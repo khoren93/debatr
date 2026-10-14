@@ -2,13 +2,12 @@
 
 COMPOSE      := docker compose
 DEV_COMPOSE  := docker compose -f docker-compose.dev.yml
-DEPLOY_HOST  ?= hetzner-ai-debates
-DEPLOY_DIR   ?= ~/apps/ai-debates
+PROD_COMPOSE := docker compose -f docker-compose.yml -f docker-compose.prod.yml
 s            ?=
 
 .DEFAULT_GOAL := help
 .PHONY: help install dev-up dev-down api worker media-worker web migrate migration \
-	lint format typecheck test check build up down restart logs ps deploy server-logs ssh
+	lint format typecheck test check build up down restart logs ps deploy prod-logs prod-ps
 
 help: ## Show this list
 	@grep -E '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | \
@@ -85,13 +84,13 @@ logs: ## Follow logs: make logs s=api
 ps: ## Container status
 	$(COMPOSE) ps
 
-# --- Production -----------------------------------------------------------------------
+# --- Production (run these on the server, in the project dir) ---------------------------
 
-deploy: ## Pull and rebuild on the server (runs deploy.sh over SSH)
-	ssh $(DEPLOY_HOST) 'cd $(DEPLOY_DIR) && ./deploy.sh'
+deploy: ## Pull latest main and rebuild the production stack (deploy.sh)
+	./deploy.sh
 
-server-logs: ## Follow server logs: make server-logs s=worker
-	ssh -t $(DEPLOY_HOST) 'cd $(DEPLOY_DIR) && docker compose -f docker-compose.yml -f docker-compose.prod.yml logs -f --tail=200 $(s)'
+prod-logs: ## Follow production logs: make prod-logs s=worker
+	$(PROD_COMPOSE) logs -f --tail=200 $(s)
 
-ssh: ## Open a shell in the project dir on the server
-	ssh -t $(DEPLOY_HOST) 'cd $(DEPLOY_DIR) && exec $$SHELL -l'
+prod-ps: ## Production container status
+	$(PROD_COMPOSE) ps

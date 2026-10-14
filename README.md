@@ -122,12 +122,8 @@ Run `make` to list every target. The most useful ones:
 | `make api` / `make worker` / `make web` | Run the API, worker and frontend with hot reload |
 | `make migrate` / `make migration m="..."` | Apply migrations / autogenerate a new one |
 | `make check` | Lint, type check, tests and frontend build |
-| `make deploy` | Run `deploy.sh` on the server over SSH |
-| `make server-logs s=worker` / `make ssh` | Production logs / a shell in the project dir |
-
-`make deploy`, `make server-logs` and `make ssh` connect to `DEPLOY_HOST` (an SSH alias, default
-`hetzner-ai-debates`) and `DEPLOY_DIR` (default `~/apps/ai-debates`); override them per call, e.g.
-`make deploy DEPLOY_HOST=my-vps DEPLOY_DIR=~/ai-debates`.
+| `make deploy` | On the server: pull `main` and rebuild the production stack (`deploy.sh`) |
+| `make prod-logs s=worker` / `make prod-ps` | On the server: production logs / container status |
 
 ---
 
@@ -156,11 +152,11 @@ Run `make` to list every target. The most useful ones:
    `deploy.sh` pulls the latest code, rebuilds the containers (migrations run on start) and
    prunes old images. In production set `ENVIRONMENT=production` and replace every placeholder
    secret in `.env` (`SECRET_KEY`, `ADMIN_PASSWORD`, `POSTGRES_PASSWORD`).
-6. **Update later** from your machine (pushes do not deploy automatically):
+6. **Update later**: SSH into the server and run it again from the project dir (pushes do not
+   deploy automatically):
    ```bash
-   make deploy    # ssh $DEPLOY_HOST 'cd $DEPLOY_DIR && ./deploy.sh'
+   make deploy    # same as ./deploy.sh
    ```
-   Add the server to `~/.ssh/config` as a `Host` alias first (or pass `DEPLOY_HOST=user@ip`).
 
 ---
 
