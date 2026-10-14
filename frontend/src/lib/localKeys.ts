@@ -3,8 +3,8 @@ import { useSyncExternalStore } from 'react';
 /**
  * Personal provider keys kept only in this browser (localStorage). They are sent with the
  * single request that needs them; the server parks them in Redis with a TTL for the running
- * job and never writes them to Postgres. The OpenRouter key can additionally be stored on the
- * account (encrypted) — that is a separate, explicit feature (`KeyCard`).
+ * job and never writes them to Postgres. Accounts may still hold a legacy encrypted OpenRouter
+ * key (used when the browser has none); `LocalKeysCard` shows it so it can be removed.
  */
 export type LocalKeyName = 'openrouter' | 'elevenlabs';
 

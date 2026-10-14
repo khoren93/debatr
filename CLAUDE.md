@@ -40,7 +40,7 @@ frontend/           React 19 + Vite 8 + Tailwind 4 + TypeScript
   src/components/create/   wizard steps + wizardState.ts (state, persistence, config mapping)
   src/components/debate/   player, live card, turn timeline, transcript, verdict, audio tab,
                            regenerate-audio dialog, exports aside (browser MP4 render), lineup
-  src/components/account/  credits, usage, key, ledger, security cards; auth layout/fields
+  src/components/account/  credits, usage, local keys, ledger, security cards; auth layout/fields
   src/video/          Remotion compositions (DebateLong 16:9, DebateShort 9:16) + render.ts
   src/pages/          Landing (/), Library (/library), Gallery (/gallery), CreateDebate (/create),
                       DebateView (/debate/:id and public /d/:slug), Account (/account),

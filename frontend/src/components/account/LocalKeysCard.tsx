@@ -1,9 +1,11 @@
-import { useState, type FormEvent } from 'react';
+import { useState, type FormEvent, type ReactNode } from 'react';
 import { Trash2, X } from 'lucide-react';
+import { removeOpenRouterKey } from '../../api/auth';
 import { getErrorMessage } from '../../api/client';
 import { getVoices } from '../../api/media';
+import type { User } from '../../api/types';
 import { maskKey, setLocalKey, useLocalKey, type LocalKeyName } from '../../lib/localKeys';
-import { Button, Card, Hint, Input, Label, SectionLabel, useToast } from '../ui';
+import { Button, Card, ConfirmDialog, Hint, Input, Label, SectionLabel, useToast } from '../ui';
 
 interface RowConfig {
   name: LocalKeyName;
@@ -38,7 +40,7 @@ const ROWS: RowConfig[] = [
   },
 ];
 
-const LocalKeyRow = ({ row }: { row: RowConfig }) => {
+const LocalKeyRow = ({ row, extra }: { row: RowConfig; extra?: ReactNode }) => {
   const toast = useToast();
   const stored = useLocalKey(row.name);
   const [replacing, setReplacing] = useState(false);
@@ -111,12 +113,52 @@ const LocalKeyRow = ({ row }: { row: RowConfig }) => {
         </div>
       )}
       {error ? <Hint tone="danger">{error}</Hint> : <Hint>{row.hint}</Hint>}
+      {extra}
+    </div>
+  );
+};
+
+/** Legacy OpenRouter key saved (encrypted) on the account: shown so it can still be removed. */
+const AccountKeyNote = ({ masked, onUser }: { masked: string; onUser: (user: User) => void }) => {
+  const toast = useToast();
+  const [confirm, setConfirm] = useState(false);
+  const [removing, setRemoving] = useState(false);
+
+  const remove = async () => {
+    setRemoving(true);
+    try {
+      onUser(await removeOpenRouterKey());
+      toast.success('Account OpenRouter key removed');
+      setConfirm(false);
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+    } finally {
+      setRemoving(false);
+    }
+  };
+
+  return (
+    <div className="mt-1.5 text-xs text-muted">
+      A key <span className="font-mono text-text-3">{masked}</span> is also saved on your account and is used when this browser has none.{' '}
+      <button type="button" onClick={() => setConfirm(true)} className="font-semibold text-con hover:underline">
+        Remove it
+      </button>
+      <ConfirmDialog
+        open={confirm}
+        title="Remove account OpenRouter key?"
+        body="Paid models will be charged to your credits unless this browser has its own key."
+        confirmLabel="Remove key"
+        danger
+        busy={removing}
+        onConfirm={remove}
+        onClose={() => setConfirm(false)}
+      />
     </div>
   );
 };
 
 /** "KEYS IN THIS BROWSER": personal provider keys kept in localStorage only (lib/localKeys). */
-export const LocalKeysCard = () => (
+export const LocalKeysCard = ({ user, onUser }: { user: User; onUser: (user: User) => void }) => (
   <Card>
     <SectionLabel>Keys in this browser</SectionLabel>
     <p className="mt-1.5 text-xs text-muted">
@@ -124,7 +166,11 @@ export const LocalKeysCard = () => (
     </p>
     <div className="mt-3.5 grid gap-4">
       {ROWS.map((row) => (
-        <LocalKeyRow key={row.name} row={row} />
+        <LocalKeyRow
+          key={row.name}
+          row={row}
+          extra={row.name === 'openrouter' && user.openrouter_key_masked ? <AccountKeyNote masked={user.openrouter_key_masked} onUser={onUser} /> : undefined}
+        />
       ))}
     </div>
   </Card>
