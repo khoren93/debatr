@@ -9,7 +9,7 @@
 
 **Debatr** (the AI Debates studio) is a full-stack service that orchestrates structured debates between AI personas and turns them into content. Powered by **OpenRouter**, it lets you pit **hundreds of LLMs** against each other with custom roles, personalities and stances, watch the debate stream live, get a judge's verdict, and render a **16:9 YouTube video plus a 9:16 Short** right in the browser.
 
-Users sign up, receive welcome credits, buy more with **Stripe**, keep a library of their debates and can publish them to a **public gallery** with share links.
+Users sign up, run free models or bring their own OpenRouter key, buy credits with **Stripe**, keep a library of their debates and can publish them to a **public gallery** with share links.
 
 > **🚀 Live Demo Version is Coming Soon!**
 
@@ -25,7 +25,7 @@ Users sign up, receive welcome credits, buy more with **Stripe**, keep a library
 - **⚖️ Structured verdict**: the judge names a winner (or a draw), with per-debater feedback shown in the UI and on the video end card.
 - **🎙️ Neural voices**: ElevenLabs (premium, emotion tags) or free Edge voices with word timestamps, mixed MP3 and karaoke transcript.
 - **🎬 Video in the browser**: 16:9 episode and 9:16 Shorts (LLM-picked highlights with a hook) rendered with Remotion and WebCodecs — no server encoding.
-- **👤 Accounts & credits**: email sign-up with welcome credits, Stripe top-ups, a ledger of every charge, an optional personal OpenRouter key that bypasses credits.
+- **👤 Accounts & credits**: email sign-up with optional welcome credits, Stripe top-ups, a ledger of every charge, an optional personal OpenRouter key that bypasses credits.
 - **📚 Library & gallery**: drafts, filters, search; publish finished debates with a share link (`/d/{slug}`) and view counts.
 - **🐳 Dockerized**: Postgres, Redis, API, workers and a Caddy-served frontend.
 
@@ -150,7 +150,7 @@ cd frontend && npm run check && npm run build
 ## 📖 Usage
 
 1. Open the web interface at `https://your-domain.com` (or `http://localhost`) and create an account
-   (new accounts receive `SIGNUP_BONUS_USD` of credits).
+   (new accounts receive `SIGNUP_BONUS_USD` of credits, 0 by default).
 2. Click **"+ New debate"** and walk through the wizard:
    - **Topic**: type a question or pick one from the library, choose language, rounds and reply length.
    - **Speakers**: a host plus two or more debaters, each with a model, a neural voice and a persona.

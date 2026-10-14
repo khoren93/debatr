@@ -66,7 +66,7 @@ class Settings(BaseSettings):
     # Accounts, credits and billing
     SESSION_MAX_AGE: int = 60 * 60 * 24 * 30  # seconds the login cookie stays valid
     LOGIN_RATE_LIMIT: int = 30  # login/register attempts per IP per hour (0 disables)
-    SIGNUP_BONUS_USD: float = 1.0  # welcome credits for every new account (0 disables)
+    SIGNUP_BONUS_USD: float = 0.0  # welcome credits for every new account (0 disables)
     # Multiplier applied to the provider cost (OpenRouter usage) when charging credits.
     CREDIT_MARKUP: float = 1.2
     # Premium (ElevenLabs) voices on the system key, charged to credits per 1000 characters.

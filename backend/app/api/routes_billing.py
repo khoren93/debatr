@@ -182,7 +182,8 @@ async def stripe_webhook(request: Request, db: AsyncSession = Depends(get_db)) -
         event = _stripe().construct_event(payload, signature, settings.STRIPE_WEBHOOK_SECRET)
     except (ValueError, stripe.SignatureVerificationError) as e:
         raise HTTPException(status_code=400, detail="Invalid webhook signature") from e
-    if event.type == "checkout.session.completed":
+    # Delayed payment methods are still unpaid at "completed" and settle with the async event.
+    if event.type in ("checkout.session.completed", "checkout.session.async_payment_succeeded"):
         tx = await _credit_checkout_session(db, event.data.object)
         if tx is not None:
             logger.info("Credited %s via Stripe webhook", tx.user_id)

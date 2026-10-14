@@ -154,7 +154,7 @@ Stopping: `POST /api/debates/{id}/stop` sets the status, sets `debate:{id}:stop`
   change goes through `services/credits.apply_transaction(_sync)`; `provider_ref` makes charges
   and Stripe sessions idempotent. The balance may go slightly negative (actual cost > estimate).
 - `POST /api/billing/checkout` creates a Stripe Checkout session (`stripe.StripeClient`,
-  `v1.checkout.sessions`); `POST /api/billing/webhook` (`checkout.session.completed`) and
+  `v1.checkout.sessions`); `POST /api/billing/webhook` (`checkout.session.completed` / `async_payment_succeeded`) and
   `GET /api/billing/confirm?session_id=` (called by the Account page after redirect) credit it.
   `DEV_FAKE_PAYMENTS=true` (non-production) credits instantly without Stripe.
 - `GET /api/billing/usage` aggregates the current month (tokens, voice ms, renders, spend).
