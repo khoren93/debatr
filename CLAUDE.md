@@ -51,6 +51,9 @@ docker-compose.yml  full stack; docker-compose.dev.yml = only Postgres + Redis f
 
 ## Commands
 
+The root `Makefile` wraps the commands below (`make` lists them: `make up`, `make down`, `make check`,
+`make deploy` runs `deploy.sh` on the server over SSH, `make logs s=api`, …).
+
 Backend (run from `backend/`):
 
 ```bash

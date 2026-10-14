@@ -74,9 +74,10 @@ Follow these steps to get a copy up and running locally or on your server.
 
 3. **Run**
    ```bash
-   docker compose up -d --build
+   make up        # = docker compose up -d --build
    ```
-   Database migrations run automatically when the API container starts.
+   Database migrations run automatically when the API container starts. `make logs s=api`
+   follows a service's logs, `make down` stops everything.
 
 4. **Open**
    - **Frontend**: [http://localhost](http://localhost)
@@ -88,23 +89,13 @@ Follow these steps to get a copy up and running locally or on your server.
 Prerequisites: [uv](https://docs.astral.sh/uv/), Node.js 20.19+ and Docker.
 
 ```bash
-# 1. Infrastructure only (Postgres on :5432, Redis on :6379)
-docker compose -f docker-compose.dev.yml up -d
+make install   # backend (uv sync) + frontend (npm install) dependencies
+make dev-up    # infrastructure only: Postgres on :5432, Redis on :6379
+make migrate   # apply database migrations
 
-# 2. Backend API (http://localhost:8000/api/docs)
-cd backend
-uv sync
-uv run alembic upgrade head
-uv run uvicorn app.main:app --reload
-
-# 3. Worker (second terminal). SimpleWorker avoids fork issues on macOS.
-cd backend
-RQ_SIMPLE_WORKER=true uv run python -m app.worker
-
-# 4. Frontend (third terminal, http://localhost:5173 — proxies /api to the backend)
-cd frontend
-npm install
-npm run dev
+make api       # backend API with reload (http://localhost:8000/api/docs)
+make worker    # second terminal: RQ worker for both queues (SimpleWorker, safe on macOS)
+make web       # third terminal: Vite on http://localhost:5173, proxies /api to the backend
 ```
 
 Leave `DATABASE_URL` and `REDIS_URL` unset in `.env`: the defaults point at localhost, and
@@ -113,9 +104,30 @@ Leave `DATABASE_URL` and `REDIS_URL` unset in `.env`: the defaults point at loca
 **Checks**
 
 ```bash
-cd backend && uv run ruff check . && uv run pyright && uv run pytest
-cd frontend && npm run check && npm run build
+make check     # everything CI runs: ruff, format check, pyright, pytest, tsc, eslint, build
+make test      # backend tests only
+make format    # ruff autofix + format
 ```
+
+### 🧰 Make commands
+
+Run `make` to list every target. The most useful ones:
+
+| Command | What it does |
+|---|---|
+| `make up` / `make down` | Start (with rebuild) / stop the full Docker stack |
+| `make restart s=worker` | Rebuild and restart one service (all without `s=`) |
+| `make logs s=api` / `make ps` | Follow logs / show container status |
+| `make dev-up` / `make dev-down` | Postgres + Redis only, for native development |
+| `make api` / `make worker` / `make web` | Run the API, worker and frontend with hot reload |
+| `make migrate` / `make migration m="..."` | Apply migrations / autogenerate a new one |
+| `make check` | Lint, type check, tests and frontend build |
+| `make deploy` | Run `deploy.sh` on the server over SSH |
+| `make server-logs s=worker` / `make ssh` | Production logs / a shell in the project dir |
+
+`make deploy`, `make server-logs` and `make ssh` connect to `DEPLOY_HOST` (an SSH alias, default
+`hetzner-ai-debates`) and `DEPLOY_DIR` (default `~/apps/ai-debates`); override them per call, e.g.
+`make deploy DEPLOY_HOST=my-vps DEPLOY_DIR=~/ai-debates`.
 
 ---
 
@@ -144,6 +156,11 @@ cd frontend && npm run check && npm run build
    `deploy.sh` pulls the latest code, rebuilds the containers (migrations run on start) and
    prunes old images. In production set `ENVIRONMENT=production` and replace every placeholder
    secret in `.env` (`SECRET_KEY`, `ADMIN_PASSWORD`, `POSTGRES_PASSWORD`).
+6. **Update later** from your machine (pushes do not deploy automatically):
+   ```bash
+   make deploy    # ssh $DEPLOY_HOST 'cd $DEPLOY_DIR && ./deploy.sh'
+   ```
+   Add the server to `~/.ssh/config` as a `Host` alias first (or pass `DEPLOY_HOST=user@ip`).
 
 ---
 
