@@ -6,6 +6,7 @@ import { deleteMedia, generateMedia, getMediaCapabilities, getVoices } from '../
 import type { DebateDetail, DebateMedia, MediaCapabilities, TTSProviderName, VoiceInfo } from '../../api/types';
 import { useBillingConfig } from '../../hooks/useBillingConfig';
 import { formatCost } from '../../lib/format';
+import { setLocalKey, useLocalKey } from '../../lib/localKeys';
 import { Button, ConfirmDialog, ErrorBox, Hint, Input, Label, Modal, Select, useToast } from '../ui';
 
 const MODEL_LABELS: Record<string, string> = {
@@ -34,7 +35,12 @@ export const RegenerateAudioDialog = ({ open, onClose, debate, media, onQueued }
   const [caps, setCaps] = useState<MediaCapabilities | null>(null);
   const [providerChoice, setProviderChoice] = useState<TTSProviderName | null>(null);
   const [modelChoice, setModelChoice] = useState<string | null>(null);
-  const [ttsKey, setTtsKey] = useState('');
+  // The key saved in this browser is used by default; typing replaces it for this build only.
+  const storedKey = useLocalKey('elevenlabs');
+  const [keyDraft, setKeyDraft] = useState<string | null>(null);
+  const [rememberKey, setRememberKey] = useState(true);
+  const ttsKey = keyDraft ?? storedKey;
+  const keyChanged = ttsKey.length > 0 && ttsKey !== storedKey;
   const [voices, setVoices] = useState<VoiceInfo[]>([]);
   const [voicesError, setVoicesError] = useState<string | null>(null);
   const [chosen, setChosen] = useState<Record<string, string>>({});
@@ -65,13 +71,14 @@ export const RegenerateAudioDialog = ({ open, onClose, debate, media, onQueued }
     [debate.participants],
   );
   const keyMissing = provider === 'elevenlabs' && !caps?.elevenlabs && !ttsKey;
+  const voicesKey = provider === 'elevenlabs' ? ttsKey : '';
   const savedVoices = media?.options?.provider === provider ? media.options.voices : debate.media_plan?.provider === provider ? debate.media_plan.voices : {};
   const savedKey = JSON.stringify(savedVoices);
 
   useEffect(() => {
     if (!open || keyMissing) return;
     let cancelled = false;
-    getVoices(provider, { debateId: debate.id }, ttsKey || undefined)
+    getVoices(provider, { debateId: debate.id }, voicesKey || undefined)
       .then((r) => {
         if (cancelled) return;
         const saved = JSON.parse(savedKey) as Record<string, string>;
@@ -92,7 +99,7 @@ export const RegenerateAudioDialog = ({ open, onClose, debate, media, onQueued }
     return () => {
       cancelled = true;
     };
-  }, [open, provider, debate.id, ttsKey, keyMissing, savedKey]);
+  }, [open, provider, debate.id, voicesKey, keyMissing, savedKey]);
 
   const chars = debate.turns.reduce((acc, t) => acc + (t.error ? 0 : t.text.length), 0);
   const premiumCost = (chars / 1000) * billing.tts_price_per_1k_chars;
@@ -101,7 +108,9 @@ export const RegenerateAudioDialog = ({ open, onClose, debate, media, onQueued }
     setSubmitting(true);
     setSubmitError(null);
     try {
-      await generateMedia(debate.id, { provider, model_id: provider === 'elevenlabs' ? modelId : 'edge', voices: chosen, force, user_tts_key: ttsKey || undefined });
+      const userKey = provider === 'elevenlabs' ? ttsKey || undefined : undefined;
+      await generateMedia(debate.id, { provider, model_id: provider === 'elevenlabs' ? modelId : 'edge', voices: chosen, force, user_tts_key: userKey });
+      if (userKey && keyChanged && rememberKey) setLocalKey('elevenlabs', userKey);
       toast.success('Audio build queued');
       onQueued();
       onClose();
@@ -182,7 +191,22 @@ export const RegenerateAudioDialog = ({ open, onClose, debate, media, onQueued }
           {provider === 'elevenlabs' && (
             <div>
               <Label hint={caps?.elevenlabs ? '(optional — otherwise billed to credits)' : '(required)'}>Your ElevenLabs key</Label>
-              <Input type="password" value={ttsKey} onChange={(e) => setTtsKey(e.target.value.trim())} placeholder="xi-…" className="mt-1.5 font-mono" />
+              <Input type="password" value={ttsKey} onChange={(e) => setKeyDraft(e.target.value.trim())} placeholder="sk_…" autoComplete="off" spellCheck={false} maxLength={200} className="mt-1.5 font-mono" />
+              {keyChanged ? (
+                <label className="mt-2 flex items-center gap-2 text-xs text-muted">
+                  <input type="checkbox" checked={rememberKey} onChange={(e) => setRememberKey(e.target.checked)} /> Remember in this browser (never stored on our servers)
+                </label>
+              ) : (
+                storedKey &&
+                ttsKey === storedKey && (
+                  <Hint>
+                    Using the key saved in this browser{caps?.elevenlabs ? ' — clear the field to pay with credits instead' : ''}.{' '}
+                    <Link to="/account" className="text-accent hover:text-accent-hover">
+                      Manage keys
+                    </Link>
+                  </Hint>
+                )
+              )}
               {keyMissing && (
                 <Hint tone="danger">
                   {caps?.elevenlabs_error ? `Premium voices are unavailable on this server: ${caps.elevenlabs_error}.` : 'No premium key is configured on this server.'} Enter your own key or switch to the free Edge voices.

@@ -57,6 +57,15 @@ export const StepReview = ({ state, config, ready, models, voices, ownKey, credi
   const estimating = ready && !estimate && !estimateError;
 
   const cost = estimate ? estimate.credits_cost_usd || estimate.llm_cost_usd + estimate.tts_cost_usd : null;
+  const llmOnKey = Boolean(estimate?.own_key || ownKey);
+  const voicesInCredits = Boolean(estimate && estimate.tts_cost_usd > 0 && !estimate.own_tts_key);
+  const costLabel = llmOnKey
+    ? voicesInCredits
+      ? 'own key · voices in credits'
+      : 'own key · $0 credits'
+    : estimate?.own_tts_key
+      ? 'models · voices on your key'
+      : 'model + voice cost';
   const insufficient = Boolean(estimate && !estimate.sufficient);
   const canStart = ready && Boolean(estimate) && !insufficient && !starting;
 
@@ -114,7 +123,7 @@ export const StepReview = ({ state, config, ready, models, voices, ownKey, credi
             </ErrorBox>
           ) : (
             <div className="mt-3 grid grid-cols-2 gap-3" aria-busy={estimating}>
-              <Stat value={cost !== null ? `~${formatCost(cost)}` : '…'} label={estimate?.own_key || ownKey ? 'own key · $0 credits' : 'model + voice cost'} />
+              <Stat value={cost !== null ? `~${formatCost(cost)}` : '…'} label={costLabel} />
               <Stat value={estimate ? `~${formatMinutes(estimate.duration_ms)}` : '…'} label="episode length" />
               <Stat value={estimate ? `${estimate.turns}` : '…'} label="turns" />
               <Stat value={estimate ? `~${formatMinutes(estimate.render_ms)}` : '…'} label="render time" />

@@ -16,7 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.redis import get_sync_redis, provider_key_key, stop_flag_key
+from app.core.redis import get_sync_redis, provider_key_key, stop_flag_key, tts_key_key
 from app.core.sync_db import get_sync_session
 from app.models.models import Debate, Turn, utcnow
 from app.services import queue_manager
@@ -120,9 +120,13 @@ def _charge(db: Session, debate: Debate) -> None:
         db.rollback()
 
 
-def _cleanup_keys(debate_id: str) -> None:
+def _cleanup_keys(debate_id: str, *, keep_tts_key: bool = False) -> None:
+    """Drop the run's secrets. The TTS key survives a completed run for the auto audio build."""
+    keys = [provider_key_key(debate_id), stop_flag_key(debate_id)]
+    if not keep_tts_key:
+        keys.append(tts_key_key(debate_id))
     try:
-        get_sync_redis().delete(provider_key_key(debate_id), stop_flag_key(debate_id))
+        get_sync_redis().delete(*keys)
     except Exception:
         logger.warning("Failed to clean up Redis keys for debate %s", debate_id)
 
@@ -257,16 +261,37 @@ def _store_verdict(db: Session, debate: Debate, verdict_text: str, api_key: str 
     )
 
 
+def _has_tts_key(debate_id: str) -> bool:
+    try:
+        return bool(get_sync_redis().exists(tts_key_key(debate_id)))
+    except Exception:
+        logger.warning("Failed to check the TTS key for debate %s", debate_id)
+        return False
+
+
+def _drop_tts_key(debate_id: str) -> None:
+    try:
+        get_sync_redis().delete(tts_key_key(debate_id))
+    except Exception:
+        logger.warning("Failed to delete the TTS key for debate %s", debate_id)
+
+
 def _auto_media(db: Session, debate: Debate) -> None:
-    """Queue the audio build when the wizard asked for audio/video outputs."""
+    """Queue the audio build when the wizard asked for audio/video outputs.
+
+    A user ElevenLabs key sent with the debate is already in Redis (`tts_key_key`); the media
+    job picks it up from there and the voices are not charged to credits."""
     conf: dict[str, Any] = debate.config_json or {}
     plan: dict[str, Any] = conf.get("media_plan") or {}
     outputs = plan.get("outputs") or []
-    if "audio" not in outputs:
-        return
     provider = str(plan.get("provider") or "edge")
+    if "audio" not in outputs or provider != "elevenlabs":
+        _drop_tts_key(str(debate.id))
+        if "audio" not in outputs:
+            return
     voices: dict[str, str] = dict(plan.get("voices") or {})
-    if provider == "elevenlabs" and not system_key_status()[0]:
+    own_tts_key = provider == "elevenlabs" and _has_tts_key(str(debate.id))
+    if provider == "elevenlabs" and not own_tts_key and not system_key_status()[0]:
         logger.warning("Premium voices unavailable for %s, falling back to Edge", debate.id)
         provider, voices = "edge", {}  # voice ids are provider-specific
     state = dict(debate.media_json or {})
@@ -278,7 +303,7 @@ def _auto_media(db: Session, debate: Debate) -> None:
                 "voices": voices,
             },
             "force": False,
-            "own_tts_key": False,
+            "own_tts_key": own_tts_key,
             "auto": True,
             "step": "queued",
             "current": 0,
@@ -462,7 +487,7 @@ def finish_debate_job(debate_id: str) -> None:
         debate.totals_json = _compute_totals(db, debate)
         db.commit()
         _charge(db, debate)
-        _cleanup_keys(debate_id)
+        _cleanup_keys(debate_id, keep_tts_key=True)
         publish_event(
             debate_id,
             "debate_completed",

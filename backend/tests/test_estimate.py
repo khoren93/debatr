@@ -87,3 +87,11 @@ def test_as_dict_round_trips():
     est = _estimate(_conf())
     assert isinstance(est, Estimate)
     assert set(est.as_dict()) >= {"turns", "credits_cost_usd", "duration_ms"}
+
+
+def test_own_tts_key_keeps_voices_off_credits():
+    paid = _estimate(_conf(), tts_provider="elevenlabs")
+    own = _estimate(_conf(), tts_provider="elevenlabs", own_tts_key=True)
+    assert paid.tts_cost_usd > 0
+    assert own.tts_cost_usd == paid.tts_cost_usd
+    assert own.credits_cost_usd == round(paid.credits_cost_usd - paid.tts_cost_usd, 6)

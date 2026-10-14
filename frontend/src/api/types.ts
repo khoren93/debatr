@@ -182,6 +182,8 @@ export interface DebateConfig {
   media_plan?: MediaPlan;
   draft?: boolean;
   user_provider_key?: string;
+  /** Browser-only ElevenLabs key for the automatic audio build (never stored server-side). */
+  user_tts_key?: string;
 }
 
 export interface CreateDebateResponse {
@@ -202,6 +204,7 @@ export interface Estimate {
   duration_ms: number;
   render_ms: number;
   own_key: boolean;
+  own_tts_key: boolean;
   paid_models: string[];
   credits_before: number | null;
   credits_after: number | null;

@@ -82,6 +82,7 @@ def estimate_debate(
     *,
     own_key: bool,
     tts_provider: str | None,
+    own_tts_key: bool = False,
     tts_price_per_1k: float,
     markup: float,
     default_model: str = "",
@@ -123,7 +124,7 @@ def estimate_debate(
     )
     tts_chars = int(total_words * CHARS_PER_WORD)
     tts_cost = tts_chars / 1000 * tts_price_per_1k if tts_provider == "elevenlabs" else 0.0
-    credits = (0.0 if own_key else cost * markup) + tts_cost
+    credits = (0.0 if own_key else cost * markup) + (0.0 if own_tts_key else tts_cost)
     return Estimate(
         turns=len(planned),
         words=total_words,

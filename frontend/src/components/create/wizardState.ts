@@ -11,9 +11,9 @@ import type {
 } from '../../api/types';
 import { STYLE_PRESETS, applyStyle, type PersonaStyle } from '../../data/styles';
 import { HOST_COLOR, debaterColor } from '../../lib/format';
+import { getLocalKey, setLocalKey } from '../../lib/localKeys';
 
 export const WIZARD_STORAGE_KEY = 'debatr.wizard.v1';
-export const OPENROUTER_KEY_STORAGE = 'debatr.openrouter_key';
 
 export type WizardStep = 1 | 2 | 3 | 4;
 export const STEP_LABELS: readonly string[] = ['Topic', 'Speakers', 'Voice & format', 'Review'];
@@ -54,7 +54,6 @@ export interface WizardState {
   voices: Record<string, string>;
   outputs: MediaOutput[];
   quality: VideoQuality;
-  openrouterKey: string;
 }
 
 // --- Static option lists -----------------------------------------------------
@@ -157,7 +156,6 @@ export const initialState = (): WizardState => ({
   voices: {},
   outputs: ['audio', 'video', 'short'],
   quality: '1080p',
-  openrouterKey: '',
 });
 
 // --- Speaker helpers ---------------------------------------------------------
@@ -257,6 +255,9 @@ export interface BuildOptions {
   defaultModelId: string;
   voices: Record<string, string>;
   provider: TTSProviderName;
+  /** Browser-only keys (see lib/localKeys); sent with the request, never persisted. */
+  openrouterKey?: string;
+  elevenlabsKey?: string;
 }
 
 export const buildConfig = (state: WizardState, opts: BuildOptions): DebateConfig => ({
@@ -281,7 +282,8 @@ export const buildConfig = (state: WizardState, opts: BuildOptions): DebateConfi
     outputs: state.outputs,
     quality: state.quality,
   },
-  user_provider_key: state.openrouterKey.trim() || undefined,
+  user_provider_key: opts.openrouterKey?.trim() || undefined,
+  user_tts_key: (opts.provider === 'elevenlabs' && state.outputs.includes('audio') && opts.elevenlabsKey?.trim()) || undefined,
 });
 
 const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
@@ -409,7 +411,6 @@ export const sanitizeState = (raw: unknown): WizardState => {
     voices: sanitizeVoices(raw.voices),
     outputs: sanitizeOutputs(raw.outputs, base.outputs),
     quality: oneOf(raw.quality, ['720p', '1080p', '4k'] as const, base.quality),
-    openrouterKey: str(raw.openrouterKey),
   };
 };
 
@@ -417,8 +418,13 @@ export const loadWizardState = (): WizardState => {
   let state = initialState();
   try {
     const raw = localStorage.getItem(WIZARD_STORAGE_KEY);
-    if (raw) state = sanitizeState(JSON.parse(raw));
-    if (!state.openrouterKey) state = { ...state, openrouterKey: localStorage.getItem(OPENROUTER_KEY_STORAGE) ?? '' };
+    if (raw) {
+      const parsed: unknown = JSON.parse(raw);
+      state = sanitizeState(parsed);
+      // Older wizard states carried the OpenRouter key inline; move it to the key store.
+      const legacyKey = parsed && typeof parsed === 'object' ? str((parsed as Record<string, unknown>).openrouterKey) : '';
+      if (legacyKey.trim() && !getLocalKey('openrouter')) setLocalKey('openrouter', legacyKey);
+    }
   } catch {
     /* corrupted or unavailable storage: start fresh */
   }
@@ -431,15 +437,6 @@ export const saveWizardState = (state: WizardState) => {
     localStorage.setItem(WIZARD_STORAGE_KEY, JSON.stringify(state));
   } catch {
     /* storage full or unavailable */
-  }
-};
-
-export const saveOpenRouterKey = (key: string) => {
-  try {
-    if (key.trim()) localStorage.setItem(OPENROUTER_KEY_STORAGE, key.trim());
-    else localStorage.removeItem(OPENROUTER_KEY_STORAGE);
-  } catch {
-    /* storage unavailable */
   }
 };
 

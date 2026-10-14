@@ -265,7 +265,12 @@ def _build(db: Session, debate: Debate, options: MediaOptions, force: bool) -> i
     speakers = build_speakers(participants, code, judge_model)
     speakers_by_id = {s.id: s for s in speakers}
 
-    provider = get_provider(options.provider, api_key=_user_tts_key(debate_id))
+    user_key = _user_tts_key(debate_id)
+    own_key = bool((debate.media_json or {}).get("own_tts_key"))
+    # Never fall back to the paid system key for a build that was promised as "own key".
+    if options.provider == "elevenlabs" and own_key and not user_key:
+        raise RuntimeError("Your ElevenLabs key expired, generate the audio again with it")
+    provider = get_provider(options.provider, api_key=user_key)
     if not provider.available():
         raise RuntimeError(f"TTS provider '{options.provider}' is not configured")
 

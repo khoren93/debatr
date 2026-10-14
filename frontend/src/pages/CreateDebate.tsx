@@ -20,7 +20,6 @@ import {
   maxReachableStep,
   pickDefaultModel,
   resolveVoices,
-  saveOpenRouterKey,
   saveWizardState,
   stateFromConfig,
   stepValid,
@@ -30,6 +29,7 @@ import {
 import { useBillingConfig } from '../hooks/useBillingConfig';
 import { useModels } from '../hooks/useModels';
 import { useVoices } from '../hooks/useVoices';
+import { useLocalKey } from '../lib/localKeys';
 
 /** Four-step wizard: topic → speakers → voice & format → review. `?draft=<id>` edits a saved draft. */
 const CreateDebate = () => {
@@ -40,6 +40,8 @@ const CreateDebate = () => {
   const { user, refresh } = useAuth();
   const { models, loading: modelsLoading, error: modelsError } = useModels();
   const { config: billing } = useBillingConfig();
+  const openrouterKey = useLocalKey('openrouter');
+  const elevenlabsKey = useLocalKey('elevenlabs');
 
   const [state, setState] = useState<WizardState>(() => (draftId ? initialState() : loadWizardState()));
   const [draftLoaded, setDraftLoaded] = useState<string | null>(null);
@@ -83,15 +85,17 @@ const CreateDebate = () => {
   const patch = (changes: Partial<WizardState>) => setState((s) => ({ ...s, ...changes }));
 
   const debaters = countDebaters(state.speakers);
-  const provider = state.provider === 'elevenlabs' && !billing.elevenlabs_available ? 'edge' : state.provider;
-  const catalogue = useVoices(provider, state.language, debaters, state.step >= 2);
+  const provider = state.provider === 'elevenlabs' && !billing.elevenlabs_available && !elevenlabsKey ? 'edge' : state.provider;
+  const catalogue = useVoices(provider, state.language, debaters, state.step >= 2, provider === 'elevenlabs' ? elevenlabsKey : '');
   const resolvedVoices = resolveVoices(state, catalogue.voices, catalogue.defaults);
 
   const defaultModelId = pickDefaultModel(models);
   const validation = { defaultModelId, modelsLoading };
-  const ownKey = state.openrouterKey.trim().length > 0 || Boolean(user?.openrouter_key_masked);
+  const ownKey = openrouterKey.length > 0 || Boolean(user?.openrouter_key_masked);
   const paidLocked = !ownKey && (user?.credits_usd ?? 0) <= 0;
-  const config = buildConfig(state, { defaultModelId, voices: resolvedVoices, provider });
+  const config = buildConfig(state, { defaultModelId, voices: resolvedVoices, provider, openrouterKey, elevenlabsKey });
+  // Drafts are stored on the server: never send the browser keys along with them.
+  const draftConfig = { ...config, user_provider_key: undefined, user_tts_key: undefined };
   const ready = !modelsLoading && config.participants.every((p) => p.model_id.length > 0);
   const maxStep = maxReachableStep(state, validation);
 
@@ -113,11 +117,10 @@ const CreateDebate = () => {
     setStarting(true);
     setStartError(null);
     try {
-      saveOpenRouterKey(state.openrouterKey);
       let debateId: string;
       if (draftLoaded) {
-        await updateDraft(draftLoaded, config);
-        debateId = (await startDraft(draftLoaded, config.user_provider_key)).debate_id;
+        await updateDraft(draftLoaded, draftConfig);
+        debateId = (await startDraft(draftLoaded, { user_provider_key: config.user_provider_key, user_tts_key: config.user_tts_key })).debate_id;
       } else {
         debateId = (await createDebate(config)).debate_id;
         clearWizardState();
@@ -145,9 +148,9 @@ const CreateDebate = () => {
     }
     setSaving(true);
     try {
-      if (draftLoaded) await updateDraft(draftLoaded, { ...config, draft: true });
+      if (draftLoaded) await updateDraft(draftLoaded, { ...draftConfig, draft: true });
       else {
-        await createDebate({ ...config, draft: true });
+        await createDebate({ ...draftConfig, draft: true });
         clearWizardState();
       }
       toast.success('Draft saved');
@@ -194,7 +197,7 @@ const CreateDebate = () => {
           showErrors={showErrors}
         />
       )}
-      {state.step === 3 && <StepFormat state={state} patch={patch} billing={billing} accountKeyMasked={user?.openrouter_key_masked ?? null} />}
+      {state.step === 3 && <StepFormat state={state} patch={patch} billing={billing} accountKeyMasked={user?.openrouter_key_masked ?? null} openrouterKey={openrouterKey} elevenlabsKey={elevenlabsKey} />}
       {state.step === 4 && (
         <StepReview
           state={state}

@@ -201,5 +201,9 @@ Stopping: `POST /api/debates/{id}/stop` sets the status, sets `debate:{id}:stop`
 - Old rows may have `turn_type=moderator_comment` and inline `"[Error ...]"` text; both are still
   handled (`scheduler.MODERATOR_TURN_TYPES`, `lib/format.isErrorTurn`). Debates created before
   accounts have `user_id=NULL`: readable via their link, manageable only from the admin panel.
-- The wizard keeps its in-progress state in `localStorage` (`debatr.wizard.v1`) and the
-  browser-only OpenRouter key under `debatr.openrouter_key`.
+- The wizard keeps its in-progress state in `localStorage` (`debatr.wizard.v1`). Browser-only
+  keys (`debatr.openrouter_key`, `debatr.elevenlabs_key`) live in `src/lib/localKeys.ts`
+  (`useLocalKey`), are managed on the Account page (`LocalKeysCard`) and in the wizard, and are
+  sent as transient `user_provider_key` / `user_tts_key` (never in `config_json`, stripped from
+  draft saves). With `user_tts_key` the API parks it in Redis (`debate:{id}:tts_key`) so
+  `_auto_media` builds premium audio on the user's key without charging credits.

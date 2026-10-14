@@ -25,20 +25,21 @@ export interface VoiceCatalogue {
 
 /**
  * Voice catalogue + default assignments for the create wizard. Re-fetches whenever the
- * provider, the debate language or the number of debaters changes. Results are tagged with
- * their request key so stale data from a previous provider is never returned.
+ * provider, the debate language, the number of debaters or the user's ElevenLabs key changes.
+ * Results are tagged with their request key so stale data from a previous provider is never
+ * returned.
  */
-export const useVoices = (provider: TTSProviderName, language: string, debaters: number, enabled = true): VoiceCatalogue => {
+export const useVoices = (provider: TTSProviderName, language: string, debaters: number, enabled = true, ttsKey = ''): VoiceCatalogue => {
   const [loaded, setLoaded] = useState<Loaded | null>(null);
   const [failed, setFailed] = useState<Failed | null>(null);
   const [attempt, setAttempt] = useState(0);
 
-  const key = `${provider}|${language.trim().toLowerCase()}|${debaters}|${attempt}`;
+  const key = `${provider}|${language.trim().toLowerCase()}|${debaters}|${ttsKey.slice(-6)}|${attempt}`;
 
   useEffect(() => {
     if (!enabled) return;
     let cancelled = false;
-    getVoices(provider, { language, participants: debaters })
+    getVoices(provider, { language, participants: debaters }, ttsKey || undefined)
       .then((res) => {
         if (!cancelled) setLoaded({ key, voices: res.voices, defaults: res.defaults });
       })
@@ -48,7 +49,7 @@ export const useVoices = (provider: TTSProviderName, language: string, debaters:
     return () => {
       cancelled = true;
     };
-  }, [enabled, key, provider, language, debaters]);
+  }, [enabled, key, provider, language, debaters, ttsKey]);
 
   const current = loaded?.key === key ? loaded : null;
   const error = failed?.key === key ? failed.message : null;

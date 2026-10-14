@@ -58,6 +58,7 @@ def test_media_plan_defaults_and_persisted_excludes_transient_fields():
             "media_plan": {"provider": "edge"},
             "draft": True,
             "user_provider_key": "sk-or-secret",
+            "user_tts_key": "xi-secret",
         }
     )
     assert cfg.media_plan is not None
@@ -65,6 +66,7 @@ def test_media_plan_defaults_and_persisted_excludes_transient_fields():
     assert cfg.media_plan.quality == "1080p"
     stored = cfg.persisted()
     assert "user_provider_key" not in stored
+    assert "user_tts_key" not in stored
     assert "draft" not in stored
     assert stored["media_plan"]["provider"] == "edge"
 

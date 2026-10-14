@@ -19,10 +19,8 @@ export const createDebate = (config: DebateConfig) =>
 export const updateDraft = (id: string, config: DebateConfig) =>
   api.patch<CreateDebateResponse>(`/debates/${id}`, config).then((r) => r.data);
 
-export const startDraft = (id: string, userProviderKey?: string) =>
-  api
-    .post<CreateDebateResponse>(`/debates/${id}/start`, userProviderKey ? { user_provider_key: userProviderKey } : {})
-    .then((r) => r.data);
+export const startDraft = (id: string, keys: { user_provider_key?: string; user_tts_key?: string } = {}) =>
+  api.post<CreateDebateResponse>(`/debates/${id}/start`, keys).then((r) => r.data);
 
 export const estimateDebate = (config: DebateConfig) =>
   api.post<Estimate>('/debates/estimate', config).then((r) => r.data);

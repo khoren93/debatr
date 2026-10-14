@@ -15,7 +15,7 @@ TTSProvider = Literal["elevenlabs", "edge"]
 GALLERY_CATEGORIES: tuple[str, ...] = ("tech", "society", "science", "culture", "money", "fun")
 
 # Request-only fields that must never be written to `debates.config_json`.
-TRANSIENT_CONFIG_FIELDS: frozenset[str] = frozenset({"user_provider_key", "draft"})
+TRANSIENT_CONFIG_FIELDS: frozenset[str] = frozenset({"user_provider_key", "user_tts_key", "draft"})
 
 
 # --- Preset Schemas ---
@@ -102,6 +102,8 @@ class DebateConfig(BaseModel):
     draft: bool = False
     # Optional BYOK OpenRouter key. Never persisted to the database.
     user_provider_key: str | None = Field(default=None, max_length=300)
+    # Optional BYOK ElevenLabs key for the automatic audio build. Never persisted either.
+    user_tts_key: str | None = Field(default=None, max_length=200)
 
     @field_validator("participants")
     @classmethod
@@ -121,6 +123,7 @@ class DebateConfig(BaseModel):
 
 class StartDebateRequest(BaseModel):
     user_provider_key: str | None = Field(default=None, max_length=300)
+    user_tts_key: str | None = Field(default=None, max_length=200)
 
 
 class DebateResponse(BaseModel):
@@ -141,6 +144,7 @@ class EstimateOut(BaseModel):
     duration_ms: int
     render_ms: int
     own_key: bool = False
+    own_tts_key: bool = False
     paid_models: list[str] = Field(default_factory=list)
     credits_before: float | None = None
     credits_after: float | None = None

@@ -8,6 +8,7 @@ import { useToast } from '../components/ui';
 import { useBillingConfig } from '../hooks/useBillingConfig';
 import { CreditsCard } from '../components/account/CreditsCard';
 import { KeyCard } from '../components/account/KeyCard';
+import { LocalKeysCard } from '../components/account/LocalKeysCard';
 import { ProfileHeader } from '../components/account/ProfileHeader';
 import { SecurityCard } from '../components/account/SecurityCard';
 import { TransactionsCard } from '../components/account/TransactionsCard';
@@ -68,6 +69,7 @@ const Account = () => {
         <div className="grid content-start gap-3.5">
           <UsageCard reloadKey={user.credits_usd} />
           <KeyCard user={user} onUser={setUser} />
+          <LocalKeysCard />
         </div>
       </div>
       <TransactionsCard reloadKey={user.credits_usd} className="mt-3.5" />

@@ -1,4 +1,6 @@
+import { Link } from 'react-router-dom';
 import type { BillingConfig } from '../../api/types';
+import { setLocalKey } from '../../lib/localKeys';
 import { Card, Chip, Hint, Input, Label } from '../ui';
 import { OptionCard } from './OptionCard';
 import { OUTPUT_OPTIONS, QUALITY_OPTIONS, type WizardState } from './wizardState';
@@ -9,9 +11,12 @@ interface StepFormatProps {
   billing: BillingConfig;
   /** Masked key already stored on the account, if any. */
   accountKeyMasked: string | null;
+  /** Browser-only keys (lib/localKeys); editing them here updates the Account page too. */
+  openrouterKey: string;
+  elevenlabsKey: string;
 }
 
-export const StepFormat = ({ state, patch, billing, accountKeyMasked }: StepFormatProps) => {
+export const StepFormat = ({ state, patch, billing, accountKeyMasked, openrouterKey, elevenlabsKey }: StepFormatProps) => {
   const toggleOutput = (value: WizardState['outputs'][number]) =>
     patch({
       outputs: state.outputs.includes(value)
@@ -19,7 +24,9 @@ export const StepFormat = ({ state, patch, billing, accountKeyMasked }: StepForm
         : OUTPUT_OPTIONS.map((o) => o.value).filter((o) => o === value || state.outputs.includes(o)),
     });
   const premiumPrice = `$${billing.tts_price_per_min.toFixed(2)} / min`;
-  const hasKey = state.openrouterKey.trim().length > 0;
+  const hasKey = openrouterKey.length > 0;
+  const hasTtsKey = elevenlabsKey.length > 0;
+  const premiumAvailable = billing.elevenlabs_available || hasTtsKey;
 
   return (
     <div className="mt-[30px] grid gap-3.5 animate-rise">
@@ -54,18 +61,19 @@ export const StepFormat = ({ state, patch, billing, accountKeyMasked }: StepForm
           <OptionCard
             active={state.provider === 'elevenlabs'}
             onClick={() => patch({ provider: 'elevenlabs' })}
-            disabled={!billing.elevenlabs_available}
-            title_={billing.elevenlabs_available ? undefined : 'Premium voices are not configured on this server'}
+            disabled={!premiumAvailable}
+            title_={premiumAvailable ? undefined : 'Premium voices are not configured on this server — add your own ElevenLabs key below'}
             title="Premium neural"
-            right={<span className="font-mono text-[11px] text-accent">{premiumPrice}</span>}
+            right={<span className="font-mono text-[11px] text-accent">{hasTtsKey ? 'YOUR KEY' : premiumPrice}</span>}
             text="Studio-grade voices with emotion tags."
           />
         </div>
-        {!billing.elevenlabs_available && (
+        {!premiumAvailable && (
           <Hint>
-            Premium voices are not available on this server right now{billing.elevenlabs_error ? ` (${billing.elevenlabs_error})` : ''} — the free Edge voices are used.
+            Premium voices are not available on this server right now{billing.elevenlabs_error ? ` (${billing.elevenlabs_error})` : ''} — the free Edge voices are used. Add your own ElevenLabs key below to use them anyway.
           </Hint>
         )}
+        {state.provider === 'elevenlabs' && hasTtsKey && <Hint tone="accent">Voices are billed to your ElevenLabs account, not to credits.</Hint>}
       </Card>
 
       <Card padding="md">
@@ -104,14 +112,39 @@ export const StepFormat = ({ state, patch, billing, accountKeyMasked }: StepForm
           autoComplete="off"
           spellCheck={false}
           placeholder="sk-or-…"
-          value={state.openrouterKey}
-          onChange={(e) => patch({ openrouterKey: e.target.value })}
+          value={openrouterKey}
+          onChange={(e) => setLocalKey('openrouter', e.target.value)}
           maxLength={300}
           aria-label="OpenRouter API key"
           className="mt-3 font-mono"
         />
         <Hint>Bypasses credit limits and unlocks paid models. Stored only in this browser.</Hint>
         {accountKeyMasked && !hasKey && <Hint tone="accent">Your account already has a key ({accountKeyMasked}) — it is used automatically.</Hint>}
+      </details>
+
+      <details className="rounded-panel border border-line bg-surface px-5 py-4.5">
+        <summary className="flex cursor-pointer items-center justify-between gap-3 text-[13px] font-semibold text-text-3">
+          Use your own ElevenLabs key
+          <span className={`font-normal ${hasTtsKey ? 'text-accent' : 'text-muted'}`}>{hasTtsKey ? 'key set ›' : 'optional ›'}</span>
+        </summary>
+        <Input
+          type="password"
+          autoComplete="off"
+          spellCheck={false}
+          placeholder="sk_…"
+          value={elevenlabsKey}
+          onChange={(e) => setLocalKey('elevenlabs', e.target.value)}
+          maxLength={200}
+          aria-label="ElevenLabs API key"
+          className="mt-3 font-mono"
+        />
+        <Hint>
+          Premium voices on your own ElevenLabs account, including your cloned voices. Stored only in this browser — manage it in{' '}
+          <Link to="/account" className="text-accent hover:text-accent-hover">
+            Account
+          </Link>
+          .
+        </Hint>
       </details>
     </div>
   );

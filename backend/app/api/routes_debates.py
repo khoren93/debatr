@@ -24,7 +24,7 @@ from app.core.config import settings
 from app.core.db import get_db
 from app.core.ids import new_slug
 from app.core.ratelimit import enforce_debate_create_limit
-from app.core.redis import get_async_redis, provider_key_key, stop_flag_key
+from app.core.redis import get_async_redis, provider_key_key, stop_flag_key, tts_key_key
 from app.core.security import decrypt_secret
 from app.models.models import Debate, DebateParticipant, User, utcnow
 from app.schemas.schemas import (
@@ -88,11 +88,19 @@ def _resolve_provider_key(user: User | None, request_key: str | None) -> tuple[s
     return None, False
 
 
-async def _effective_tts_provider(config: DebateConfig) -> str | None:
+def _tts_key(config: DebateConfig, request_key: str | None) -> str | None:
+    """The user's ElevenLabs key, kept only when the auto audio build will use it."""
+    plan = config.media_plan
+    if plan is None or plan.provider != "elevenlabs" or "audio" not in plan.outputs:
+        return None
+    return request_key.strip() if request_key and request_key.strip() else None
+
+
+async def _effective_tts_provider(config: DebateConfig, own_tts_key: bool) -> str | None:
     plan = config.media_plan
     if plan is None or "audio" not in plan.outputs:
         return None
-    if plan.provider == "elevenlabs":
+    if plan.provider == "elevenlabs" and not own_tts_key:
         ok, _reason = await run_in_threadpool(system_key_status)
         if not ok:
             return "edge"
@@ -108,18 +116,26 @@ def _paid_models(config: DebateConfig, pricing: Pricing) -> list[str]:
     return sorted(paid)
 
 
-async def _estimate(config: DebateConfig, user: User | None, own_key: bool) -> EstimateOut:
+async def _estimate(
+    config: DebateConfig, user: User | None, own_key: bool, own_tts_key: bool = False
+) -> EstimateOut:
     pricing = pricing_from_models(await openrouter_client.get_models())
     est = estimate_debate(
         config.persisted(),
         pricing,
         own_key=own_key,
-        tts_provider=await _effective_tts_provider(config),
+        tts_provider=await _effective_tts_provider(config, own_tts_key),
+        own_tts_key=own_tts_key,
         tts_price_per_1k=settings.TTS_CREDIT_PRICE_PER_1K_CHARS,
         markup=settings.CREDIT_MARKUP,
         default_model=settings.DEFAULT_MODEL_ID,
     )
-    out = EstimateOut(**est.as_dict(), own_key=own_key, paid_models=_paid_models(config, pricing))
+    out = EstimateOut(
+        **est.as_dict(),
+        own_key=own_key,
+        own_tts_key=own_tts_key,
+        paid_models=_paid_models(config, pricing),
+    )
     if user is not None:
         before = float(user.credits_usd or 0)
         out.credits_before = before
@@ -157,13 +173,19 @@ def _apply_config(debate: Debate, config: DebateConfig, own_key: bool) -> None:
     ]
 
 
-async def _enqueue(db: AsyncSession, debate: Debate, provider_key: str | None) -> None:
+async def _enqueue(
+    db: AsyncSession, debate: Debate, provider_key: str | None, tts_key: str | None = None
+) -> None:
+    """Queue the run. User keys go to Redis with a TTL, never to Postgres."""
     debate_id = str(debate.id)
     try:
+        redis = get_async_redis()
         if provider_key:
-            await get_async_redis().set(
-                provider_key_key(debate_id), provider_key, ex=settings.PROVIDER_KEY_TTL
-            )
+            await redis.set(provider_key_key(debate_id), provider_key, ex=settings.PROVIDER_KEY_TTL)
+        if tts_key:
+            await redis.set(tts_key_key(debate_id), tts_key, ex=settings.PROVIDER_KEY_TTL)
+        else:
+            await redis.delete(tts_key_key(debate_id))
         await run_in_threadpool(enqueue_debate_start, debate_id)
     except RedisError:
         logger.exception("Failed to enqueue debate %s", debate_id)
@@ -185,7 +207,8 @@ async def estimate(
 ) -> EstimateOut:
     """Cost, length and credit impact of a configuration before running it."""
     _key, own_key = _resolve_provider_key(user, config.user_provider_key)
-    return await _estimate(config, user, own_key)
+    own_tts_key = _tts_key(config, config.user_tts_key) is not None
+    return await _estimate(config, user, own_key, own_tts_key)
 
 
 @router.get("", response_model=list[DebateSummary])
@@ -228,8 +251,9 @@ async def create_debate(
 ) -> DebateResponse:
     """Create a debate and queue it, or save it as a draft when `draft` is true."""
     provider_key, own_key = _resolve_provider_key(user, config.user_provider_key)
+    tts_key = _tts_key(config, config.user_tts_key)
     if not config.draft:
-        _require_sufficient(await _estimate(config, user, own_key))
+        _require_sufficient(await _estimate(config, user, own_key, tts_key is not None))
 
     debate = Debate(user_id=user.id, status="draft" if config.draft else "queued")
     _apply_config(debate, config, own_key)
@@ -238,7 +262,7 @@ async def create_debate(
     debate_id = str(debate.id)
     if config.draft:
         return DebateResponse(debate_id=debate_id, status="draft", message="Draft saved")
-    await _enqueue(db, debate, provider_key)
+    await _enqueue(db, debate, provider_key, tts_key)
     return DebateResponse(debate_id=debate_id, status="queued", message="Debate created and queued")
 
 
@@ -278,12 +302,13 @@ async def start_draft(
     stored.pop("billing", None)
     config = DebateConfig.model_validate(stored)
     provider_key, own_key = _resolve_provider_key(user, body.user_provider_key if body else None)
-    _require_sufficient(await _estimate(config, user, own_key))
+    tts_key = _tts_key(config, body.user_tts_key if body else None)
+    _require_sufficient(await _estimate(config, user, own_key, tts_key is not None))
     debate.config_json = {**config.persisted(), "billing": {"own_key": own_key}}
     debate.status = "queued"
     debate.error_message = None
     await db.commit()
-    await _enqueue(db, debate, provider_key)
+    await _enqueue(db, debate, provider_key, tts_key)
     return DebateResponse(debate_id=debate_id, status="queued", message="Debate queued")
 
 
