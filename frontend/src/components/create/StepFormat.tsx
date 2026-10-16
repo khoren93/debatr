@@ -1,4 +1,4 @@
-import { KeyRound } from 'lucide-react';
+import { KeyRound, PenTool } from 'lucide-react';
 import type { TtsKeyCheck, TtsKeyStatus } from '../../hooks/useElevenLabsKeyStatus';
 import { Card, Chip, Hint, Label, LinkButton } from '../ui';
 import { OptionCard } from './OptionCard';
@@ -38,6 +38,9 @@ export const StepFormat = ({ state, patch, accountKeyMasked, openrouterKey, ttsK
         ? state.outputs.filter((o) => o !== value)
         : OUTPUT_OPTIONS.map((o) => o.value).filter((o) => o === value || state.outputs.includes(o)),
     });
+
+  const withAudio = state.outputs.includes('audio');
+  const visualsOn = withAudio && state.visuals;
 
   return (
     <div className="mt-[30px] grid gap-3.5 animate-rise">
@@ -83,6 +86,27 @@ export const StepFormat = ({ state, patch, accountKeyMasked, openrouterKey, ttsK
             </Chip>
           ))}
         </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={visualsOn}
+          disabled={!withAudio}
+          onClick={() => patch({ visuals: !state.visuals })}
+          className="mt-3.5 flex w-full items-start gap-3 rounded-field border border-line-2 bg-ink p-3.5 text-left transition-colors hover:border-line-3 disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer"
+        >
+          <PenTool className={`mt-0.5 size-4 shrink-0 ${visualsOn ? 'text-accent' : 'text-muted'}`} />
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-semibold">Visual scenes</span>
+            <span className="mt-0.5 block text-xs leading-relaxed text-muted">
+              {withAudio
+                ? 'Charts, numbers and hand-drawn schemes appear in the video exactly when a speaker mentions them.'
+                : 'Designed together with the audio — select Audio to enable.'}
+            </span>
+          </span>
+          <span className={`relative mt-0.5 h-5 w-9 shrink-0 rounded-full transition-colors ${visualsOn ? 'bg-accent' : 'bg-line-3'}`} aria-hidden="true">
+            <span className={`absolute top-0.5 size-4 rounded-full bg-ink transition-[left] ${visualsOn ? 'left-[18px]' : 'left-0.5'}`} />
+          </span>
+        </button>
       </Card>
 
       <Card padding="md">

@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Visual scenes in the video**: while a speaker talks, the centre of the frame draws a scene
+  that illustrates exactly what is being said — counting numbers, bar, line and pie charts,
+  "1 in 4" pictogram grids, ticked-off points, pros vs cons, quotes, struck-through rebuttals,
+  kinetic headlines, cause → effect chains and cycles, timelines and pictograms. Scenes are drawn
+  stroke by stroke in a hand-drawn marker style and appear on the exact words thanks to the
+  word timestamps. A cheap "visual director" model designs them per turn during the audio
+  build; numbers that the speaker did not say are rejected. On by default, switchable in the
+  wizard and in the audio dialog.
+
+### Changed
+
+- **New video layout**: the host sits on top, debaters in side columns (up to 2 + 2), the
+  visual stage in the centre and captions below; the topic is shown big at the start and then
+  stays as a small chip in the corner. The Short gets the same stage between the debaters and
+  the captions.
+
 ## [1.1.0] - 2026-10-16
 
 AI Debates becomes **Debatr**: a redesigned studio that takes a debate from a live stream to a

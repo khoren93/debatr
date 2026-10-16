@@ -3,14 +3,19 @@ import type { Timeline } from '../../api/timeline';
 import { ACCENT, FONT } from '../constants';
 import { roundLabel } from '../utils';
 
-export const TopicBanner = ({ topic, fontSize, maxWidth }: { topic: string; fontSize: number; maxWidth: number }) => (
-  <div style={{ fontFamily: FONT, maxWidth, margin: '0 auto', textAlign: 'center' }}>
-    <div style={{ fontSize: fontSize * 0.42, letterSpacing: 6, color: ACCENT, fontWeight: 800 }}>DEBATR</div>
-    <div style={{ fontSize, fontWeight: 800, color: '#fff', lineHeight: 1.15, marginTop: 6, textShadow: '0 4px 24px #0009' }}>{topic}</div>
-  </div>
-);
+/** One-line topic in a corner once the intro has shown it in big (context for viewers who skip). */
+export const TopicChip = ({ topic, sinceMs, maxChars, fontSize }: { topic: string; sinceMs: number; maxChars: number; fontSize: number }) => {
+  const o = interpolate(sinceMs, [0, 500], [0, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
+  const text = topic.length > maxChars ? `${topic.slice(0, maxChars - 1).trimEnd()}…` : topic;
+  return (
+    <div style={{ display: 'inline-flex', alignItems: 'center', gap: fontSize * 0.55, padding: `${fontSize * 0.45}px ${fontSize * 0.9}px`, borderRadius: 999, background: '#0f172acc', border: '2px solid #ffffff1f', fontFamily: FONT, opacity: o }}>
+      <span style={{ fontSize: fontSize * 0.75, letterSpacing: 4, color: ACCENT, fontWeight: 800 }}>DEBATR</span>
+      <span style={{ fontSize, fontWeight: 700, color: '#ffffffd9', whiteSpace: 'nowrap' }}>{text}</span>
+    </div>
+  );
+};
 
-export const RoundChip = ({ roundId, fontSize }: { roundId: string; fontSize: number }) => (
+export const RoundChip =({ roundId, fontSize }: { roundId: string; fontSize: number }) => (
   <div style={{ fontFamily: FONT, display: 'inline-block', padding: `${fontSize * 0.35}px ${fontSize * 0.9}px`, borderRadius: 999, background: roundId === 'verdict' ? '#FFC46B' : '#ffffff1a', border: '2px solid #ffffff33', color: roundId === 'verdict' ? '#3a2600' : '#fff', fontWeight: 800, fontSize, letterSpacing: 2, textTransform: 'uppercase' }}>
     {roundLabel(roundId)}
   </div>

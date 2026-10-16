@@ -48,6 +48,7 @@ export const RegenerateAudioDialog = ({ open, onClose, debate, media, onQueued }
   const [voicesError, setVoicesError] = useState<string | null>(null);
   const [chosen, setChosen] = useState<Record<string, string>>({});
   const [force, setForce] = useState(false);
+  const [visualsChoice, setVisualsChoice] = useState<boolean | null>(null);
   const [submitError, setSubmitError] = useState<{ status: number | null; message: string } | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -111,6 +112,7 @@ export const RegenerateAudioDialog = ({ open, onClose, debate, media, onQueued }
     };
   }, [open, provider, debate.id, voicesKey, keyMissing, keyRejected, savedKey]);
 
+  const visuals = visualsChoice ?? media?.options?.visuals ?? debate.media_plan?.visuals ?? true;
   const chars = debate.turns.reduce((acc, t) => acc + (t.error ? 0 : t.text.length), 0);
   const premiumCost = (chars / 1000) * billing.tts_price_per_1k_chars;
 
@@ -119,7 +121,7 @@ export const RegenerateAudioDialog = ({ open, onClose, debate, media, onQueued }
     setSubmitError(null);
     try {
       const userKey = provider === 'elevenlabs' ? ttsKey || undefined : undefined;
-      await generateMedia(debate.id, { provider, model_id: provider === 'elevenlabs' ? modelId : 'edge', voices: chosen, force, user_tts_key: userKey });
+      await generateMedia(debate.id, { provider, model_id: provider === 'elevenlabs' ? modelId : 'edge', voices: chosen, visuals, force, user_tts_key: userKey });
       if (userKey && keyChanged && rememberKey) setLocalKey('elevenlabs', userKey);
       toast.success('Audio build queued');
       onQueued();
@@ -272,8 +274,11 @@ export const RegenerateAudioDialog = ({ open, onClose, debate, media, onQueued }
               ~{chars.toLocaleString()} characters ·{' '}
               {provider === 'elevenlabs' ? (ttsKey ? 'billed to your ElevenLabs account' : `≈ ${formatCost(premiumCost)} in credits`) : 'free'}
             </span>
+            <label className="flex items-center gap-2" title="Charts, numbers and hand-drawn schemes synced with the speech">
+              <input type="checkbox" checked={visuals} onChange={(e) => setVisualsChoice(e.target.checked)} /> visual scenes
+            </label>
             {ready && (
-              <label className="flex items-center gap-2">
+              <label className="flex items-center gap-2" title="Re-voice every turn and design the scenes again">
                 <input type="checkbox" checked={force} onChange={(e) => setForce(e.target.checked)} /> ignore cached turns
               </label>
             )}

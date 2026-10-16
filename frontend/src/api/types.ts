@@ -101,6 +101,8 @@ export interface MediaPlan {
   voices: Record<string, string>; // speaker id -> provider voice id
   outputs: MediaOutput[];
   quality: VideoQuality;
+  /** Charts / drawn scenes synced with the speech (built with the audio; default on). */
+  visuals?: boolean;
 }
 
 export interface DebateSummary {
@@ -407,6 +409,8 @@ export interface MediaOptions {
   provider: TTSProviderName;
   model_id: string;
   voices: Record<string, string>; // speaker id -> provider voice id
+  /** Design visual scenes for the video (default true). */
+  visuals?: boolean;
 }
 
 export interface GenerateMediaRequest extends MediaOptions {

@@ -76,6 +76,7 @@ export const StepReview = ({ state, config, ready, models, voices, ownKey, credi
     `${lengthOption(state.length_preset).label.toLowerCase()} replies`,
     state.output_style === 'spoken' ? 'spoken' : 'written',
     state.outputs.length ? state.outputs.map((o) => OUTPUT_LABELS[o] ?? o).join(' + ') : 'text only',
+    ...(state.visuals && state.outputs.includes('audio') ? ['visual scenes'] : []),
   ].join(' · ');
 
   return (

@@ -1,5 +1,7 @@
 // Mirrors backend/app/schemas/timeline.py (serialized as media/{debate_id}/timeline.json).
 
+import type { TimelineVisual } from './visuals';
+
 export type SpeakerRole = 'moderator' | 'debater' | 'judge';
 export type Mascot = 'orb' | 'bolt' | 'cube';
 
@@ -69,5 +71,7 @@ export interface Timeline {
   full_audio_mp3: string;
   verdict: TimelineVerdict | null;
   highlights: TimelineHighlight[];
-  stats: { chars: number; tts_ms: number; estimated_usd: number | null; cached_turns: number };
+  /** Charts / drawn scenes synced with the speech; missing in timelines built before them. */
+  visuals?: TimelineVisual[];
+  stats: { chars: number; tts_ms: number; estimated_usd: number | null; cached_turns: number; visuals_usd?: number | null };
 }

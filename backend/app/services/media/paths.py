@@ -39,6 +39,9 @@ class MediaPaths:
     def turn_meta(self, seq_index: int) -> Path:
         return self.turns_dir / f"{seq_index:03d}.json"
 
+    def turn_visuals(self, seq_index: int) -> Path:
+        return self.turns_dir / f"{seq_index:03d}.visuals.json"
+
     @property
     def timeline(self) -> Path:
         return self.dir / "timeline.json"

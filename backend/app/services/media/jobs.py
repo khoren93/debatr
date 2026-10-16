@@ -31,6 +31,7 @@ from app.schemas.timeline import (
     TimelineVerdict,
     TimelineWord,
 )
+from app.schemas.visuals import TimelineVisual
 from app.services.credits import charge_media_sync
 from app.services.media import ffmpeg
 from app.services.media.alignment import WordTiming, clamp_words, merge_chunks
@@ -50,6 +51,16 @@ from app.services.media.state import set_media_state
 from app.services.media.timeline import build_speakers
 from app.services.media.tts import SpeakerRef, SynthRequest, TTSProvider, get_provider
 from app.services.media.tts.elevenlabs import TAG_MODELS, estimate_usd
+from app.services.media.visuals import (
+    PROMPT_VERSION,
+    TurnBrief,
+    align_scenes,
+    build_briefs,
+    build_director_messages,
+    diversify,
+    parse_scenes,
+    scene_budget,
+)
 from app.services.scheduler import speaker_role_for
 
 logger = logging.getLogger(__name__)
@@ -239,6 +250,101 @@ def _pick_highlights(
         return fallback_highlights(segments, total_ms), None
 
 
+def _plan_turn(
+    paths: MediaPaths, brief: TurnBrief, *, topic: str, language: str, model: str, force: bool
+) -> tuple[list[Any], float]:
+    """Candidate scene specs for one turn, the spare included (cached by content, so new
+    voices reuse them). Returns (scenes, usd spent)."""
+    budget = scene_budget(brief.text, brief.role)
+    if budget == 0:
+        return [], 0.0
+    cache = paths.turn_visuals(brief.seq_index)
+    parts = [PROMPT_VERSION, model, topic, language, brief.role, brief.turn_type, brief.text]
+    key = "|".join([*parts, brief.opponent or "", brief.previous_text or "", str(budget)])
+    digest = hashlib.sha256(key.encode()).hexdigest()
+    if not force and cache.exists():
+        try:
+            meta = json.loads(cache.read_text())
+            if meta.get("hash") == digest:
+                return parse_scenes(meta.get("scenes"), budget + 1), 0.0
+        except (OSError, ValueError):
+            logger.warning("Unreadable visuals cache %s, planning again", cache)
+    messages = build_director_messages(brief, topic=topic, language=language, budget=budget)
+    text, usage = complete(model, messages, max_tokens=1600)
+    try:
+        payload = extract_json(text)
+    except ValueError:
+        payload = None
+    scenes = parse_scenes(
+        payload, budget + 1, speech=brief.text, speaker=brief.speaker_name, opponent=brief.opponent
+    )
+    cache.write_text(
+        json.dumps({"hash": digest, "scenes": [s.model_dump(mode="json") for s in scenes]})
+    )
+    return scenes, float((usage or {}).get("cost") or 0.0)
+
+
+def _plan_visuals(
+    db: Session,
+    debate: Debate,
+    paths: MediaPaths,
+    segments: list[TimelineSegment],
+    speakers_by_id: dict[str, TimelineSpeaker],
+    *,
+    topic: str,
+    language: str,
+    force: bool,
+) -> tuple[list[TimelineVisual], float | None]:
+    """Ask the visual director for every turn in parallel and align the scenes to the words.
+    A failing turn only loses its scenes."""
+    if not settings.OPENROUTER_API_KEY:
+        return [], None
+    model = settings.MEDIA_VISUALS_MODEL or settings.MEDIA_HIGHLIGHTS_MODEL
+    roles = {s.id: s.role for s in speakers_by_id.values()}
+    briefs = [b for b in build_briefs(segments, roles) if scene_budget(b.text, b.role) > 0]
+    total = len(briefs)
+    set_media_state(
+        db, debate, step="visuals", current=0, total=total, message="Designing visual scenes…"
+    )
+    planned: dict[int, list[Any]] = {}
+    cost = 0.0
+    with ThreadPoolExecutor(max_workers=max(1, settings.MEDIA_VISUALS_CONCURRENCY)) as pool:
+        futures = {
+            pool.submit(
+                _plan_turn, paths, b, topic=topic, language=language, model=model, force=force
+            ): b
+            for b in briefs
+        }
+        for done, future in enumerate(as_completed(futures), start=1):
+            brief = futures[future]
+            try:
+                scenes, usd = future.result()
+                planned[brief.seq_index] = scenes
+                cost += usd
+            except Exception as e:
+                logger.warning("Visual director failed for turn %s: %s", brief.seq_index, e)
+            set_media_state(
+                db,
+                debate,
+                step="visuals",
+                current=done,
+                total=total,
+                message=f"Designed scenes for {done} of {total} turns",
+            )
+    by_seq = {s.seq_index: s for s in segments}
+    picked = diversify(
+        [
+            (b.seq_index, planned[b.seq_index], scene_budget(b.text, b.role))
+            for b in briefs
+            if b.seq_index in planned
+        ]
+    )
+    visuals: list[TimelineVisual] = []
+    for seq in sorted(picked):
+        visuals.extend(align_scenes(picked[seq], by_seq[seq]))
+    return visuals, round(cost, 6)
+
+
 def _build(db: Session, debate: Debate, options: MediaOptions, force: bool) -> int:
     """Voice, mix and write the timeline. Returns the characters actually synthesized
     (cached turns excluded), which is what premium voices are billed on."""
@@ -377,6 +483,24 @@ def _build(db: Session, debate: Debate, options: MediaOptions, force: bool) -> i
             )
         )
 
+    visuals: list[TimelineVisual] = []
+    visuals_usd: float | None = None
+    if options.visuals:
+        try:
+            visuals, visuals_usd = _plan_visuals(
+                db,
+                debate,
+                paths,
+                segments,
+                speakers_by_id,
+                topic=str(conf.get("topic") or ""),
+                language=language,
+                force=force,
+            )
+        except Exception:
+            logger.exception("Visual scenes failed for %s, continuing without them", debate_id)
+            visuals = []
+
     set_media_state(db, debate, step="highlights", message="Picking highlights for shorts…")
     highlights, winner_name = _pick_highlights(
         topic=str(conf.get("topic") or ""),
@@ -410,6 +534,7 @@ def _build(db: Session, debate: Debate, options: MediaOptions, force: bool) -> i
         if provider.name == "elevenlabs"
         else None,
         cached_turns=sum(1 for a in ordered if a.cached),
+        visuals_usd=visuals_usd,
     )
     timeline = Timeline(
         debate_id=debate_id,
@@ -426,6 +551,7 @@ def _build(db: Session, debate: Debate, options: MediaOptions, force: bool) -> i
         total_ms=total_ms,
         verdict=verdict,
         highlights=highlights,
+        visuals=visuals,
         stats=stats,
     )
     paths.timeline.write_text(timeline.model_dump_json(indent=2))

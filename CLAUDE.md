@@ -23,8 +23,10 @@ backend/            FastAPI API + RQ worker (Python 3.12+, managed with uv)
                       check + auto-publish), views (view counter),
                       engagement (likes/audience votes), ranking (trending score, model leaderboard)
   app/services/media/ audio pipeline: script (markdown→speech), tts/ (elevenlabs, edge),
-                      ffmpeg, highlights (LLM picks shorts), jobs (build_media_job), timeline
-  app/schemas/timeline.py  Timeline contract shared with frontend/src/api/timeline.ts
+                      ffmpeg, highlights (LLM picks shorts), visuals (LLM visual director),
+                      jobs (build_media_job), timeline
+  app/schemas/timeline.py  Timeline contract shared with frontend/src/api/timeline.ts;
+                      visuals.py = scene specs shared with frontend/src/api/visuals.ts
   app/models/         SQLAlchemy ORM models (User, CreditTransaction, Debate, Turn, …)
   app/schemas/        Pydantic request/response schemas (schemas, auth, billing, media)
   migrations/         Alembic (async env)
@@ -51,7 +53,9 @@ frontend/           React 19 + Vite 8 + Tailwind 4 + TypeScript
                            regenerate-audio dialog, exports aside (browser MP4 render), lineup,
                            AudienceVote (blind vote), LikeButton
   src/components/account/  credits, usage, local keys, ledger, security cards; auth layout/fields
-  src/video/          Remotion compositions (DebateLong 16:9, DebateShort 9:16) + render.ts
+  src/video/          Remotion compositions (DebateLong 16:9, DebateShort 9:16) + render.ts;
+                      visuals/ = scene renderer (SceneStage, 13 scene views, rough.js strokes,
+                      drawn Lucide pictograms in icons.ts)
   src/pages/          Landing (/), Library (/library), Gallery (/gallery), Leaderboard (/leaderboard),
                       CreateDebate (/create, `?draft=<id>`, `?remix=<id>`),
                       DebateView (/debate/:id and public /d/:slug), Account (/account),
@@ -185,8 +189,9 @@ Stopping: `POST /api/debates/{id}/stop` sets the status, sets `debate:{id}:stop`
 7. The job cleans each turn's Markdown (`media/script.py`), synthesizes it with the provider
    (`elevenlabs` with word timestamps / forced-alignment fallback, or the free `edge` voices),
    normalizes loudness with ffmpeg, caches per-turn WAV+JSON by content hash under
-   `MEDIA_ROOT/{debate_id}/turns/`, mixes `full.wav`/`full.mp3`, asks a cheap LLM for
-   short-video highlights and writes `timeline.json` (`app/schemas/timeline.py`).
+   `MEDIA_ROOT/{debate_id}/turns/`, mixes `full.wav`/`full.mp3`, designs the visual scenes
+   (below, when `MediaOptions.visuals`), asks a cheap LLM for short-video highlights and writes
+   `timeline.json` (`app/schemas/timeline.py`).
    Progress lives in `media_json` (polled by `GET /api/debates/{id}/media`); `media_status`
    is `none | queued | running | ready | error`.
 8. Files are served by `MediaStaticFiles` at `/api/media/files/{debate_id}/...` (Range
@@ -201,6 +206,29 @@ Stopping: `POST /api/debates/{id}/stop` sets the status, sets `debate:{id}:stop`
    it via `GET /media/voices` (502 = rejected) and a rejected key is neither used nor sent.
    `output_style=spoken` in `DebateConfig` asks the models for plain spoken prose with
    optional `[emotion]` tags, which ElevenLabs v3 understands.
+
+### Visual scenes (charts and drawn schemes in the video)
+
+- `services/media/visuals.py` ("visual director", `MEDIA_VISUALS_MODEL`, default Gemini Flash,
+  system key, not billed; cost in `timeline.stats.visuals_usd`) runs per turn in parallel after
+  the mix. `scene_budget` ≈ one scene per 18 s of speech; the reply holds one spare scene and
+  `diversify` drops repeats across turns. Turn plans are cached in `turns/{seq}.visuals.json`
+  (hash of text, opponent, model, `PROMPT_VERSION`); `force` re-plans. A failure only loses scenes.
+- Scenes are typed data only (`app/schemas/visuals.py`, 13 types: stat, bars, line, pie,
+  proportion, bullets, versus, quote, rebuttal, headline, flow, timeline, icons) — never code or
+  markup. The models clip long strings instead of rejecting; `parse_scenes(speech=…)` enforces
+  content rules: numbers must appear in the speech (`is_grounded`, small integers ≤ 12 pass),
+  no self-quotes, `rebuttal` only with an opponent turn (its `claim_author` is set by code).
+- Timing: every scene and element carries an `anchor` (exact words); `align_scenes` finds them in
+  the word timestamps (`highlights.locate_quote`), so `Timeline.visuals[]` has absolute
+  `start_ms`/`end_ms`/`item_ms`, non-overlapping, recomputed on every audio build.
+- Rendering (`src/video/visuals/`): `SceneStage` sits in the centre of both compositions
+  (16:9: host chip on top, debaters in side columns 1+1 / 2+1 / 2+2, captions below; 9:16:
+  debater row, stage, captions) and shows the speaking character/topic when no scene is up.
+  The web renderer serializes each `<svg>` into an image, so strokes animate via SVG attributes
+  (`pathLength=1` + dashoffset), colours are attributes (no `currentColor`), text stays in HTML,
+  and rough.js shapes use a fixed seed per scene (random seeds jitter between frames).
+  Icon keys in `icons.ts` mirror `ICONS` in `schemas/visuals.py`.
 
 ### Credits and payments
 

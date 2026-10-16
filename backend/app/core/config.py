@@ -51,6 +51,10 @@ class Settings(BaseSettings):
     TTS_CONCURRENCY: int = 2
     # Cheap model used to pick short-video highlights and the winner from the transcript.
     MEDIA_HIGHLIGHTS_MODEL: str = "openai/gpt-4o-mini"
+    # Model that designs the visual scenes (charts, drawn schemes) per turn; empty = the
+    # highlights model. Runs on the system key and is not billed to the user (~$0.01/debate).
+    MEDIA_VISUALS_MODEL: str = "google/gemini-2.5-flash"
+    MEDIA_VISUALS_CONCURRENCY: int = 4
     MEDIA_GAP_MS: int = 600
     MEDIA_LOUDNESS_LUFS: float = -16.0
     FFMPEG_BIN: str = "ffmpeg"

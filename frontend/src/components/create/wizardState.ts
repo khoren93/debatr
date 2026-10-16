@@ -55,6 +55,8 @@ export interface WizardState {
   voices: Record<string, string>;
   outputs: MediaOutput[];
   quality: VideoQuality;
+  /** Charts / drawn scenes in the video, designed per turn during the audio build. */
+  visuals: boolean;
   /** Publish to the gallery once finished and approved by the AI check. */
   auto_publish: boolean;
 }
@@ -159,6 +161,7 @@ export const initialState = (): WizardState => ({
   voices: {},
   outputs: ['audio', 'video', 'short'],
   quality: '1080p',
+  visuals: true,
   auto_publish: true,
 });
 
@@ -288,6 +291,7 @@ export const buildConfig = (state: WizardState, opts: BuildOptions): DebateConfi
     voices: opts.voices,
     outputs: state.outputs,
     quality: state.quality,
+    visuals: state.visuals,
   },
   auto_publish: state.auto_publish,
   user_provider_key: opts.openrouterKey?.trim() || undefined,
@@ -333,6 +337,7 @@ export const stateFromConfig = (config: DebateConfig, base: WizardState): Wizard
     voices,
     outputs: plan?.outputs ?? base.outputs,
     quality: plan?.quality ?? base.quality,
+    visuals: plan?.visuals ?? base.visuals,
     auto_publish: config.auto_publish ?? base.auto_publish,
   };
 };
@@ -449,6 +454,7 @@ export const sanitizeState = (raw: unknown): WizardState => {
     voices: sanitizeVoices(raw.voices),
     outputs: sanitizeOutputs(raw.outputs, base.outputs),
     quality: oneOf(raw.quality, ['720p', '1080p', '4k'] as const, base.quality),
+    visuals: typeof raw.visuals === 'boolean' ? raw.visuals : base.visuals,
     auto_publish: typeof raw.auto_publish === 'boolean' ? raw.auto_publish : base.auto_publish,
   };
 };

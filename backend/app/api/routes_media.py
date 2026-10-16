@@ -283,7 +283,9 @@ async def generate_debate_media(
                     ),
                 )
 
-    options = MediaOptions(provider=body.provider, model_id=body.model_id, voices=body.voices)
+    options = MediaOptions(
+        provider=body.provider, model_id=body.model_id, voices=body.voices, visuals=body.visuals
+    )
     state = dict(debate.media_json or {})
     state.update(
         {

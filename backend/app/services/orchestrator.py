@@ -343,6 +343,7 @@ def _auto_media(db: Session, debate: Debate) -> None:
                 "provider": provider,
                 "model_id": str(plan.get("model_id") or settings.TTS_DEFAULT_MODEL_ID),
                 "voices": voices,
+                "visuals": bool(plan.get("visuals", True)),
             },
             "force": False,
             "own_tts_key": own_tts_key,

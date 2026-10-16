@@ -89,6 +89,7 @@ class MediaPlan(BaseModel):
     voices: dict[str, str] = Field(default_factory=dict)  # speaker id -> provider voice id
     outputs: list[MediaOutput] = Field(default_factory=lambda: ["audio", "video", "short"])
     quality: VideoQuality = "1080p"
+    visuals: bool = True  # charts / drawn scenes synced with the speech in the video
 
 
 class DebateConfig(BaseModel):

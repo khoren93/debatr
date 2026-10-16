@@ -26,7 +26,8 @@
     "react-markdown": "^10.1.0",
     "react-router-dom": "^7.18.3",
     "remark-gfm": "^4.0.1",
-    "remotion": "^4.0.520"
+    "remotion": "^4.0.520",
+    "roughjs": "^4.6.6"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

@@ -6,6 +6,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from app.schemas.visuals import TimelineVisual
+
 SpeakerRole = Literal["moderator", "debater", "judge"]
 Mascot = Literal["orb", "bolt", "cube"]
 
@@ -63,6 +65,7 @@ class TimelineStats(BaseModel):
     tts_ms: int = 0
     estimated_usd: float | None = None
     cached_turns: int = 0
+    visuals_usd: float | None = None  # LLM cost of the visual director (not billed)
 
 
 class Timeline(BaseModel):
@@ -83,4 +86,6 @@ class Timeline(BaseModel):
     full_audio_mp3: str = "full.mp3"
     verdict: TimelineVerdict | None = None
     highlights: list[TimelineHighlight] = Field(default_factory=list)
+    # Charts / drawn schemes synced with the speech (schemas/visuals.py), sorted by start_ms.
+    visuals: list[TimelineVisual] = Field(default_factory=list)
     stats: TimelineStats = Field(default_factory=TimelineStats)
