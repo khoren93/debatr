@@ -21,6 +21,9 @@ export interface ModelInfo {
   context_length: number;
   pricing: { prompt: string; completion: string };
   is_free: boolean;
+  description: string;
+  /** Unix seconds the model was added to OpenRouter (0 = unknown). */
+  created: number;
 }
 
 export interface ModelsResponse {

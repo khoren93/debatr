@@ -2,8 +2,8 @@ import { ArrowUpRight, Play, RefreshCw, Square, Trophy, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { LeaderboardEntry, ModelInfo, VoiceInfo } from '../../api/types';
 import { STYLE_PRESETS, applyStyle, detectStyle } from '../../data/styles';
-import { formatContext, formatPrice } from '../../lib/format';
-import { Chip, Hint, ModelIcon, Select } from '../ui';
+import { Chip, Hint, Select } from '../ui';
+import { ModelPicker } from './ModelPicker';
 import type { Speaker } from './wizardState';
 
 interface SpeakerCardProps {
@@ -20,6 +20,8 @@ interface SpeakerCardProps {
   paidLocked: boolean;
   /** Audience ranking of the chosen model: null = no public debates yet, undefined = not shown. */
   ranking?: { entry: LeaderboardEntry; rank: number } | null;
+  /** Audience rank per model id for the model list. */
+  ranks: Record<string, number>;
   voices: VoiceInfo[];
   voicesLoading: boolean;
   removable: boolean;
@@ -45,6 +47,7 @@ export const SpeakerCard = ({
   modelsLoading,
   paidLocked,
   ranking,
+  ranks,
   voices,
   voicesLoading,
   removable,
@@ -92,9 +95,6 @@ export const SpeakerCard = ({
       .catch(() => setPlaying(false));
   };
 
-  const free = models.filter((m) => m.is_free);
-  const paid = models.filter((m) => !m.is_free);
-  const knownModel = models.some((m) => m.id === modelId);
   const activeStyle = detectStyle(speaker.prompt);
   const nameMissing = showErrors && !speaker.name.trim();
   const modelMissing = showErrors && !modelId && !modelsLoading;
@@ -141,29 +141,7 @@ export const SpeakerCard = ({
 
       <div className="mt-3.5 text-xs text-muted">Model</div>
       <div className="mt-1.5 flex items-center gap-2">
-        <ModelIcon modelId={modelId} size={18} tile />
-        <Select value={modelId} onChange={(e) => onChange({ model_id: e.target.value })} className="min-w-0 flex-1" aria-label="Model">
-          {!modelId && <option value="">{modelsLoading ? 'Loading models…' : 'Select a model'}</option>}
-          {modelId && !knownModel && <option value={modelId}>{modelId}</option>}
-          {free.length > 0 && (
-            <optgroup label="Free">
-              {free.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.name} · {formatContext(m.context_length)} ctx
-                </option>
-              ))}
-            </optgroup>
-          )}
-          {paid.length > 0 && (
-            <optgroup label={paidLocked ? 'Paid — needs credits or your own key' : 'Paid · per 1M output tokens'}>
-              {paid.map((m) => (
-                <option key={m.id} value={m.id} disabled={paidLocked && m.id !== modelId}>
-                  {m.name} · {formatPrice(m.pricing)}/1M · {formatContext(m.context_length)} ctx
-                </option>
-              ))}
-            </optgroup>
-          )}
-        </Select>
+        <ModelPicker value={modelId} models={models} loading={modelsLoading} paidLocked={paidLocked} ranks={ranks} onChange={(id) => onChange({ model_id: id })} />
       </div>
       {modelMissing && <Hint tone="danger">Pick a model for this speaker.</Hint>}
       {ranking && (

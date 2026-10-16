@@ -41,6 +41,8 @@ class ModelInfo(BaseModel):
     context_length: int
     pricing: ModelPricing
     is_free: bool
+    description: str = ""
+    created: int = 0  # unix seconds the model was added to OpenRouter
 
 
 class ModelsResponse(BaseModel):

@@ -135,15 +135,14 @@ export const AppShell = ({ children }: { children: ReactNode }) => {
   const { pathname } = useLocation();
   const bare = pathname === '/login' || pathname === '/register';
   return (
-    <div className="flex min-h-screen justify-center bg-ink">
-      <div className="relative flex w-full max-w-[1600px] min-h-screen">
-        {!bare && <Sidebar />}
-        <main className="flex min-w-0 flex-1 flex-col pb-24 md:pb-0">
-          {!bare && <MobileTopBar />}
-          {children}
-        </main>
-        {!bare && <MobileTabs />}
-      </div>
+    <div className="relative flex min-h-screen bg-ink">
+      {/* The sidebar stays pinned to the left edge; only the page content is capped and centred. */}
+      {!bare && <Sidebar />}
+      <main className="flex min-w-0 flex-1 flex-col pb-24 md:pb-0">
+        {!bare && <MobileTopBar />}
+        <div className="mx-auto flex w-full max-w-[1364px] flex-1 flex-col">{children}</div>
+      </main>
+      {!bare && <MobileTabs />}
     </div>
   );
 };

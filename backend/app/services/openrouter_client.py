@@ -283,6 +283,8 @@ class OpenRouterClient:
                         "completion": str(pricing.get("completion") or "0"),
                     },
                     "is_free": prompt_price == 0.0 and completion_price == 0.0,
+                    "description": str(model.get("description") or "")[:600],
+                    "created": int(model.get("created") or 0),
                 }
             )
 

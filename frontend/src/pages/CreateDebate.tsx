@@ -190,21 +190,21 @@ const CreateDebate = () => {
 
   if (remixId && !remixError) {
     return (
-      <Page narrow>
+      <Page>
         <PageLoader label="Copying the debate…" />
       </Page>
     );
   }
   if (draftId && !draftLoaded && !draftError) {
     return (
-      <Page narrow>
+      <Page>
         <PageLoader label="Opening the draft…" />
       </Page>
     );
   }
 
   return (
-    <Page narrow>
+    <Page>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="font-display text-[clamp(26px,3vw,38px)] font-extrabold tracking-[-0.03em]">{draftLoaded ? 'Edit draft' : 'New debate'}</h1>
         <button type="button" onClick={saveDraft} disabled={saving || starting} className="text-[13px] text-muted hover:text-text cursor-pointer disabled:opacity-50">

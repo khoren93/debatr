@@ -42,7 +42,8 @@ frontend/           React 19 + Vite 8 + Tailwind 4 + TypeScript
                       ModelIcon — provider logo of a model id via src/lib/modelIcons.ts)
   src/components/layout/AppShell.tsx  sidebar + mobile top bar/bottom tabs, Page, PageTitle
   src/components/cards/    DebateCard (library / gallery / landing)
-  src/components/create/   wizard steps + wizardState.ts (state, persistence, config mapping)
+  src/components/create/   wizard steps + wizardState.ts (state, persistence, config mapping),
+                           ModelPicker (searchable OpenRouter list: logos, prices, rank)
   src/components/debate/   player, live card, turn timeline, transcript, verdict, audio tab,
                            regenerate-audio dialog, exports aside (browser MP4 render), lineup,
                            AudienceVote (blind vote), LikeButton

@@ -41,6 +41,7 @@ export const StepSpeakers = ({ state, patch, models, modelsLoading, modelsError,
     const index = entries.findIndex((e) => e.model_id === modelId);
     return index < 0 ? null : { entry: entries[index], rank: index + 1 };
   };
+  const ranks = Object.fromEntries((leaderboard?.entries ?? []).map((e, i) => [e.model_id, i + 1]));
 
   const updateSpeaker = (index: number, changes: Partial<Speaker>) =>
     patch({ speakers: state.speakers.map((s, i) => (i === index ? { ...s, ...changes } : s)) });
@@ -142,6 +143,7 @@ export const StepSpeakers = ({ state, patch, models, modelsLoading, modelsError,
             modelsLoading={modelsLoading}
             paidLocked={paidLocked}
             ranking={speaker.role === 'debater' && leaderboard ? rankingFor(speaker.model_id || defaultModelId) : undefined}
+            ranks={ranks}
             voices={catalogue.voices}
             voicesLoading={catalogue.loading}
             removable={speaker.role === 'debater' && debaters > MIN_DEBATERS}
