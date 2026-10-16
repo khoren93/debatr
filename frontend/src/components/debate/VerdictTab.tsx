@@ -2,7 +2,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { Participant, Turn, Verdict } from '../../api/types';
 import { speakerColor } from '../../lib/format';
-import { EmptyState } from '../ui';
+import { Button, EmptyState } from '../ui';
 
 interface Props {
   verdict: Verdict | null;
@@ -11,13 +11,30 @@ interface Props {
   judgeVoice: string | null;
   isActive: boolean;
   markdown: boolean;
+  /** Blind voting: the verdict stays covered until the viewer votes or reveals it. */
+  hidden?: boolean;
+  onReveal?: () => void;
 }
 
+/** Placeholder shown instead of the judge's ruling while the audience vote is still blind. */
+export const VerdictGate = ({ onReveal, compact = false }: { onReveal?: () => void; compact?: boolean }) => (
+  <div className={`rounded-panel border border-dashed border-host/35 text-center ${compact ? 'p-4' : 'mt-5 p-[clamp(20px,3vw,32px)]'}`}>
+    <div className="font-mono text-[11px] tracking-[0.12em] text-host">JUDGE · VERDICT HIDDEN</div>
+    <p className={`mx-auto max-w-[460px] text-text-3 ${compact ? 'mt-1.5 text-[13px]' : 'mt-2.5 text-[15px]'}`}>The judge has ruled. Vote for the debater who argued better first — then see whether you agree.</p>
+    {onReveal && (
+      <Button variant="ghost" size="sm" onClick={onReveal} className="mt-2.5">
+        Reveal the verdict
+      </Button>
+    )}
+  </div>
+);
+
 /** Verdict tab: headline, per-debater feedback, full judge text. */
-export const VerdictTab = ({ verdict, verdictTurn, participants, judgeVoice, isActive, markdown }: Props) => {
+export const VerdictTab = ({ verdict, verdictTurn, participants, judgeVoice, isActive, markdown, hidden = false, onReveal }: Props) => {
   if (!verdict && !verdictTurn) {
     return <EmptyState className="mt-5" title={isActive ? 'The judge is still deliberating' : 'No verdict'} text={isActive ? 'The verdict arrives after the last round.' : undefined} />;
   }
+  if (hidden) return <VerdictGate onReveal={onReveal} />;
   const headline = verdict?.headline || (verdict?.winner_name ? `${verdict.winner_name} wins the debate.` : 'The debate ends in a draw.');
   const debaters = participants.filter((p) => p.role !== 'moderator');
   return (

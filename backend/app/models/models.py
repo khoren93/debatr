@@ -3,7 +3,17 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, Numeric, String, Text
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    Numeric,
+    String,
+    Text,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -123,6 +133,9 @@ class Debate(Base):
     slug: Mapped[str | None] = mapped_column(String(32), nullable=True, unique=True)
     category: Mapped[str | None] = mapped_column(String(40), nullable=True)
     views: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    # Denormalized counters of debate_likes / debate_votes rows (gallery sorting).
+    likes_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    votes_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Audio/video pipeline: none | queued | running | ready | error.
@@ -197,6 +210,41 @@ class Turn(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     debate: Mapped["Debate"] = relationship("Debate", back_populates="turns")
+
+
+class DebateLike(Base):
+    """One like per user and public debate."""
+
+    __tablename__ = "debate_likes"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    debate_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("debates.id", ondelete="CASCADE"), primary_key=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    __table_args__ = (Index("ix_debate_likes_debate_id", "debate_id"),)
+
+
+class DebateVote(Base):
+    """Audience vote: which debater argued better, one per user and debate (changeable)."""
+
+    __tablename__ = "debate_votes"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    debate_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("debates.id", ondelete="CASCADE"), primary_key=True
+    )
+    # "participant_{i}" (see serializers.participants_out); always a debater.
+    participant_id: Mapped[str] = mapped_column(String(32))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    __table_args__ = (Index("ix_debate_votes_debate_id", "debate_id"),)
 
 
 class Preset(Base):

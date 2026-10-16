@@ -6,6 +6,7 @@ import { LinkButton, PageLoader } from './components/ui';
 import Landing from './pages/Landing';
 import Library from './pages/Library';
 import Gallery from './pages/Gallery';
+import Leaderboard from './pages/Leaderboard';
 import Account from './pages/Account';
 import Login from './pages/Login';
 import Register from './pages/Register';
@@ -45,6 +46,7 @@ function App() {
         <Routes>
         <Route path="/" element={<Landing />} />
         <Route path="/gallery" element={<Gallery />} />
+        <Route path="/leaderboard" element={<Leaderboard />} />
         <Route path="/d/:slug" element={<PublicDebateRoute />} />
         <Route path="/debate/:id" element={<DebateRoute />} />
         <Route path="/login" element={<Login />} />

@@ -5,6 +5,7 @@ import type { Participant, Turn, TurnStartedEvent } from '../../api/types';
 import { isErrorTurn, roundHeading, splitEmotionTag, turnErrorMessage } from '../../lib/format';
 import { EmptyState, ErrorBox, SpeakerBadge } from '../ui';
 import { msLabel, turnColor } from './helpers';
+import { VerdictGate } from './VerdictTab';
 
 export interface StreamingTurn extends TurnStartedEvent {
   text: string;
@@ -18,6 +19,9 @@ interface Props {
   markdown: boolean;
   isActive: boolean;
   activeSeq?: number | null;
+  /** Cover the judge's turn while the audience vote is blind. */
+  hideVerdict?: boolean;
+  onRevealVerdict?: () => void;
 }
 
 interface RowProps {
@@ -63,7 +67,7 @@ const Row = ({ turn, participants, time, markdown, streaming = false, active = f
 };
 
 /** Transcript tab: turns grouped by round with mono headings. */
-export const Transcript = ({ turns, streaming, participants, timeline, markdown, isActive, activeSeq = null }: Props) => {
+export const Transcript = ({ turns, streaming, participants, timeline, markdown, isActive, activeSeq = null, hideVerdict = false, onRevealVerdict }: Props) => {
   if (turns.length === 0 && !streaming) {
     return <EmptyState className="mt-5" title={isActive ? 'Waiting for the first speaker…' : 'No turns were recorded'} />;
   }
@@ -82,6 +86,14 @@ export const Transcript = ({ turns, streaming, participants, timeline, markdown,
     if (turn.round_id !== lastRound) {
       rows.push(heading(turn.round_id, turn.turn_type));
       lastRound = turn.round_id;
+    }
+    if (hideVerdict && turn.turn_type === 'verdict') {
+      rows.push(
+        <div key={turn.seq_index} id={`turn-${turn.seq_index}`}>
+          <VerdictGate onReveal={onRevealVerdict} compact />
+        </div>,
+      );
+      continue;
     }
     rows.push(<Row key={turn.seq_index} turn={turn} participants={participants} time={timeFor(turn.seq_index)} markdown={markdown} active={activeSeq === turn.seq_index} />);
   }

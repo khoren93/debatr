@@ -13,6 +13,8 @@ VideoQuality = Literal["720p", "1080p", "4k"]
 TTSProvider = Literal["elevenlabs", "edge"]
 
 GALLERY_CATEGORIES: tuple[str, ...] = ("tech", "society", "science", "culture", "money", "fun")
+GallerySort = Literal["new", "trending", "top"]
+GalleryPeriod = Literal["week", "month", "year", "all"]
 
 # Request-only fields that must never be written to `debates.config_json`.
 TRANSIENT_CONFIG_FIELDS: frozenset[str] = frozenset({"user_provider_key", "user_tts_key", "draft"})
@@ -248,6 +250,8 @@ class DebateSummary(BaseModel):
     slug: str | None = None
     category: str | None = None
     views: int = 0
+    likes: int = 0
+    votes: int = 0
     duration_ms: int | None = None
     outputs: list[str] = Field(default_factory=list)
     verdict: VerdictOut | None = None
@@ -263,6 +267,33 @@ class DebateSettingsOut(BaseModel):
     length_preset: str
     intensity: int
     output_style: OutputStyle = "markdown"
+
+
+class AudienceOut(BaseModel):
+    """Audience vote ("who argued better?") on a public debate."""
+
+    total: int = 0
+    counts: dict[str, int] = Field(default_factory=dict)  # participant_id -> votes
+    my_vote: str | None = None
+    can_vote: bool = False
+    # Why the viewer cannot vote: sign_in | owner | not_public | not_finished
+    reason: str | None = None
+
+
+class EngagementOut(BaseModel):
+    likes: int = 0
+    liked: bool = False
+    can_like: bool = False
+    audience: AudienceOut = Field(default_factory=AudienceOut)
+
+
+class LikeOut(BaseModel):
+    liked: bool
+    likes: int
+
+
+class VoteRequest(BaseModel):
+    participant_id: str = Field(min_length=1, max_length=32)
 
 
 class DebateDetail(BaseModel):
@@ -292,6 +323,7 @@ class DebateDetail(BaseModel):
     duration_ms: int | None = None
     outputs: list[str] = Field(default_factory=list)
     billing: BillingOut = Field(default_factory=BillingOut)
+    engagement: EngagementOut = Field(default_factory=EngagementOut)
     # Full stored configuration; only sent to the owner (drafts re-open in the wizard).
     config: DebateConfig | None = None
 
@@ -311,6 +343,8 @@ class GalleryItem(BaseModel):
     category: str | None = None
     author_name: str | None = None
     views: int = 0
+    likes: int = 0
+    votes: int = 0
     duration_ms: int | None = None
     has_media: bool = False
     verdict: VerdictOut | None = None
@@ -322,3 +356,24 @@ class GalleryResponse(BaseModel):
     items: list[GalleryItem]
     total: int
     categories: list[str] = Field(default_factory=lambda: list(GALLERY_CATEGORIES))
+
+
+# --- Model leaderboard ---
+class LeaderboardEntry(BaseModel):
+    model_id: str
+    name: str
+    is_free: bool
+    rating: int
+    debates: int  # public debates the model argued in
+    votes: int  # audience votes received
+    vote_share: float | None = None  # votes / all votes cast in its debates
+    audience_wins: int = 0
+    audience_contests: int = 0
+    judge_wins: int = 0
+    judge_contests: int = 0
+
+
+class LeaderboardOut(BaseModel):
+    entries: list[LeaderboardEntry]
+    total_debates: int
+    total_votes: int

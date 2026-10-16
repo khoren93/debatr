@@ -221,7 +221,11 @@ The system uses an event-driven architecture to handle long-running LLM generati
 - [x] **Voice Synthesis (TTS)**: Browser text-to-speech playback.
 - [x] **Neural TTS**: ElevenLabs / Edge voices with word timestamps, karaoke transcript and MP3 export.
 - [x] **Video**: 16:9 debate video and 9:16 shorts rendered in the browser (Remotion).
-- [ ] **User Voting**: Let the audience decide the winner.
+- [x] **Audience voting**: blind "who argued better?" vote next to the AI judge's verdict.
+- [x] **Likes & gallery ranking**: Trending / New / Top (week, month, year) sorting.
+- [x] **Model ranking**: Elo-like leaderboard of models from audience votes, free/paid filter.
+- [x] **Remix**: start a new debate prefilled from any public debate.
+- [ ] **Comments**: discussion under public debates (owner can switch it on/off).
 - [x] **Export Transcripts**: Save debates as Markdown.
 - [x] **Accounts & credits**: sign-up, Stripe top-ups, ledger, personal OpenRouter key.
 - [x] **Public gallery**: publish debates with share links.

@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { Mic, Plus, Search } from 'lucide-react';
+import { Heart, Mic, Plus, Search } from 'lucide-react';
 import { getErrorMessage } from '../api/client';
 import { listDebates } from '../api/debates';
 import type { DebateSummary, MediaOutput } from '../api/types';
@@ -7,7 +7,7 @@ import { useAuth } from '../auth/AuthContext';
 import { Page, PageTitle } from '../components/layout/AppShell';
 import { DebateCard, DurationChip, VerdictLine } from '../components/cards';
 import { Button, EmptyState, ErrorBox, Input, LinkButton, PageLoader, SectionLabel, Segmented, StagePill, Tag, type SegmentOption } from '../components/ui';
-import { formatDateShort, stageOfSummary } from '../lib/format';
+import { formatCount, formatDateShort, stageOfSummary } from '../lib/format';
 
 type Filter = 'all' | 'live' | 'completed' | 'rendering' | 'draft';
 
@@ -150,7 +150,20 @@ const Library = () => {
                           )}
                         </>
                       }
-                      footerRight={outputs.length > 0 ? outputs.map((o) => <Tag key={o}>{OUTPUT_TAGS[o]}</Tag>) : undefined}
+                      footerRight={
+                        outputs.length > 0 || d.is_public ? (
+                          <>
+                            {d.is_public && (
+                              <span className="mr-1 inline-flex items-center gap-1" title={`${d.likes} likes · ${d.votes} audience votes`}>
+                                <Heart className="size-3" /> {formatCount(d.likes)}
+                              </span>
+                            )}
+                            {outputs.map((o) => (
+                              <Tag key={o}>{OUTPUT_TAGS[o]}</Tag>
+                            ))}
+                          </>
+                        ) : undefined
+                      }
                     />
                   );
                 })}

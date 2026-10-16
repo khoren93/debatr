@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { Heart } from 'lucide-react';
 import { listGallery } from '../api/gallery';
 import type { GalleryItem } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { Page } from '../components/layout/AppShell';
-import { DebateCard, DurationChip, VerdictLine, VersusLine } from '../components/cards';
+import { DebateCard, DurationChip, VersusLine } from '../components/cards';
 import { Bars, LinkButton } from '../components/ui';
 import { APP_DESCRIPTION } from '../lib/brand';
 import { formatCount } from '../lib/format';
@@ -77,12 +78,12 @@ const Landing = () => {
 
   useEffect(() => {
     let cancelled = false;
-    listGallery({ limit: 3 })
+    listGallery({ limit: 3, sort: 'trending' })
       .then((res) => {
         if (!cancelled) setFeatured(res.items);
       })
       .catch(() => {
-        // The "Fresh from the studio" section is optional: it stays hidden when the gallery is unavailable.
+        // The "Trending in the gallery" section is optional: it stays hidden when the gallery is unavailable.
       });
     return () => {
       cancelled = true;
@@ -145,7 +146,7 @@ const Landing = () => {
       {featured.length > 0 && (
         <div className="relative mt-[clamp(60px,8vw,100px)]">
           <div className="flex flex-wrap items-end justify-between gap-4">
-            <h2 className="font-display text-[clamp(26px,3vw,38px)] font-bold tracking-[-0.03em]">Fresh from the studio</h2>
+            <h2 className="font-display text-[clamp(26px,3vw,38px)] font-bold tracking-[-0.03em]">Trending in the gallery</h2>
             <Link to="/gallery" className="text-sm text-accent transition-colors hover:text-accent-hover">
               Browse gallery →
             </Link>
@@ -161,7 +162,11 @@ const Landing = () => {
                 topLeft={<VersusLine participants={item.participants} />}
                 topRight={<DurationChip ms={item.duration_ms} />}
                 footerLeft={<span>{formatCount(item.views)} views</span>}
-                footerRight={<VerdictLine verdict={item.verdict} />}
+                footerRight={
+                  <span className="inline-flex items-center gap-1">
+                    <Heart className="size-3" /> {formatCount(item.likes)}
+                  </span>
+                }
               />
             ))}
           </div>

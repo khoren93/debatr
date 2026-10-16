@@ -1,5 +1,6 @@
 import type {
   DebateConfig,
+  DebateDetail,
   LengthPreset,
   MediaOutput,
   ModelInfo,
@@ -325,6 +326,35 @@ export const stateFromConfig = (config: DebateConfig, base: WizardState): Wizard
     voices,
     outputs: plan?.outputs ?? base.outputs,
     quality: plan?.quality ?? base.quality,
+  };
+};
+
+const isRole = (role: string): role is ParticipantRole => role === 'moderator' || role === 'debater';
+
+/**
+ * Configuration to start a "remix" of an existing debate from: the owner gets their full stored
+ * config; everyone else gets the public settings and lineup (custom personas stay private).
+ */
+export const configFromDebate = (debate: DebateDetail): DebateConfig => {
+  if (debate.config) return debate.config;
+  const { settings } = debate;
+  return {
+    topic: settings.topic || debate.title || '',
+    description: settings.description ?? undefined,
+    language: settings.language,
+    num_rounds: settings.num_rounds,
+    length_preset: LENGTH_VALUES.includes(settings.length_preset as LengthPreset) ? (settings.length_preset as LengthPreset) : 'medium',
+    intensity: settings.intensity,
+    output_style: settings.output_style,
+    participants: debate.participants
+      .filter((p) => isRole(p.role))
+      .map((p) => ({
+        role: p.role as ParticipantRole,
+        model_id: p.model,
+        display_name: p.name?.trim() || (p.role === 'moderator' ? 'The Host' : 'Debater'),
+        voice_name: p.voice_name ?? undefined,
+      })),
+    media_plan: debate.media_plan ?? undefined,
   };
 };
 

@@ -14,11 +14,13 @@ backend/            FastAPI API + RQ worker (Python 3.12+, managed with uv)
   app/worker.py       RQ worker entrypoint (`python -m app.worker`)
   app/core/           config (pydantic-settings), db (async SQLAlchemy), redis, logging,
                       ratelimit, auth (session-cookie login deps), security (bcrypt, Fernet), ids
-  app/api/            routers: auth, billing (Stripe), debates, gallery, models, presets,
-                      stream (SSE), media; serializers.py builds the shared response models
+  app/api/            routers: auth, billing (Stripe), debates, gallery (+ leaderboard), reactions
+                      (likes/votes), models, presets, stream (SSE), media; serializers.py builds
+                      the shared response models
   app/services/       orchestrator (RQ jobs), scheduler (turn order), prompt_builder,
                       openrouter_client, events (pub/sub), queue_manager, credits (ledger),
-                      estimate (pre-run cost), verdict (structured verdict), views (view counter)
+                      estimate (pre-run cost), verdict (structured verdict), views (view counter),
+                      engagement (likes/audience votes), ranking (trending score, model leaderboard)
   app/services/media/ audio pipeline: script (markdown→speech), tts/ (elevenlabs, edge),
                       ffmpeg, highlights (LLM picks shorts), jobs (build_media_job), timeline
   app/schemas/timeline.py  Timeline contract shared with frontend/src/api/timeline.ts
@@ -32,17 +34,20 @@ frontend/           React 19 + Vite 8 + Tailwind 4 + TypeScript
                       gallery, media, models), shared types.ts, timeline.ts
   src/auth/           AuthContext (useAuth), RequireAuth route guard
   src/hooks/          useDebateStream (SSE), useDebateMedia (polling), useAudioClock,
-                      useModels, useBillingConfig, useVoices (wizard voice catalogue)
+                      useModels, useBillingConfig, useVoices (wizard voice catalogue),
+                      useLeaderboard (cached model ranking)
   src/components/ui/  design-system primitives (Button, Card, Chip, Segmented, Field, Pill,
                       Progress, Modal/ConfirmDialog, Toast, Avatar/SpeakerBadge, Thumb, Logo…)
   src/components/layout/AppShell.tsx  sidebar + mobile top bar/bottom tabs, Page, PageTitle
   src/components/cards/    DebateCard (library / gallery / landing)
   src/components/create/   wizard steps + wizardState.ts (state, persistence, config mapping)
   src/components/debate/   player, live card, turn timeline, transcript, verdict, audio tab,
-                           regenerate-audio dialog, exports aside (browser MP4 render), lineup
+                           regenerate-audio dialog, exports aside (browser MP4 render), lineup,
+                           AudienceVote (blind vote), LikeButton
   src/components/account/  credits, usage, local keys, ledger, security cards; auth layout/fields
   src/video/          Remotion compositions (DebateLong 16:9, DebateShort 9:16) + render.ts
-  src/pages/          Landing (/), Library (/library), Gallery (/gallery), CreateDebate (/create),
+  src/pages/          Landing (/), Library (/library), Gallery (/gallery), Leaderboard (/leaderboard),
+                      CreateDebate (/create, `?draft=<id>`, `?remix=<id>`),
                       DebateView (/debate/:id and public /d/:slug), Account (/account),
                       Login (/login), Register (/register)
 design/             the Claude Design mockup (`AI Debates Studio.dc.html` + `support.js`)
@@ -124,6 +129,26 @@ Access: owners and the admin session manage a debate; public (`is_public`, `slug
 (`app/api/serializers.can_view / can_manage`). `POST /api/debates/{id}/publish` assigns the slug.
 Stopping: `POST /api/debates/{id}/stop` sets the status, sets `debate:{id}:stop` in Redis
 (checked by the worker every few chunks) and publishes `debate_stopped`.
+
+### Likes, audience votes and the model ranking
+
+- `debate_likes` / `debate_votes` (PK `user_id, debate_id`) with denormalized
+  `debates.likes_count` / `votes_count` (atomic increments in `services/engagement.py`; the admin
+  Like/Vote views call `recount` after deletes). Only signed-in non-owners can like or vote, only on
+  public debates; votes also need `status=completed` and ≥2 debaters (`like_blocker`/`vote_blocker`).
+- `PUT|DELETE /api/debates/{id}/like`, `PUT|DELETE /api/debates/{id}/vote` (`participant_id` of a
+  debater; a second PUT moves the vote). `DebateDetail.engagement` carries likes, `liked` and the
+  `audience` split (`counts`, `my_vote`, `can_vote`, `reason`).
+- Blind voting is a frontend rule: for a viewer who could vote, the judge's verdict (Verdict tab,
+  verdict turn in the transcript) and the split stay hidden until they vote or click reveal;
+  gallery/landing cards show likes instead of the winner.
+- `GET /api/gallery?sort=new|trending|top&period=week|month|year|all&model=<id>`; trending is
+  `services/ranking.trending_score` mirrored in SQL by `routes_gallery.trending_sql`.
+- `GET /api/gallery/leaderboard`: Bradley–Terry ratings (Elo-like scale, 1000 = average,
+  `PRIOR_GAMES` virtual games damp single votes) from audience votes on public completed debates;
+  each vote is a win of the chosen model over every other model in the debate, mirror matches are
+  ignored. Lists only models that argued in a public debate; `is_free` comes from the OpenRouter
+  catalogue. The wizard's speaker cards show each model's rank and link to `/gallery?model=`.
 
 ### Media pipeline (audio on the server, video in the browser)
 

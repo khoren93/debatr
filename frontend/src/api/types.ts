@@ -10,6 +10,8 @@ export type VideoQuality = '720p' | '1080p' | '4k';
 export const ACTIVE_STATUSES: readonly DebateStatus[] = ['queued', 'running'];
 export const GALLERY_CATEGORIES = ['tech', 'society', 'science', 'culture', 'money', 'fun'] as const;
 export type GalleryCategory = (typeof GALLERY_CATEGORIES)[number];
+export type GallerySort = 'new' | 'trending' | 'top';
+export type GalleryPeriod = 'week' | 'month' | 'year' | 'all';
 
 // --- Models ------------------------------------------------------------------
 
@@ -111,6 +113,8 @@ export interface DebateSummary {
   slug: string | null;
   category: string | null;
   views: number;
+  likes: number;
+  votes: number;
   duration_ms: number | null;
   outputs: MediaOutput[];
   verdict: Verdict | null;
@@ -126,6 +130,25 @@ export interface DebateSettings {
   length_preset: string;
   intensity: number;
   output_style: OutputStyle;
+}
+
+/** Why the viewer cannot vote / like (null when they can). */
+export type EngagementBlocker = 'sign_in' | 'owner' | 'not_public' | 'not_finished';
+
+export interface Audience {
+  total: number;
+  /** participant_id -> votes */
+  counts: Record<string, number>;
+  my_vote: string | null;
+  can_vote: boolean;
+  reason: EngagementBlocker | null;
+}
+
+export interface Engagement {
+  likes: number;
+  liked: boolean;
+  can_like: boolean;
+  audience: Audience;
 }
 
 export interface DebateDetail {
@@ -155,6 +178,7 @@ export interface DebateDetail {
   duration_ms: number | null;
   outputs: MediaOutput[];
   billing: { own_key: boolean };
+  engagement: Engagement;
   /** Full stored configuration; only present for the owner (drafts re-open in the wizard). */
   config: DebateConfig | null;
 }
@@ -291,6 +315,8 @@ export interface GalleryItem {
   category: string | null;
   author_name: string | null;
   views: number;
+  likes: number;
+  votes: number;
   duration_ms: number | null;
   has_media: boolean;
   verdict: Verdict | null;
@@ -302,6 +328,29 @@ export interface GalleryResponse {
   items: GalleryItem[];
   total: number;
   categories: string[];
+}
+
+export interface LeaderboardEntry {
+  model_id: string;
+  name: string;
+  is_free: boolean;
+  rating: number;
+  /** Public debates the model argued in. */
+  debates: number;
+  /** Audience votes received. */
+  votes: number;
+  /** votes / all votes cast in its debates (null without votes). */
+  vote_share: number | null;
+  audience_wins: number;
+  audience_contests: number;
+  judge_wins: number;
+  judge_contests: number;
+}
+
+export interface Leaderboard {
+  entries: LeaderboardEntry[];
+  total_debates: number;
+  total_votes: number;
 }
 
 // --- Server-Sent Events -----------------------------------------------------

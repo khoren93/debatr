@@ -14,6 +14,7 @@ from app.schemas.schemas import (
     DebateSettingsOut,
     DebateSummary,
     DebateTotals,
+    EngagementOut,
     GalleryItem,
     MediaPlan,
     ParticipantOut,
@@ -134,6 +135,15 @@ def participants_out(debate: Debate) -> list[ParticipantOut]:
     ]
 
 
+def debater_models(debate: Debate) -> dict[str, str]:
+    """participant_id -> model id for the debaters (the ids audience votes refer to)."""
+    return {
+        f"participant_{i}": p.model_id
+        for i, p in enumerate(debate.participants)
+        if p.role != "moderator"
+    }
+
+
 def topic_of(debate: Debate) -> str:
     return str((debate.config_json or {}).get("topic") or debate.title or "")
 
@@ -152,6 +162,8 @@ def summary_out(debate: Debate) -> DebateSummary:
         slug=debate.slug,
         category=debate.category,
         views=debate.views or 0,
+        likes=debate.likes_count or 0,
+        votes=debate.votes_count or 0,
         duration_ms=duration_ms(debate),
         outputs=outputs(debate),
         verdict=verdict_out(debate),
@@ -169,7 +181,9 @@ def owner_config(debate: Debate) -> DebateConfig | None:
         return None
 
 
-def detail_out(debate: Debate, viewer: User | None) -> DebateDetail:
+def detail_out(
+    debate: Debate, viewer: User | None, engagement: EngagementOut | None = None
+) -> DebateDetail:
     conf: dict[str, Any] = debate.config_json or {}
     billing = conf.get("billing") or {}
     author = debate.user.display_name if debate.user is not None else None
@@ -211,6 +225,7 @@ def detail_out(debate: Debate, viewer: User | None) -> DebateDetail:
         duration_ms=duration_ms(debate),
         outputs=outputs(debate),
         billing=BillingOut(own_key=bool(billing.get("own_key"))),
+        engagement=engagement or EngagementOut(likes=debate.likes_count or 0),
     )
 
 
@@ -225,6 +240,8 @@ def gallery_item_out(debate: Debate) -> GalleryItem:
         category=debate.category,
         author_name=debate.user.display_name if debate.user is not None else None,
         views=debate.views or 0,
+        likes=debate.likes_count or 0,
+        votes=debate.votes_count or 0,
         duration_ms=duration_ms(debate),
         has_media=debate.media_status == "ready",
         verdict=verdict_out(debate),

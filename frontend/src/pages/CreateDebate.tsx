@@ -14,6 +14,7 @@ import { WizardProgress } from '../components/create/WizardProgress';
 import {
   buildConfig,
   clearWizardState,
+  configFromDebate,
   countDebaters,
   initialState,
   loadWizardState,
@@ -31,12 +32,16 @@ import { useModels } from '../hooks/useModels';
 import { useVoices } from '../hooks/useVoices';
 import { useLocalKey } from '../lib/localKeys';
 
-/** Four-step wizard: topic → speakers → voice & format → review. `?draft=<id>` edits a saved draft. */
+/**
+ * Four-step wizard: topic → speakers → voice & format → review. `?draft=<id>` edits a saved draft,
+ * `?remix=<id>` starts a new debate prefilled from an existing one.
+ */
 const CreateDebate = () => {
   const navigate = useNavigate();
   const toast = useToast();
   const [searchParams] = useSearchParams();
   const draftId = searchParams.get('draft');
+  const remixId = draftId ? null : searchParams.get('remix');
   const { user, refresh } = useAuth();
   const { models, loading: modelsLoading, error: modelsError } = useModels();
   const { config: billing } = useBillingConfig();
@@ -46,6 +51,7 @@ const CreateDebate = () => {
   const [state, setState] = useState<WizardState>(() => (draftId ? initialState() : loadWizardState()));
   const [draftLoaded, setDraftLoaded] = useState<string | null>(null);
   const [draftError, setDraftError] = useState<string | null>(null);
+  const [remixError, setRemixError] = useState<string | null>(null);
   const [showErrors, setShowErrors] = useState(false);
   const [starting, setStarting] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -77,10 +83,30 @@ const CreateDebate = () => {
     };
   }, [draftId]);
 
-  // The in-progress wizard survives reloads (drafts live on the server instead).
+  // Remix: replace the in-progress wizard with a copy of the debate, then drop the query param.
   useEffect(() => {
-    if (!draftId) saveWizardState(state);
-  }, [state, draftId]);
+    if (!remixId) return;
+    let cancelled = false;
+    getDebate(remixId)
+      .then((d) => {
+        if (cancelled) return;
+        setState(stateFromConfig(configFromDebate(d), initialState()));
+        toast.info('Prefilled from the debate — tweak anything you like');
+        navigate('/create', { replace: true });
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setRemixError(getErrorMessage(err));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [remixId, navigate, toast]);
+
+  // The in-progress wizard survives reloads (drafts live on the server instead). While a remix
+  // loads, keep the stored state untouched in case it fails.
+  useEffect(() => {
+    if (!draftId && !remixId) saveWizardState(state);
+  }, [state, draftId, remixId]);
 
   const patch = (changes: Partial<WizardState>) => setState((s) => ({ ...s, ...changes }));
 
@@ -162,6 +188,13 @@ const CreateDebate = () => {
     }
   };
 
+  if (remixId && !remixError) {
+    return (
+      <Page narrow>
+        <PageLoader label="Copying the debate…" />
+      </Page>
+    );
+  }
   if (draftId && !draftLoaded && !draftError) {
     return (
       <Page narrow>
@@ -179,6 +212,7 @@ const CreateDebate = () => {
         </button>
       </div>
       {draftError && <ErrorBox className="mt-4">{draftError}</ErrorBox>}
+      {remixError && <ErrorBox className="mt-4">Could not copy that debate: {remixError}</ErrorBox>}
 
       <WizardProgress step={state.step} maxStep={maxStep} onSelect={goTo} />
 

@@ -1,5 +1,5 @@
 import { Link, NavLink, useLocation } from 'react-router-dom';
-import { Home, LayoutGrid, Play, Plus, UserRound } from 'lucide-react';
+import { Home, LayoutGrid, Play, Plus, Trophy, UserRound } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useAuth } from '../../auth/AuthContext';
 import { Avatar, Logo, Progress } from '../ui';
@@ -9,6 +9,8 @@ const NAV = [
   { to: '/library', label: 'Library', icon: LayoutGrid },
   { to: '/create', label: 'Create', icon: Plus },
   { to: '/gallery', label: 'Gallery', icon: Play },
+  // Phones keep five bottom tabs; the gallery links to the ranking there.
+  { to: '/leaderboard', label: 'Ranking', icon: Trophy, desktopOnly: true },
   { to: '/account', label: 'Account', icon: UserRound },
 ];
 
@@ -112,7 +114,7 @@ const MobileTopBar = () => {
 
 const MobileTabs = () => (
   <nav className="fixed inset-x-0 bottom-0 z-30 flex items-center justify-around border-t border-line bg-ink-2/95 px-1.5 pt-2 pb-[calc(10px+env(safe-area-inset-bottom))] backdrop-blur-xl md:hidden">
-    {NAV.map(({ to, label, icon: Icon, end }) => (
+    {NAV.filter((item) => !item.desktopOnly).map(({ to, label, icon: Icon, end }) => (
       <NavLink
         key={to}
         to={to}

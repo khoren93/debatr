@@ -1,6 +1,20 @@
-from sqladmin import ModelView
+from typing import Any
 
-from app.models.models import CreditTransaction, Debate, DebateParticipant, Session, Turn, User
+from sqladmin import ModelView
+from starlette.requests import Request
+
+from app.core.db import AsyncSessionLocal
+from app.models.models import (
+    CreditTransaction,
+    Debate,
+    DebateLike,
+    DebateParticipant,
+    DebateVote,
+    Session,
+    Turn,
+    User,
+)
+from app.services.engagement import recount
 
 
 class UserAdmin(ModelView, model=User):
@@ -61,16 +75,62 @@ class DebateAdmin(ModelView, model=Debate):
         Debate.user_id,
         Debate.is_public,
         Debate.media_status,
+        Debate.views,
+        Debate.likes_count,
+        Debate.votes_count,
         Debate.created_at,
         Debate.ended_at,
     ]
     column_searchable_list = [Debate.id, Debate.title, Debate.status, Debate.slug]
-    column_sortable_list = [Debate.created_at, Debate.status, Debate.views]
+    column_sortable_list = [
+        Debate.created_at,
+        Debate.status,
+        Debate.views,
+        Debate.likes_count,
+        Debate.votes_count,
+    ]
     column_default_sort = (Debate.created_at, True)
     can_delete = True
     name = "Debate"
     name_plural = "Debates"
     icon = "fa-solid fa-comments"
+
+
+class _RecountOnDelete:
+    """Deleting likes/votes here keeps the denormalized counters on the debate in step."""
+
+    async def after_model_delete(self, model: Any, request: Request) -> None:
+        async with AsyncSessionLocal() as db:
+            await recount(db, model.debate_id)
+
+
+class LikeAdmin(_RecountOnDelete, ModelView, model=DebateLike):
+    column_list = [DebateLike.debate_id, DebateLike.user_id, DebateLike.created_at]
+    column_sortable_list = [DebateLike.created_at]
+    column_default_sort = (DebateLike.created_at, True)
+    can_create = False
+    can_edit = False
+    can_delete = True
+    name = "Like"
+    name_plural = "Likes"
+    icon = "fa-solid fa-heart"
+
+
+class VoteAdmin(_RecountOnDelete, ModelView, model=DebateVote):
+    column_list = [
+        DebateVote.debate_id,
+        DebateVote.user_id,
+        DebateVote.participant_id,
+        DebateVote.updated_at,
+    ]
+    column_sortable_list = [DebateVote.created_at, DebateVote.updated_at]
+    column_default_sort = (DebateVote.updated_at, True)
+    can_create = False
+    can_edit = False
+    can_delete = True
+    name = "Vote"
+    name_plural = "Votes"
+    icon = "fa-solid fa-check-to-slot"
 
 
 class ParticipantAdmin(ModelView, model=DebateParticipant):

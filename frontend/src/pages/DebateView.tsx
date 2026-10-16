@@ -1,16 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Download, Eye, Lock, Share2, Square, Trash2 } from 'lucide-react';
+import { ArrowLeft, Download, Eye, Lock, Repeat2, Share2, Square, Trash2 } from 'lucide-react';
 import { getErrorMessage, getErrorStatus } from '../api/client';
 import { deleteDebate, getDebate, stopDebate } from '../api/debates';
 import { getPublicDebate } from '../api/gallery';
 import { absoluteMediaBase } from '../api/media';
-import { ACTIVE_STATUSES, type DebateDetail, type Turn } from '../api/types';
+import { ACTIVE_STATUSES, type Audience, type DebateDetail, type Turn } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { Page } from '../components/layout/AppShell';
 import { Button, ConfirmDialog, EmptyState, ErrorBox, LinkButton, PageLoader, Pill, StagePill, useToast } from '../components/ui';
+import { AudienceVote } from '../components/debate/AudienceVote';
 import { AudioTab } from '../components/debate/AudioTab';
 import { ExportsAside } from '../components/debate/ExportsAside';
+import { LikeButton } from '../components/debate/LikeButton';
 import { LiveCard } from '../components/debate/LiveCard';
 import { PlayerCard } from '../components/debate/PlayerCard';
 import { RegenerateAudioDialog } from '../components/debate/RegenerateAudioDialog';
@@ -55,6 +57,8 @@ const DebateView = ({ id, slug }: Props) => {
   const [confirm, setConfirm] = useState<'stop' | 'delete' | null>(null);
   const [busy, setBusy] = useState(false);
   const [regenOpen, setRegenOpen] = useState(false);
+  // Blind voting: the judge's ruling stays covered until the viewer votes or peeks.
+  const [revealed, setRevealed] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [activeSeq, setActiveSeq] = useState<number | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -172,6 +176,13 @@ const DebateView = ({ id, slug }: Props) => {
     }
   };
 
+  const updateAudience = (audience: Audience) => {
+    if (audience.my_vote) setRevealed(true);
+    setDebate((d) => (d ? { ...d, engagement: { ...d.engagement, audience } } : d));
+  };
+
+  const updateLikes = (likes: number, liked: boolean) => setDebate((d) => (d ? { ...d, engagement: { ...d.engagement, likes, liked } } : d));
+
   const exportMarkdown = () => {
     if (!debate) return;
     downloadText(debateMarkdown(debate.title ?? 'Debate', debate.created_at, debate.status, debate.participants, debate.turns), `debate-${debate.id}.md`);
@@ -241,6 +252,10 @@ const DebateView = ({ id, slug }: Props) => {
   const totals = debate.totals;
   const currentSpeaker = streaming ? { name: streaming.speaker_name, color: turnColor({ ...streaming, speaker_id: undefined }, participants) } : null;
   const backTo = slug || !isOwner ? { to: '/gallery', label: 'Gallery' } : { to: '/library', label: 'Library' };
+  const audience = debate.engagement.audience;
+  const showVote = debate.is_public && audience.reason !== 'not_public' && audience.reason !== 'not_finished';
+  const verdictHidden = showVote && !revealed && audience.my_vote === null && audience.reason !== 'owner';
+  const reveal = () => setRevealed(true);
   const tabs: { value: Tab; label: string }[] = [
     { value: 'transcript', label: 'Transcript' },
     { value: 'verdict', label: 'Verdict' },
@@ -275,6 +290,7 @@ const DebateView = ({ id, slug }: Props) => {
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
+          {debate.is_public && <LikeButton debate={debate} onChange={updateLikes} />}
           {isOwner && isActive && (
             <Button variant="danger" size="sm" onClick={() => setConfirm('stop')} icon={<Square className="size-3 fill-current" />}>
               Stop
@@ -284,6 +300,11 @@ const DebateView = ({ id, slug }: Props) => {
             <Button variant="secondary" size="sm" onClick={() => setShareOpen((v) => !v)} icon={<Share2 className="size-3.5" />}>
               Share
             </Button>
+          )}
+          {completed && (isOwner || debate.is_public) && (
+            <LinkButton to={`/create?remix=${debate.id}`} variant="secondary" size="sm" icon={<Repeat2 className="size-3.5" />}>
+              Remix
+            </LinkButton>
           )}
           <Button variant="secondary" size="sm" onClick={exportMarkdown} disabled={debate.turns.length === 0} icon={<Download className="size-3.5" />}>
             Export MD
@@ -319,6 +340,8 @@ const DebateView = ({ id, slug }: Props) => {
 
           <TurnTimeline items={items} activeKey={activeSeq} onSelect={selectSegment} className="mt-3.5" />
 
+          {showVote && <AudienceVote debate={debate} revealed={!verdictHidden} onReveal={reveal} onChange={updateAudience} className="mt-5" />}
+
           <div className="mt-7 flex gap-[18px] border-b border-line" role="tablist">
             {tabs.map((t) => (
               <button
@@ -334,8 +357,8 @@ const DebateView = ({ id, slug }: Props) => {
             ))}
           </div>
 
-          {tab === 'transcript' && <Transcript turns={debate.turns} streaming={streaming} participants={participants} timeline={timeline} markdown={debate.settings.output_style === 'markdown'} isActive={isActive} activeSeq={activeSeq} />}
-          {tab === 'verdict' && <VerdictTab verdict={debate.verdict} verdictTurn={verdictTurn} participants={participants} judgeVoice={judgeVoice} isActive={isActive} markdown={debate.settings.output_style === 'markdown'} />}
+          {tab === 'transcript' && <Transcript turns={debate.turns} streaming={streaming} participants={participants} timeline={timeline} markdown={debate.settings.output_style === 'markdown'} isActive={isActive} activeSeq={activeSeq} hideVerdict={verdictHidden} onRevealVerdict={reveal} />}
+          {tab === 'verdict' && <VerdictTab verdict={debate.verdict} verdictTurn={verdictTurn} participants={participants} judgeVoice={judgeVoice} isActive={isActive} markdown={debate.settings.output_style === 'markdown'} hidden={verdictHidden} onReveal={reveal} />}
           {tab === 'audio' && <AudioTab media={media} timeline={timeline} isOwner={isOwner} completed={completed} onGenerate={() => setRegenOpen(true)} audioRef={audioRef} />}
           <div ref={bottomRef} />
         </div>

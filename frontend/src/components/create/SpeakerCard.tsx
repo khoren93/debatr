@@ -1,6 +1,6 @@
-import { Play, RefreshCw, Square, X } from 'lucide-react';
+import { ArrowUpRight, Play, RefreshCw, Square, Trophy, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import type { ModelInfo, VoiceInfo } from '../../api/types';
+import type { LeaderboardEntry, ModelInfo, VoiceInfo } from '../../api/types';
 import { STYLE_PRESETS, applyStyle, detectStyle } from '../../data/styles';
 import { formatContext, formatPrice } from '../../lib/format';
 import { Chip, Hint, Select } from '../ui';
@@ -18,6 +18,8 @@ interface SpeakerCardProps {
   modelsLoading: boolean;
   /** Paid models cannot be used: no own key and no credits. */
   paidLocked: boolean;
+  /** Audience ranking of the chosen model: null = no public debates yet, undefined = not shown. */
+  ranking?: { entry: LeaderboardEntry; rank: number } | null;
   voices: VoiceInfo[];
   voicesLoading: boolean;
   removable: boolean;
@@ -42,6 +44,7 @@ export const SpeakerCard = ({
   models,
   modelsLoading,
   paidLocked,
+  ranking,
   voices,
   voicesLoading,
   removable,
@@ -160,6 +163,18 @@ export const SpeakerCard = ({
         )}
       </Select>
       {modelMissing && <Hint tone="danger">Pick a model for this speaker.</Hint>}
+      {ranking && (
+        <div className="mt-1.5 flex items-center justify-between gap-2 text-[11px] text-muted">
+          <span className="inline-flex min-w-0 items-center gap-1 truncate" title="Audience ranking of this model">
+            <Trophy className="size-3 shrink-0" /> #{ranking.rank} · rating {ranking.entry.rating} · {ranking.entry.votes} votes
+          </span>
+          {/* New tab: the wizard keeps its state, but leaving it mid-setup would be annoying. */}
+          <a href={`/gallery?model=${encodeURIComponent(ranking.entry.model_id)}`} target="_blank" rel="noreferrer" className="inline-flex shrink-0 items-center gap-0.5 text-accent hover:text-accent-hover">
+            {ranking.entry.debates} {ranking.entry.debates === 1 ? 'debate' : 'debates'} <ArrowUpRight className="size-3" />
+          </a>
+        </div>
+      )}
+      {ranking === null && modelId && <div className="mt-1.5 text-[11px] text-dim">No public debates with this model yet.</div>}
 
       <div className="mt-3 text-xs text-muted">Voice</div>
       <div className="mt-1.5 flex items-center gap-2">

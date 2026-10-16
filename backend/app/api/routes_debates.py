@@ -40,6 +40,7 @@ from app.schemas.schemas import (
     StartDebateRequest,
     StopDebateResponse,
 )
+from app.services.engagement import engagement_out
 from app.services.estimate import Pricing, estimate_debate, pricing_from_models
 from app.services.media.paths import MediaPaths
 from app.services.media.tts.elevenlabs import system_key_status
@@ -60,7 +61,7 @@ def _parse_uuid(debate_id: str) -> uuid.UUID:
         raise HTTPException(status_code=400, detail="Invalid debate id") from e
 
 
-async def _load(db: AsyncSession, debate_id: str, *, full: bool = False) -> Debate:
+async def load_debate(db: AsyncSession, debate_id: str, *, full: bool = False) -> Debate:
     options = [selectinload(Debate.participants), selectinload(Debate.user)]
     if full:
         options.append(selectinload(Debate.turns))
@@ -275,7 +276,7 @@ async def update_draft(
     db: AsyncSession = Depends(get_db),
 ) -> DebateResponse:
     """Replace the configuration of a draft."""
-    debate = await _load(db, debate_id)
+    debate = await load_debate(db, debate_id)
     _require_manage(debate, user, request)
     if debate.status != "draft":
         raise HTTPException(status_code=409, detail="Only drafts can be edited")
@@ -294,7 +295,7 @@ async def start_draft(
     db: AsyncSession = Depends(get_db),
 ) -> DebateResponse:
     """Queue a draft."""
-    debate = await _load(db, debate_id)
+    debate = await load_debate(db, debate_id)
     _require_manage(debate, user, request)
     if debate.status != "draft":
         raise HTTPException(status_code=409, detail=f"Debate is already {debate.status}")
@@ -320,11 +321,11 @@ async def get_debate(
     db: AsyncSession = Depends(get_db),
 ) -> DebateDetail:
     """Debate details including participants and all turns."""
-    debate = await _load(db, debate_id, full=True)
+    debate = await load_debate(db, debate_id, full=True)
     if not can_view(debate, viewer, request):
         raise HTTPException(status_code=403, detail="This debate is private")
     await count_view(db, debate, viewer, request)
-    return detail_out(debate, viewer)
+    return detail_out(debate, viewer, await engagement_out(db, debate, viewer))
 
 
 @router.post("/{debate_id}/stop", response_model=StopDebateResponse)
@@ -335,7 +336,7 @@ async def stop_debate(
     db: AsyncSession = Depends(get_db),
 ) -> StopDebateResponse:
     """Stop a queued or running debate. The current turn finishes early."""
-    debate = await _load(db, debate_id)
+    debate = await load_debate(db, debate_id)
     _require_manage(debate, user, request)
     if debate.status not in ACTIVE_STATUSES:
         raise HTTPException(status_code=409, detail=f"Debate is already {debate.status}")
@@ -364,7 +365,7 @@ async def delete_debate(
     db: AsyncSession = Depends(get_db),
 ) -> None:
     """Delete a debate, its turns and generated media."""
-    debate = await _load(db, debate_id)
+    debate = await load_debate(db, debate_id)
     _require_manage(debate, user, request)
     if debate.status in ACTIVE_STATUSES:
         # Make sure the worker stops touching it.
@@ -384,7 +385,7 @@ async def publish_debate(
     db: AsyncSession = Depends(get_db),
 ) -> PublishOut:
     """Make a finished debate public (gallery + share link)."""
-    debate = await _load(db, debate_id)
+    debate = await load_debate(db, debate_id)
     _require_manage(debate, user, request)
     if debate.status != "completed":
         raise HTTPException(status_code=409, detail="Only completed debates can be published")
@@ -411,7 +412,7 @@ async def unpublish_debate(
     user: User | None = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> PublishOut:
-    debate = await _load(db, debate_id)
+    debate = await load_debate(db, debate_id)
     _require_manage(debate, user, request)
     debate.is_public = False
     await db.commit()
@@ -427,7 +428,7 @@ async def report_render(
     db: AsyncSession = Depends(get_db),
 ) -> RendersOut:
     """The browser reports a finished MP4 render (used for the usage stats)."""
-    debate = await _load(db, debate_id)
+    debate = await load_debate(db, debate_id)
     _require_manage(debate, user, request)
     state = dict(debate.media_json or {})
     renders = dict(state.get("renders") or {})

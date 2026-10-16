@@ -14,10 +14,12 @@ from app.admin.auth import authentication_backend
 from app.admin.views import (
     CreditTransactionAdmin,
     DebateAdmin,
+    LikeAdmin,
     ParticipantAdmin,
     SessionAdmin,
     TurnAdmin,
     UserAdmin,
+    VoteAdmin,
 )
 from app.api import (
     routes_auth,
@@ -27,6 +29,7 @@ from app.api import (
     routes_media,
     routes_models,
     routes_presets,
+    routes_reactions,
     routes_stream,
 )
 from app.core.config import settings
@@ -95,6 +98,8 @@ admin = Admin(app, engine, authentication_backend=authentication_backend, base_u
 admin.add_view(UserAdmin)
 admin.add_view(CreditTransactionAdmin)
 admin.add_view(DebateAdmin)
+admin.add_view(LikeAdmin)
+admin.add_view(VoteAdmin)
 admin.add_view(ParticipantAdmin)
 admin.add_view(TurnAdmin)
 admin.add_view(SessionAdmin)
@@ -106,6 +111,7 @@ app.include_router(routes_models.router, prefix="/api/models", tags=["models"])
 app.include_router(routes_presets.router, prefix="/api/presets", tags=["presets"])
 app.include_router(routes_gallery.router, prefix="/api/gallery", tags=["gallery"])
 app.include_router(routes_debates.router, prefix="/api/debates", tags=["debates"])
+app.include_router(routes_reactions.router, prefix="/api/debates", tags=["reactions"])
 app.include_router(routes_stream.router, prefix="/api/debates", tags=["stream"])
 app.include_router(routes_media.router, prefix="/api", tags=["media"])
 

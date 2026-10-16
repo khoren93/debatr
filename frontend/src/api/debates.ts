@@ -1,5 +1,6 @@
 import { api } from './client';
 import type {
+  Audience,
   CreateDebateResponse,
   DebateConfig,
   DebateDetail,
@@ -38,5 +39,13 @@ export const unpublishDebate = (id: string) =>
 
 export const reportRender = (id: string, kind: 'long' | 'short') =>
   api.post<{ renders: Record<string, number> }>(`/debates/${id}/renders`, { kind }).then((r) => r.data);
+
+export const setLike = (id: string, liked: boolean) =>
+  (liked ? api.put<{ liked: boolean; likes: number }>(`/debates/${id}/like`) : api.delete<{ liked: boolean; likes: number }>(`/debates/${id}/like`)).then((r) => r.data);
+
+export const castVote = (id: string, participantId: string) =>
+  api.put<Audience>(`/debates/${id}/vote`, { participant_id: participantId }).then((r) => r.data);
+
+export const retractVote = (id: string) => api.delete<Audience>(`/debates/${id}/vote`).then((r) => r.data);
 
 export const debateStreamUrl = (id: string) => `${api.defaults.baseURL}/debates/${id}/stream`;

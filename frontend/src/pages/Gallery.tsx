@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
-import { Play } from 'lucide-react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { Heart, Play, Trophy, X } from 'lucide-react';
 import { getErrorMessage } from '../api/client';
 import { listGallery } from '../api/gallery';
-import { GALLERY_CATEGORIES, type GalleryCategory, type GalleryItem } from '../api/types';
+import { GALLERY_CATEGORIES, type GalleryCategory, type GalleryItem, type GalleryPeriod, type GallerySort } from '../api/types';
 import { Page, PageTitle } from '../components/layout/AppShell';
-import { DebateCard, DurationChip, VerdictLine, VersusLine } from '../components/cards';
-import { Avatar, Button, Chip, EmptyState, ErrorBox, LinkButton, PageLoader } from '../components/ui';
-import { formatCount } from '../lib/format';
+import { DebateCard, DurationChip, VersusLine } from '../components/cards';
+import { Avatar, Button, Chip, EmptyState, ErrorBox, LinkButton, PageLoader, Segmented } from '../components/ui';
+import { formatCount, shortModelName } from '../lib/format';
 
 type CategoryFilter = 'all' | GalleryCategory;
 
@@ -17,18 +18,54 @@ const CATEGORY_OPTIONS: { value: CategoryFilter; label: string }[] = [
   ...GALLERY_CATEGORIES.map((c) => ({ value: c, label: capitalize(c) })),
 ];
 
+const SORT_OPTIONS: { value: GallerySort; label: string }[] = [
+  { value: 'trending', label: 'Trending' },
+  { value: 'new', label: 'New' },
+  { value: 'top', label: 'Top' },
+];
+
+const PERIOD_OPTIONS: { value: GalleryPeriod; label: string }[] = [
+  { value: 'week', label: 'Week' },
+  { value: 'month', label: 'Month' },
+  { value: 'year', label: 'Year' },
+  { value: 'all', label: 'All time' },
+];
+
+const oneOf = <T extends string>(value: string | null, options: { value: T }[], fallback: T): T => options.find((o) => o.value === value)?.value ?? fallback;
+
+/** Public gallery. Sort, period and the model filter live in the URL (`?sort=top&period=week&model=…`). */
 const Gallery = () => {
+  const [params, setParams] = useSearchParams();
+  const sort = oneOf(params.get('sort'), SORT_OPTIONS, 'trending');
+  const period = oneOf(params.get('period'), PERIOD_OPTIONS, 'all');
+  const model = params.get('model')?.trim() || null;
   const [category, setCategory] = useState<CategoryFilter>('all');
   const [attempt, setAttempt] = useState(0);
   const [result, setResult] = useState<{ key: string; items: GalleryItem[] } | null>(null);
   const [failure, setFailure] = useState<{ key: string; message: string } | null>(null);
 
-  // One key per (category, retry) so responses for a stale request are ignored.
-  const key = `${category}#${attempt}`;
+  const setParam = (name: string, value: string | null) =>
+    setParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (value === null) next.delete(name);
+        else next.set(name, value);
+        return next;
+      },
+      { replace: true },
+    );
+
+  // One key per (filters, retry) so responses for a stale request are ignored.
+  const key = `${category}|${sort}|${period}|${model ?? ''}#${attempt}`;
 
   useEffect(() => {
     let cancelled = false;
-    listGallery(category === 'all' ? {} : { category })
+    listGallery({
+      category: category === 'all' ? undefined : category,
+      sort,
+      period: sort === 'top' ? period : undefined,
+      model: model ?? undefined,
+    })
       .then((res) => {
         if (!cancelled) setResult({ key, items: res.items });
       })
@@ -38,7 +75,7 @@ const Gallery = () => {
     return () => {
       cancelled = true;
     };
-  }, [category, key]);
+  }, [category, sort, period, model, key]);
 
   const items = result?.key === key ? result.items : null;
   const error = failure?.key === key ? failure.message : null;
@@ -59,6 +96,35 @@ const Gallery = () => {
     }
     if (shown === null) return <PageLoader label="Loading the gallery…" />;
     if (shown.length === 0) {
+      if (model) {
+        return (
+          <EmptyState
+            className="mt-6"
+            icon={<Play className="size-5" />}
+            title={`No public debates with ${shortModelName(model)} yet`}
+            text="Run one with this model and publish it to be the first."
+            action={
+              <Button variant="secondary" onClick={() => setParam('model', null)}>
+                Show all models
+              </Button>
+            }
+          />
+        );
+      }
+      if (sort === 'top' && period !== 'all') {
+        return (
+          <EmptyState
+            className="mt-6"
+            icon={<Play className="size-5" />}
+            title="Nothing published in this period"
+            action={
+              <Button variant="secondary" onClick={() => setParam('period', 'all')}>
+                Show all time
+              </Button>
+            }
+          />
+        );
+      }
       return category === 'all' ? (
         <EmptyState
           className="mt-6"
@@ -102,8 +168,11 @@ const Gallery = () => {
               }
               footerRight={
                 <>
-                  <VerdictLine verdict={item.verdict} className="max-w-[140px]" />
-                  {item.verdict && <span className="text-dim">·</span>}
+                  {/* No verdict on the cards: the audience votes blind on the debate page. */}
+                  <span className="inline-flex items-center gap-1" title={`${item.likes} likes`}>
+                    <Heart className="size-3" /> {formatCount(item.likes)}
+                  </span>
+                  <span className="text-dim">·</span>
                   <span>{formatCount(item.views)} views</span>
                 </>
               }
@@ -116,8 +185,30 @@ const Gallery = () => {
 
   return (
     <Page>
-      <PageTitle kicker="Public" title="Gallery" />
-      <div className="mt-5 flex flex-wrap gap-2" role="tablist" aria-label="Categories">
+      <PageTitle
+        kicker="Public"
+        title="Gallery"
+        right={
+          <Link to="/leaderboard" className="inline-flex items-center gap-1.5 text-sm text-accent transition-colors hover:text-accent-hover">
+            <Trophy className="size-4" /> Model ranking →
+          </Link>
+        }
+      />
+      <div className="mt-5 flex flex-wrap items-center gap-2.5">
+        <Segmented options={SORT_OPTIONS} value={sort} onChange={(v) => setParam('sort', v === 'trending' ? null : v)} size="sm" />
+        {sort === 'top' && <Segmented options={PERIOD_OPTIONS} value={period} onChange={(v) => setParam('period', v === 'all' ? null : v)} size="sm" />}
+        {model && (
+          <button
+            type="button"
+            onClick={() => setParam('model', null)}
+            className="inline-flex items-center gap-1.5 rounded-full border border-accent/40 bg-accent/10 px-3 py-1.5 text-xs font-semibold text-accent hover:bg-accent/15 cursor-pointer"
+            title="Remove the model filter"
+          >
+            With {shortModelName(model)} <X className="size-3.5" />
+          </button>
+        )}
+      </div>
+      <div className="mt-3.5 flex flex-wrap gap-2" role="tablist" aria-label="Categories">
         {CATEGORY_OPTIONS.map((opt) => (
           <Chip key={opt.value} active={opt.value === category} onClick={() => setCategory(opt.value)}>
             {opt.label}

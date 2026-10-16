@@ -1,6 +1,7 @@
 import { Plus, RefreshCw } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import type { ModelInfo } from '../../api/types';
+import { useLeaderboard } from '../../hooks/useLeaderboard';
 import type { VoiceCatalogue } from '../../hooks/useVoices';
 import { ErrorBox, Hint, Spinner } from '../ui';
 import { SpeakerCard } from './SpeakerCard';
@@ -34,6 +35,12 @@ interface StepSpeakersProps {
 
 export const StepSpeakers = ({ state, patch, models, modelsLoading, modelsError, defaultModelId, catalogue, resolvedVoices, paidLocked, showErrors }: StepSpeakersProps) => {
   const debaters = countDebaters(state.speakers);
+  const { data: leaderboard } = useLeaderboard();
+  const rankingFor = (modelId: string) => {
+    const entries = leaderboard?.entries ?? [];
+    const index = entries.findIndex((e) => e.model_id === modelId);
+    return index < 0 ? null : { entry: entries[index], rank: index + 1 };
+  };
 
   const updateSpeaker = (index: number, changes: Partial<Speaker>) =>
     patch({ speakers: state.speakers.map((s, i) => (i === index ? { ...s, ...changes } : s)) });
@@ -134,6 +141,7 @@ export const StepSpeakers = ({ state, patch, models, modelsLoading, modelsError,
             models={models}
             modelsLoading={modelsLoading}
             paidLocked={paidLocked}
+            ranking={speaker.role === 'debater' && leaderboard ? rankingFor(speaker.model_id || defaultModelId) : undefined}
             voices={catalogue.voices}
             voicesLoading={catalogue.loading}
             removable={speaker.role === 'debater' && debaters > MIN_DEBATERS}
