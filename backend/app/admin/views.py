@@ -1,7 +1,10 @@
+import uuid
 from typing import Any
 
-from sqladmin import ModelView
+from sqladmin import ModelView, action
+from sqladmin.filters import BooleanFilter, StaticValuesFilter
 from starlette.requests import Request
+from starlette.responses import RedirectResponse
 
 from app.core.db import AsyncSessionLocal
 from app.models.models import (
@@ -15,6 +18,7 @@ from app.models.models import (
     User,
 )
 from app.services.engagement import recount
+from app.services.moderation import mark_admin_decision, publish_async, wants_public
 
 
 class UserAdmin(ModelView, model=User):
@@ -74,6 +78,7 @@ class DebateAdmin(ModelView, model=Debate):
         Debate.status,
         Debate.user_id,
         Debate.is_public,
+        Debate.moderation_status,
         Debate.media_status,
         Debate.views,
         Debate.likes_count,
@@ -82,6 +87,14 @@ class DebateAdmin(ModelView, model=Debate):
         Debate.ended_at,
     ]
     column_searchable_list = [Debate.id, Debate.title, Debate.status, Debate.slug]
+    column_filters = [
+        StaticValuesFilter(
+            Debate.moderation_status,
+            values=[(s, s) for s in ("flagged", "approved", "rejected", "none")],
+            title="Moderation",
+        ),
+        BooleanFilter(Debate.is_public, title="Public"),
+    ]
     column_sortable_list = [
         Debate.created_at,
         Debate.status,
@@ -94,6 +107,37 @@ class DebateAdmin(ModelView, model=Debate):
     name = "Debate"
     name_plural = "Debates"
     icon = "fa-solid fa-comments"
+
+    async def _moderate(self, request: Request, *, approved: bool) -> RedirectResponse:
+        """Approve (and publish when the owner asked for the gallery) or reject."""
+        pks = [pk for pk in request.query_params.get("pks", "").split(",") if pk]
+        async with AsyncSessionLocal() as db:
+            for pk in pks:
+                debate = await db.get(Debate, uuid.UUID(pk))
+                if debate is None:
+                    continue
+                mark_admin_decision(debate, approved=approved)
+                if approved and debate.status == "completed" and wants_public(debate):
+                    await publish_async(db, debate)
+            await db.commit()
+        referer = request.headers.get("referer")
+        return RedirectResponse(referer or request.url_for("admin:list", identity=self.identity))
+
+    @action(
+        name="approve",
+        label="Approve for gallery",
+        confirmation_message="Approve these debates? Ones whose owner wants them public go live.",
+    )
+    async def approve(self, request: Request) -> RedirectResponse:
+        return await self._moderate(request, approved=True)
+
+    @action(
+        name="reject",
+        label="Reject",
+        confirmation_message="Reject these debates? They are removed from the gallery.",
+    )
+    async def reject(self, request: Request) -> RedirectResponse:
+        return await self._moderate(request, approved=False)
 
 
 class _RecountOnDelete:

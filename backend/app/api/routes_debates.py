@@ -19,10 +19,9 @@ from sqlalchemy.orm import selectinload
 from starlette.concurrency import run_in_threadpool
 
 from app.api.serializers import can_manage, can_view, detail_out, share_url, summary_out
-from app.core.auth import get_current_user, require_user
+from app.core.auth import get_current_user, is_admin_session, require_user
 from app.core.config import settings
 from app.core.db import get_db
-from app.core.ids import new_slug
 from app.core.ratelimit import enforce_debate_create_limit
 from app.core.redis import get_async_redis, provider_key_key, stop_flag_key, tts_key_key
 from app.core.security import decrypt_secret
@@ -44,6 +43,7 @@ from app.services.engagement import engagement_out
 from app.services.estimate import Pricing, estimate_debate, pricing_from_models
 from app.services.media.paths import MediaPaths
 from app.services.media.tts.elevenlabs import system_key_status
+from app.services.moderation import mark_admin_decision, publish_async
 from app.services.openrouter_client import openrouter_client
 from app.services.queue_manager import enqueue_debate_start
 from app.services.views import count_view
@@ -325,7 +325,12 @@ async def get_debate(
     if not can_view(debate, viewer, request):
         raise HTTPException(status_code=403, detail="This debate is private")
     await count_view(db, debate, viewer, request)
-    return detail_out(debate, viewer, await engagement_out(db, debate, viewer))
+    return detail_out(
+        debate,
+        viewer,
+        await engagement_out(db, debate, viewer),
+        manager=can_manage(debate, viewer, request),
+    )
 
 
 @router.post("/{debate_id}/stop", response_model=StopDebateResponse)
@@ -384,25 +389,33 @@ async def publish_debate(
     user: User | None = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> PublishOut:
-    """Make a finished debate public (gallery + share link)."""
+    """Make a finished debate public (gallery + share link). A debate flagged by the AI check
+    is only queued for an admin review; publishing from the admin session approves it."""
     debate = await load_debate(db, debate_id)
     _require_manage(debate, user, request)
     if debate.status != "completed":
         raise HTTPException(status_code=409, detail="Only completed debates can be published")
-    if not debate.slug:
-        for _ in range(5):
-            candidate = new_slug()
-            taken = await db.scalar(select(Debate.id).where(Debate.slug == candidate))
-            if taken is None:
-                debate.slug = candidate
-                break
-        if not debate.slug:
-            raise HTTPException(status_code=500, detail="Could not allocate a share link")
-    debate.is_public = True
+    admin = is_admin_session(request)
+    if debate.moderation_status == "rejected" and not admin:
+        raise HTTPException(
+            status_code=409, detail="This debate was not approved for the public gallery"
+        )
+    if debate.moderation_status == "flagged" and not admin:
+        debate.moderation_json = {**(debate.moderation_json or {}), "publish_requested": True}
+        await db.commit()
+        return PublishOut(is_public=False, slug=None, share_url=None, moderation_status="flagged")
+    if admin and debate.moderation_status in ("flagged", "rejected"):
+        mark_admin_decision(debate, approved=True)
+    if not await publish_async(db, debate):
+        raise HTTPException(status_code=500, detail="Could not allocate a share link")
     debate.category = body.category or debate.category
-    debate.published_at = debate.published_at or utcnow()
     await db.commit()
-    return PublishOut(is_public=True, slug=debate.slug, share_url=share_url(debate))
+    return PublishOut(
+        is_public=True,
+        slug=debate.slug,
+        share_url=share_url(debate),
+        moderation_status=debate.moderation_status,
+    )
 
 
 @router.delete("/{debate_id}/publish", response_model=PublishOut)
@@ -415,8 +428,15 @@ async def unpublish_debate(
     debate = await load_debate(db, debate_id)
     _require_manage(debate, user, request)
     debate.is_public = False
+    # Withdraws a pending review request as well.
+    debate.moderation_json = {**(debate.moderation_json or {}), "publish_requested": False}
     await db.commit()
-    return PublishOut(is_public=False, slug=debate.slug, share_url=None)
+    return PublishOut(
+        is_public=False,
+        slug=debate.slug,
+        share_url=None,
+        moderation_status=debate.moderation_status,
+    )
 
 
 @router.post("/{debate_id}/renders", response_model=RendersOut)

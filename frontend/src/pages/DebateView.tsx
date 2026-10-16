@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Download, Eye, Lock, Repeat2, Share2, Square, Trash2 } from 'lucide-react';
+import { ArrowLeft, Download, Eye, Lock, Repeat2, ShieldAlert, Share2, Square, Trash2 } from 'lucide-react';
 import { getErrorMessage, getErrorStatus } from '../api/client';
 import { deleteDebate, getDebate, stopDebate } from '../api/debates';
 import { getPublicDebate } from '../api/gallery';
@@ -282,6 +282,11 @@ const DebateView = ({ id, slug }: Props) => {
               </span>
             )}
             {debate.author_name && !isOwner && <span>by {debate.author_name}</span>}
+            {isOwner && debate.moderation?.status === 'flagged' && (
+              <button type="button" onClick={() => setShareOpen(true)} className="inline-flex items-center gap-1 text-host hover:underline cursor-pointer">
+                <ShieldAlert className="size-3" /> in review
+              </button>
+            )}
             {debate.is_public && (
               <span className="inline-flex items-center gap-1">
                 <Eye className="size-3" /> {formatCount(debate.views)} views

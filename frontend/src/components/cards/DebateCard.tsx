@@ -2,7 +2,7 @@ import type { CSSProperties, ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import type { Participant, Verdict } from '../../api/types';
 import { formatDuration, gradientFor } from '../../lib/format';
-import { Thumb } from '../ui';
+import { ModelIcon, Thumb } from '../ui';
 import { debaterNames, verdictLabel } from './helpers';
 
 interface DebateCardProps {
@@ -50,12 +50,17 @@ export const DurationChip = ({ ms }: { ms: number | null | undefined }) => (
   <span className="inline-block rounded-md bg-black/45 px-2 py-[3px] font-mono text-[10px] text-text">{formatDuration(ms)}</span>
 );
 
-/** "Claude vs GPT-4o" mono line built from the first two debaters. */
+/** "Claude vs GPT-4o" mono line built from the first two debaters, with their model logos. */
 export const VersusLine = ({ participants }: { participants: Participant[] }) => {
   const [pro = 'Pro', con = 'Con'] = debaterNames(participants);
+  const [proModel, conModel] = participants.filter((p) => p.role !== 'moderator').map((p) => p.model);
   return (
-    <span className="block truncate font-mono text-[10px] tracking-[0.1em] text-white/70" title={`${pro} vs ${con}`}>
-      {pro} vs {con}
+    <span className="flex min-w-0 items-center gap-1.5 font-mono text-[10px] tracking-[0.1em] text-white/70" title={`${pro} vs ${con}`}>
+      {proModel && <ModelIcon modelId={proModel} size={12} />}
+      <span className="truncate">
+        {pro} vs {con}
+      </span>
+      {conModel && <ModelIcon modelId={conModel} size={12} />}
     </span>
   );
 };

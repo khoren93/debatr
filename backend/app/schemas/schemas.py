@@ -100,6 +100,8 @@ class DebateConfig(BaseModel):
     intensity: int = Field(default=5, ge=1, le=10)
     output_style: OutputStyle = "markdown"
     media_plan: MediaPlan | None = None
+    # Publish to the gallery once finished and approved by the AI check (services/moderation).
+    auto_publish: bool = True
     # Save without starting (status=draft). Request-only.
     draft: bool = False
     # Optional BYOK OpenRouter key. Never persisted to the database.
@@ -171,6 +173,17 @@ class PublishOut(BaseModel):
     is_public: bool
     slug: str | None
     share_url: str | None
+    # "flagged" when the debate waits for an admin review instead of going public.
+    moderation_status: str = "none"
+
+
+class ModerationOut(BaseModel):
+    """Gallery check, shown to the owner only."""
+
+    # none | approved | flagged | rejected
+    status: str = "none"
+    reason: str | None = None
+    publish_requested: bool = False
 
 
 class RenderReport(BaseModel):
@@ -248,6 +261,7 @@ class DebateSummary(BaseModel):
     totals: DebateTotals = Field(default_factory=DebateTotals)
     is_public: bool = False
     slug: str | None = None
+    moderation_status: str = "none"
     category: str | None = None
     views: int = 0
     likes: int = 0
@@ -326,6 +340,8 @@ class DebateDetail(BaseModel):
     engagement: EngagementOut = Field(default_factory=EngagementOut)
     # Full stored configuration; only sent to the owner (drafts re-open in the wizard).
     config: DebateConfig | None = None
+    # Gallery check; only sent to the owner and the admin.
+    moderation: ModerationOut | None = None
 
 
 class StopDebateResponse(BaseModel):

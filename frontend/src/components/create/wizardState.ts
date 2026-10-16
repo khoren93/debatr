@@ -55,6 +55,8 @@ export interface WizardState {
   voices: Record<string, string>;
   outputs: MediaOutput[];
   quality: VideoQuality;
+  /** Publish to the gallery once finished and approved by the AI check. */
+  auto_publish: boolean;
 }
 
 // --- Static option lists -----------------------------------------------------
@@ -157,6 +159,7 @@ export const initialState = (): WizardState => ({
   voices: {},
   outputs: ['audio', 'video', 'short'],
   quality: '1080p',
+  auto_publish: true,
 });
 
 // --- Speaker helpers ---------------------------------------------------------
@@ -283,6 +286,7 @@ export const buildConfig = (state: WizardState, opts: BuildOptions): DebateConfi
     outputs: state.outputs,
     quality: state.quality,
   },
+  auto_publish: state.auto_publish,
   user_provider_key: opts.openrouterKey?.trim() || undefined,
   user_tts_key: (opts.provider === 'elevenlabs' && state.outputs.includes('audio') && opts.elevenlabsKey?.trim()) || undefined,
 });
@@ -326,6 +330,7 @@ export const stateFromConfig = (config: DebateConfig, base: WizardState): Wizard
     voices,
     outputs: plan?.outputs ?? base.outputs,
     quality: plan?.quality ?? base.quality,
+    auto_publish: config.auto_publish ?? base.auto_publish,
   };
 };
 
@@ -441,6 +446,7 @@ export const sanitizeState = (raw: unknown): WizardState => {
     voices: sanitizeVoices(raw.voices),
     outputs: sanitizeOutputs(raw.outputs, base.outputs),
     quality: oneOf(raw.quality, ['720p', '1080p', '4k'] as const, base.quality),
+    auto_publish: typeof raw.auto_publish === 'boolean' ? raw.auto_publish : base.auto_publish,
   };
 };
 

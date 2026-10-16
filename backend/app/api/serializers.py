@@ -17,6 +17,7 @@ from app.schemas.schemas import (
     EngagementOut,
     GalleryItem,
     MediaPlan,
+    ModerationOut,
     ParticipantOut,
     TurnOut,
     TurnUsage,
@@ -160,6 +161,7 @@ def summary_out(debate: Debate) -> DebateSummary:
         totals=totals_out(debate),
         is_public=debate.is_public,
         slug=debate.slug,
+        moderation_status=debate.moderation_status or "none",
         category=debate.category,
         views=debate.views or 0,
         likes=debate.likes_count or 0,
@@ -181,8 +183,21 @@ def owner_config(debate: Debate) -> DebateConfig | None:
         return None
 
 
+def moderation_out(debate: Debate) -> ModerationOut:
+    raw: dict[str, Any] = debate.moderation_json or {}
+    return ModerationOut(
+        status=debate.moderation_status or "none",
+        reason=raw.get("reason") or None,
+        publish_requested=bool(raw.get("publish_requested")),
+    )
+
+
 def detail_out(
-    debate: Debate, viewer: User | None, engagement: EngagementOut | None = None
+    debate: Debate,
+    viewer: User | None,
+    engagement: EngagementOut | None = None,
+    *,
+    manager: bool = False,
 ) -> DebateDetail:
     conf: dict[str, Any] = debate.config_json or {}
     billing = conf.get("billing") or {}
@@ -214,6 +229,7 @@ def detail_out(
         author_name=author,
         is_owner=owner,
         config=owner_config(debate) if owner else None,
+        moderation=moderation_out(debate) if owner or manager else None,
         is_public=debate.is_public,
         slug=debate.slug,
         share_url=share_url(debate),

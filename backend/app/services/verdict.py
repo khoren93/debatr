@@ -1,9 +1,13 @@
 """Turn the judge's free-text verdict into structured data (winner, headline, feedback)
-for the UI and the video end card. The LLM step is optional; a regex fallback always works."""
+for the UI and the video end card. The LLM step is optional; a regex fallback always works.
+The same call answers the gallery moderation question (`services/moderation.py`); that answer
+is kept apart from the verdict and never shown to viewers."""
 
 import logging
 import re
 from typing import Any
+
+from app.services.moderation import MODERATION_JSON_SPEC, MODERATION_RULES, parse_moderation
 
 logger = logging.getLogger(__name__)
 
@@ -34,17 +38,30 @@ def match_debater(name: str | None, debaters: list[dict[str, str]]) -> dict[str,
 
 
 def build_verdict_parse_messages(
-    *, topic: str, language: str, verdict_text: str, debaters: list[dict[str, str]]
+    *,
+    topic: str,
+    language: str,
+    verdict_text: str,
+    debaters: list[dict[str, str]],
+    description: str | None = None,
 ) -> list[dict[str, str]]:
     names = ", ".join(d["name"] for d in debaters)
+    # The content check comes first and is about the user's own text: asked as an afterthought
+    # of the verdict task, small models wave obvious spam through.
     system = (
-        "You extract structured data from a debate judge's verdict. "
+        "You do two jobs for a debate platform: a content check of the user's input for the "
+        "public gallery, then structuring the judge's verdict. "
         "Reply with a single JSON object and nothing else."
     )
+    about = f"\nDescription: {description}" if description else ""
     user = (
-        f"Topic: {topic}\nDebaters: {names}\n\nVerdict:\n{verdict_text}\n\n"
+        f"JOB 1 - content check. The user wrote this topic:\nTopic: {topic}{about}\n"
+        "Judge the user's text itself (and the verdict below), not whether a debate about it "
+        f"is useful. {MODERATION_RULES}\n\n"
+        f"JOB 2 - verdict. Debaters: {names}\n\nVerdict:\n{verdict_text}\n\n"
         "Return JSON with exactly these keys:\n"
-        '{"winner": <exact debater name, or null for a draw>, '
+        f'{{"moderation": {MODERATION_JSON_SPEC}, '
+        '"winner": <exact debater name, or null for a draw>, '
         f'"headline": <one short sentence in {language} announcing the result, '
         "e.g. 'Alice wins the debate.' or 'The debate ends in a draw.'>, "
         '"feedback": [{"name": <debater name>, "text": <two sentences in '
@@ -125,28 +142,37 @@ def structure_verdict(
     *,
     model: str,
     api_key: str | None = None,
-) -> tuple[dict[str, Any], dict[str, Any]]:
-    """LLM structuring with fallback. Returns (verdict, usage). Never raises."""
+) -> tuple[dict[str, Any], dict[str, Any] | None, dict[str, Any]]:
+    """LLM structuring with fallback. Returns (verdict, moderation, usage); moderation is None
+    when the model gave no usable answer (the caller then runs a stand-alone check).
+    Never raises."""
     from app.services.media.llm import complete, extract_json  # worker-side import
 
     debaters = debaters_from_config(conf)
     fallback = fallback_verdict(verdict_text, debaters)
     if not verdict_text.strip() or not debaters:
-        return fallback, {}
+        return fallback, None, {}
     try:
         messages = build_verdict_parse_messages(
             topic=str(conf.get("topic") or ""),
             language=str(conf.get("language") or "English"),
             verdict_text=verdict_text,
             debaters=debaters,
+            description=conf.get("description"),
         )
-        text, usage = complete(model, messages, api_key=api_key, max_tokens=700)
-        parsed = parse_verdict_payload(extract_json(text), debaters)
+        text, usage = complete(model, messages, api_key=api_key, max_tokens=800)
+        payload = extract_json(text)
+        moderation = parse_moderation(
+            payload.get("moderation") if isinstance(payload, dict) else None
+        )
+        if moderation is not None:
+            moderation["source"] = "llm"
+        parsed = parse_verdict_payload(payload, debaters)
         if parsed is None:
-            return fallback, usage or {}
+            return fallback, moderation, usage or {}
         if not parsed["headline"]:
             parsed["headline"] = fallback["headline"]
-        return parsed, usage or {}
+        return parsed, moderation, usage or {}
     except Exception as e:
         logger.warning("Verdict structuring failed, using fallback: %s", e)
-        return fallback, {}
+        return fallback, None, {}

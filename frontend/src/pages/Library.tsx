@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { Heart, Mic, Plus, Search } from 'lucide-react';
+import { Heart, Mic, Plus, Search, ShieldAlert } from 'lucide-react';
 import { getErrorMessage } from '../api/client';
 import { listDebates } from '../api/debates';
 import type { DebateSummary, MediaOutput } from '../api/types';
@@ -151,8 +151,13 @@ const Library = () => {
                         </>
                       }
                       footerRight={
-                        outputs.length > 0 || d.is_public ? (
+                        outputs.length > 0 || d.is_public || d.moderation_status === 'flagged' ? (
                           <>
+                            {d.moderation_status === 'flagged' && !d.is_public && (
+                              <span className="mr-1 inline-flex items-center gap-1 text-host" title="Waits for a moderator before it can go public">
+                                <ShieldAlert className="size-3" /> review
+                              </span>
+                            )}
                             {d.is_public && (
                               <span className="mr-1 inline-flex items-center gap-1" title={`${d.likes} likes · ${d.votes} audience votes`}>
                                 <Heart className="size-3" /> {formatCount(d.likes)}

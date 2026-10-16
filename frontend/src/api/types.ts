@@ -111,6 +111,7 @@ export interface DebateSummary {
   totals: DebateTotals;
   is_public: boolean;
   slug: string | null;
+  moderation_status: ModerationStatus;
   category: string | null;
   views: number;
   likes: number;
@@ -151,6 +152,17 @@ export interface Engagement {
   audience: Audience;
 }
 
+/** Gallery check of a finished debate (backend services/moderation.py). */
+export type ModerationStatus = 'none' | 'approved' | 'flagged' | 'rejected';
+
+export interface Moderation {
+  status: ModerationStatus;
+  /** Why the AI check asked for a human review (owner only). */
+  reason: string | null;
+  /** The owner asked for the gallery while the debate waits for review. */
+  publish_requested: boolean;
+}
+
 export interface DebateDetail {
   id: string;
   status: DebateStatus;
@@ -181,6 +193,8 @@ export interface DebateDetail {
   engagement: Engagement;
   /** Full stored configuration; only present for the owner (drafts re-open in the wizard). */
   config: DebateConfig | null;
+  /** Gallery check; only present for the owner and the admin. */
+  moderation: Moderation | null;
 }
 
 export interface ParticipantConfig {
@@ -204,6 +218,8 @@ export interface DebateConfig {
   intensity?: number;
   output_style?: OutputStyle;
   media_plan?: MediaPlan;
+  /** Publish to the gallery once finished and approved by the AI check (default true). */
+  auto_publish?: boolean;
   draft?: boolean;
   user_provider_key?: string;
   /** Browser-only ElevenLabs key for the automatic audio build (never stored server-side). */
@@ -239,6 +255,8 @@ export interface PublishResponse {
   is_public: boolean;
   slug: string | null;
   share_url: string | null;
+  /** 'flagged' when the debate was queued for a review instead of going public. */
+  moderation_status: ModerationStatus;
 }
 
 // --- Accounts & billing ------------------------------------------------------

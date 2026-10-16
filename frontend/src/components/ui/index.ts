@@ -12,3 +12,4 @@ export { Thumb } from './Thumb';
 export { EmptyState, ErrorBox } from './Empty';
 export { Logo, Bars } from './Logo';
 export { Spinner, PageLoader } from './Spinner';
+export { ModelIcon } from './ModelIcon';

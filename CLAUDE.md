@@ -19,7 +19,8 @@ backend/            FastAPI API + RQ worker (Python 3.12+, managed with uv)
                       the shared response models
   app/services/       orchestrator (RQ jobs), scheduler (turn order), prompt_builder,
                       openrouter_client, events (pub/sub), queue_manager, credits (ledger),
-                      estimate (pre-run cost), verdict (structured verdict), views (view counter),
+                      estimate (pre-run cost), verdict (structured verdict), moderation (AI gallery
+                      check + auto-publish), views (view counter),
                       engagement (likes/audience votes), ranking (trending score, model leaderboard)
   app/services/media/ audio pipeline: script (markdown→speech), tts/ (elevenlabs, edge),
                       ffmpeg, highlights (LLM picks shorts), jobs (build_media_job), timeline
@@ -37,7 +38,8 @@ frontend/           React 19 + Vite 8 + Tailwind 4 + TypeScript
                       useModels, useBillingConfig, useVoices (wizard voice catalogue),
                       useLeaderboard (cached model ranking)
   src/components/ui/  design-system primitives (Button, Card, Chip, Segmented, Field, Pill,
-                      Progress, Modal/ConfirmDialog, Toast, Avatar/SpeakerBadge, Thumb, Logo…)
+                      Progress, Modal/ConfirmDialog, Toast, Avatar/SpeakerBadge, Thumb, Logo,
+                      ModelIcon — provider logo of a model id via src/lib/modelIcons.ts)
   src/components/layout/AppShell.tsx  sidebar + mobile top bar/bottom tabs, Page, PageTitle
   src/components/cards/    DebateCard (library / gallery / landing)
   src/components/create/   wizard steps + wizardState.ts (state, persistence, config mapping)
@@ -127,6 +129,22 @@ Debate statuses: `draft | queued | running | completed | error | stopped`.
 Access: owners and the admin session manage a debate; public (`is_public`, `slug`, `/d/{slug}`,
 `GET /api/gallery/{slug}`) and ownerless legacy rows are readable by anyone
 (`app/api/serializers.can_view / can_manage`). `POST /api/debates/{id}/publish` assigns the slug.
+
+### Gallery moderation and auto-publish
+
+- Debates are public by default: `DebateConfig.auto_publish` (wizard switch on the Review step,
+  default on). The cheap verdict-structuring call (`services/verdict.py`) also returns a hidden
+  `moderation` answer (`services/moderation.MODERATION_RULES`: controversy is fine; hate, sexual
+  content, incitement, harmful instructions, attacks on real private people, spam/tests are not).
+  It is stored in `debates.moderation_status` (`none | approved | flagged | rejected`) and
+  `moderation_json` (`reason`, `source` llm|fallback|admin, `publish_requested`), never in
+  `verdict_json`. `finish_debate_job` runs a stand-alone check when the verdict step gave no answer
+  (fails closed: flagged) before the status turns `completed`, then publishes approved debates
+  whose owner wants them public and whose turns all succeeded (`moderation.should_auto_publish`).
+- Flagged debates stay private: the owner's Publish only sets `publish_requested`; the admin panel
+  (Debates, filter Moderation=flagged) has Approve / Reject actions, and publishing from the admin
+  session approves. Rejected debates cannot be published by the owner. `moderation` in
+  `DebateDetail` goes to the owner/admin only; configs from before auto-publish count as `false`.
 Stopping: `POST /api/debates/{id}/stop` sets the status, sets `debate:{id}:stop` in Redis
 (checked by the worker every few chunks) and publishes `debate_stopped`.
 
@@ -226,6 +244,10 @@ Stopping: `POST /api/debates/{id}/stop` sets the status, sets `debate:{id}:stop`
   (`--queues default`) and `media-worker` (`--queues media`); natively one worker takes both.
 - Without `ELEVENLABS_API_KEY` the UI offers only the free Edge voices (unofficial API, few
   voices per language) or a user-supplied ElevenLabs key.
+- Model logos: OpenRouter's API has no icons. `frontend/public/model-icons/` holds a curated set
+  of LobeHub Icons SVGs (MIT, see its README), mapped by model author in `src/lib/modelIcons.ts`;
+  files without `-color` are drawn as a CSS mask in `currentColor`. Add a mapping (and the SVG)
+  when a new provider appears; unknown authors get a letter tile.
 - Old rows may have `turn_type=moderator_comment` and inline `"[Error ...]"` text; both are still
   handled (`scheduler.MODERATOR_TURN_TYPES`, `lib/format.isErrorTurn`). Debates created before
   accounts have `user_id=NULL`: readable via their link, manageable only from the admin panel.

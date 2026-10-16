@@ -6,7 +6,7 @@ import { listGallery } from '../api/gallery';
 import { GALLERY_CATEGORIES, type GalleryCategory, type GalleryItem, type GalleryPeriod, type GallerySort } from '../api/types';
 import { Page, PageTitle } from '../components/layout/AppShell';
 import { DebateCard, DurationChip, VersusLine } from '../components/cards';
-import { Avatar, Button, Chip, EmptyState, ErrorBox, LinkButton, PageLoader, Segmented } from '../components/ui';
+import { Avatar, Button, Chip, EmptyState, ErrorBox, LinkButton, ModelIcon, PageLoader, Segmented } from '../components/ui';
 import { formatCount, shortModelName } from '../lib/format';
 
 type CategoryFilter = 'all' | GalleryCategory;
@@ -204,7 +204,7 @@ const Gallery = () => {
             className="inline-flex items-center gap-1.5 rounded-full border border-accent/40 bg-accent/10 px-3 py-1.5 text-xs font-semibold text-accent hover:bg-accent/15 cursor-pointer"
             title="Remove the model filter"
           >
-            With {shortModelName(model)} <X className="size-3.5" />
+            <ModelIcon modelId={model} size={14} /> With {shortModelName(model)} <X className="size-3.5" />
           </button>
         )}
       </div>

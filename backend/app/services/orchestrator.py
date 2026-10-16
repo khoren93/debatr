@@ -3,7 +3,8 @@
 Runs in the worker process only. Uses a blocking SQLAlchemy engine because RQ
 jobs are synchronous; LLM streaming happens inside a short-lived asyncio loop.
 When a debate reaches a terminal state the owner's credits are charged and, if the
-configuration asks for it, the audio build is queued automatically.
+configuration asks for it, the audio build is queued automatically. A completed debate is
+checked for the gallery and published when its owner asked for that (`services/moderation`).
 """
 
 import asyncio
@@ -23,6 +24,7 @@ from app.services import queue_manager
 from app.services.credits import charge_debate_sync
 from app.services.events import publish_event
 from app.services.media.tts.elevenlabs import system_key_status
+from app.services.moderation import apply_check, check_debate, publish_sync, should_auto_publish
 from app.services.openrouter_client import OpenRouterClient, OpenRouterError
 from app.services.prompt_builder import (
     build_debater_messages,
@@ -248,17 +250,57 @@ def _save_turn(
 def _store_verdict(db: Session, debate: Debate, verdict_text: str, api_key: str | None) -> None:
     """Structure the judge's text (winner, headline, feedback) for the UI and the video."""
     conf: dict[str, Any] = debate.config_json or {}
-    verdict, usage = structure_verdict(
+    verdict, moderation, usage = structure_verdict(
         conf, verdict_text, model=settings.MEDIA_HIGHLIGHTS_MODEL, api_key=api_key
     )
     debate.verdict_json = verdict
-    cost = float((usage or {}).get("cost") or 0.0)
-    if cost:
-        debate.totals_json = {**(debate.totals_json or {}), "analysis_cost": cost}
+    if moderation is not None:
+        apply_check(debate, moderation)
+    _add_analysis_cost(debate, usage)
     db.commit()
     publish_event(
         str(debate.id), "verdict_ready", {"debate_id": str(debate.id), "verdict": verdict}
     )
+
+
+def _add_analysis_cost(debate: Debate, usage: dict[str, Any] | None) -> None:
+    cost = float((usage or {}).get("cost") or 0.0)
+    if cost:
+        totals = debate.totals_json or {}
+        totals_cost = float(totals.get("analysis_cost") or 0.0) + cost
+        debate.totals_json = {**totals, "analysis_cost": totals_cost}
+
+
+def _ensure_moderated(db: Session, debate: Debate, api_key: str | None) -> None:
+    """Run the stand-alone gallery check when the verdict step gave no answer. Never raises."""
+    if debate.moderation_status != "none":
+        return
+    try:
+        verdict = next((t for t in debate.turns if t.turn_type == "verdict"), None)
+        result, usage = check_debate(
+            debate.config_json or {},
+            model=settings.MEDIA_HIGHLIGHTS_MODEL,
+            api_key=api_key,
+            verdict_text=verdict.text if verdict and not verdict.error else "",
+        )
+        apply_check(debate, result)
+        _add_analysis_cost(debate, usage)
+        db.commit()
+    except Exception:
+        logger.exception("Moderation check failed for debate %s", debate.id)
+        db.rollback()
+
+
+def _auto_publish(db: Session, debate: Debate) -> None:
+    """Publish a finished debate when its owner asked for the gallery (the caller commits)."""
+    try:
+        if should_auto_publish(debate) and publish_sync(db, debate):
+            logger.info("Debate %s published to the gallery", debate.id)
+        elif debate.moderation_status == "flagged":
+            reason = (debate.moderation_json or {}).get("reason")
+            logger.info("Debate %s waits for review: %s", debate.id, reason)
+    except Exception:
+        logger.exception("Auto-publish failed for debate %s", debate.id)
 
 
 def _has_tts_key(debate_id: str) -> bool:
@@ -482,9 +524,13 @@ def finish_debate_job(debate_id: str) -> None:
         if debate.status != "running":
             return
 
+        # Before "completed" so nobody sees a finished debate that is not checked yet, and
+        # before the totals so a stand-alone check is part of the charged analysis cost.
+        _ensure_moderated(db, debate, _provider_key(debate_id))
         debate.status = "completed"
         debate.ended_at = utcnow()
         debate.totals_json = _compute_totals(db, debate)
+        _auto_publish(db, debate)
         db.commit()
         _charge(db, debate)
         _cleanup_keys(debate_id, keep_tts_key=True)

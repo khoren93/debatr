@@ -1,11 +1,11 @@
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight, Globe } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { getErrorMessage } from '../../api/client';
 import { estimateDebate } from '../../api/debates';
 import type { DebateConfig, Estimate, ModelInfo, PaymentsMode, VoiceInfo } from '../../api/types';
 import { formatCost, formatMinutes, shortModelName } from '../../lib/format';
-import { Card, ErrorBox, Hint, LinkButton, SectionLabel, SpeakerBadge, Spinner, Stat } from '../ui';
+import { Card, ErrorBox, Hint, LinkButton, ModelIcon, SectionLabel, SpeakerBadge, Spinner, Stat } from '../ui';
 import { languageLabel, lengthOption, speakerColorOf, speakerId, speakerTagOf, type WizardState } from './wizardState';
 
 interface StepReviewProps {
@@ -22,11 +22,12 @@ interface StepReviewProps {
   starting: boolean;
   startError: string | null;
   onStart: () => void;
+  patch: (patch: Partial<WizardState>) => void;
 }
 
 const OUTPUT_LABELS: Record<string, string> = { audio: 'MP3', video: 'MP4', short: 'Short' };
 
-export const StepReview = ({ state, config, ready, models, voices, ownKey, credits, paymentsMode, starting, startError, onStart }: StepReviewProps) => {
+export const StepReview = ({ state, config, ready, models, voices, ownKey, credits, paymentsMode, starting, startError, onStart, patch }: StepReviewProps) => {
   const [loaded, setLoaded] = useState<{ key: string; estimate: Estimate } | null>(null);
   const [failed, setFailed] = useState<{ key: string; message: string } | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -101,8 +102,11 @@ export const StepReview = ({ state, config, ready, models, voices, ownKey, credi
                       {speakerTagOf(state.speakers, index)}
                     </span>
                   </div>
-                  <div className="truncate text-xs text-muted">
-                    {model?.name ?? (modelId ? shortModelName(modelId) : 'model pending')} · {voice?.name ?? voiceId ?? 'default voice'}
+                  <div className="flex min-w-0 items-center gap-1.5 text-xs text-muted">
+                    {modelId && <ModelIcon modelId={modelId} size={12} className="text-text-3" />}
+                    <span className="truncate">
+                      {model?.name ?? (modelId ? shortModelName(modelId) : 'model pending')} · {voice?.name ?? voiceId ?? 'default voice'}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -167,6 +171,27 @@ export const StepReview = ({ state, config, ready, models, voices, ownKey, credi
             </Link>
           </ErrorBox>
         )}
+
+        <button
+          type="button"
+          role="switch"
+          aria-checked={state.auto_publish}
+          onClick={() => patch({ auto_publish: !state.auto_publish })}
+          className="flex w-full items-start gap-3 rounded-panel border border-line-2 bg-surface p-4 text-left transition-colors hover:border-line-3 cursor-pointer"
+        >
+          <Globe className={`mt-0.5 size-4 shrink-0 ${state.auto_publish ? 'text-accent' : 'text-muted'}`} />
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-semibold">Publish to the gallery</span>
+            <span className="mt-0.5 block text-xs leading-relaxed text-muted">
+              {state.auto_publish
+                ? 'Goes public with a share link once it finishes and passes an automatic content check.'
+                : 'Stays private. You can still publish it later from the debate page.'}
+            </span>
+          </span>
+          <span className={`relative mt-0.5 h-5 w-9 shrink-0 rounded-full transition-colors ${state.auto_publish ? 'bg-accent' : 'bg-line-3'}`} aria-hidden="true">
+            <span className={`absolute top-0.5 size-4 rounded-full bg-ink transition-[left] ${state.auto_publish ? 'left-[18px]' : 'left-0.5'}`} />
+          </span>
+        </button>
 
         <button
           type="button"

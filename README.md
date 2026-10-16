@@ -42,8 +42,9 @@ Users sign up, run free models or bring their own OpenRouter key, buy credits wi
 - **📝 Transcript export**: take the full debate with you as Markdown.
 
 ### 🌍 Share and discover
-- **🖼️ Public gallery**: publish a debate with its own share link and browse Trending, New and Top
-  debates of the week, month or year.
+- **🖼️ Public gallery**: finished debates go public with their own share link after an automatic
+  content check (or stay private if you prefer). Browse Trending, New and Top debates of the week,
+  month or year.
 - **❤️ Likes and remixes**: like the debates you enjoy, or remix any of them into your own version
   with a new cast.
 - **👤 Your studio**: a library of drafts and finished debates, credits topped up via Stripe, or

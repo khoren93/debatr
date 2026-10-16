@@ -5,7 +5,7 @@ import { getErrorMessage } from '../../api/client';
 import { castVote, retractVote } from '../../api/debates';
 import type { Audience, DebateDetail } from '../../api/types';
 import { shortModelName, speakerColor } from '../../lib/format';
-import { Card, LinkButton, SectionLabel, SpeakerBadge, Spinner, useToast } from '../ui';
+import { Card, LinkButton, ModelIcon, SectionLabel, SpeakerBadge, Spinner, useToast } from '../ui';
 
 interface Props {
   debate: DebateDetail;
@@ -107,7 +107,10 @@ export const AudienceVote = ({ debate, revealed, onReveal, onChange, className =
                     <span className="truncate">{p.name ?? 'Debater'}</span>
                     {mine && <Check className="size-3.5 shrink-0" style={{ color }} aria-label="Your vote" />}
                   </span>
-                  <span className="mt-0.5 block truncate text-[11px] text-muted">{shortModelName(p.model)}</span>
+                  <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[11px] text-muted">
+                    <ModelIcon modelId={p.model} size={12} className="text-text-3" />
+                    <span className="truncate">{shortModelName(p.model)}</span>
+                  </span>
                 </span>
                 {pending === id ? (
                   <Spinner className="size-4" />

@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { LeaderboardEntry, ModelInfo, VoiceInfo } from '../../api/types';
 import { STYLE_PRESETS, applyStyle, detectStyle } from '../../data/styles';
 import { formatContext, formatPrice } from '../../lib/format';
-import { Chip, Hint, Select } from '../ui';
+import { Chip, Hint, ModelIcon, Select } from '../ui';
 import type { Speaker } from './wizardState';
 
 interface SpeakerCardProps {
@@ -140,28 +140,31 @@ export const SpeakerCard = ({
       {nameMissing && <Hint tone="danger">Every speaker needs a name.</Hint>}
 
       <div className="mt-3.5 text-xs text-muted">Model</div>
-      <Select value={modelId} onChange={(e) => onChange({ model_id: e.target.value })} className="mt-1.5" aria-label="Model">
-        {!modelId && <option value="">{modelsLoading ? 'Loading models…' : 'Select a model'}</option>}
-        {modelId && !knownModel && <option value={modelId}>{modelId}</option>}
-        {free.length > 0 && (
-          <optgroup label="Free">
-            {free.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.name} · {formatContext(m.context_length)} ctx
-              </option>
-            ))}
-          </optgroup>
-        )}
-        {paid.length > 0 && (
-          <optgroup label={paidLocked ? 'Paid — needs credits or your own key' : 'Paid · per 1M output tokens'}>
-            {paid.map((m) => (
-              <option key={m.id} value={m.id} disabled={paidLocked && m.id !== modelId}>
-                {m.name} · {formatPrice(m.pricing)}/1M · {formatContext(m.context_length)} ctx
-              </option>
-            ))}
-          </optgroup>
-        )}
-      </Select>
+      <div className="mt-1.5 flex items-center gap-2">
+        <ModelIcon modelId={modelId} size={18} tile />
+        <Select value={modelId} onChange={(e) => onChange({ model_id: e.target.value })} className="min-w-0 flex-1" aria-label="Model">
+          {!modelId && <option value="">{modelsLoading ? 'Loading models…' : 'Select a model'}</option>}
+          {modelId && !knownModel && <option value={modelId}>{modelId}</option>}
+          {free.length > 0 && (
+            <optgroup label="Free">
+              {free.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name} · {formatContext(m.context_length)} ctx
+                </option>
+              ))}
+            </optgroup>
+          )}
+          {paid.length > 0 && (
+            <optgroup label={paidLocked ? 'Paid — needs credits or your own key' : 'Paid · per 1M output tokens'}>
+              {paid.map((m) => (
+                <option key={m.id} value={m.id} disabled={paidLocked && m.id !== modelId}>
+                  {m.name} · {formatPrice(m.pricing)}/1M · {formatContext(m.context_length)} ctx
+                </option>
+              ))}
+            </optgroup>
+          )}
+        </Select>
+      </div>
       {modelMissing && <Hint tone="danger">Pick a model for this speaker.</Hint>}
       {ranking && (
         <div className="mt-1.5 flex items-center justify-between gap-2 text-[11px] text-muted">

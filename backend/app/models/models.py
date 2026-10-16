@@ -137,6 +137,13 @@ class Debate(Base):
     likes_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     votes_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Gallery moderation: none (not checked) | approved | flagged (waits for an admin) | rejected.
+    # moderation_json: {reason, source: llm|fallback|admin, checked_at, publish_requested}
+    # (see app.services.moderation).
+    moderation_status: Mapped[str] = mapped_column(
+        String(16), default="none", server_default="none", index=True
+    )
+    moderation_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, server_default="{}")
 
     # Audio/video pipeline: none | queued | running | ready | error.
     # media_json holds progress, options, asset names and stats (see app.services.media.state).

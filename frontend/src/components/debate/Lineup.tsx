@@ -1,6 +1,6 @@
 import type { Participant } from '../../api/types';
 import { JUDGE_COLOR, roleTag, shortModelName, speakerColor } from '../../lib/format';
-import { Card, SectionLabel, SpeakerBadge } from '../ui';
+import { Card, ModelIcon, SectionLabel, SpeakerBadge } from '../ui';
 
 interface Props {
   participants: Participant[];
@@ -28,7 +28,10 @@ export const Lineup = ({ participants, judgeVoice, className = '' }: Props) => {
                     {roleTag(p, participants)}
                   </span>
                 </div>
-                <div className="truncate text-[11px] text-muted">{shortModelName(p.model)}</div>
+                <div className="flex min-w-0 items-center gap-1.5 text-[11px] text-muted">
+                  <ModelIcon modelId={p.model} size={12} className="text-text-3" />
+                  <span className="truncate">{shortModelName(p.model)}</span>
+                </div>
               </div>
             </div>
           );

@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { Trophy } from 'lucide-react';
 import type { LeaderboardEntry } from '../api/types';
 import { Page, PageTitle } from '../components/layout/AppShell';
-import { Button, EmptyState, ErrorBox, LinkButton, PageLoader, Segmented, Tag } from '../components/ui';
+import { Button, EmptyState, ErrorBox, LinkButton, ModelIcon, PageLoader, Segmented, Tag } from '../components/ui';
 import { useLeaderboard } from '../hooks/useLeaderboard';
 import { formatCount, providerOf } from '../lib/format';
 
@@ -33,16 +33,19 @@ const Row = ({ entry, rank }: { entry: LeaderboardEntry; rank: number }) => {
       title={`Public debates with ${entry.name}`}
     >
       <span className={`font-mono text-sm ${rank <= 3 ? 'font-bold text-accent' : 'text-muted'}`}>{rank}</span>
-      <span className="min-w-0">
-        <span className="flex items-center gap-2">
-          <span className="truncate text-sm font-bold">{entry.name}</span>
-          {entry.is_free && <Tag className="shrink-0 !text-ok">FREE</Tag>}
-        </span>
-        <span className="mt-0.5 block truncate text-[11px] text-muted">
-          {provider || entry.model_id}
-          <span className="md:hidden">
-            {' '}
-            · {entry.votes} votes · {entry.debates} debates
+      <span className="flex min-w-0 items-center gap-3">
+        <ModelIcon modelId={entry.model_id} size={18} tile />
+        <span className="min-w-0">
+          <span className="flex items-center gap-2">
+            <span className="truncate text-sm font-bold">{entry.name}</span>
+            {entry.is_free && <Tag className="shrink-0 !text-ok">FREE</Tag>}
+          </span>
+          <span className="mt-0.5 block truncate text-[11px] text-muted">
+            {provider || entry.model_id}
+            <span className="md:hidden">
+              {' '}
+              · {entry.votes} votes · {entry.debates} debates
+            </span>
           </span>
         </span>
       </span>

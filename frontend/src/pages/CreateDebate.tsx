@@ -235,6 +235,7 @@ const CreateDebate = () => {
       {state.step === 4 && (
         <StepReview
           state={state}
+          patch={patch}
           config={config}
           ready={ready}
           models={models}
