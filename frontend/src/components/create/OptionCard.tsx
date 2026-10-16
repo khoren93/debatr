@@ -16,7 +16,7 @@ interface OptionCardProps {
   title_?: string;
 }
 
-/** Selectable card used for writing style, voice engine and outputs. */
+/** Selectable card used for writing style and outputs. */
 export const OptionCard = ({ active, onClick, title, text, right, leading, checkbox = false, disabled = false, title_ }: OptionCardProps) => (
   <button
     type="button"

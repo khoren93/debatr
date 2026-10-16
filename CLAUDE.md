@@ -44,7 +44,8 @@ frontend/           React 19 + Vite 8 + Tailwind 4 + TypeScript
   src/components/cards/    DebateCard (library / gallery / landing)
   src/components/create/   wizard steps + wizardState.ts (state, persistence, config mapping),
                            ModelPicker (searchable OpenRouter list: logos, prices, rank, Latest
-                           filter), VoicePicker (voice list with previews), usePickerPopover
+                           filter), VoicePicker (voice list with previews, debate-language / all scope),
+                           PersonaPicker (persona preset dropdown), usePickerPopover
   src/components/debate/   player, live card, turn timeline, transcript, verdict, audio tab,
                            regenerate-audio dialog, exports aside (browser MP4 render), lineup,
                            AudienceVote (blind vote), LikeButton
@@ -193,6 +194,8 @@ Stopping: `POST /api/debates/{id}/stop` sets the status, sets `debate:{id}:stop`
    `@remotion/web-renderer`) — the server never encodes video; finished renders are reported to
    `POST /api/debates/{id}/renders` for the usage stats. Premium voices on the system ElevenLabs
    key cost `TTS_CREDIT_PRICE_PER_1K_CHARS` in credits (charged after the build); own keys are free.
+   A zero balance is the free tier: without an own key premium voices are locked in the wizard
+   and the regenerate dialog, and `POST /media` answers 402.
    `output_style=spoken` in `DebateConfig` asks the models for plain spoken prose with
    optional `[emotion]` tags, which ElevenLabs v3 understands.
 
@@ -244,6 +247,12 @@ Stopping: `POST /api/debates/{id}/stop` sets the status, sets `debate:{id}:stop`
 - Media: `MEDIA_ROOT` is `./media` natively and the `media_data` volume (`/media`) in Docker;
   the worker image target installs ffmpeg, the api target does not. Docker runs `worker`
   (`--queues default`) and `media-worker` (`--queues media`); natively one worker takes both.
+- ElevenLabs voice lists: `/v1/voices` holds only the account's voices (premade ones are English).
+  For other languages `tts/elevenlabs.list_voices` adds native Voice Library voices
+  (`/v1/shared-voices?language=`, no surcharged ones) — on paid plans only: free plans get
+  `402 paid_plan_required` for library voices, so those (incl. ones copied into "My Voices",
+  `sharing.status=copied`) are hidden. The plan comes from `/v1/user/subscription`; lists are
+  cached per key+language for 5 min.
 - Without `ELEVENLABS_API_KEY` the UI offers only the free Edge voices (unofficial API, few
   voices per language) or a user-supplied ElevenLabs key.
 - Model logos: OpenRouter's API has no icons. `frontend/public/model-icons/` holds a curated set

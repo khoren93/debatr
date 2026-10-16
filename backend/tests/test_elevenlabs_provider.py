@@ -159,6 +159,75 @@ def test_pick_default_voices_without_catalogue() -> None:
     ) == {"a": "only", "b": "only"}
 
 
+def test_list_voices_adds_native_library_voices_on_paid_plans() -> None:
+    paths: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        paths.append(request.url.path)
+        if request.url.path == "/v1/user/subscription":
+            return httpx.Response(200, json={"tier": "creator"})
+        if request.url.path == "/v1/shared-voices":
+            assert request.url.params["language"] == "hy"
+            return httpx.Response(
+                200,
+                json={
+                    "voices": [
+                        {
+                            "voice_id": "an",
+                            "name": "Anahit - Bright",
+                            "gender": "female",
+                            "language": "hy",
+                            "description": "A long marketing blurb " * 5,
+                            "verified_languages": [{"language": "hy"}, {"language": "hy"}],
+                        },
+                        {"voice_id": "ar", "name": "Aram", "gender": "male", "language": "hy"},
+                        {"voice_id": "pricey", "name": "Gor", "language": "hy", "rate": 2.0},
+                    ]
+                },
+            )
+        return httpx.Response(
+            200,
+            json={"voices": [{"voice_id": "r", "name": "Roger - Casual", "labels": {}}]},
+        )
+
+    provider = ElevenLabsProvider(api_key="paid", transport=httpx.MockTransport(handler))
+    voices = provider.list_voices("hy")
+    assert [v.id for v in voices] == ["an", "ar", "r"]  # native first, surcharged voice dropped
+    assert voices[0].languages == ("hy",) and voices[0].description == "female"
+    speakers = [
+        SpeakerRef("participant_0", "moderator", 0),
+        SpeakerRef("participant_1", "debater", 0),
+    ]
+    defaults = pick_default_voices(voices, speakers, "hy")
+    assert defaults == {"participant_0": "an", "participant_1": "ar"}  # natives, mixed genders
+    provider.list_voices("hy")
+    assert paths.count("/v1/voices") == 1  # cached
+
+
+def test_list_voices_free_plan_skips_library_voices() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/v1/user/subscription":
+            return httpx.Response(200, json={"tier": "free"})
+        assert request.url.path == "/v1/voices"
+        return httpx.Response(
+            200,
+            json={
+                "voices": [
+                    {"voice_id": "r", "name": "Roger - Casual", "labels": {}, "sharing": None},
+                    {"voice_id": "n", "name": "Nikolay", "sharing": {"status": "copied"}},
+                ]
+            },
+        )
+
+    provider = ElevenLabsProvider(api_key="free", transport=httpx.MockTransport(handler))
+    assert [v.id for v in provider.list_voices("ru")] == ["r"]
+
+
+def test_pick_default_voices_matches_names_with_descriptions() -> None:
+    voices = [VoiceInfo("x", "Xavier - Calm"), VoiceInfo("g", "George - Warm Storyteller")]
+    assert pick_default_voices(voices, [SpeakerRef("m", "moderator", 0)]) == {"m": "g"}
+
+
 def test_estimate_usd() -> None:
     assert estimate_usd("eleven_v3", 12_000) == 1.2
     assert estimate_usd("unknown", 100) is None

@@ -127,7 +127,7 @@ async def checkout(
         )
         return CheckoutOut(url=f"{_site()}/account?topup=success", instant=True)
     if mode != "stripe":
-        raise HTTPException(status_code=503, detail="Payments are not configured yet")
+        raise HTTPException(status_code=503, detail="Payments coming soon")
     try:
         url = await run_in_threadpool(_create_checkout, user, body.amount_usd)
     except stripe.StripeError as e:

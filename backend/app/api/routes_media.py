@@ -195,6 +195,7 @@ async def media_voices(
         raise HTTPException(status_code=502, detail=str(e)) from e
     return VoicesResponse(
         provider=provider,  # type: ignore[arg-type]
+        language=code,
         voices=[
             VoiceOut(
                 id=v.id,
@@ -265,6 +266,12 @@ async def generate_debate_media(
         if not own_tts_key and not _is_trusted(request, x_media_token):
             if user is None:
                 raise HTTPException(status_code=401, detail="Sign in to use premium voices")
+            if float(user.credits_usd or 0) <= 0:
+                raise HTTPException(
+                    status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                    detail="Premium voices need credits: top up, use your own ElevenLabs key "
+                    "or the free Edge voices.",
+                )
             chars = await _spoken_chars(db, debate)
             needed = float(tts_charge_usd(chars))
             if needed > float(user.credits_usd or 0):

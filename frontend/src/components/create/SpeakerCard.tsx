@@ -1,8 +1,9 @@
 import { ArrowUpRight, RefreshCw, Trophy, X } from 'lucide-react';
 import type { LeaderboardEntry, ModelInfo, VoiceInfo } from '../../api/types';
-import { STYLE_PRESETS, applyStyle, detectStyle } from '../../data/styles';
-import { Chip, Hint } from '../ui';
+import { applyStyle, detectStyle } from '../../data/styles';
+import { Hint } from '../ui';
 import { ModelPicker } from './ModelPicker';
+import { PersonaPicker } from './PersonaPicker';
 import { VoicePicker } from './VoicePicker';
 import type { Speaker } from './wizardState';
 
@@ -18,7 +19,7 @@ interface SpeakerCardProps {
   modelsLoading: boolean;
   /** Paid models cannot be used: no own key and no credits. */
   paidLocked: boolean;
-  /** Audience ranking of the chosen model: null = no public debates yet, undefined = not shown. */
+  /** Audience ranking of the chosen model: null = not ranked yet, undefined = not shown. */
   ranking?: { entry: LeaderboardEntry; rank: number } | null;
   /** Audience rank per model id for the model list. */
   ranks: Record<string, number>;
@@ -29,6 +30,8 @@ interface SpeakerCardProps {
   /** Speaker name per voice id used by another speaker. */
   voicesTakenBy: Record<string, string>;
   showVoiceLanguages: boolean;
+  /** Debate language for the voice list: ISO code + display name. */
+  voiceLanguage: { code: string; name: string };
   removable: boolean;
   showErrors: boolean;
   onChange: (patch: Partial<Speaker>) => void;
@@ -53,6 +56,7 @@ export const SpeakerCard = ({
   voicesAuto,
   voicesTakenBy,
   showVoiceLanguages,
+  voiceLanguage,
   removable,
   showErrors,
   onChange,
@@ -120,7 +124,6 @@ export const SpeakerCard = ({
           </a>
         </div>
       )}
-      {ranking === null && modelId && <div className="mt-1.5 text-[11px] text-dim">No public debates with this model yet.</div>}
 
       <div className="mt-3 text-xs text-muted">Voice</div>
       <div className="mt-1.5 flex">
@@ -131,17 +134,14 @@ export const SpeakerCard = ({
           auto={voicesAuto}
           takenBy={voicesTakenBy}
           showLanguages={showVoiceLanguages}
+          language={voiceLanguage}
           onChange={onVoice}
         />
       </div>
 
       <div className="mt-3 text-xs text-muted">Persona</div>
-      <div className="mt-1.5 flex flex-wrap gap-1.5">
-        {STYLE_PRESETS.map((s) => (
-          <Chip key={s.id} size="sm" active={activeStyle?.id === s.id} color={color} title={s.full} onClick={() => onChange({ prompt: applyStyle(speaker.prompt, s) })}>
-            {s.label}
-          </Chip>
-        ))}
+      <div className="mt-1.5 flex">
+        <PersonaPicker value={activeStyle} color={color} onChange={(s) => onChange({ prompt: applyStyle(speaker.prompt, s) })} />
       </div>
 
       <details className="mt-3">

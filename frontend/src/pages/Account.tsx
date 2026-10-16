@@ -58,7 +58,7 @@ const Account = () => {
   if (!user) return null;
 
   return (
-    <Page narrow="account">
+    <Page>
       <ProfileHeader user={user} onUser={setUser} />
       <div className="mt-[26px] grid grid-cols-[repeat(auto-fit,minmax(min(100%,300px),1fr))] gap-3.5">
         <div className="grid content-start gap-3.5">

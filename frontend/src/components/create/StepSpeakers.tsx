@@ -1,9 +1,9 @@
-import { ArrowUpRight, Plus, RefreshCw } from 'lucide-react';
+import { ArrowUpRight, Lock, Plus, RefreshCw } from 'lucide-react';
+import type { ReactNode } from 'react';
 import type { BillingConfig, ModelInfo, TTSProviderName } from '../../api/types';
 import { useLeaderboard } from '../../hooks/useLeaderboard';
 import type { VoiceCatalogue } from '../../hooks/useVoices';
 import { Card, ErrorBox, Hint, Label, Spinner } from '../ui';
-import { OptionCard } from './OptionCard';
 import { SpeakerCard } from './SpeakerCard';
 import {
   MAX_DEBATERS,
@@ -34,9 +34,42 @@ interface StepSpeakersProps {
   billing: BillingConfig;
   /** User's own ElevenLabs key (lib/localKeys) — premium voices without credits. */
   hasTtsKey: boolean;
+  /** Free tier: no credits and no own ElevenLabs key, so premium voices cannot be picked. */
+  premiumLocked: boolean;
   paidLocked: boolean;
   showErrors: boolean;
 }
+
+/** Compact voice-engine toggle (the description goes to the tooltip to keep the row short). */
+const EngineOption = ({
+  active,
+  disabled = false,
+  onClick,
+  title,
+  tag,
+  tooltip,
+}: {
+  active: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+  title: string;
+  tag: ReactNode;
+  tooltip: string;
+}) => (
+  <button
+    type="button"
+    onClick={onClick}
+    disabled={disabled}
+    aria-pressed={active}
+    title={tooltip}
+    className={`inline-flex min-w-0 flex-1 items-center justify-between gap-3 rounded-field border px-3 py-2 text-left text-[13px] font-semibold transition-colors sm:flex-none ${
+      active ? 'border-accent bg-accent/6 text-text' : 'border-line-2 bg-ink text-text-3 hover:border-line-3'
+    } ${disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
+  >
+    <span className="truncate">{title}</span>
+    <span className="shrink-0 font-mono text-[11px] font-normal text-accent">{tag}</span>
+  </button>
+);
 
 /** Account page in a new tab: the wizard keeps its state and picks up new keys immediately. */
 const AccountLink = ({ children }: { children: string }) => (
@@ -58,6 +91,7 @@ export const StepSpeakers = ({
   provider,
   billing,
   hasTtsKey,
+  premiumLocked,
   paidLocked,
   showErrors,
 }: StepSpeakersProps) => {
@@ -82,6 +116,15 @@ export const StepSpeakers = ({
     const index = entries.findIndex((e) => e.model_id === modelId);
     return index < 0 ? null : { entry: entries[index], rank: index + 1 };
   };
+  const voiceLanguage = { code: catalogue.language, name: state.language.trim() || 'English' };
+  // ElevenLabs lists library voices for the language only on paid plans: say why there are none.
+  const noNativeVoices =
+    provider === 'elevenlabs' &&
+    !catalogue.loading &&
+    catalogue.voices.length > 0 &&
+    !!catalogue.language &&
+    catalogue.language !== 'en' &&
+    !catalogue.voices.some((v) => v.languages.includes(catalogue.language));
   const ranks = Object.fromEntries((leaderboard?.entries ?? []).map((e, i) => [e.model_id, i + 1]));
 
   const updateSpeaker = (index: number, changes: Partial<Speaker>) =>
@@ -154,30 +197,39 @@ export const StepSpeakers = ({
         </Hint>
       )}
 
-      <Card padding="md" className="mt-4">
-        <div className="flex flex-wrap items-baseline justify-between gap-2">
+      <Card padding="sm" className="mt-4">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2.5">
           <Label>Voice engine</Label>
+          <div className="flex min-w-0 flex-1 flex-wrap gap-2">
+            <EngineOption active={provider === 'edge'} onClick={() => setProvider('edge')} title="Edge neural" tag="FREE" tooltip="Good quality, word timestamps, instant." />
+            <EngineOption
+              active={provider === 'elevenlabs'}
+              onClick={() => setProvider('elevenlabs')}
+              disabled={!premiumAvailable || premiumLocked}
+              title="Premium neural"
+              tag={
+                hasTtsKey ? (
+                  'YOUR KEY'
+                ) : premiumLocked ? (
+                  <span className="inline-flex items-center gap-1 text-muted">
+                    <Lock className="size-3" /> ${billing.tts_price_per_min.toFixed(2)}/min
+                  </span>
+                ) : (
+                  `$${billing.tts_price_per_min.toFixed(2)}/min`
+                )
+              }
+              tooltip={
+                !premiumAvailable
+                  ? 'Premium voices are not configured on this server — add your own ElevenLabs key in Account'
+                  : premiumLocked
+                    ? 'Top up credits to unlock premium voices, or add your own ElevenLabs key in Account'
+                    : 'ElevenLabs studio voices with emotion tags.'
+              }
+            />
+          </div>
           <span className="text-xs text-muted">
-            Own ElevenLabs key? Add it in <AccountLink>Account</AccountLink>
+            Own ElevenLabs key? <AccountLink>Account</AccountLink>
           </span>
-        </div>
-        <div className="mt-2.5 grid gap-2.5 [grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr))]">
-          <OptionCard
-            active={provider === 'edge'}
-            onClick={() => setProvider('edge')}
-            title="Edge neural"
-            right={<span className="font-mono text-[11px] text-accent">FREE</span>}
-            text="Good quality, word timestamps, instant."
-          />
-          <OptionCard
-            active={provider === 'elevenlabs'}
-            onClick={() => setProvider('elevenlabs')}
-            disabled={!premiumAvailable}
-            title_={premiumAvailable ? undefined : 'Premium voices are not configured on this server — add your own ElevenLabs key in Account'}
-            title="Premium neural"
-            right={<span className="font-mono text-[11px] text-accent">{hasTtsKey ? 'YOUR KEY' : `$${billing.tts_price_per_min.toFixed(2)} / min`}</span>}
-            text="ElevenLabs studio voices with emotion tags."
-          />
         </div>
         {!premiumAvailable && (
           <Hint>
@@ -185,7 +237,19 @@ export const StepSpeakers = ({
             <AccountLink>Account</AccountLink> to use them.
           </Hint>
         )}
+        {premiumAvailable && premiumLocked && (
+          <Hint>
+            <Lock className="mr-1 inline size-3 align-[-1px]" />
+            Premium ElevenLabs voices are part of the paid tier: <AccountLink>top up credits</AccountLink> to unlock them, or add your own ElevenLabs key there.
+          </Hint>
+        )}
         {provider === 'elevenlabs' && hasTtsKey && <Hint tone="accent">Voices are billed to your ElevenLabs account, not to credits.</Hint>}
+        {noNativeVoices && (
+          <Hint>
+            No native {voiceLanguage.name} voices for this ElevenLabs key (Voice Library voices need a paid ElevenLabs plan) — the voices below speak{' '}
+            {voiceLanguage.name} with an accent.
+          </Hint>
+        )}
         {catalogue.loading && (
           <Hint className="flex items-center gap-2">
             <Spinner className="size-3.5" /> Loading {provider === 'elevenlabs' ? 'premium' : 'Edge'} voices…
@@ -220,6 +284,7 @@ export const StepSpeakers = ({
             voicesAuto={voicesAuto}
             voicesTakenBy={takenBy(index)}
             showVoiceLanguages={provider === 'elevenlabs'}
+            voiceLanguage={voiceLanguage}
             removable={speaker.role === 'debater' && debaters > MIN_DEBATERS}
             showErrors={showErrors}
             onChange={(changes) => updateSpeaker(index, changes)}

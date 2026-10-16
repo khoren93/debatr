@@ -460,6 +460,8 @@ export interface VoiceInfo {
 
 export interface VoicesResponse {
   provider: TTSProviderName;
+  /** ISO code of the debate language; `voices[].languages` use the same codes. */
+  language: string;
   voices: VoiceInfo[];
   defaults: Record<string, string>;
 }

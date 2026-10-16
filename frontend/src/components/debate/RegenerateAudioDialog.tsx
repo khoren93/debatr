@@ -2,6 +2,7 @@ import { Play, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { getErrorMessage, getErrorStatus } from '../../api/client';
+import { useAuth } from '../../auth/AuthContext';
 import { deleteMedia, generateMedia, getMediaCapabilities, getVoices } from '../../api/media';
 import type { DebateDetail, DebateMedia, MediaCapabilities, TTSProviderName, VoiceInfo } from '../../api/types';
 import { useBillingConfig } from '../../hooks/useBillingConfig';
@@ -32,6 +33,7 @@ interface SpeakerRow {
 export const RegenerateAudioDialog = ({ open, onClose, debate, media, onQueued }: Props) => {
   const toast = useToast();
   const { config: billing } = useBillingConfig();
+  const { user } = useAuth();
   const [caps, setCaps] = useState<MediaCapabilities | null>(null);
   const [providerChoice, setProviderChoice] = useState<TTSProviderName | null>(null);
   const [modelChoice, setModelChoice] = useState<string | null>(null);
@@ -71,6 +73,9 @@ export const RegenerateAudioDialog = ({ open, onClose, debate, media, onQueued }
     [debate.participants],
   );
   const keyMissing = provider === 'elevenlabs' && !caps?.elevenlabs && !ttsKey;
+  // Free tier (no credits): the system key is locked, only an own key unlocks premium voices.
+  const noCredits = (user?.credits_usd ?? 0) <= 0;
+  const creditsMissing = provider === 'elevenlabs' && Boolean(caps?.elevenlabs) && !ttsKey && noCredits;
   const voicesKey = provider === 'elevenlabs' ? ttsKey : '';
   const savedVoices = media?.options?.provider === provider ? media.options.voices : debate.media_plan?.provider === provider ? debate.media_plan.voices : {};
   const savedKey = JSON.stringify(savedVoices);
@@ -160,7 +165,7 @@ export const RegenerateAudioDialog = ({ open, onClose, debate, media, onQueued }
             <Button variant="secondary" onClick={onClose}>
               Cancel
             </Button>
-            <Button onClick={submit} loading={submitting} disabled={keyMissing || voices.length === 0}>
+            <Button onClick={submit} loading={submitting} disabled={keyMissing || creditsMissing || voices.length === 0}>
               {ready ? 'Regenerate' : 'Generate'}
             </Button>
           </>
@@ -172,7 +177,9 @@ export const RegenerateAudioDialog = ({ open, onClose, debate, media, onQueued }
               <Label>Voice engine</Label>
               <Select value={provider} onChange={(e) => setProviderChoice(e.target.value as TTSProviderName)} className="mt-1.5">
                 <option value="edge">Edge neural — free</option>
-                <option value="elevenlabs">Premium neural (ElevenLabs){caps && !caps.elevenlabs ? ' — needs your key' : ''}</option>
+                <option value="elevenlabs">
+                  Premium neural (ElevenLabs){caps && !caps.elevenlabs ? ' — needs your key' : !ttsKey && noCredits ? ' — needs credits or your key' : ''}
+                </option>
               </Select>
             </div>
             {provider === 'elevenlabs' && (
@@ -190,7 +197,7 @@ export const RegenerateAudioDialog = ({ open, onClose, debate, media, onQueued }
           </div>
           {provider === 'elevenlabs' && (
             <div>
-              <Label hint={caps?.elevenlabs ? '(optional — otherwise billed to credits)' : '(required)'}>Your ElevenLabs key</Label>
+              <Label hint={caps?.elevenlabs && !noCredits ? '(optional — otherwise billed to credits)' : '(required)'}>Your ElevenLabs key</Label>
               <Input type="password" value={ttsKey} onChange={(e) => setKeyDraft(e.target.value.trim())} placeholder="sk_…" autoComplete="off" spellCheck={false} maxLength={200} className="mt-1.5 font-mono" />
               {keyChanged ? (
                 <label className="mt-2 flex items-center gap-2 text-xs text-muted">
@@ -206,6 +213,15 @@ export const RegenerateAudioDialog = ({ open, onClose, debate, media, onQueued }
                     </Link>
                   </Hint>
                 )
+              )}
+              {creditsMissing && (
+                <Hint>
+                  Premium voices on our key are part of the paid tier.{' '}
+                  <Link to="/account" className="font-semibold text-accent hover:text-accent-hover">
+                    Top up credits
+                  </Link>{' '}
+                  to unlock them, enter your own key or switch to the free Edge voices.
+                </Hint>
               )}
               {keyMissing && (
                 <Hint tone="danger">

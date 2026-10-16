@@ -72,6 +72,7 @@ class VoiceOut(BaseModel):
 
 class VoicesResponse(BaseModel):
     provider: TTSProviderName
+    language: str = "en"  # ISO code of the debate language (voices[].languages use it)
     voices: list[VoiceOut]
     defaults: dict[str, str]  # speaker_id -> voice id
 

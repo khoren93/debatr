@@ -5,6 +5,7 @@ Fallback for models that reject it: plain TTS + /v1/forced-alignment.
 """
 
 import base64
+import hashlib
 import logging
 import time
 from typing import Any
@@ -32,6 +33,12 @@ USD_PER_1K_CHARS: dict[str, float] = {
     "eleven_flash_v2_5": 0.05,
     "eleven_turbo_v2_5": 0.05,
 }
+
+# Native voices for non-English debates come from the shared Voice Library. Free plans cannot
+# use library voices through the API (402 paid_plan_required), so they get only stock voices.
+LIBRARY_PAGE_SIZE = 60
+_VOICES_TTL = 300.0
+_voices_cache: dict[tuple[str, str], tuple[float, list[VoiceInfo]]] = {}
 
 _ROLE_PREFERENCES: dict[str, list[str]] = {
     "moderator": ["George", "Daniel", "Brian", "Roger"],
@@ -89,40 +96,62 @@ class ElevenLabsProvider:
     # --- voices ------------------------------------------------------------
 
     def list_voices(self, language_code: str) -> list[VoiceInfo]:
+        """The account's voices plus, on paid plans, library voices native to the language.
+
+        Voices verified for the language come first. Cached per key and language."""
+        cache_key = (hashlib.sha256(self._api_key.encode()).hexdigest()[:16], language_code)
+        cached = _voices_cache.get(cache_key)
+        if cached and time.monotonic() - cached[0] < _VOICES_TTL:
+            return list(cached[1])
         with self._client() as client:
             response = self._request(client, "GET", f"{self.base_url}/v1/voices")
-        if response.status_code != 200:
-            raise TTSError(_error_message(response), response.status_code)
-        voices: list[VoiceInfo] = []
-        for v in response.json().get("voices") or []:
-            labels = v.get("labels") or {}
-            langs = tuple(
-                str(item.get("language"))
-                for item in (v.get("verified_languages") or [])
-                if item.get("language")
-            )
-            description = " · ".join(
-                str(labels[k])
-                for k in ("gender", "accent", "description", "use_case")
-                if labels.get(k)
-            )
-            voices.append(
-                VoiceInfo(
-                    id=str(v.get("voice_id")),
-                    name=str(v.get("name") or v.get("voice_id")),
-                    description=description or None,
-                    preview_url=v.get("preview_url"),
-                    gender=labels.get("gender"),
-                    languages=langs,
-                )
-            )
-        # Voices verified for the debate language first, then the rest (multilingual anyway).
+            if response.status_code != 200:
+                raise TTSError(_error_message(response), response.status_code)
+            paid = self._paid_plan(client)
+            voices = [
+                _voice_info(v)
+                for v in response.json().get("voices") or []
+                # Library voices copied into "My Voices" are still library voices.
+                if paid or (v.get("sharing") or {}).get("status") != "copied"
+            ]
+            if paid and language_code != "en":
+                known = {v.id for v in voices}
+                voices += [
+                    v for v in self._library_voices(client, language_code) if v.id not in known
+                ]
         voices.sort(key=lambda v: 0 if language_code in v.languages else 1)
-        return voices
+        _voices_cache[cache_key] = (time.monotonic(), voices)
+        return list(voices)
+
+    def _paid_plan(self, client: httpx.Client) -> bool:
+        """Whether the key's plan may use Voice Library voices (unknown counts as no)."""
+        response = self._request(client, "GET", f"{self.base_url}/v1/user/subscription", attempts=1)
+        if response.status_code != 200:
+            return False
+        tier = response.json().get("tier")
+        return bool(tier) and tier != "free"
+
+    def _library_voices(self, client: httpx.Client, language_code: str) -> list[VoiceInfo]:
+        response = self._request(
+            client,
+            "GET",
+            f"{self.base_url}/v1/shared-voices",
+            params={"language": language_code, "page_size": LIBRARY_PAGE_SIZE},
+            attempts=1,
+        )
+        if response.status_code != 200:
+            logger.warning("ElevenLabs voice library: %s", _error_message(response))
+            return []
+        return [
+            _voice_info(v)
+            for v in response.json().get("voices") or []
+            # Some library voices cost extra per character: keep the price predictable.
+            if v.get("voice_id") and (v.get("rate") or 1.0) <= 1.0 and not v.get("fiat_rate")
+        ]
 
     def default_voices(self, language_code: str, speakers: list[SpeakerRef]) -> dict[str, str]:
         voices = self.list_voices(language_code)
-        return pick_default_voices(voices, speakers)
+        return pick_default_voices(voices, speakers, language_code)
 
     # --- synthesis ---------------------------------------------------------
 
@@ -195,6 +224,29 @@ class ElevenLabsProvider:
         return words_from_forced_alignment(response.json())
 
 
+def _voice_info(v: dict[str, Any]) -> VoiceInfo:
+    """VoiceInfo from a /v1/voices entry (fields in `labels`) or a shared library voice
+    (fields at the top level)."""
+    labels = v.get("labels") or v
+    langs = [str(item.get("language")) for item in v.get("verified_languages") or []]
+    if isinstance(labels.get("language"), str):
+        langs.append(labels["language"])
+    description = " · ".join(
+        str(labels[k]).replace("_", " ")
+        for k in ("gender", "accent", "descriptive", "description", "use_case")
+        # A library voice's `description` is a long blurb, not a label.
+        if isinstance(labels.get(k), str) and labels[k] and len(labels[k]) <= 40
+    )
+    return VoiceInfo(
+        id=str(v.get("voice_id")),
+        name=str(v.get("name") or v.get("voice_id")),
+        description=description or None,
+        preview_url=v.get("preview_url"),
+        gender=labels.get("gender") if isinstance(labels.get("gender"), str) else None,
+        languages=tuple(dict.fromkeys(lang for lang in langs if lang and lang != "None")),
+    )
+
+
 def _alignment_to_words(alignment: dict[str, Any] | None) -> list[WordTiming] | None:
     if not alignment:
         return None
@@ -228,11 +280,20 @@ def _error_message(response: httpx.Response) -> str:
     return f"ElevenLabs {response.status_code}: {response.text[:200]}"
 
 
-def pick_default_voices(voices: list[VoiceInfo], speakers: list[SpeakerRef]) -> dict[str, str]:
-    """Assign distinct voices by role preference, falling back to unused voices (pure)."""
-    by_name = {v.name.lower(): v.id for v in voices}
+def pick_default_voices(
+    voices: list[VoiceInfo], speakers: list[SpeakerRef], language_code: str = "en"
+) -> dict[str, str]:
+    """Assign distinct voices by role preference, falling back to unused voices (pure).
+
+    For non-English debates with native voices only those are used, alternating genders so
+    neighbouring speakers are easy to tell apart."""
+    native = [v for v in voices if language_code in v.languages]
+    pool = native if language_code != "en" and native else voices
+    by_name = {v.name.split(" - ")[0].lower(): v.id for v in pool}
+    gender = {v.id: (v.gender or "").lower() for v in voices}
     used: set[str] = set()
     out: dict[str, str] = {}
+    last_gender = ""
     for speaker in speakers:
         prefs = _ROLE_PREFERENCES.get(speaker.role, _ROLE_PREFERENCES["debater"])
         if speaker.role == "debater":
@@ -246,10 +307,14 @@ def pick_default_voices(voices: list[VoiceInfo], speakers: list[SpeakerRef]) -> 
             None,
         )
         if chosen is None:
+            unused = [v.id for v in pool if v.id not in used]
+            contrast = [i for i in unused if last_gender and gender[i] and gender[i] != last_gender]
             chosen = next(
-                (v.id for v in voices if v.id not in used), voices[0].id if voices else ""
+                iter(contrast or unused or [v.id for v in voices if v.id not in used]),
+                voices[0].id if voices else "",
             )
         used.add(chosen)
+        last_gender = gender.get(chosen, "")
         out[speaker.id] = chosen
     return out
 

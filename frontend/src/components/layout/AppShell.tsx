@@ -148,8 +148,8 @@ export const AppShell = ({ children }: { children: ReactNode }) => {
 };
 
 /** Standard page padding from the design. */
-export const Page = ({ children, className = '', narrow = false }: { children: ReactNode; className?: string; narrow?: boolean | 'account' }) => (
-  <section className={`w-full px-[clamp(18px,4vw,48px)] pt-[clamp(20px,3.5vw,44px)] pb-24 ${narrow === true ? 'mx-auto max-w-[1080px]' : narrow === 'account' ? 'mx-auto max-w-[960px]' : ''} ${className}`}>
+export const Page = ({ children, className = '' }: { children: ReactNode; className?: string }) => (
+  <section className={`w-full px-[clamp(18px,4vw,48px)] pt-[clamp(20px,3.5vw,44px)] pb-24 ${className}`}>
     {children}
   </section>
 );

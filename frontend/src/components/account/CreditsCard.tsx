@@ -49,7 +49,7 @@ export const CreditsCard = ({ user, config, configLoaded, onToppedUp }: CreditsC
   const hint = !configLoaded
     ? ' '
     : config.payments_mode === 'disabled'
-      ? 'Payments are not configured yet'
+      ? 'Payments coming soon'
       : config.payments_mode === 'dev'
         ? 'Development mode: credited instantly'
         : 'Secure checkout by Stripe';

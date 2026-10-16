@@ -111,7 +111,11 @@ const CreateDebate = () => {
   const patch = (changes: Partial<WizardState>) => setState((s) => ({ ...s, ...changes }));
 
   const debaters = countDebaters(state.speakers);
-  const provider = state.provider === 'elevenlabs' && !billing.elevenlabs_available && !elevenlabsKey ? 'edge' : state.provider;
+  // Premium voices on the system key are paid from credits: a zero balance (the free tier) locks
+  // them unless the user brings an own ElevenLabs key.
+  const premiumLocked = !elevenlabsKey && (user?.credits_usd ?? 0) <= 0;
+  const premiumUsable = elevenlabsKey.length > 0 || (billing.elevenlabs_available && !premiumLocked);
+  const provider = state.provider === 'elevenlabs' && !premiumUsable ? 'edge' : state.provider;
   const catalogue = useVoices(provider, state.language, debaters, state.step >= 2, provider === 'elevenlabs' ? elevenlabsKey : '');
   // Without a catalogue the server picks the voices (the Speakers step says so).
   const resolvedVoices = catalogue.error ? {} : resolveVoices(state, catalogue.voices, catalogue.defaults);
@@ -231,6 +235,7 @@ const CreateDebate = () => {
           provider={provider}
           billing={billing}
           hasTtsKey={elevenlabsKey.length > 0}
+          premiumLocked={premiumLocked}
           paidLocked={paidLocked}
           showErrors={showErrors}
         />

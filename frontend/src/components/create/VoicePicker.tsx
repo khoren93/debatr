@@ -13,6 +13,8 @@ interface VoicePickerProps {
   takenBy: Record<string, string>;
   /** Show the verified languages (ElevenLabs voices speak many; Edge voices one). */
   showLanguages: boolean;
+  /** Debate language: ISO code (as in `VoiceInfo.languages`) and display name. */
+  language: { code: string; name: string };
   onChange: (voiceId: string) => void;
 }
 
@@ -25,6 +27,10 @@ const matches = (voice: VoiceInfo, terms: string[]) => {
 };
 
 const genderOf = (voice: VoiceInfo) => voice.gender?.trim().toLowerCase() || '';
+const termsOf = (query: string) => query.toLowerCase().split(/\s+/).filter(Boolean);
+
+type Scope = 'native' | 'all';
+const SCOPES: Scope[] = ['native', 'all'];
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 /** Only one preview plays at a time across all pickers. */
@@ -91,10 +97,11 @@ const PreviewButton = ({ url, playing, onToggle, size = 'md' }: { url: string | 
 );
 
 /** Searchable voice list with gender filter, previews and "used by" hints. */
-export const VoicePicker = ({ value, voices, loading, auto, takenBy, showLanguages, onChange }: VoicePickerProps) => {
+export const VoicePicker = ({ value, voices, loading, auto, takenBy, showLanguages, language, onChange }: VoicePickerProps) => {
   const { open, show: openPopover, close, placement, rootRef, triggerRef } = usePickerPopover(POPOVER_WIDTH, POPOVER_HEIGHT);
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState('all');
+  const [scope, setScope] = useState<Scope>('native');
   const [active, setActive] = useState(value);
   const listRef = useRef<HTMLDivElement>(null);
   const listId = useId();
@@ -103,10 +110,22 @@ export const VoicePicker = ({ value, voices, loading, auto, takenBy, showLanguag
   const selected = voices.find((v) => v.id === value);
   // Edge voices have no samples: no preview buttons at all rather than disabled ones.
   const hasPreviews = voices.some((v) => v.preview_url);
-  const genders = [...new Set(voices.map(genderOf).filter(Boolean))].sort();
-  const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
-  const found = voices.filter((v) => matches(v, terms));
-  const visible = filter === 'all' ? found : found.filter((v) => genderOf(v) === filter);
+  // ElevenLabs voices are multilingual: offer the ones verified for the debate language first.
+  const native = voices.filter((v) => language.code && v.languages.includes(language.code));
+  const hasScope = showLanguages && native.length > 0 && native.length < voices.length;
+  const pool = (s: Scope) => (hasScope && s === 'native' ? native : voices);
+  const visibleFor = (q: string, f: string, s: Scope) => {
+    const terms = termsOf(q);
+    return pool(s).filter((v) => matches(v, terms) && (f === 'all' || genderOf(v) === f));
+  };
+  const genders = [...new Set(pool(scope).map(genderOf).filter(Boolean))].sort();
+  const found = visibleFor(query, 'all', scope);
+  const visible = visibleFor(query, filter, scope);
+
+  // A new search or filter starts at the top of the list.
+  useEffect(() => {
+    if (listRef.current) listRef.current.scrollTop = 0;
+  }, [query, filter, scope]);
 
   // Bring the current choice into view when the list opens (without scrolling the page).
   useEffect(() => {
@@ -127,6 +146,8 @@ export const VoicePicker = ({ value, voices, loading, auto, takenBy, showLanguag
   const show = () => {
     setQuery('');
     setFilter('all');
+    // Start with the native voices unless the current choice is not one of them.
+    setScope(!value || native.some((v) => v.id === value) ? 'native' : 'all');
     setActive(value);
     openPopover();
   };
@@ -136,11 +157,14 @@ export const VoicePicker = ({ value, voices, loading, auto, takenBy, showLanguag
     close();
   };
 
-  const resetActive = (nextQuery: string, nextFilter: string) => {
-    const nextTerms = nextQuery.toLowerCase().split(/\s+/).filter(Boolean);
-    const first = voices.find((v) => matches(v, nextTerms) && (nextFilter === 'all' || genderOf(v) === nextFilter));
-    setActive(first?.id ?? '');
-    if (listRef.current) listRef.current.scrollTop = 0;
+  const resetActive = (nextQuery: string, nextFilter: string, nextScope: Scope) => {
+    setActive(visibleFor(nextQuery, nextFilter, nextScope)[0]?.id ?? '');
+  };
+
+  const changeScope = (next: Scope) => {
+    setScope(next);
+    setFilter('all');
+    resetActive(query, 'all', next);
   };
 
   const onKeyDown = (e: KeyboardEvent) => {
@@ -236,9 +260,9 @@ export const VoicePicker = ({ value, voices, loading, auto, takenBy, showLanguag
                 value={query}
                 onChange={(e) => {
                   setQuery(e.target.value);
-                  resetActive(e.target.value, filter);
+                  resetActive(e.target.value, filter, scope);
                 }}
-                placeholder={`Search ${voices.length} voices…`}
+                placeholder={`Search ${pool(scope).length} voices…`}
                 aria-label="Search voices"
                 aria-controls={listId}
                 aria-activedescendant={active ? `${listId}-${active}` : undefined}
@@ -251,7 +275,7 @@ export const VoicePicker = ({ value, voices, loading, auto, takenBy, showLanguag
                   type="button"
                   onClick={() => {
                     setQuery('');
-                    resetActive('', filter);
+                    resetActive('', filter, scope);
                   }}
                   className="rounded p-0.5 text-muted hover:text-text cursor-pointer"
                   aria-label="Clear search"
@@ -260,9 +284,27 @@ export const VoicePicker = ({ value, voices, loading, auto, takenBy, showLanguag
                 </button>
               )}
             </div>
-            {genders.length > 1 && (
-              <div className="mt-2 flex gap-1 overflow-x-auto" role="tablist" aria-label="Filter voices">
-                {['all', ...genders].map((g) => (
+            {(hasScope || genders.length > 1) && (
+              <div className="mt-2 flex items-center gap-1 overflow-x-auto" role="tablist" aria-label="Filter voices">
+                {hasScope &&
+                  SCOPES.map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      role="tab"
+                      aria-selected={scope === s}
+                      onClick={() => changeScope(s)}
+                      title={s === 'native' ? `Voices verified for ${language.name}` : `Every voice; the others speak ${language.name} with an accent`}
+                      className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-2.5 py-[3px] text-[11px] font-semibold transition-colors cursor-pointer ${
+                        scope === s ? 'border-accent text-accent' : 'border-line-2 text-muted hover:text-text'
+                      }`}
+                    >
+                      {s === 'native' ? language.name : 'All languages'}
+                      <span className={scope === s ? 'text-accent/60' : 'text-dim'}>{s === 'native' ? native.length : voices.length}</span>
+                    </button>
+                  ))}
+                {hasScope && genders.length > 1 && <span className="mx-1 h-4 w-px shrink-0 bg-line-2" aria-hidden="true" />}
+                {genders.length > 1 && ['all', ...genders].map((g) => (
                   <button
                     key={g}
                     type="button"
@@ -270,7 +312,7 @@ export const VoicePicker = ({ value, voices, loading, auto, takenBy, showLanguag
                     aria-selected={filter === g}
                     onClick={() => {
                       setFilter(g);
-                      resetActive(query, g);
+                      resetActive(query, g, scope);
                     }}
                     className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors cursor-pointer ${
                       filter === g ? 'bg-accent text-ink' : 'text-muted hover:bg-surface-3 hover:text-text'

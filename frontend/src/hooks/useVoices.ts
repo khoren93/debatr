@@ -7,6 +7,7 @@ interface Loaded {
   key: string;
   voices: VoiceInfo[];
   defaults: Record<string, string>;
+  language: string;
 }
 
 interface Failed {
@@ -18,6 +19,8 @@ export interface VoiceCatalogue {
   voices: VoiceInfo[];
   /** Default voice per speaker id: `participant_0` = moderator, `participant_1..n` = debaters, `judge`. */
   defaults: Record<string, string>;
+  /** ISO code of the debate language ('' while loading). */
+  language: string;
   loading: boolean;
   error: string | null;
   reload: () => void;
@@ -41,7 +44,7 @@ export const useVoices = (provider: TTSProviderName, language: string, debaters:
     let cancelled = false;
     getVoices(provider, { language, participants: debaters }, ttsKey || undefined)
       .then((res) => {
-        if (!cancelled) setLoaded({ key, voices: res.voices, defaults: res.defaults });
+        if (!cancelled) setLoaded({ key, voices: res.voices, defaults: res.defaults, language: res.language });
       })
       .catch((err: unknown) => {
         if (!cancelled) setFailed({ key, message: getErrorMessage(err) });
@@ -57,6 +60,7 @@ export const useVoices = (provider: TTSProviderName, language: string, debaters:
   return {
     voices: current?.voices ?? [],
     defaults: current?.defaults ?? {},
+    language: current?.language ?? '',
     loading: enabled && !current && !error,
     error,
     reload: () => setAttempt((n) => n + 1),
