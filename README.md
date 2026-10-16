@@ -61,8 +61,8 @@ Follow these steps to get a copy up and running locally or on your server.
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/khoren93/ai-debates.git
-   cd ai-debates
+   git clone https://github.com/khoren93/debatr.git
+   cd debatr
    ```
 
 2. **Configure environment**
@@ -136,8 +136,8 @@ Run `make` to list every target. The most useful ones:
    ```
 3. **Clone and Setup**:
    ```bash
-   git clone https://github.com/khoren93/ai-debates.git
-   cd ai-debates
+   git clone https://github.com/khoren93/debatr.git
+   cd debatr
    cp .env.example .env
    ```
 4. **Edit `.env`**:
@@ -251,4 +251,4 @@ Distributed under the MIT License. See `LICENSE` for more information.
 
 ## 📬 Contact
 
-Project Link: [https://github.com/khoren93/ai-debates](https://github.com/khoren93/ai-debates)
+Project Link: [https://github.com/khoren93/debatr](https://github.com/khoren93/debatr)
