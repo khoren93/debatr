@@ -11,7 +11,7 @@
 
 Users sign up, run free models or bring their own OpenRouter key, buy credits with **Stripe**, keep a library of their debates and can publish them to a **public gallery** with share links.
 
-> **🚀 Live Demo Version is Coming Soon!**
+> **🚀 Try it live: [ai-debates.net](https://ai-debates.net)**
 
 ![App Demo](https://github.com/user-attachments/assets/54c6768d-8b00-43a9-baa7-1312c8dc01a4)
 
@@ -180,7 +180,7 @@ Run `make` to list every target. The most useful ones:
 
 ### 🌐 Server Deployment (Hetzner/VPS)
 
-1. **Point your domain** (e.g., `ai-debates.net`) to your server IP in Cloudflare/DNS.
+1. **Point your domain** (e.g., `example.com`) to your server IP in Cloudflare/DNS.
 2. **SSH into your server** and install Docker:
    ```bash
    curl -fsSL https://get.docker.com | sh
