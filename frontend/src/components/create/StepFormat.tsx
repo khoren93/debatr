@@ -1,4 +1,5 @@
 import { KeyRound } from 'lucide-react';
+import type { TtsKeyCheck, TtsKeyStatus } from '../../hooks/useElevenLabsKeyStatus';
 import { Card, Chip, Hint, Label, LinkButton } from '../ui';
 import { OptionCard } from './OptionCard';
 import { OUTPUT_OPTIONS, QUALITY_OPTIONS, type WizardState } from './wizardState';
@@ -10,18 +11,27 @@ interface StepFormatProps {
   accountKeyMasked: string | null;
   /** Browser-only keys (lib/localKeys), managed on the Account page. */
   openrouterKey: string;
-  elevenlabsKey: string;
+  /** The browser's ElevenLabs key, as checked against ElevenLabs. */
+  ttsKeyCheck: TtsKeyCheck;
 }
 
-const KeyStatus = ({ label, value }: { label: string; value: string | null }) => (
-  <span className="inline-flex items-center gap-1.5 rounded-full border border-line-2 bg-ink px-2.5 py-1 text-[11px]">
-    <span className={`size-1.5 rounded-full ${value ? 'bg-ok' : 'bg-line-3'}`} aria-hidden="true" />
+const KeyStatus = ({ label, value, bad = false, title }: { label: string; value: string | null; bad?: boolean; title?: string }) => (
+  <span title={title} className="inline-flex items-center gap-1.5 rounded-full border border-line-2 bg-ink px-2.5 py-1 text-[11px]">
+    <span className={`size-1.5 rounded-full ${bad ? 'bg-con' : value ? 'bg-ok' : 'bg-line-3'}`} aria-hidden="true" />
     <span className="font-semibold text-text-3">{label}</span>
     <span className="text-muted">{value ?? 'not set'}</span>
   </span>
 );
 
-export const StepFormat = ({ state, patch, accountKeyMasked, openrouterKey, elevenlabsKey }: StepFormatProps) => {
+const TTS_KEY_LABELS: Record<TtsKeyStatus, string | null> = {
+  none: null,
+  checking: 'checking…',
+  valid: 'set in this browser',
+  invalid: 'rejected by ElevenLabs',
+  unknown: 'set in this browser',
+};
+
+export const StepFormat = ({ state, patch, accountKeyMasked, openrouterKey, ttsKeyCheck }: StepFormatProps) => {
   const toggleOutput = (value: WizardState['outputs'][number]) =>
     patch({
       outputs: state.outputs.includes(value)
@@ -89,7 +99,12 @@ export const StepFormat = ({ state, patch, accountKeyMasked, openrouterKey, elev
         </div>
         <div className="mt-3 flex flex-wrap gap-2">
           <KeyStatus label="OpenRouter" value={openrouterKey ? 'set in this browser' : accountKeyMasked ? `account key ${accountKeyMasked}` : null} />
-          <KeyStatus label="ElevenLabs" value={elevenlabsKey ? 'set in this browser' : null} />
+          <KeyStatus
+            label="ElevenLabs"
+            value={TTS_KEY_LABELS[ttsKeyCheck.status]}
+            bad={ttsKeyCheck.status === 'invalid'}
+            title={ttsKeyCheck.error ?? undefined}
+          />
         </div>
       </Card>
     </div>

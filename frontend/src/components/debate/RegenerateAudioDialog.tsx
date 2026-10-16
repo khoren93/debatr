@@ -6,6 +6,7 @@ import { useAuth } from '../../auth/AuthContext';
 import { deleteMedia, generateMedia, getMediaCapabilities, getVoices } from '../../api/media';
 import type { DebateDetail, DebateMedia, MediaCapabilities, TTSProviderName, VoiceInfo } from '../../api/types';
 import { useBillingConfig } from '../../hooks/useBillingConfig';
+import { ttsKeyUsable, useElevenLabsKeyStatus } from '../../hooks/useElevenLabsKeyStatus';
 import { formatCost } from '../../lib/format';
 import { setLocalKey, useLocalKey } from '../../lib/localKeys';
 import { Button, ConfirmDialog, ErrorBox, Hint, Input, Label, Modal, Select, useToast } from '../ui';
@@ -72,16 +73,20 @@ export const RegenerateAudioDialog = ({ open, onClose, debate, media, onQueued }
     () => [...debate.participants.map((p, i) => ({ id: p.id || `participant_${i}`, name: p.name ?? `Speaker ${i + 1}` })), { id: 'judge', name: 'Judge (verdict)' }],
     [debate.participants],
   );
-  const keyMissing = provider === 'elevenlabs' && !caps?.elevenlabs && !ttsKey;
+  // Only a key ElevenLabs accepts unlocks premium voices (typed keys are checked after a pause).
+  const keyCheck = useElevenLabsKeyStatus(open && provider === 'elevenlabs' ? ttsKey : '', 500);
+  const keyRejected = keyCheck.status === 'invalid';
+  const ownKeyUsable = ttsKeyUsable(keyCheck);
+  const keyMissing = provider === 'elevenlabs' && !caps?.elevenlabs && !ownKeyUsable;
   // Empty balance: the system key is locked, only an own key unlocks premium voices.
   const noCredits = (user?.credits_usd ?? 0) <= 0;
-  const creditsMissing = provider === 'elevenlabs' && Boolean(caps?.elevenlabs) && !ttsKey && noCredits;
+  const creditsMissing = provider === 'elevenlabs' && Boolean(caps?.elevenlabs) && !ownKeyUsable && noCredits;
   const voicesKey = provider === 'elevenlabs' ? ttsKey : '';
   const savedVoices = media?.options?.provider === provider ? media.options.voices : debate.media_plan?.provider === provider ? debate.media_plan.voices : {};
   const savedKey = JSON.stringify(savedVoices);
 
   useEffect(() => {
-    if (!open || keyMissing) return;
+    if (!open || keyMissing || keyRejected) return;
     let cancelled = false;
     getVoices(provider, { debateId: debate.id }, voicesKey || undefined)
       .then((r) => {
@@ -104,7 +109,7 @@ export const RegenerateAudioDialog = ({ open, onClose, debate, media, onQueued }
     return () => {
       cancelled = true;
     };
-  }, [open, provider, debate.id, voicesKey, keyMissing, savedKey]);
+  }, [open, provider, debate.id, voicesKey, keyMissing, keyRejected, savedKey]);
 
   const chars = debate.turns.reduce((acc, t) => acc + (t.error ? 0 : t.text.length), 0);
   const premiumCost = (chars / 1000) * billing.tts_price_per_1k_chars;
@@ -165,7 +170,7 @@ export const RegenerateAudioDialog = ({ open, onClose, debate, media, onQueued }
             <Button variant="secondary" onClick={onClose}>
               Cancel
             </Button>
-            <Button onClick={submit} loading={submitting} disabled={keyMissing || creditsMissing || voices.length === 0}>
+            <Button onClick={submit} loading={submitting} disabled={keyMissing || creditsMissing || keyRejected || keyCheck.status === 'checking' || voices.length === 0}>
               {ready ? 'Regenerate' : 'Generate'}
             </Button>
           </>
@@ -178,7 +183,7 @@ export const RegenerateAudioDialog = ({ open, onClose, debate, media, onQueued }
               <Select value={provider} onChange={(e) => setProviderChoice(e.target.value as TTSProviderName)} className="mt-1.5">
                 <option value="edge">Edge neural — free</option>
                 <option value="elevenlabs">
-                  Premium neural (ElevenLabs){caps && !caps.elevenlabs ? ' — needs your key' : !ttsKey && noCredits ? ' — needs credits or your key' : ''}
+                  Premium neural (ElevenLabs){caps && !caps.elevenlabs ? ' — needs your key' : !ownKeyUsable && noCredits ? ' — needs credits or your key' : ''}
                 </option>
               </Select>
             </div>
@@ -214,7 +219,12 @@ export const RegenerateAudioDialog = ({ open, onClose, debate, media, onQueued }
                   </Hint>
                 )
               )}
-              {creditsMissing && (
+              {keyRejected && (
+                <Hint tone="danger">
+                  ElevenLabs rejected this key: {keyCheck.error}.{caps?.elevenlabs && !noCredits ? ' Fix it or clear the field to pay with credits.' : ''}
+                </Hint>
+              )}
+              {creditsMissing && !keyRejected && (
                 <Hint>
                   Premium voices on our key are paid from your balance.{' '}
                   <Link to="/account" className="font-semibold text-accent hover:text-accent-hover">
@@ -223,14 +233,14 @@ export const RegenerateAudioDialog = ({ open, onClose, debate, media, onQueued }
                   to unlock them, enter your own key or switch to the free Edge voices.
                 </Hint>
               )}
-              {keyMissing && (
+              {keyMissing && !keyRejected && (
                 <Hint tone="danger">
                   {caps?.elevenlabs_error ? `Premium voices are unavailable on this server: ${caps.elevenlabs_error}.` : 'No premium key is configured on this server.'} Enter your own key or switch to the free Edge voices.
                 </Hint>
               )}
             </div>
           )}
-          {voicesError && <ErrorBox>{voicesError}</ErrorBox>}
+          {voicesError && !keyRejected && <ErrorBox>{voicesError}</ErrorBox>}
           {!keyMissing && (
             <div className="grid gap-2 sm:grid-cols-2">
               {rows.map((row) => {

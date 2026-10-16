@@ -13,7 +13,8 @@ const hash = (s: string) => {
 export const avatarGradient = (seed: string) => {
   const h = hash(seed || 'debatr');
   const a = PALETTE[h % PALETTE.length];
-  const b = PALETTE[(h >> 3) % PALETTE.length];
+  // `>>>`: the hash is an unsigned 32-bit value; a signed shift gave negative indices.
+  const b = PALETTE[(h >>> 3) % PALETTE.length];
   return `linear-gradient(135deg, ${a}, ${b === a ? PALETTE[(h + 1) % PALETTE.length] : b})`;
 };
 

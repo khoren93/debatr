@@ -2,8 +2,8 @@ import { useState, type FormEvent, type ReactNode } from 'react';
 import { Trash2, X } from 'lucide-react';
 import { removeOpenRouterKey } from '../../api/auth';
 import { getErrorMessage } from '../../api/client';
-import { getVoices } from '../../api/media';
 import type { User } from '../../api/types';
+import { checkElevenLabsKey } from '../../hooks/useElevenLabsKeyStatus';
 import { maskKey, setLocalKey, useLocalKey, type LocalKeyName } from '../../lib/localKeys';
 import { Button, Card, ConfirmDialog, Hint, Input, Label, SectionLabel, useToast } from '../ui';
 
@@ -17,10 +17,10 @@ interface RowConfig {
   validate?: (key: string) => Promise<string | null>;
 }
 
-const checkElevenLabsKey = (key: string) =>
-  getVoices('elevenlabs', { language: 'English', participants: 0 }, key)
-    .then(() => null)
-    .catch((err: unknown) => `ElevenLabs rejected the key: ${getErrorMessage(err)}`);
+const validateElevenLabsKey = (key: string) =>
+  checkElevenLabsKey(key).then(({ status, error }) =>
+    status === 'valid' ? null : status === 'invalid' ? `ElevenLabs rejected the key: ${error}` : `Could not check the key: ${error}`,
+  );
 
 const ROWS: RowConfig[] = [
   {
@@ -29,7 +29,7 @@ const ROWS: RowConfig[] = [
     placeholder: 'sk_…',
     hint: 'Premium voices (and your cloned voices) billed to your ElevenLabs account instead of credits. Needs the Text to Speech and Voices read permissions.',
     maxLength: 200,
-    validate: checkElevenLabsKey,
+    validate: validateElevenLabsKey,
   },
   {
     name: 'openrouter',

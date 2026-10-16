@@ -31,6 +31,7 @@ import { useBillingConfig } from '../hooks/useBillingConfig';
 import { useModels } from '../hooks/useModels';
 import { useVoices } from '../hooks/useVoices';
 import { useLocalKey } from '../lib/localKeys';
+import { ttsKeyUsable, useElevenLabsKeyStatus } from '../hooks/useElevenLabsKeyStatus';
 
 /**
  * Four-step wizard: topic → speakers (models, voice engine, voices) → format → review. `?draft=<id>` edits a saved draft,
@@ -46,7 +47,10 @@ const CreateDebate = () => {
   const { models, loading: modelsLoading, error: modelsError } = useModels();
   const { config: billing } = useBillingConfig();
   const openrouterKey = useLocalKey('openrouter');
-  const elevenlabsKey = useLocalKey('elevenlabs');
+  const storedTtsKey = useLocalKey('elevenlabs');
+  const ttsKeyCheck = useElevenLabsKeyStatus(storedTtsKey);
+  // A key ElevenLabs rejected neither unlocks premium voices nor goes to the audio build.
+  const elevenlabsKey = ttsKeyUsable(ttsKeyCheck) ? storedTtsKey : '';
 
   const [state, setState] = useState<WizardState>(() => (draftId ? initialState() : loadWizardState()));
   const [draftLoaded, setDraftLoaded] = useState<string | null>(null);
@@ -235,12 +239,13 @@ const CreateDebate = () => {
           provider={provider}
           billing={billing}
           hasTtsKey={elevenlabsKey.length > 0}
+          ttsKeyError={ttsKeyCheck.status === 'invalid' ? ttsKeyCheck.error : null}
           premiumLocked={premiumLocked}
           paidLocked={paidLocked}
           showErrors={showErrors}
         />
       )}
-      {state.step === 3 && <StepFormat state={state} patch={patch} accountKeyMasked={user?.openrouter_key_masked ?? null} openrouterKey={openrouterKey} elevenlabsKey={elevenlabsKey} />}
+      {state.step === 3 && <StepFormat state={state} patch={patch} accountKeyMasked={user?.openrouter_key_masked ?? null} openrouterKey={openrouterKey} ttsKeyCheck={ttsKeyCheck} />}
       {state.step === 4 && (
         <StepReview
           state={state}

@@ -32,8 +32,10 @@ interface StepSpeakersProps {
   /** Effective voice engine (premium falls back to Edge when it is not available). */
   provider: TTSProviderName;
   billing: BillingConfig;
-  /** User's own ElevenLabs key (lib/localKeys) — premium voices without credits. */
+  /** User's own working ElevenLabs key (lib/localKeys) — premium voices without credits. */
   hasTtsKey: boolean;
+  /** Why ElevenLabs rejected the key saved in this browser, if it did. */
+  ttsKeyError: string | null;
   /** Empty balance and no own ElevenLabs key, so premium voices cannot be picked. */
   premiumLocked: boolean;
   paidLocked: boolean;
@@ -91,6 +93,7 @@ export const StepSpeakers = ({
   provider,
   billing,
   hasTtsKey,
+  ttsKeyError,
   premiumLocked,
   paidLocked,
   showErrors,
@@ -231,6 +234,12 @@ export const StepSpeakers = ({
             Own ElevenLabs key? <AccountLink>Account</AccountLink>
           </span>
         </div>
+        {ttsKeyError && (
+          <Hint tone="danger">
+            ElevenLabs rejected the key saved in this browser ({ttsKeyError}), so {premiumLocked ? 'premium voices stay locked' : 'premium voices are paid from your credits'}. Replace it in{' '}
+            <AccountLink>Account</AccountLink>.
+          </Hint>
+        )}
         {!premiumAvailable && (
           <Hint>
             Premium voices are not available on this server right now{billing.elevenlabs_error ? ` (${billing.elevenlabs_error})` : ''}. Add your own ElevenLabs key in{' '}

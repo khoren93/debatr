@@ -36,7 +36,8 @@ frontend/           React 19 + Vite 8 + Tailwind 4 + TypeScript
   src/auth/           AuthContext (useAuth), RequireAuth route guard
   src/hooks/          useDebateStream (SSE), useDebateMedia (polling), useAudioClock,
                       useModels, useBillingConfig, useVoices (wizard voice catalogue),
-                      useLeaderboard (cached model ranking)
+                      useLeaderboard (cached model ranking), useElevenLabsKeyStatus (checks
+                      the browser's ElevenLabs key)
   src/components/ui/  design-system primitives (Button, Card, Chip, Segmented, Field, Pill,
                       Progress, Modal/ConfirmDialog, Toast, Avatar/SpeakerBadge, Thumb, Logo,
                       ModelIcon — provider logo of a model id via src/lib/modelIcons.ts)
@@ -196,7 +197,8 @@ Stopping: `POST /api/debates/{id}/stop` sets the status, sets `debate:{id}:stop`
    key cost `TTS_CREDIT_PRICE_PER_1K_CHARS` in credits (charged after the build); own keys are free.
    There are no plans, only the prepaid balance (like OpenRouter): with an empty balance and no
    own key premium voices are locked in the wizard and the regenerate dialog, and `POST /media`
-   answers 402.
+   answers 402. Only an own key ElevenLabs accepts unlocks them: `useElevenLabsKeyStatus` checks
+   it via `GET /media/voices` (502 = rejected) and a rejected key is neither used nor sent.
    `output_style=spoken` in `DebateConfig` asks the models for plain spoken prose with
    optional `[emotion]` tags, which ElevenLabs v3 understands.
 
