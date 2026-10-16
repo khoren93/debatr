@@ -102,7 +102,7 @@ def parse_highlights(payload: Any) -> tuple[str | None, list[HighlightPick]]:
 _WORD_RE = re.compile(r"[^\w']+", re.UNICODE)
 
 
-def _norm(token: str) -> str:
+def normalize_token(token: str) -> str:
     return _WORD_RE.sub("", token.lower())
 
 
@@ -112,10 +112,10 @@ def locate_quote(
     """Index of the word where `quote` starts (or ends when from_end) using fuzzy token matching.
 
     `words` = [(text, start_ms, end_ms)]. Returns None when nothing matches well enough."""
-    q = [_norm(t) for t in quote.split() if _norm(t)]
+    q = [normalize_token(t) for t in quote.split() if normalize_token(t)]
     if not q or not words:
         return None
-    tokens = [_norm(w[0]) for w in words]
+    tokens = [normalize_token(w[0]) for w in words]
     n = len(q)
     best_ratio = 0.0
     best_index: int | None = None

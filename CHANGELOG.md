@@ -17,6 +17,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   word timestamps. A cheap "visual director" model designs them per turn during the audio
   build; numbers that the speaker did not say are rejected. On by default, switchable in the
   wizard and in the audio dialog.
+- **More scene types**: a balance that tips towards the heavier arguments, a 2×2 matrix, Venn
+  diagrams, top lists and pyramids, dictionary cards for key terms and a world map that fills
+  in and circles the countries a speaker names. The director's prompt now shows an example
+  per type and which type fits which content.
+- **Judge's scoreboard**: when the judge announces the result, the stage shows the debaters
+  side by side and crowns the winner (or stamps a draw), built from the structured verdict
+  without another model call.
 
 ### Changed
 
@@ -24,6 +31,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   visual stage in the centre and captions below; the topic is shown big at the start and then
   stays as a small chip in the corner. The Short gets the same stage between the debaters and
   the captions.
+
+### Fixed
+
+- **720p video export**: the "720p · faster" quality rendered at 1281×721, which the browser's
+  H.264 encoder rejects, so the export failed; it now renders at exactly 1280×720.
 
 ## [1.1.0] - 2026-10-16
 

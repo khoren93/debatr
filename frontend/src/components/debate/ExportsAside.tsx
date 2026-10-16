@@ -2,6 +2,7 @@ import { Download, Sparkles } from 'lucide-react';
 import type { Timeline } from '../../api/timeline';
 import type { DebateDetail, DebateMedia } from '../../api/types';
 import { formatDuration } from '../../lib/format';
+import { SCALE_720P } from '../../video/render';
 import { Button, Card, SectionLabel } from '../ui';
 import { ExportCard } from './ExportCard';
 import { Lineup } from './Lineup';
@@ -20,7 +21,7 @@ interface Props {
 /** Right column: EXPORTS (video, short, audio track) and LINEUP. */
 export const ExportsAside = ({ debate, media, timeline, mediaBase, highlightIndex, onHighlightChange, onGenerate }: Props) => {
   const completed = debate.status === 'completed' || debate.status === 'stopped';
-  const defaultScale = debate.media_plan?.quality === '4k' ? 2 : debate.media_plan?.quality === '720p' ? 0.6667 : 1;
+  const defaultScale = debate.media_plan?.quality === '4k' ? 2 : debate.media_plan?.quality === '720p' ? SCALE_720P : 1;
   const judgeVoice = prettyVoice(timeline?.speakers.find((s) => s.role === 'judge')?.voice_id);
   return (
     <aside className="grid gap-3.5 xl:sticky xl:top-6">

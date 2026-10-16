@@ -7,8 +7,9 @@ import { formatDuration } from '../../lib/format';
 import { FPS, LONG_H, LONG_W, SHORT_H, SHORT_W } from '../../video/constants';
 import { DebateLong } from '../../video/DebateLong';
 import { DebateShort } from '../../video/DebateShort';
-import { checkRenderSupport, renderMp4 } from '../../video/render';
+import { SCALE_720P, checkRenderSupport, renderMp4 } from '../../video/render';
 import { longDurationInFrames, shortDurationInFrames } from '../../video/utils';
+import { preloadSceneAssets } from '../../video/visuals/geoLoader';
 import { Button, Progress, Select } from '../ui';
 
 type AnyComposition = ComponentType<Record<string, unknown>>;
@@ -20,7 +21,7 @@ interface Props {
   mediaBase: string;
   highlightIndex: number;
   onHighlightChange?: (index: number) => void;
-  /** 2 = 4K (2160p from 1080p), 1 = full resolution, 0.6667 = 720p, 0.5 = draft. */
+  /** 2 = 4K (2160p from 1080p), 1 = full resolution, SCALE_720P = 720p, 0.5 = draft. */
   defaultScale: number;
   /** Owners report finished renders for the usage stats. */
   reportRenders: boolean;
@@ -79,6 +80,7 @@ export const ExportCard = ({ kind, debateId, timeline, mediaBase, highlightIndex
     try {
       const composition = (isLong ? DebateLong : DebateShort) as unknown as AnyComposition;
       const inputProps: Record<string, unknown> = isLong ? { timeline, mediaBase } : { timeline, mediaBase, highlightIndex };
+      await preloadSceneAssets(timeline);
       const { blob, ms: took } = await renderMp4({
         id: isLong ? 'DebateLong' : `DebateShort${highlightIndex}`,
         component: composition,
@@ -168,7 +170,7 @@ export const ExportCard = ({ kind, debateId, timeline, mediaBase, highlightIndex
           <Select value={scale} onChange={(e) => setScale(Number(e.target.value))} disabled={busy} className="!w-auto !bg-surface !py-1.5 text-xs">
             <option value={2}>{height * 2}p · 4K, slow</option>
             <option value={1}>{height}p</option>
-            <option value={0.6667}>{Math.round(height * 0.6667)}p · faster</option>
+            <option value={SCALE_720P}>{Math.round(height * SCALE_720P)}p · faster</option>
             <option value={0.5}>{Math.round(height * 0.5)}p · draft</option>
           </Select>
         </div>

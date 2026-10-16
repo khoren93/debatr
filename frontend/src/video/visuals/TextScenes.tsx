@@ -2,7 +2,7 @@ import type { BulletsScene, HeadlineScene, QuoteScene, RebuttalScene, VersusScen
 import { DISPLAY_FONT, FONT } from '../constants';
 import { INK, INK_DIM, backOut, easeOut, fitFont, ramp, seedOf, sketch, type Pt } from './draw';
 import { InkLayer, Reveal, Stroke } from './Ink';
-import { seriesColors, type SceneCtx } from './scene';
+import { sideColors, type SceneCtx } from './scene';
 
 const STRIKE = '#FF7A66';
 
@@ -41,9 +41,9 @@ export const BulletsView = ({ scene, ctx }: { scene: BulletsScene; ctx: SceneCtx
 
 /** Two columns (A vs B, pros vs cons) filled in turn, split by a hand-drawn line. */
 export const VersusView = ({ scene, ctx }: { scene: VersusScene; ctx: SceneCtx }) => {
-  const { t, w, h, k, color, dur, id } = ctx;
+  const { t, w, h, k, dur, id } = ctx;
   const seed = seedOf(id);
-  const [left, right] = seriesColors(color, 2);
+  const [left, right] = sideColors(ctx, [scene.left.label, scene.right.label]);
   const colW = w * 0.43;
   const headH = 76 * k;
   const maxItems = Math.max(scene.left.items.length, scene.right.items.length);

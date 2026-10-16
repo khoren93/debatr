@@ -58,8 +58,10 @@ from app.services.media.visuals import (
     build_briefs,
     build_director_messages,
     diversify,
+    make_room,
     parse_scenes,
     scene_budget,
+    scoreboard_visual,
 )
 from app.services.scheduler import speaker_role_for
 
@@ -260,13 +262,14 @@ def _plan_turn(
         return [], 0.0
     cache = paths.turn_visuals(brief.seq_index)
     parts = [PROMPT_VERSION, model, topic, language, brief.role, brief.turn_type, brief.text]
-    key = "|".join([*parts, brief.opponent or "", brief.previous_text or "", str(budget)])
+    parts += [brief.opponent or "", brief.previous_text or "", ",".join(brief.debaters)]
+    key = "|".join([*parts, str(budget)])
     digest = hashlib.sha256(key.encode()).hexdigest()
     if not force and cache.exists():
         try:
             meta = json.loads(cache.read_text())
             if meta.get("hash") == digest:
-                return parse_scenes(meta.get("scenes"), budget + 1), 0.0
+                return parse_scenes(meta.get("scenes"), budget + 1, debaters=brief.debaters), 0.0
         except (OSError, ValueError):
             logger.warning("Unreadable visuals cache %s, planning again", cache)
     messages = build_director_messages(brief, topic=topic, language=language, budget=budget)
@@ -276,7 +279,12 @@ def _plan_turn(
     except ValueError:
         payload = None
     scenes = parse_scenes(
-        payload, budget + 1, speech=brief.text, speaker=brief.speaker_name, opponent=brief.opponent
+        payload,
+        budget + 1,
+        speech=brief.text,
+        speaker=brief.speaker_name,
+        opponent=brief.opponent,
+        debaters=brief.debaters,
     )
     cache.write_text(
         json.dumps({"hash": digest, "scenes": [s.model_dump(mode="json") for s in scenes]})
@@ -343,6 +351,31 @@ def _plan_visuals(
     for seq in sorted(picked):
         visuals.extend(align_scenes(picked[seq], by_seq[seq]))
     return visuals, round(cost, 6)
+
+
+def _add_scoreboard(
+    visuals: list[TimelineVisual],
+    segments: list[TimelineSegment],
+    speakers: list[TimelineSpeaker],
+    verdict: TimelineVerdict,
+    verdict_json: dict[str, Any] | None,
+) -> list[TimelineVisual]:
+    """The judge's scoreboard on the verdict turn. A draw is shown only when the structured
+    verdict says so (a regex fallback without a winner is not a reliable draw)."""
+    structured = verdict_json or {}
+    is_draw = structured.get("source") == "llm" and bool(structured.get("is_draw"))
+    segment = next((s for s in segments if s.seq_index == verdict.seq_index), None)
+    debater_ids = [s.id for s in speakers if s.role == "debater"]
+    if segment is None or len(debater_ids) < 2 or not (verdict.winner_id or is_draw):
+        return visuals
+    board = scoreboard_visual(
+        segment,
+        debater_ids,
+        winner_id=verdict.winner_id,
+        winner_name=verdict.winner_name,
+        headline=str(structured.get("headline") or ""),
+    )
+    return make_room(visuals, board)
 
 
 def _build(db: Session, debate: Debate, options: MediaOptions, force: bool) -> int:
@@ -524,6 +557,8 @@ def _build(db: Session, debate: Debate, options: MediaOptions, force: bool) -> i
             winner_id=winner.id if winner else None,
             winner_name=winner.name if winner else None,
         )
+        if options.visuals:
+            visuals = _add_scoreboard(visuals, segments, speakers, verdict, debate.verdict_json)
 
     chars = sum(len(strip_audio_tags(task.text)) for task in tasks)
     char_cost = sum(a.char_cost for a in ordered if not a.cached)

@@ -16,24 +16,31 @@ from pydantic import TypeAdapter, ValidationError
 from app.schemas.timeline import TimelineSegment
 from app.schemas.visuals import (
     ICONS,
+    UNORDERED_ITEMS,
     BarsScene,
+    DirectorScene,
     LineScene,
+    MapScene,
     PieScene,
     ProportionScene,
     QuoteScene,
+    RankingScene,
     RebuttalScene,
-    Scene,
+    ScaleScene,
+    ScoreboardScene,
     StatScene,
     TimelineVisual,
+    VennScene,
+    VersusScene,
     item_anchors,
     parse_number,
 )
-from app.services.media.highlights import locate_quote
+from app.services.media.highlights import locate_quote, normalize_token
 
 logger = logging.getLogger(__name__)
 
 # Bump when the prompt or the scene contract changes: invalidates cached plans.
-PROMPT_VERSION = "1"
+PROMPT_VERSION = "2"
 
 WORDS_PER_SECOND = 2.6  # typical TTS pace, for the scene budget before audio exists
 SECONDS_PER_SCENE = 18
@@ -47,10 +54,10 @@ ITEM_GAP_MS = 3000  # a scene whose first element comes later than this starts w
 ITEM_HOLD_MS = 2500  # the last revealed element stays readable at least this long
 JOIN_GAP_MS = 1500  # a scene is stretched to the next one when the gap is shorter
 END_HOLD_MS = 400  # after the end of the turn audio
-DEFAULT_MS: dict[str, int] = {"stat": 6500, "headline": 5500, "quote": 7500}
+DEFAULT_MS: dict[str, int] = {"stat": 6500, "headline": 5500, "quote": 7500, "definition": 8000}
 DEFAULT_SCENE_MS = 9000
 
-_SCENE = TypeAdapter(Scene)
+_SCENE = TypeAdapter(DirectorScene)
 TYPE_ALIASES: dict[str, str] = {
     "number": "stat", "statistic": "stat", "kpi": "stat", "bar": "bars",
     "bar_chart": "bars", "chart": "bars", "line_chart": "line", "trend": "line",
@@ -58,7 +65,12 @@ TYPE_ALIASES: dict[str, str] = {
     "comparison": "versus", "compare": "versus", "pros_cons": "versus", "citation": "quote",
     "keyword": "headline", "punchline": "headline", "diagram": "flow", "chain": "flow",
     "cycle": "flow", "chronology": "timeline", "pictograms": "icons", "icon": "icons",
-    "isotype": "proportion", "ratio": "proportion",
+    "isotype": "proportion", "ratio": "proportion", "balance": "scale", "scales": "scale",
+    "weighing": "scale", "tradeoff": "scale", "trade_off": "scale", "quadrant": "matrix",
+    "2x2": "matrix", "matrix_2x2": "matrix", "overlap": "venn", "intersection": "venn",
+    "venn_diagram": "venn", "rank": "ranking", "top": "ranking", "top_list": "ranking",
+    "leaderboard": "ranking", "pyramid": "ranking", "term": "definition", "glossary": "definition",
+    "dictionary": "definition", "world_map": "map", "geo": "map", "countries": "map",
 }  # fmt: skip
 
 
@@ -72,11 +84,17 @@ class TurnBrief:
     text: str
     previous_text: str | None = None
     opponent: str | None = None  # name of the debater who spoke just before (for rebuttals)
+    debaters: tuple[str, ...] = ()  # everyone's exact names, for labels such as scale pans
 
 
 def build_briefs(segments: list[TimelineSegment], roles: dict[str, str]) -> list[TurnBrief]:
     """One brief per spoken turn. A debater's opponent is the last other debater who spoke
     (host turns in between are skipped), so round openings can rebut too."""
+    debaters = tuple(
+        dict.fromkeys(
+            s.speaker_name for s in segments if roles.get(s.speaker_id, "debater") == "debater"
+        )
+    )
     briefs: list[TurnBrief] = []
     for i, seg in enumerate(segments):
         role = roles.get(seg.speaker_id, "debater")
@@ -101,6 +119,7 @@ def build_briefs(segments: list[TimelineSegment], roles: dict[str, str]) -> list
                 text=seg.text,
                 previous_text=rival.text if rival else None,
                 opponent=rival.speaker_name if rival else None,
+                debaters=debaters,
             )
         )
     return briefs
@@ -119,19 +138,35 @@ def scene_budget(text: str, role: str) -> int:
 
 CATALOGUE = """\
 - stat: {"type":"stat","anchor":"...","value":42,"prefix":"$","suffix":"%","label":"what the number means","trend":"up|down|null","icon":ICON}
-  One striking number the speaker says.
+  One striking number the speaker says. "prices fell 90% in ten years" -> value 90, suffix "%", trend "down".
 - bars: {"type":"bars","anchor":"...","title":"...","unit":"%","items":[{"label":"...","value":10,"highlight":true}]}
-  2-6 quantities the speaker compares; highlight the one the speaker stresses.
+  2-6 quantities the speaker compares; highlight the one the speaker stresses. "Denmark pays 40 cents, Germany 35, the US 15" -> three bars.
 - line: {"type":"line","anchor":"...","title":"...","unit":"...","points":[{"label":"2010","value":5}]}
-  3-12 points of a trend over time, every value said by the speaker.
+  3-12 points of a trend over time, every value said by the speaker. "2 million in 2010, 5 in 2015, 14 in 2023".
 - pie: {"type":"pie","anchor":"...","title":"...","unit":"%","items":[{"label":"...","value":30}]}
-  2-5 shares of one whole.
+  2-5 shares of one whole. "70% of the budget goes to pensions, 20% to health".
 - proportion: {"type":"proportion","anchor":"...","count":1,"total":4,"label":"...","icon":ICON}
   "1 in 4", "7 out of 10" (total at most 100).
+- ranking: {"type":"ranking","anchor":"...","title":"...","layout":"list|pyramid","unit":"...","items":[{"label":"...","value":null,"anchor":"..."}]}
+  2-6 items in rank order, #1 first, even if the speaker counts down. "The biggest emitters are China, then the US, then India". Values only if said for every item; "pyramid" for a hierarchy (needs, power, a food chain).
+- map: {"type":"map","anchor":"...","title":"...","unit":"%","regions":[{"code":"NOR","label":"...","value":null,"anchor":"..."}]}
+  1-8 countries the speaker names. code = ISO 3166-1 alpha-3 ("USA", "DEU", "CHN") or "EU"; label = the name in the debate language; value only if a number is said for every country. "Norway, Sweden and Finland already did it".
 - bullets: {"type":"bullets","anchor":"...","title":"...","items":[{"text":"...","anchor":"..."}]}
-  2-4 key points of the argument, each anchored where it is said.
+  2-4 key points of the argument, each anchored where it is said. "First... Second... Third...".
 - versus: {"type":"versus","anchor":"...","title":"...","left":{"label":"...","items":["..."]},"right":{"label":"...","items":["..."]}}
-  Two options side by side, pros vs cons, before vs after (1-4 short items per side).
+  Two options side by side, pros vs cons, before vs after (1-4 short items per side). "Remote work saves the commute; the office builds the team".
+- scale: {"type":"scale","anchor":"...","title":"...","left":{"label":"...","items":[{"text":"...","anchor":"..."}]},"right":{"label":"...","items":[{"text":"...","anchor":"..."}]},"heavier":"left|right|even"}
+  Arguments weighed against each other on a balance, 1-3 per pan; heavier = the side the speaker says wins. "Yes, it is costly and slow, but it is clean and reliable, and that outweighs it" -> left costs, right benefits, heavier "right".
+- matrix: {"type":"matrix","anchor":"...","title":"...","x_axis":"...","y_axis":"...","quadrants":["top-left","top-right","bottom-left","bottom-right"],"items":[{"label":"...","x":8,"y":2,"highlight":true,"anchor":"..."}]}
+  1-6 options placed on two criteria, x and y from 0 (low) to 10 (high); quadrants optional (four labels or omit). "Wind is cheap and clean, coal is cheap but dirty, nuclear is clean but costly" -> x_axis cost, y_axis cleanliness.
+- venn: {"type":"venn","anchor":"...","title":"...","sets":[{"label":"...","anchor":"..."}],"overlap":"...","overlap_anchor":"..."}
+  2-3 ideas and what they share. "Both science and religion try to explain where we come from" -> sets Science, Religion; overlap "Our origins".
+- definition: {"type":"definition","anchor":"...","term":"...","kind":"...","text":"...","source":"..."}
+  A key term the speaker defines or redefines. "By basic income I mean a monthly payment to every citizen, no strings attached". kind like "noun" or "legal term" (optional); source only if the speaker cites one.
+- flow: {"type":"flow","anchor":"...","title":"...","layout":"chain|cycle","steps":[{"label":"...","icon":ICON,"anchor":"..."}]}
+  Cause -> effect chain, or a vicious/virtuous cycle; 2-5 steps. "Cheaper energy means cheaper factories, which means more jobs".
+- timeline: {"type":"timeline","anchor":"...","title":"...","events":[{"date":"1969","label":"...","anchor":"..."}]}
+  2-6 dated events. "In 1990... by 2008... today...".
 - quote: {"type":"quote","anchor":"...","text":"...","author":"..."}
   Words of SOMEONE ELSE the speaker cites (a thinker, a law, a report) with that author.
   Never the speaker's own words: use headline for those.
@@ -140,25 +175,34 @@ CATALOGUE = """\
   point as THEY argued it (a few words), response = the speaker's counter (a few words).
 - headline: {"type":"headline","anchor":"...","text":"...","emphasis":"..."}
   The single most quotable idea, max 8 words; emphasis = 1-2 of its words to highlight.
-- flow: {"type":"flow","anchor":"...","title":"...","layout":"chain|cycle","steps":[{"label":"...","icon":ICON,"anchor":"..."}]}
-  Cause -> effect chain, or a vicious/virtuous cycle; 2-5 steps.
-- timeline: {"type":"timeline","anchor":"...","title":"...","events":[{"date":"1969","label":"...","anchor":"..."}]}
-  2-6 dated events.
 - icons: {"type":"icons","anchor":"...","items":[{"icon":ICON,"label":"...","anchor":"..."}]}
-  1-3 concrete things the speaker names, drawn as simple pictograms."""
+  1-3 concrete things the speaker names, drawn as simple pictograms. "Cars, planes and ships all burn oil"."""
+
+# Which type fits which content, so the director does not default to bullets.
+CHOOSING = (
+    "numbers -> stat, bars, line, pie or proportion; an order or a top list -> ranking; "
+    "countries -> map; a key term explained -> definition; costs against benefits, which side "
+    "outweighs -> scale; options rated on two criteria -> matrix; what two ideas share -> venn; "
+    "two sides in parallel -> versus; causes and effects -> flow; dates -> timeline; someone "
+    "else's words -> quote; the opponent's point answered -> rebuttal; the punchline -> "
+    "headline; concrete things -> icons; a list of points -> bullets (only when nothing above fits)"
+)
 
 
 # What fits each kind of turn, so a debate does not become a row of identical scenes.
 TURN_HINTS: dict[str, str] = {
-    "moderator": "This is the host: at most a headline (the question at stake) or the bullets "
-    "of what comes next.",
-    "judge": "This is the judge's verdict: prefer versus (the strengths of each side), bullets "
-    "or a headline. Numbers only if the judge states scores.",
-    "opening": "Opening statement: build the case — prefer bullets, flow, icons, or a chart "
-    "when numbers are said. Use rebuttal only for a direct attack on the opponent's words.",
-    "argument": "Main argument: prefer bullets, flow, icons, or a chart when numbers are said.",
-    "rebuttal": "Rebuttal turn: rebuttal or versus fit best; a chart if numbers are said.",
-    "closing": "Closing statement: prefer a headline or bullets that sum up the case; a "
+    "moderator": "This is the host: at most a headline (the question at stake), a definition "
+    "of the key term, or the bullets of what comes next.",
+    "judge": "This is the judge's verdict: prefer scale (which side outweighs), versus (the "
+    "strengths of each side) or bullets. Numbers only if the judge states scores. The studio "
+    "shows the winner on its own scoreboard: do not design a scene announcing the winner.",
+    "opening": "Opening statement: build the case — prefer flow, definition, map, icons, "
+    "bullets, or a chart when numbers are said. Use rebuttal only for a direct attack on the "
+    "opponent's words.",
+    "argument": "Main argument: prefer flow, scale, matrix, map, bullets, or a chart when "
+    "numbers are said.",
+    "rebuttal": "Rebuttal turn: rebuttal, scale or versus fit best; a chart if numbers are said.",
+    "closing": "Closing statement: prefer a headline, scale or bullets that sum up the case; a "
     "rebuttal only if it clearly answers the opponent's last point.",
 }
 
@@ -182,8 +226,8 @@ def build_director_messages(
         "score anything; a speech without numbers gets non-numeric scenes.\n"
         f"3. All visible text in {language}. Labels at most 4 words, titles at most 8 words, "
         "no Markdown, no emoji.\n"
-        "4. Pick the type that fits the content best and vary types within the turn. Fewer "
-        "strong scenes beat many weak ones; an empty list is fine.\n"
+        f"4. Pick the type by content: {CHOOSING}. Vary types within the turn. Fewer strong "
+        "scenes beat many weak ones; an empty list is fine.\n"
         '5. Return {"scenes": [...]}.'
     )
     parts = [
@@ -191,6 +235,11 @@ def build_director_messages(
         f"Language: {language}",
         f"Speaker: {brief.speaker_name} ({brief.role}, {brief.turn_type.replace('_', ' ')})",
     ]
+    if brief.debaters:
+        parts.append(
+            f"Debaters: {', '.join(brief.debaters)}. A side, set or item that stands for a "
+            "debater is labelled with that exact name."
+        )
     if brief.opponent and brief.previous_text:
         previous = brief.previous_text
         if len(previous) > 1500:
@@ -246,6 +295,10 @@ def _values(scene: Any) -> list[float]:
         return [p.value for p in scene.points]
     if isinstance(scene, ProportionScene):
         return [scene.count] + ([] if scene.total in (10, 100) else [scene.total])
+    if isinstance(scene, RankingScene):
+        return [i.value for i in scene.items if i.value is not None]
+    if isinstance(scene, MapScene):
+        return [r.value for r in scene.regions if r.value is not None]
     return []
 
 
@@ -264,13 +317,47 @@ def _same_person(a: str, b: str) -> bool:
     return bool(x and y) and (x == y or x in y or y in x)
 
 
+_NUMBER_WORDS: dict[str, str] = {
+    "one": "1", "two": "2", "three": "3", "four": "4", "first": "1", "second": "2", "third": "3",
+    "fourth": "4",
+}  # fmt: skip
+
+
+def _name_key(text: str) -> str:
+    tokens: list[str] = re.findall(r"\w+", text.lower())
+    return " ".join(_NUMBER_WORDS.get(t, t) for t in tokens)
+
+
+def debater_label(label: str, debaters: tuple[str, ...]) -> str:
+    """A side labelled "Debater One" for the debater "Debater 1" gets the exact name, so the
+    studio can paint it in that debater's colour."""
+    key = _name_key(label)
+    return next((name for name in debaters if key and _name_key(name) == key), label)
+
+
+def _label_debaters(scene: Any, debaters: tuple[str, ...]) -> None:
+    if isinstance(scene, ScaleScene | VersusScene):
+        scene.left.label = debater_label(scene.left.label, debaters)
+        scene.right.label = debater_label(scene.right.label, debaters)
+    elif isinstance(scene, VennScene):
+        for item in scene.sets:
+            item.label = debater_label(item.label, debaters)
+
+
 def parse_scenes(
-    payload: Any, limit: int, *, speech: str = "", speaker: str = "", opponent: str | None = None
+    payload: Any,
+    limit: int,
+    *,
+    speech: str = "",
+    speaker: str = "",
+    opponent: str | None = None,
+    debaters: tuple[str, ...] = (),
 ) -> list[Any]:
     """Valid scene specs from the director's reply; invalid scenes are skipped, not fatal.
 
     With `speech` the content rules are enforced too: numbers must come from the speech, a
-    quote may not be the speaker's own words, a rebuttal needs the opponent's turn before."""
+    quote may not be the speaker's own words, a rebuttal needs the opponent's turn before.
+    Sides named after a debater get the debater's exact name."""
     items = payload.get("scenes") if isinstance(payload, dict) else payload
     if not isinstance(items, list):
         return []
@@ -280,8 +367,8 @@ def parse_scenes(
             continue
         kind = str(item.get("type") or "").strip().lower().replace("-", "_").replace(" ", "_")
         if kind in TYPE_ALIASES:
-            if kind == "cycle":
-                item = {**item, "layout": "cycle"}
+            if kind in ("cycle", "pyramid"):
+                item = {**item, "layout": kind}
             kind = TYPE_ALIASES[kind]
         try:
             scene = _SCENE.validate_python({**item, "type": kind})
@@ -290,14 +377,18 @@ def parse_scenes(
             continue
         if speech:
             if not is_grounded(scene, speech):
-                logger.debug("Dropping %s scene with numbers not in the speech", kind)
-                continue
+                if not isinstance(scene, RankingScene | MapScene):
+                    logger.debug("Dropping %s scene with numbers not in the speech", kind)
+                    continue
+                for element in scene.items if isinstance(scene, RankingScene) else scene.regions:
+                    element.value = None  # the order / the countries still stand
             if isinstance(scene, QuoteScene) and _same_person(scene.author, speaker):
                 continue
             if isinstance(scene, RebuttalScene):
                 if not opponent:
                     continue
                 scene.claim_author = opponent
+        _label_debaters(scene, debaters)
         scenes.append(scene)
         if len(scenes) >= limit:
             break
@@ -364,20 +455,21 @@ def _place(
         end = start + DEFAULT_MS.get(scene.type, DEFAULT_SCENE_MS)
 
     anchors = item_anchors(scene)
+    unordered = isinstance(scene, UNORDERED_ITEMS)
     found: list[int | None] = []
     cursor = at
     for anchor in anchors:
-        hit = _locate(words, anchor, cursor) if anchor else None
+        hit = _locate(words, anchor, at if unordered else cursor) if anchor else None
         if hit is not None:
             cursor = hit + 1
             found.append(max(start, words[hit][1] - ITEM_LEAD_MS))
         else:
             found.append(None)
-    items = _fill_items(found, start, end)
-    if items and items[0] - start > ITEM_GAP_MS:
-        start = items[0] - LEAD_MS  # the first element is said much later: appear with it
+    items = _spread_items(found, start, end) if unordered else _fill_items(found, start, end)
+    if items and min(items) - start > ITEM_GAP_MS:
+        start = min(items) - LEAD_MS  # the first element is said much later: appear with it
     if items:
-        end = max(end, items[-1] + ITEM_HOLD_MS)
+        end = max(end, max(items) + ITEM_HOLD_MS)
     cap = MAX_ITEMS_SCENE_MS if items else MAX_SCENE_MS
     return _Placed(scene, start, min(end, start + cap), items, anchored)
 
@@ -412,6 +504,16 @@ def _fill_items(found: list[int | None], start: int, end: int) -> list[int]:
     return [t for t in out if t is not None]
 
 
+def _spread_items(found: list[int | None], start: int, end: int) -> list[int]:
+    """Reveal times for elements said in any order: located anchors are kept, the others are
+    spread evenly over the first 60% of the scene in list order."""
+    n = len(found)
+    span = (end - start) * 0.6
+    return [
+        t if t is not None else start + round(span * i / max(1, n - 1)) for i, t in enumerate(found)
+    ]
+
+
 def align_scenes(scenes: list[Any], segment: TimelineSegment) -> list[TimelineVisual]:
     """Turn scene specs into absolute, non-overlapping screen time within one segment."""
     words = [(w.w, w.s, w.e) for w in segment.words]
@@ -422,6 +524,8 @@ def align_scenes(scenes: list[Any], segment: TimelineSegment) -> list[TimelineVi
     kept: list[_Placed] = []
     for p in placed:
         p.end = min(p.end, duration + END_HOLD_MS)
+        if p.end - p.start < MIN_SCENE_MS:  # said at the very end (a punchline): appear earlier
+            p.start = max(0, p.end - MIN_SCENE_MS)
         if kept and p.start < kept[-1].end:
             kept[-1].end = p.start
             if kept[-1].end - kept[-1].start < MIN_SCENE_MS:
@@ -448,3 +552,81 @@ def align_scenes(scenes: list[Any], segment: TimelineSegment) -> list[TimelineVi
             )
         )
     return visuals
+
+
+SCOREBOARD_MS = 9000
+SCOREBOARD_TAIL_MS = 2500  # without an announcement: end this long before the verdict ends
+_WIN_RE = re.compile(
+    r"(win|wins|winner|winners|winning|won|victory|victor|prevails?|triumphs?|"
+    r"побед\w*|побежд\w*|выигр\w*)"
+)
+_DRAW_RE = re.compile(r"(draw|tie|tied|ничья|ничью|ничьей|вничью)")
+
+
+def announcement_index(words: list[tuple[str, int, int]], winner: str | None) -> int | None:
+    """Index of the word where the judge announces the result: a win word next to the
+    winner's name ("the winner is Nova", "Nova wins"), or a draw word for a draw."""
+    tokens = [normalize_token(w[0]) for w in words]
+    name = next((normalize_token(t) for t in (winner or "").split() if normalize_token(t)), "")
+    for i, token in enumerate(tokens):
+        if winner is None:
+            if _DRAW_RE.fullmatch(token):
+                return i
+            continue
+        if not _WIN_RE.fullmatch(token):
+            continue
+        near = [j for j in range(max(0, i - 4), min(len(tokens), i + 10)) if tokens[j] == name]
+        if near:
+            return min(i, near[0])
+    return None
+
+
+def scoreboard_visual(
+    segment: TimelineSegment,
+    debater_ids: list[str],
+    *,
+    winner_id: str | None,
+    winner_name: str | None,
+    headline: str = "",
+) -> TimelineVisual:
+    """The judge's result on the stage, from the structured verdict (no LLM): shown when the
+    judge announces it, otherwise shortly before the verdict ends."""
+    words = [(w.w, w.s, w.e) for w in segment.words]
+    duration = segment.end_ms - segment.start_ms
+    at = announcement_index(words, winner_name if winner_id else None)
+    if at is not None:
+        start = max(0, words[at][1] - LEAD_MS)
+    else:
+        start = max(0, duration - SCOREBOARD_MS - SCOREBOARD_TAIL_MS)
+    end = min(start + SCOREBOARD_MS, duration + END_HOLD_MS)
+    scene = ScoreboardScene(
+        type="scoreboard", speaker_ids=debater_ids, winner_id=winner_id, headline=headline
+    )
+    return TimelineVisual(
+        id=f"v{segment.seq_index}_score",
+        seq_index=segment.seq_index,
+        speaker_id=segment.speaker_id,
+        start_ms=segment.start_ms + start,
+        end_ms=segment.start_ms + end,
+        anchored=at is not None,
+        scene=scene,
+    )
+
+
+def make_room(visuals: list[TimelineVisual], pinned: TimelineVisual) -> list[TimelineVisual]:
+    """Insert a scene that must stay (the scoreboard): overlapping scenes are cut short, moved
+    after it or dropped when too little of them would remain."""
+    out = [pinned]
+    for v in visuals:
+        start, end = v.start_ms, v.end_ms
+        if end > pinned.start_ms and start < pinned.end_ms:
+            if pinned.start_ms - start >= MIN_SCENE_MS:
+                end = pinned.start_ms
+            elif end - pinned.end_ms >= MIN_SCENE_MS:
+                start = pinned.end_ms
+            else:
+                continue
+        last = max(start, end - 1200)
+        items = [min(max(t, start), last) for t in v.item_ms]
+        out.append(v.model_copy(update={"start_ms": start, "end_ms": end, "item_ms": items}))
+    return sorted(out, key=lambda v: v.start_ms)

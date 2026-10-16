@@ -10,10 +10,14 @@ export interface RenderJob<P extends Record<string, unknown>> {
   height: number;
   durationInFrames: number;
   muted: boolean;
-  scale: number; // 1 = full resolution, 0.667 = 720p from 1080p
+  scale: number; // 1 = full resolution, SCALE_720P = 720p from 1080p
   onProgress: (p: RenderMediaOnWebProgress) => void;
   signal: AbortSignal;
 }
+
+/** Exactly 2/3: the renderer rounds the scaled size up, and H.264 needs even sides
+ * (0.6667 gave 1281×721 and the encoder refused it). */
+export const SCALE_720P = 2 / 3;
 
 export const checkRenderSupport = (width: number, height: number, muted: boolean): Promise<CanRenderMediaOnWebResult> =>
   canRenderMediaOnWeb({ container: 'mp4', videoCodec: 'h264', audioCodec: 'aac', width, height, muted });

@@ -1,9 +1,14 @@
+import { useEffect } from 'react';
 import type { Timeline, TimelineSegment } from '../../api/timeline';
 import type { Scene } from '../../api/visuals';
 import { DISPLAY_FONT, FONT, MONO_FONT } from '../constants';
 import { Mascot } from '../Mascot';
 import { levelAt, roundLabel } from '../utils';
+import { DefinitionView, RankingView, ScoreboardView } from './CardScenes';
+import { MatrixView, ScaleView, VennView } from './DiagramScenes';
 import { INK, INK_DIM, fitFont } from './draw';
+import { hasMapScene, loadGeo } from './geoLoader';
+import { MapView } from './MapView';
 import { BarsView, LineView, PieView, ProportionView, StatView } from './NumberScenes';
 import { FlowView, IconsView, TimelineView } from './SchemeScenes';
 import type { SceneCtx } from './scene';
@@ -11,7 +16,11 @@ import { BulletsView, HeadlineView, QuoteView, RebuttalView, VersusView } from '
 import { relativeItems, scenesAt, type ActiveScene } from './timing';
 
 const NUMERIC = new Set<Scene['type']>(['stat', 'bars', 'line', 'pie', 'proportion']);
-const UNTITLED = new Set<Scene['type']>(['headline', 'quote']);
+const UNTITLED = new Set<Scene['type']>(['headline', 'quote', 'definition', 'scoreboard']);
+
+/** Scenes showing numbers the speaker said get the "claim" note (they are not fact-checked). */
+const isNumeric = (scene: Scene) =>
+  NUMERIC.has(scene.type) || (scene.type === 'ranking' && scene.items.some((i) => i.value !== null)) || (scene.type === 'map' && scene.regions.some((r) => r.value !== null));
 
 const SceneBody = ({ scene, ctx }: { scene: Scene; ctx: SceneCtx }) => {
   switch (scene.type) {
@@ -41,6 +50,20 @@ const SceneBody = ({ scene, ctx }: { scene: Scene; ctx: SceneCtx }) => {
       return <TimelineView scene={scene} ctx={ctx} />;
     case 'icons':
       return <IconsView scene={scene} ctx={ctx} />;
+    case 'scale':
+      return <ScaleView scene={scene} ctx={ctx} />;
+    case 'matrix':
+      return <MatrixView scene={scene} ctx={ctx} />;
+    case 'venn':
+      return <VennView scene={scene} ctx={ctx} />;
+    case 'ranking':
+      return <RankingView scene={scene} ctx={ctx} />;
+    case 'definition':
+      return <DefinitionView scene={scene} ctx={ctx} />;
+    case 'map':
+      return <MapView scene={scene} ctx={ctx} />;
+    case 'scoreboard':
+      return <ScoreboardView scene={scene} ctx={ctx} />;
     default:
       return null; // a scene type from a newer timeline
   }
@@ -53,7 +76,7 @@ const ScenePanel = ({ active, timeline, w, h, k }: { active: ActiveScene; timeli
   const speaker = timeline.speakers.find((s) => s.id === visual.speaker_id);
   const color = speaker?.color ?? INK;
   const title = UNTITLED.has(scene.type) ? '' : scene.title;
-  const numeric = NUMERIC.has(scene.type);
+  const numeric = isNumeric(scene);
   const pad = 44 * k;
   const head = title ? 78 * k : 34 * k;
   const foot = numeric ? 40 * k : 0;
@@ -68,6 +91,7 @@ const ScenePanel = ({ active, timeline, w, h, k }: { active: ActiveScene; timeli
     color,
     speaker: speaker?.name ?? '',
     locale: timeline.language_code,
+    cast: timeline.speakers,
   };
   return (
     <div style={{ position: 'absolute', inset: 0, opacity, transform: `translateY(${(1 - enter) * 26 * k}px) scale(${0.97 + 0.03 * enter})` }}>
@@ -123,6 +147,10 @@ const Spotlight = ({ timeline, seg, ms, w, h, k }: { timeline: Timeline; seg: Ti
 /** Centre of the frame: the active visual scene(s), or the spotlight between scenes. */
 export const SceneStage = ({ timeline, seg, ms, x, y, w, h, k }: { timeline: Timeline; seg: TimelineSegment | null; ms: number; x: number; y: number; w: number; h: number; k: number }) => {
   const { active, cover } = scenesAt(timeline.visuals, ms);
+  const needsMap = hasMapScene(timeline);
+  useEffect(() => {
+    if (needsMap) void loadGeo().catch(() => undefined); // warm up before the first map scene
+  }, [needsMap]);
   return (
     <div style={{ position: 'absolute', left: x, top: y, width: w, height: h }}>
       {cover < 1 && (

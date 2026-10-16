@@ -54,8 +54,8 @@ frontend/           React 19 + Vite 8 + Tailwind 4 + TypeScript
                            AudienceVote (blind vote), LikeButton
   src/components/account/  credits, usage, local keys, ledger, security cards; auth layout/fields
   src/video/          Remotion compositions (DebateLong 16:9, DebateShort 9:16) + render.ts;
-                      visuals/ = scene renderer (SceneStage, 13 scene views, rough.js strokes,
-                      drawn Lucide pictograms in icons.ts)
+                      visuals/ = scene renderer (SceneStage, 20 scene views, rough.js strokes,
+                      drawn Lucide pictograms in icons.ts, lazy world map in geo.ts)
   src/pages/          Landing (/), Library (/library), Gallery (/gallery), Leaderboard (/leaderboard),
                       CreateDebate (/create, `?draft=<id>`, `?remix=<id>`),
                       DebateView (/debate/:id and public /d/:slug), Account (/account),
@@ -214,14 +214,30 @@ Stopping: `POST /api/debates/{id}/stop` sets the status, sets `debate:{id}:stop`
   the mix. `scene_budget` ≈ one scene per 18 s of speech; the reply holds one spare scene and
   `diversify` drops repeats across turns. Turn plans are cached in `turns/{seq}.visuals.json`
   (hash of text, opponent, model, `PROMPT_VERSION`); `force` re-plans. A failure only loses scenes.
-- Scenes are typed data only (`app/schemas/visuals.py`, 13 types: stat, bars, line, pie,
-  proportion, bullets, versus, quote, rebuttal, headline, flow, timeline, icons) — never code or
-  markup. The models clip long strings instead of rejecting; `parse_scenes(speech=…)` enforces
-  content rules: numbers must appear in the speech (`is_grounded`, small integers ≤ 12 pass),
-  no self-quotes, `rebuttal` only with an opponent turn (its `claim_author` is set by code).
+- Scenes are typed data only (`app/schemas/visuals.py`) — never code or markup. The director
+  may design 19 types (`DirectorScene`: stat, bars, line, pie, proportion, ranking, map, bullets,
+  versus, scale, matrix, venn, definition, flow, timeline, quote, rebuttal, headline, icons); the
+  prompt carries a JSON template, a sample phrase per type and a "which type fits" guide
+  (`CHOOSING`). The models clip long strings instead of rejecting; `parse_scenes(speech=…)`
+  enforces content rules: numbers must appear in the speech (`is_grounded`, small integers ≤ 12
+  pass; `ranking`/`map` lose invented values instead of the scene), no self-quotes, `rebuttal`
+  only with an opponent turn (its `claim_author` is set by code). The prompt lists the
+  debaters' names; `debater_label` turns "Debater One" into "Debater 1", and the frontend paints
+  a side named after a debater in that debater's colour (`sideColors`).
+- `scoreboard` is not designed by the model: `scoreboard_visual` builds it from the structured
+  verdict (`winner_id`, `headline`; a draw only when `verdict_json` came from the LLM), shows it
+  when the judge announces the result (`announcement_index`: a win word next to the winner's
+  name) or before the verdict ends, and `make_room` cuts the director's scenes around it.
+- `map` scenes take ISO alpha-3 codes (`schemas/geo.py`: alpha-2, a few English names and `EU`
+  are normalized; countries missing from the 110m atlas are dropped). `frontend/.../geo.ts`
+  holds the same `COUNTRY_TABLE`, draws `world-atlas` 110m with d3-geo (Natural Earth, zoomed to
+  the highlighted mainlands) and is a lazy chunk: `ExportCard` awaits `preloadSceneAssets`
+  before an MP4 render, `useGeo` holds the frame with `useDelayRender` otherwise.
 - Timing: every scene and element carries an `anchor` (exact words); `align_scenes` finds them in
   the word timestamps (`highlights.locate_quote`), so `Timeline.visuals[]` has absolute
-  `start_ms`/`end_ms`/`item_ms`, non-overlapping, recomputed on every audio build.
+  `start_ms`/`end_ms`/`item_ms`, non-overlapping, recomputed on every audio build. `item_ms`
+  follows the order of the scene's lists; `UNORDERED_ITEMS` (ranking, scale, map) search every
+  element on its own, since a countdown or the two pans are not said in list order.
 - Rendering (`src/video/visuals/`): `SceneStage` sits in the centre of both compositions
   (16:9: host chip on top, debaters in side columns 1+1 / 2+1 / 2+2, captions below; 9:16:
   debater row, stage, captions) and shows the speaking character/topic when no scene is up.
@@ -290,6 +306,8 @@ Stopping: `POST /api/debates/{id}/stop` sets the status, sets `debate:{id}:stop`
   of LobeHub Icons SVGs (MIT, see its README), mapped by model author in `src/lib/modelIcons.ts`;
   files without `-color` are drawn as a CSS mask in `currentColor`. Add a mapping (and the SVG)
   when a new provider appears; unknown authors get a letter tile.
+- Browser MP4 export: `@remotion/web-renderer` rounds scaled sizes up and H.264 needs even
+  sides, so 720p uses exactly `SCALE_720P = 2 / 3` (0.6667 gave 1281×721 and failed).
 - Old rows may have `turn_type=moderator_comment` and inline `"[Error ...]"` text; both are still
   handled (`scheduler.MODERATOR_TURN_TYPES`, `lib/format.isErrorTurn`). Debates created before
   accounts have `user_id=NULL`: readable via their link, manageable only from the admin panel.

@@ -96,6 +96,57 @@ export interface IconsScene extends SceneBase {
   items: { icon: string; label: string; anchor: string }[];
 }
 
+export interface ScaleScene extends SceneBase {
+  type: 'scale';
+  left: { label: string; items: { text: string; anchor: string }[] };
+  right: { label: string; items: { text: string; anchor: string }[] };
+  heavier: 'left' | 'right' | 'even' | null; // null: by the number of arguments
+}
+
+export interface MatrixScene extends SceneBase {
+  type: 'matrix';
+  x_axis: string;
+  y_axis: string;
+  quadrants: string[]; // [] or [top-left, top-right, bottom-left, bottom-right]
+  items: { label: string; x: number; y: number; highlight: boolean; anchor: string }[]; // 0..10
+}
+
+export interface VennScene extends SceneBase {
+  type: 'venn';
+  sets: { label: string; anchor: string }[];
+  overlap: string;
+  overlap_anchor: string;
+}
+
+export interface RankingScene extends SceneBase {
+  type: 'ranking';
+  layout: 'list' | 'pyramid';
+  unit: string;
+  items: { label: string; value: number | null; anchor: string }[]; // #1 first
+}
+
+export interface DefinitionScene extends SceneBase {
+  type: 'definition';
+  term: string;
+  kind: string;
+  text: string;
+  source: string;
+}
+
+export interface MapScene extends SceneBase {
+  type: 'map';
+  unit: string;
+  regions: { codes: string[]; label: string; value: number | null; anchor: string }[]; // ISO alpha-3
+}
+
+/** The judge's result, built from the structured verdict (not by the director). */
+export interface ScoreboardScene extends SceneBase {
+  type: 'scoreboard';
+  speaker_ids: string[];
+  winner_id: string | null; // null: a draw
+  headline: string;
+}
+
 export type Scene =
   | StatScene
   | BarsScene
@@ -109,7 +160,14 @@ export type Scene =
   | HeadlineScene
   | FlowScene
   | TimelineScene
-  | IconsScene;
+  | IconsScene
+  | ScaleScene
+  | MatrixScene
+  | VennScene
+  | RankingScene
+  | DefinitionScene
+  | MapScene
+  | ScoreboardScene;
 
 export type SceneType = Scene['type'];
 
@@ -119,7 +177,7 @@ export interface TimelineVisual {
   speaker_id: string;
   start_ms: number; // absolute on the full track
   end_ms: number;
-  item_ms: number[]; // absolute reveal time per element (bullets, steps, events, rebuttal)
+  item_ms: number[]; // absolute reveal time per element (in the order of the scene's lists)
   anchored: boolean; // false: the phrase was not found, the timing is estimated
   scene: Scene;
 }

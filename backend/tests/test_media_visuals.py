@@ -3,14 +3,24 @@ from itertools import pairwise
 import pytest
 from pydantic import TypeAdapter, ValidationError
 
+from app.schemas.geo import normalize_countries
 from app.schemas.timeline import TimelineSegment, TimelineWord
 from app.schemas.visuals import (
     BarsScene,
     BulletsScene,
+    DefinitionScene,
     FlowScene,
+    HeadlineScene,
+    MapScene,
+    MatrixScene,
+    RankingScene,
     RebuttalScene,
+    ScaleScene,
     Scene,
+    ScoreboardScene,
     StatScene,
+    TimelineVisual,
+    VennScene,
     normalize_icon,
     parse_number,
 )
@@ -20,12 +30,16 @@ from app.services.media.visuals import (
     MIN_SCENE_MS,
     TurnBrief,
     align_scenes,
+    announcement_index,
     build_briefs,
     build_director_messages,
+    debater_label,
     diversify,
     is_grounded,
+    make_room,
     parse_scenes,
     scene_budget,
+    scoreboard_visual,
     spoken_numbers,
 )
 
@@ -296,7 +310,9 @@ def test_align_keeps_scenes_inside_the_turn() -> None:
     scenes = parse_scenes(
         [{"type": "quote", "text": "Build", "anchor": "lines we need today."}], limit=1
     )
-    assert align_scenes(scenes, seg) == []  # would start right before the end: dropped
+    [last] = align_scenes(scenes, seg)  # the closing words: shown from a little earlier
+    assert last.end_ms == seg.end_ms + 400
+    assert last.end_ms - last.start_ms == MIN_SCENE_MS
     scenes = parse_scenes(
         [{"type": "stat", "value": 1, "label": "x", "anchor": "So the question is"}], limit=1
     )
@@ -430,6 +446,9 @@ def test_build_briefs_finds_the_last_other_debater() -> None:
     ]
     assert briefs[4].previous_text == "atlas one"
     assert briefs[5].role == "judge"
+    assert briefs[5].debaters == ("participant_1", "participant_2")
+    user = build_director_messages(briefs[5], topic="t", language="English", budget=2)[1]
+    assert "Debaters: participant_1, participant_2." in user["content"]
 
 
 def test_diversify_swaps_in_the_spare_to_avoid_repeats() -> None:
@@ -484,3 +503,237 @@ def test_align_starts_with_the_first_element_when_it_comes_late() -> None:
     assert visual.item_ms[0] == coal
     assert visual.start_ms == coal - LEAD_MS
     assert visual.item_ms[1] == seg.start_ms + _word_ms(SPEECH, "batteries") - 120
+
+
+def test_normalize_countries_reads_codes_names_and_groups() -> None:
+    assert normalize_countries("DEU") == ["DEU"]
+    assert normalize_countries(["de", "Germany", "united_states", "UK"]) == ["DEU", "USA", "GBR"]
+    eu = normalize_countries("EU")
+    assert len(eu) == 26 and "FRA" in eu and "MLT" not in eu  # Malta is not on the 110m map
+    assert normalize_countries(["Atlantis", 7, None]) == []
+
+
+def test_new_scene_models_are_lenient() -> None:
+    adapter = TypeAdapter(Scene)
+    scale = adapter.validate_python(
+        {
+            "type": "scale",
+            "left": {"label": "Costs", "items": [{"text": "Expensive"}, {"text": "Slow"}]},
+            "right": {"label": "Benefits", "items": [{"text": "Clean"}] * 5},
+            "heavier": "Balanced",
+        }
+    )
+    assert isinstance(scale, ScaleScene) and scale.heavier == "even"
+    assert len(scale.right.items) == 3
+
+    matrix = adapter.validate_python(
+        {
+            "type": "matrix",
+            "x_axis": "Cost",
+            "y_axis": "Benefit",
+            "quadrants": ["a", "b"],  # not four: ignored
+            "items": [{"label": "Wind", "x": "low", "y": 85}, {"label": "Coal", "x": 14, "y": -3}],
+        }
+    )
+    assert isinstance(matrix, MatrixScene) and matrix.quadrants == []
+    assert [(p.x, p.y) for p in matrix.items] == [(2.5, 8.5), (1.4, 0.0)]
+
+    ranking = adapter.validate_python(
+        {
+            "type": "ranking",
+            "items": [{"label": "China", "value": 30}, {"label": "USA", "value": "n/a"}],
+        }
+    )
+    assert isinstance(ranking, RankingScene) and ranking.layout == "list"
+    assert [i.value for i in ranking.items] == [None, None]  # all values or none
+
+    venn = adapter.validate_python({"type": "venn", "sets": [{"label": "A"}, {"label": "B"}]})
+    assert isinstance(venn, VennScene) and venn.overlap == ""
+    definition = adapter.validate_python({"type": "definition", "term": "UBI", "text": "x" * 400})
+    assert isinstance(definition, DefinitionScene) and len(definition.text) == 160
+
+
+def test_map_scene_keeps_drawable_countries_only() -> None:
+    adapter = TypeAdapter(Scene)
+    scene = adapter.validate_python(
+        {
+            "type": "map",
+            "regions": [
+                {"code": "NOR", "label": "Норвегия", "value": "90%"},
+                {"code": "Atlantis", "label": "?"},
+                {"codes": ["se", "FIN"], "label": "Nordics", "value": 40},
+                {"country": "Germany"},
+            ],
+        }
+    )
+    assert isinstance(scene, MapScene)
+    assert [r.codes for r in scene.regions] == [["NOR"], ["SWE", "FIN"], ["DEU"]]
+    assert [r.value for r in scene.regions] == [None, None, None]  # Germany has no value
+    with pytest.raises(ValidationError):
+        adapter.validate_python({"type": "map", "regions": [{"code": "Atlantis"}]})
+
+
+def test_director_cannot_design_a_scoreboard() -> None:
+    reply = {"scenes": [{"type": "scoreboard", "speaker_ids": ["a", "b"], "winner_id": "a"}]}
+    assert parse_scenes(reply, limit=3) == []
+
+
+def test_parse_scenes_strips_invented_values_from_rankings_and_maps() -> None:
+    speech = "China emits the most, then the United States, then India, all with 30 percent."
+    reply = {
+        "scenes": [
+            {
+                "type": "pyramid",
+                "items": [
+                    {"label": "China", "value": 31},
+                    {"label": "USA", "value": 14},
+                    {"label": "India", "value": 7},
+                ],
+            },
+            {
+                "type": "map",
+                "regions": [{"code": "CHN", "value": 55}, {"code": "IND", "value": 66}],
+            },
+        ]
+    }
+    ranking, world = parse_scenes(reply, limit=3, speech=speech)
+    assert isinstance(ranking, RankingScene) and ranking.layout == "pyramid"
+    assert [i.value for i in ranking.items] == [None, None, None]
+    assert isinstance(world, MapScene) and [r.value for r in world.regions] == [None, None]
+
+
+def test_director_prompt_lists_new_types_and_how_to_choose() -> None:
+    brief = TurnBrief(
+        seq_index=9,
+        speaker_id="judge",
+        speaker_name="Judge",
+        role="judge",
+        turn_type="verdict",
+        text=SPEECH,
+    )
+    system, user = (
+        m["content"]
+        for m in build_director_messages(brief, topic="t", language="English", budget=2)
+    )
+    for kind in ("scale", "matrix", "venn", "ranking", "definition", "map"):
+        assert f'"type":"{kind}"' in system
+    assert "countries -> map" in system and "alpha-3" in system
+    assert "scoreboard" in user  # the judge does not announce the winner itself
+
+
+COUNTDOWN = (
+    "Who pollutes most? In third place India with its coal plants, in second place the United "
+    "States with its cars, and in first place China with its huge factories everywhere today."
+)
+
+
+def test_align_ranking_items_in_any_spoken_order() -> None:
+    seg = _segment(COUNTDOWN)
+    scene = parse_scenes(
+        [
+            {
+                "type": "ranking",
+                "anchor": "Who pollutes most",
+                "items": [
+                    {"label": "China", "anchor": "first place China"},
+                    {"label": "USA", "anchor": "second place the United States"},
+                    {"label": "India", "anchor": "third place India"},
+                ],
+            }
+        ],
+        limit=2,
+    )
+    [visual] = align_scenes(scene, seg)
+    china, usa, india = (t - seg.start_ms for t in visual.item_ms)
+    assert india < usa < china  # revealed as counted down, shown in rank order
+    assert china >= _word_ms(COUNTDOWN, "first") - LEAD_MS
+
+
+VERDICT = (
+    "Both debaters argued well tonight. Atlas was precise on costs, but after weighing every "
+    "argument the winner of this debate is Nova, whose case on storage was never answered."
+)
+
+
+def _verdict_segment(text: str = VERDICT) -> TimelineSegment:
+    seg = _segment(text, start_ms=50_000, seq=9)
+    return seg.model_copy(update={"speaker_id": "judge", "turn_type": "verdict"})
+
+
+def test_scoreboard_appears_when_the_winner_is_announced() -> None:
+    seg = _verdict_segment()
+    board = scoreboard_visual(
+        seg, ["participant_0", "participant_1"], winner_id="participant_1", winner_name="Nova"
+    )
+    assert isinstance(board.scene, ScoreboardScene) and board.anchored
+    assert board.start_ms == seg.start_ms + _word_ms(VERDICT, "winner") - LEAD_MS
+    assert board.end_ms <= seg.end_ms + 400
+    assert board.speaker_id == "judge" and board.scene.winner_id == "participant_1"
+
+
+def test_scoreboard_without_an_announcement_comes_before_the_end() -> None:
+    seg = _verdict_segment(" ".join(["Thoughtful words everywhere."] * 30))
+    board = scoreboard_visual(seg, ["a", "b"], winner_id=None, winner_name=None)
+    assert not board.anchored
+    assert board.end_ms <= seg.end_ms - 2000 and board.end_ms - board.start_ms >= 8000
+
+
+def _untimed(text: str) -> list[tuple[str, int, int]]:
+    return [(w, 0, 0) for w in text.split(" ")]
+
+
+def test_announcement_index_finds_name_before_or_after_the_win_word() -> None:
+    words = _untimed("So Nova wins tonight clearly")
+    assert announcement_index(words, "Nova") == 1
+    words = _untimed("Победителем становится Nova, поздравляем")
+    assert announcement_index(words, "Nova") == 0
+    words = _untimed("It ends in a draw tonight")
+    assert announcement_index(words, None) == 4
+    words = _untimed("Nova argued; nobody wins the lottery")
+    assert announcement_index(words, "Atlas") is None
+
+
+def test_make_room_cuts_moves_or_drops_overlapping_scenes() -> None:
+    def visual(vid: str, start: int, end: int) -> TimelineVisual:
+        scene = HeadlineScene(type="headline", text="x")
+        return TimelineVisual(
+            id=vid,
+            seq_index=9,
+            speaker_id="judge",
+            start_ms=start,
+            end_ms=end,
+            scene=scene,
+            item_ms=[start, end - 100],
+        )
+
+    pinned = visual("board", 10_000, 19_000)
+    before = visual("before", 2_000, 12_000)  # cut to end at 10 s
+    inside = visual("inside", 11_000, 18_000)  # dropped
+    after = visual("after", 17_000, 26_000)  # moved to start at 19 s
+    short = visual("short", 9_000, 21_000)  # 1 s before, 2 s after: dropped
+    out = make_room([before, inside, after, short], pinned)
+    assert [(v.id, v.start_ms, v.end_ms) for v in out] == [
+        ("before", 2_000, 10_000),
+        ("board", 10_000, 19_000),
+        ("after", 19_000, 26_000),
+    ]
+    assert all(v.start_ms <= t <= v.end_ms for v in out for t in v.item_ms)
+
+
+def test_sides_named_after_debaters_get_the_exact_names() -> None:
+    debaters = ("Debater 1", "Debater 2", "Nova")
+    assert debater_label("Debater One", debaters) == "Debater 1"
+    assert debater_label("debater two", debaters) == "Debater 2"
+    assert debater_label("NOVA", debaters) == "Nova"
+    assert debater_label("Benefits", debaters) == "Benefits"
+    reply = {
+        "scenes": [
+            {
+                "type": "versus",
+                "left": {"label": "Debater One", "items": ["Data"]},
+                "right": {"label": "Debater Two", "items": ["Risks"]},
+            }
+        ]
+    }
+    [scene] = parse_scenes(reply, limit=2, debaters=debaters)
+    assert (scene.left.label, scene.right.label) == ("Debater 1", "Debater 2")
