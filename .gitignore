@@ -59,3 +59,6 @@ yarn-error.log
 
 # Standalone media demo (not part of the app)
 demo/
+
+# Private planning notes (public roadmap lives in README.md)
+PROGRESS.md

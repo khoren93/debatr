@@ -19,15 +19,65 @@ Users sign up, run free models or bring their own OpenRouter key, buy credits wi
 
 ## ✨ Key Features
 
-- **🧭 4-step wizard**: topic → speakers (model, neural voice, persona per speaker) → voice engine, outputs and quality → review with a cost/length estimate.
-- **⚔️ LLM vs LLM**: Mix and match models. Have **Claude** debate **GPT** on philosophy while **Gemini** moderates.
-- **⚡ Real-time streaming**: watch the debate generate token-by-token, stop it at any moment.
-- **⚖️ Structured verdict**: the judge names a winner (or a draw), with per-debater feedback shown in the UI and on the video end card.
-- **🎙️ Neural voices**: ElevenLabs (premium, emotion tags) or free Edge voices with word timestamps, mixed MP3 and karaoke transcript.
-- **🎬 Video in the browser**: 16:9 episode and 9:16 Shorts (LLM-picked highlights with a hook) rendered with Remotion and WebCodecs — no server encoding.
-- **👤 Accounts & credits**: email sign-up with optional welcome credits, Stripe top-ups, a ledger of every charge, an optional personal OpenRouter key that bypasses credits.
-- **📚 Library & gallery**: drafts, filters, search; publish finished debates with a share link (`/d/{slug}`) and view counts.
-- **🐳 Dockerized**: Postgres, Redis, API, workers and a Caddy-served frontend.
+### 🎬 Stage any debate
+- **⚔️ Any model vs any model**: pick from hundreds of LLMs on OpenRouter. Have **Claude** take
+  on **GPT** while **Gemini** moderates, with a persona, a stance and a voice for every speaker.
+- **🧭 Ready in four steps**: topic, speakers, voices and format, then a review with the exact cost
+  and length before you hit start.
+- **⚡ Watch it live**: arguments stream in word by word, and you can stop the debate at any moment.
+
+### ⚖️ Who won?
+- **🧑‍⚖️ AI judge**: a verdict with the winner (or a draw), a headline and feedback for every
+  debater.
+- **🗳️ Blind audience vote**: viewers pick who argued better *before* they see the judge's call,
+  so you can find out whether people agree with the AI.
+- **📊 Model leaderboard**: an Elo-style ranking of models built from audience votes, with a
+  free/paid filter. Find out which model really wins arguments.
+
+### 🎙️ From transcript to video
+- **🔊 Neural voices**: premium ElevenLabs voices with emotion tags, or free Edge voices, with a
+  karaoke-style transcript and an MP3 of the whole debate.
+- **📹 YouTube video and a Short in minutes**: a 16:9 episode plus a 9:16 Short cut around the
+  strongest moments, rendered right in your browser.
+- **📝 Transcript export**: take the full debate with you as Markdown.
+
+### 🌍 Share and discover
+- **🖼️ Public gallery**: publish a debate with its own share link and browse Trending, New and Top
+  debates of the week, month or year.
+- **❤️ Likes and remixes**: like the debates you enjoy, or remix any of them into your own version
+  with a new cast.
+- **👤 Your studio**: a library of drafts and finished debates, credits topped up via Stripe, or
+  your own OpenRouter key to run models at your own cost.
+
+### 🐳 Self-host it
+- One `docker compose up`: Postgres, Redis, API, workers and a Caddy-served frontend.
+
+## 🗺️ Roadmap
+
+### 🔜 Coming next
+
+- [ ] **🧑‍⚖️ Human vs AI**: step into the arena yourself. Argue against a model of your choice, turn
+  by turn, and let the judge decide who made the stronger case.
+- [ ] **🎭 New formats**: beyond the classic debate: rap battles, roasts, courtroom trials with a
+  prosecutor, defence and jury, Shark Tank pitches, Socratic dialogues and podcast interviews.
+- [ ] **🏛️ Historical & fictional characters**: Socrates vs Nietzsche, Sherlock vs Poirot. Cast
+  famous minds from history and fiction as your speakers, each with their own voice and style.
+- [ ] **🏆 Tournaments**: knockout brackets of 4–8 models on one question. Every match is a
+  full debate, and the champion climbs the model leaderboard.
+- [ ] **📅 Debate of the day**: a fresh debate on a topical question every day, voiced and
+  published to the gallery, ready for your vote.
+- [ ] **📰 Trending topics**: debate-ready questions drawn from today's news, one click away in
+  the wizard.
+- [ ] **🎞️ Animated avatars**: speakers that talk, react and lip-sync in the 16:9 episodes and
+  9:16 Shorts.
+- [ ] **🔗 Embeddable player**: drop any public debate into a blog post or article with a simple
+  `<iframe>` or an oEmbed link.
+
+### 🧩 Also planned
+
+- [ ] **Comments**: discussion under public debates (owner can switch it on/off).
+- [ ] **PDF Export**: Nicely formatted transcript downloads.
+- [ ] **Local LLM Support**: Integration with Ollama for offline debates.
 
 ## 🛠️ Tech Stack
 
@@ -213,25 +263,6 @@ The system uses an event-driven architecture to handle long-running LLM generati
 `SIGNUP_BONUS_USD`, `CREDIT_MARKUP`, `TTS_CREDIT_PRICE_PER_1K_CHARS`, `TOPUP_AMOUNTS_USD`,
 `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` (or `DEV_FAKE_PAYMENTS`), `DEBATE_CREATE_RATE_LIMIT`,
 `LOGIN_RATE_LIMIT`, `TURN_JOB_TIMEOUT`, `MEDIA_JOB_TIMEOUT`, `ADMIN_USER` / `ADMIN_PASSWORD`, `SECRET_KEY`.
-
----
-
-## 🗺️ Roadmap
-
-- [x] **Voice Synthesis (TTS)**: Browser text-to-speech playback.
-- [x] **Neural TTS**: ElevenLabs / Edge voices with word timestamps, karaoke transcript and MP3 export.
-- [x] **Video**: 16:9 debate video and 9:16 shorts rendered in the browser (Remotion).
-- [x] **Audience voting**: blind "who argued better?" vote next to the AI judge's verdict.
-- [x] **Likes & gallery ranking**: Trending / New / Top (week, month, year) sorting.
-- [x] **Model ranking**: Elo-like leaderboard of models from audience votes, free/paid filter.
-- [x] **Remix**: start a new debate prefilled from any public debate.
-- [ ] **Comments**: discussion under public debates (owner can switch it on/off).
-- [x] **Export Transcripts**: Save debates as Markdown.
-- [x] **Accounts & credits**: sign-up, Stripe top-ups, ledger, personal OpenRouter key.
-- [x] **Public gallery**: publish debates with share links.
-- [ ] **PDF Export**: Nicely formatted transcript downloads.
-- [ ] **Multiplayer Mode**: Human vs AI debates.
-- [ ] **Local LLM Support**: Integration with Ollama for offline debates.
 
 ---
 
