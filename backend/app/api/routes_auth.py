@@ -41,7 +41,6 @@ def user_out(user: User) -> UserOut:
         email=user.email,
         display_name=user.display_name,
         avatar_seed=user.avatar_seed or "",
-        plan=user.plan,
         credits_usd=float(user.credits_usd or 0),
         openrouter_key_masked=mask_key(user.openrouter_key_last4),
         created_at=user.created_at,

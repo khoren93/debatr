@@ -34,7 +34,7 @@ interface StepSpeakersProps {
   billing: BillingConfig;
   /** User's own ElevenLabs key (lib/localKeys) — premium voices without credits. */
   hasTtsKey: boolean;
-  /** Free tier: no credits and no own ElevenLabs key, so premium voices cannot be picked. */
+  /** Empty balance and no own ElevenLabs key, so premium voices cannot be picked. */
   premiumLocked: boolean;
   paidLocked: boolean;
   showErrors: boolean;
@@ -240,7 +240,7 @@ export const StepSpeakers = ({
         {premiumAvailable && premiumLocked && (
           <Hint>
             <Lock className="mr-1 inline size-3 align-[-1px]" />
-            Premium ElevenLabs voices are part of the paid tier: <AccountLink>top up credits</AccountLink> to unlock them, or add your own ElevenLabs key there.
+            Premium ElevenLabs voices are paid from your balance: <AccountLink>top up credits</AccountLink> to unlock them, or add your own ElevenLabs key there.
           </Hint>
         )}
         {provider === 'elevenlabs' && hasTtsKey && <Hint tone="accent">Voices are billed to your ElevenLabs account, not to credits.</Hint>}

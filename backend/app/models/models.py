@@ -48,7 +48,6 @@ class User(Base):
     display_name: Mapped[str] = mapped_column(String(100))
     # Seed for the generated avatar gradient; users can re-roll it.
     avatar_seed: Mapped[str] = mapped_column(String(64), default="")
-    plan: Mapped[str] = mapped_column(String(32), default="free", server_default="free")
     # Prepaid balance in USD. May go slightly negative when a run costs more than estimated.
     credits_usd: Mapped[Decimal] = mapped_column(
         Numeric(14, 6), default=Decimal("0"), server_default="0"

@@ -194,8 +194,9 @@ Stopping: `POST /api/debates/{id}/stop` sets the status, sets `debate:{id}:stop`
    `@remotion/web-renderer`) — the server never encodes video; finished renders are reported to
    `POST /api/debates/{id}/renders` for the usage stats. Premium voices on the system ElevenLabs
    key cost `TTS_CREDIT_PRICE_PER_1K_CHARS` in credits (charged after the build); own keys are free.
-   A zero balance is the free tier: without an own key premium voices are locked in the wizard
-   and the regenerate dialog, and `POST /media` answers 402.
+   There are no plans, only the prepaid balance (like OpenRouter): with an empty balance and no
+   own key premium voices are locked in the wizard and the regenerate dialog, and `POST /media`
+   answers 402.
    `output_style=spoken` in `DebateConfig` asks the models for plain spoken prose with
    optional `[emotion]` tags, which ElevenLabs v3 understands.
 

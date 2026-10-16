@@ -26,7 +26,6 @@ class UserAdmin(ModelView, model=User):
         User.id,
         User.email,
         User.display_name,
-        User.plan,
         User.credits_usd,
         User.is_active,
         User.created_at,

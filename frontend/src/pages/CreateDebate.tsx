@@ -111,7 +111,7 @@ const CreateDebate = () => {
   const patch = (changes: Partial<WizardState>) => setState((s) => ({ ...s, ...changes }));
 
   const debaters = countDebaters(state.speakers);
-  // Premium voices on the system key are paid from credits: a zero balance (the free tier) locks
+  // Premium voices on the system key are paid from credits: an empty balance locks
   // them unless the user brings an own ElevenLabs key.
   const premiumLocked = !elevenlabsKey && (user?.credits_usd ?? 0) <= 0;
   const premiumUsable = elevenlabsKey.length > 0 || (billing.elevenlabs_available && !premiumLocked);

@@ -269,7 +269,6 @@ export interface User {
   email: string;
   display_name: string;
   avatar_seed: string;
-  plan: string;
   credits_usd: number;
   openrouter_key_masked: string | null;
   created_at: string;

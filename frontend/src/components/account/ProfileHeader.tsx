@@ -4,11 +4,10 @@ import { updateProfile } from '../../api/auth';
 import { getErrorMessage } from '../../api/client';
 import type { User } from '../../api/types';
 import { Avatar, Button, Input, useToast } from '../ui';
-import { planLabel } from './helpers';
 
 const randomSeed = () => Math.random().toString(36).slice(2, 10);
 
-/** Avatar, inline-editable display name and "email · plan" line. */
+/** Avatar, inline-editable display name and "email · new avatar" line. */
 export const ProfileHeader = ({ user, onUser }: { user: User; onUser: (user: User) => void }) => {
   const toast = useToast();
   const [editing, setEditing] = useState(false);
@@ -109,8 +108,6 @@ export const ProfileHeader = ({ user, onUser }: { user: User; onUser: (user: Use
         )}
         <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[13px] text-muted">
           <span className="truncate">{user.email}</span>
-          <span aria-hidden="true">·</span>
-          <span>{planLabel(user.plan)}</span>
           <span aria-hidden="true">·</span>
           <button
             type="button"

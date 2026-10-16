@@ -42,7 +42,6 @@ class UserOut(BaseModel):
     email: str
     display_name: str
     avatar_seed: str
-    plan: str
     credits_usd: float
     openrouter_key_masked: str | None = None
     created_at: datetime

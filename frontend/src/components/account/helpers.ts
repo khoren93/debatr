@@ -6,12 +6,6 @@ export const money = (n: number) => `${n < 0 ? '−' : ''}$${Math.abs(n).toFixed
 /** "$10" for whole amounts, "$2.50" otherwise (top-up chips and buttons). */
 export const moneyShort = (n: number) => (Number.isInteger(n) ? `$${n}` : money(n));
 
-/** "free" -> "Free plan". */
-export const planLabel = (plan: string) => {
-  const name = plan.trim();
-  return `${name ? name.charAt(0).toUpperCase() + name.slice(1) : 'Free'} plan`;
-};
-
 /** "debate_charge" -> "Debate charge". */
 export const humanizeKind = (kind: string) => {
   const text = kind.replace(/[_-]+/g, ' ').trim();

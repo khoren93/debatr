@@ -73,7 +73,7 @@ export const RegenerateAudioDialog = ({ open, onClose, debate, media, onQueued }
     [debate.participants],
   );
   const keyMissing = provider === 'elevenlabs' && !caps?.elevenlabs && !ttsKey;
-  // Free tier (no credits): the system key is locked, only an own key unlocks premium voices.
+  // Empty balance: the system key is locked, only an own key unlocks premium voices.
   const noCredits = (user?.credits_usd ?? 0) <= 0;
   const creditsMissing = provider === 'elevenlabs' && Boolean(caps?.elevenlabs) && !ttsKey && noCredits;
   const voicesKey = provider === 'elevenlabs' ? ttsKey : '';
@@ -216,7 +216,7 @@ export const RegenerateAudioDialog = ({ open, onClose, debate, media, onQueued }
               )}
               {creditsMissing && (
                 <Hint>
-                  Premium voices on our key are part of the paid tier.{' '}
+                  Premium voices on our key are paid from your balance.{' '}
                   <Link to="/account" className="font-semibold text-accent hover:text-accent-hover">
                     Top up credits
                   </Link>{' '}
