@@ -43,7 +43,8 @@ frontend/           React 19 + Vite 8 + Tailwind 4 + TypeScript
   src/components/layout/AppShell.tsx  sidebar + mobile top bar/bottom tabs, Page, PageTitle
   src/components/cards/    DebateCard (library / gallery / landing)
   src/components/create/   wizard steps + wizardState.ts (state, persistence, config mapping),
-                           ModelPicker (searchable OpenRouter list: logos, prices, rank)
+                           ModelPicker (searchable OpenRouter list: logos, prices, rank, Latest
+                           filter), VoicePicker (voice list with previews), usePickerPopover
   src/components/debate/   player, live card, turn timeline, transcript, verdict, audio tab,
                            regenerate-audio dialog, exports aside (browser MP4 render), lineup,
                            AudienceVote (blind vote), LikeButton
@@ -254,7 +255,8 @@ Stopping: `POST /api/debates/{id}/stop` sets the status, sets `debate:{id}:stop`
   accounts have `user_id=NULL`: readable via their link, manageable only from the admin panel.
 - The wizard keeps its in-progress state in `localStorage` (`debatr.wizard.v1`). Browser-only
   keys (`debatr.openrouter_key`, `debatr.elevenlabs_key`) live in `src/lib/localKeys.ts`
-  (`useLocalKey`), are managed on the Account page (`LocalKeysCard`) and in the wizard, and are
+  (`useLocalKey`), are managed on the Account page (`LocalKeysCard`; the wizard only shows their
+  status and links there in a new tab — the `storage` event syncs them back), and are
   sent as transient `user_provider_key` / `user_tts_key` (never in `config_json`, stripped from
-  draft saves). With `user_tts_key` the API parks it in Redis (`debate:{id}:tts_key`) so
+  draft saves). The wizard's default model is `openrouter/free` (`FREE_ROUTER_ID`). With `user_tts_key` the API parks it in Redis (`debate:{id}:tts_key`) so
   `_auto_media` builds premium audio on the user's key without charging credits.

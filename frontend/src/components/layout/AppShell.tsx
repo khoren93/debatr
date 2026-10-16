@@ -94,7 +94,7 @@ const Sidebar = () => {
 const MobileTopBar = () => {
   const { user } = useAuth();
   return (
-    <header className="sticky top-0 z-20 flex items-center justify-between border-b border-line bg-ink/85 px-4 py-3 backdrop-blur-xl md:hidden">
+    <header data-bar="top" className="sticky top-0 z-20 flex items-center justify-between border-b border-line bg-ink/85 px-4 py-3 backdrop-blur-xl md:hidden">
       <Link to="/" className="flex items-center gap-2">
         <Logo size={26} />
       </Link>
@@ -113,7 +113,7 @@ const MobileTopBar = () => {
 };
 
 const MobileTabs = () => (
-  <nav className="fixed inset-x-0 bottom-0 z-30 flex items-center justify-around border-t border-line bg-ink-2/95 px-1.5 pt-2 pb-[calc(10px+env(safe-area-inset-bottom))] backdrop-blur-xl md:hidden">
+  <nav data-bar="bottom" className="fixed inset-x-0 bottom-0 z-30 flex items-center justify-around border-t border-line bg-ink-2/95 px-1.5 pt-2 pb-[calc(10px+env(safe-area-inset-bottom))] backdrop-blur-xl md:hidden">
     {NAV.filter((item) => !item.desktopOnly).map(({ to, label, icon: Icon, end }) => (
       <NavLink
         key={to}

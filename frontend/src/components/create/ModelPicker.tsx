@@ -1,9 +1,11 @@
-import { Check, ChevronDown, Lock, Search, Sparkles, Trophy, X } from 'lucide-react';
+import { Check, ChevronDown, Lock, Search, Sparkles, Trophy, X, Zap } from 'lucide-react';
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import type { ModelInfo } from '../../api/types';
 import { formatContext } from '../../lib/format';
 import { modelAuthor } from '../../lib/modelIcons';
 import { ModelIcon } from '../ui';
+import { usePickerPopover } from './usePickerPopover';
+import { FREE_ROUTER_ID } from './wizardState';
 
 interface ModelPickerProps {
   value: string;
@@ -16,17 +18,21 @@ interface ModelPickerProps {
   onChange: (modelId: string) => void;
 }
 
-type Filter = 'all' | 'free' | 'paid' | 'ranked';
+type Filter = 'all' | 'free' | 'paid' | 'latest';
+
+const FILTER_LABELS: Record<Filter, string> = { all: 'All', free: 'Free', paid: 'Paid', latest: 'Latest' };
 
 /** Models added to OpenRouter in the last 45 days get a "New" badge. */
 const NEW_SINCE = Date.now() / 1000 - 45 * 86_400;
+const POPOVER_WIDTH = 580;
 const POPOVER_HEIGHT = 470;
 
 /** "Anthropic: Claude Sonnet 4.5" -> provider "Anthropic", title "Claude Sonnet 4.5". */
 const splitName = (model: Pick<ModelInfo, 'id' | 'name'>) => {
   const sep = model.name.indexOf(': ');
   if (sep > 0) return { provider: model.name.slice(0, sep), title: model.name.slice(sep + 2) };
-  return { provider: modelAuthor(model.id) || 'OpenRouter', title: model.name };
+  const author = modelAuthor(model.id);
+  return { provider: !author || author === 'openrouter' ? 'OpenRouter' : author, title: model.name };
 };
 
 const perMillion = (price: string) => {
@@ -44,6 +50,12 @@ const matches = (model: ModelInfo, terms: string[]) => {
   return terms.every((t) => haystack.includes(t));
 };
 
+/** OpenRouter aliases that always point at a provider's newest version ("~openai/gpt-latest"). */
+const isLatest = (model: ModelInfo) => /latest/i.test(`${model.id} ${model.name}`);
+
+const inFilter = (model: ModelInfo, filter: Filter) =>
+  filter === 'all' || (filter === 'free' ? model.is_free : filter === 'paid' ? !model.is_free : isLatest(model));
+
 const PriceBadge = ({ model }: { model: ModelInfo }) =>
   model.is_free ? (
     <span className="rounded-md bg-ok/12 px-1.5 py-0.5 font-mono text-[10px] font-semibold tracking-[0.04em] text-ok">FREE</span>
@@ -56,36 +68,28 @@ const PriceBadge = ({ model }: { model: ModelInfo }) =>
 
 /** Searchable OpenRouter model list with provider logos, prices, context and audience rank. */
 export const ModelPicker = ({ value, models, loading, paidLocked, ranks, onChange }: ModelPickerProps) => {
-  const [open, setOpen] = useState(false);
-  const [dropUp, setDropUp] = useState(false);
+  const { open, show: openPopover, close, placement, rootRef, triggerRef } = usePickerPopover(POPOVER_WIDTH, POPOVER_HEIGHT);
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<Filter>('all');
   const [active, setActive] = useState(value);
-  const rootRef = useRef<HTMLDivElement>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const listId = useId();
 
   const selected = models.find((m) => m.id === value);
   const locked = (m: ModelInfo) => paidLocked && !m.is_free && m.id !== value;
-  const hasRanks = Object.keys(ranks).length > 0;
+  const hasLatest = models.some(isLatest);
 
   const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
-  const found = models.filter((m) => matches(m, terms));
+  // The free router (the default model) leads the list.
+  const sorted = [...models].sort((a, b) => Number(b.id === FREE_ROUTER_ID) - Number(a.id === FREE_ROUTER_ID));
+  const found = sorted.filter((m) => matches(m, terms));
   const counts = {
     all: found.length,
     free: found.filter((m) => m.is_free).length,
     paid: found.filter((m) => !m.is_free).length,
-    ranked: found.filter((m) => ranks[m.id]).length,
+    latest: found.filter(isLatest).length,
   };
-  const visible =
-    filter === 'free'
-      ? found.filter((m) => m.is_free)
-      : filter === 'paid'
-        ? found.filter((m) => !m.is_free)
-        : filter === 'ranked'
-          ? found.filter((m) => ranks[m.id]).sort((a, b) => ranks[a.id] - ranks[b.id])
-          : found;
+  const visible = found.filter((m) => inFilter(m, filter));
   const sections =
     filter === 'all'
       ? [
@@ -96,16 +100,6 @@ export const ModelPicker = ({ value, models, loading, paidLocked, ranks, onChang
   const ordered = sections.flatMap((s) => s.items);
   const selectable = ordered.filter((m) => !locked(m));
   const preview = models.find((m) => m.id === active) ?? selected;
-
-  // Close on a click outside the picker.
-  useEffect(() => {
-    if (!open) return;
-    const onPointer = (e: PointerEvent) => {
-      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener('pointerdown', onPointer);
-    return () => document.removeEventListener('pointerdown', onPointer);
-  }, [open]);
 
   // Bring the current choice into view when the list opens (without scrolling the page).
   useEffect(() => {
@@ -124,17 +118,10 @@ export const ModelPicker = ({ value, models, loading, paidLocked, ranks, onChang
   };
 
   const show = () => {
-    const rect = triggerRef.current?.getBoundingClientRect();
-    if (rect) setDropUp(window.innerHeight - rect.bottom < POPOVER_HEIGHT && rect.top > window.innerHeight - rect.bottom);
     setQuery('');
     setFilter('all');
     setActive(value);
-    setOpen(true);
-  };
-
-  const close = (refocus = true) => {
-    setOpen(false);
-    if (refocus) triggerRef.current?.focus();
+    openPopover();
   };
 
   const pick = (model: ModelInfo) => {
@@ -145,9 +132,7 @@ export const ModelPicker = ({ value, models, loading, paidLocked, ranks, onChang
 
   const resetActive = (nextQuery: string, nextFilter: Filter) => {
     const nextTerms = nextQuery.toLowerCase().split(/\s+/).filter(Boolean);
-    const first = models.find(
-      (m) => matches(m, nextTerms) && !locked(m) && (nextFilter === 'all' || (nextFilter === 'free' ? m.is_free : nextFilter === 'paid' ? !m.is_free : ranks[m.id])),
-    );
+    const first = sorted.find((m) => matches(m, nextTerms) && !locked(m) && inFilter(m, nextFilter));
     setActive(first?.id ?? '');
     if (listRef.current) listRef.current.scrollTop = 0;
   };
@@ -218,9 +203,10 @@ export const ModelPicker = ({ value, models, loading, paidLocked, ranks, onChang
 
       {open && (
         <div
-          className={`absolute inset-x-0 z-40 flex max-h-[min(470px,70vh)] min-w-[min(300px,calc(100vw-32px))] flex-col overflow-hidden rounded-card border border-line-2 bg-surface-2 shadow-2xl shadow-black/60 animate-rise ${
-            dropUp ? 'bottom-full mb-2' : 'top-full mt-2'
+          className={`absolute z-40 flex flex-col overflow-hidden rounded-card border border-line-2 bg-surface-2 shadow-2xl shadow-black/60 animate-rise ${
+            placement.dropUp ? 'bottom-full mb-2' : 'top-full mt-2'
           }`}
+          style={{ left: placement.left, width: placement.width, maxHeight: placement.maxHeight }}
           onKeyDown={onKeyDown}
         >
           <div className="border-b border-line p-2.5">
@@ -256,7 +242,7 @@ export const ModelPicker = ({ value, models, loading, paidLocked, ranks, onChang
               )}
             </div>
             <div className="mt-2 flex gap-1 overflow-x-auto" role="tablist" aria-label="Filter models">
-              {(['all', 'free', 'paid', ...(hasRanks ? (['ranked'] as const) : [])] as Filter[]).map((f) => (
+              {(['all', 'free', 'paid', ...(hasLatest ? (['latest'] as const) : [])] as Filter[]).map((f) => (
                 <button
                   key={f}
                   type="button"
@@ -270,8 +256,8 @@ export const ModelPicker = ({ value, models, loading, paidLocked, ranks, onChang
                     filter === f ? 'bg-accent text-ink' : 'text-muted hover:bg-surface-3 hover:text-text'
                   }`}
                 >
-                  {f === 'ranked' && <Trophy className="size-3" />}
-                  {{ all: 'All', free: 'Free', paid: 'Paid', ranked: 'Ranked' }[f]}
+                  {f === 'latest' && <Zap className="size-3" />}
+                  {FILTER_LABELS[f]}
                   <span className={filter === f ? 'text-ink/60' : 'text-dim'}>{counts[f]}</span>
                 </button>
               ))}
@@ -302,7 +288,7 @@ export const ModelPicker = ({ value, models, loading, paidLocked, ranks, onChang
                       aria-disabled={isLocked}
                       onPointerMove={() => !isLocked && active !== m.id && setActive(m.id)}
                       onClick={() => pick(m)}
-                      title={isLocked ? 'Paid model: add credits or use your own OpenRouter key' : m.id}
+                      title={isLocked ? 'Paid model: add credits or your own OpenRouter key in Account' : m.id}
                       className={`mx-1.5 flex items-center gap-2.5 rounded-[10px] px-2 py-2 ${isLocked ? 'cursor-not-allowed opacity-45' : 'cursor-pointer'} ${
                         active === m.id && !isLocked ? 'bg-surface-3' : ''
                       }`}
@@ -339,7 +325,8 @@ export const ModelPicker = ({ value, models, loading, paidLocked, ranks, onChang
             ))}
           </div>
 
-          {preview && (
+          {/* Details footer only when there is room for the list as well. */}
+          {preview && placement.maxHeight >= 400 && (
             <div className="border-t border-line bg-surface px-3.5 py-2.5">
               <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 font-mono text-[10px] text-muted">
                 {preview.is_free ? (

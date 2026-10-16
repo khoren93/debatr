@@ -1,9 +1,9 @@
-import { ArrowUpRight, Play, RefreshCw, Square, Trophy, X } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { ArrowUpRight, RefreshCw, Trophy, X } from 'lucide-react';
 import type { LeaderboardEntry, ModelInfo, VoiceInfo } from '../../api/types';
 import { STYLE_PRESETS, applyStyle, detectStyle } from '../../data/styles';
-import { Chip, Hint, Select } from '../ui';
+import { Chip, Hint } from '../ui';
 import { ModelPicker } from './ModelPicker';
+import { VoicePicker } from './VoicePicker';
 import type { Speaker } from './wizardState';
 
 interface SpeakerCardProps {
@@ -24,6 +24,11 @@ interface SpeakerCardProps {
   ranks: Record<string, number>;
   voices: VoiceInfo[];
   voicesLoading: boolean;
+  /** Premium list unavailable: voices are assigned by the server. */
+  voicesAuto: boolean;
+  /** Speaker name per voice id used by another speaker. */
+  voicesTakenBy: Record<string, string>;
+  showVoiceLanguages: boolean;
   removable: boolean;
   showErrors: boolean;
   onChange: (patch: Partial<Speaker>) => void;
@@ -31,11 +36,6 @@ interface SpeakerCardProps {
   onRandomize: () => void;
   onRemove: () => void;
 }
-
-const voiceLabel = (v: VoiceInfo) => `${v.name}${v.description ? ` — ${v.description}` : ''}`;
-
-/** Only one preview plays at a time across all cards. */
-let currentPreview: HTMLAudioElement | null = null;
 
 export const SpeakerCard = ({
   speaker,
@@ -50,6 +50,9 @@ export const SpeakerCard = ({
   ranks,
   voices,
   voicesLoading,
+  voicesAuto,
+  voicesTakenBy,
+  showVoiceLanguages,
   removable,
   showErrors,
   onChange,
@@ -57,44 +60,6 @@ export const SpeakerCard = ({
   onRandomize,
   onRemove,
 }: SpeakerCardProps) => {
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const [playing, setPlaying] = useState(false);
-
-  useEffect(
-    () => () => {
-      audioRef.current?.pause();
-    },
-    [],
-  );
-
-  const stopPreview = () => {
-    audioRef.current?.pause();
-    audioRef.current = null;
-    setPlaying(false);
-  };
-
-  const voice = voices.find((v) => v.id === voiceId);
-  const canPreview = Boolean(voice?.preview_url);
-
-  const togglePreview = () => {
-    if (playing) {
-      stopPreview();
-      return;
-    }
-    if (!voice?.preview_url) return;
-    currentPreview?.pause();
-    const audio = new Audio(voice.preview_url);
-    audio.onpause = () => setPlaying(false);
-    audio.onended = () => setPlaying(false);
-    audio.onerror = () => setPlaying(false);
-    audioRef.current = audio;
-    currentPreview = audio;
-    audio
-      .play()
-      .then(() => setPlaying(true))
-      .catch(() => setPlaying(false));
-  };
-
   const activeStyle = detectStyle(speaker.prompt);
   const nameMissing = showErrors && !speaker.name.trim();
   const modelMissing = showErrors && !modelId && !modelsLoading;
@@ -158,44 +123,16 @@ export const SpeakerCard = ({
       {ranking === null && modelId && <div className="mt-1.5 text-[11px] text-dim">No public debates with this model yet.</div>}
 
       <div className="mt-3 text-xs text-muted">Voice</div>
-      <div className="mt-1.5 flex items-center gap-2">
-        <Select
+      <div className="mt-1.5 flex">
+        <VoicePicker
           value={voiceId}
-          onChange={(e) => {
-            stopPreview();
-            onVoice(e.target.value);
-          }}
-          disabled={voicesLoading || voices.length === 0}
-          className="min-w-0 flex-1"
-          aria-label="Voice"
-        >
-          {voicesLoading ? (
-            <option value={voiceId}>Loading voices…</option>
-          ) : voices.length === 0 ? (
-            <option value={voiceId}>{voiceId || 'Voices unavailable'}</option>
-          ) : (
-            <>
-              {!voice && <option value={voiceId}>{voiceId || 'Default voice'}</option>}
-              {voices.map((v) => (
-                <option key={v.id} value={v.id}>
-                  {voiceLabel(v)}
-                </option>
-              ))}
-            </>
-          )}
-        </Select>
-        <button
-          type="button"
-          onClick={togglePreview}
-          disabled={!canPreview}
-          title={canPreview ? (playing ? 'Stop preview' : 'Preview voice') : 'No preview for this voice'}
-          aria-label={playing ? 'Stop preview' : 'Preview voice'}
-          className={`grid size-10 shrink-0 place-items-center rounded-[11px] border bg-surface-2 transition-colors ${
-            canPreview ? 'cursor-pointer border-line-2 text-text hover:border-accent' : 'cursor-not-allowed border-line text-dim'
-          } ${playing ? 'border-accent text-accent' : ''}`}
-        >
-          {playing ? <Square className="size-3.5" fill="currentColor" /> : <Play className="size-3.5" fill="currentColor" />}
-        </button>
+          voices={voices}
+          loading={voicesLoading}
+          auto={voicesAuto}
+          takenBy={voicesTakenBy}
+          showLanguages={showVoiceLanguages}
+          onChange={onVoice}
+        />
       </div>
 
       <div className="mt-3 text-xs text-muted">Persona</div>

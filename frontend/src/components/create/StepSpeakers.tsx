@@ -1,9 +1,9 @@
-import { Plus, RefreshCw } from 'lucide-react';
-import { Link } from 'react-router-dom';
-import type { ModelInfo } from '../../api/types';
+import { ArrowUpRight, Plus, RefreshCw } from 'lucide-react';
+import type { BillingConfig, ModelInfo, TTSProviderName } from '../../api/types';
 import { useLeaderboard } from '../../hooks/useLeaderboard';
 import type { VoiceCatalogue } from '../../hooks/useVoices';
-import { ErrorBox, Hint, Spinner } from '../ui';
+import { Card, ErrorBox, Hint, Label, Spinner } from '../ui';
+import { OptionCard } from './OptionCard';
 import { SpeakerCard } from './SpeakerCard';
 import {
   MAX_DEBATERS,
@@ -29,12 +29,53 @@ interface StepSpeakersProps {
   catalogue: VoiceCatalogue;
   /** Effective voice per speaker id (see resolveVoices). */
   resolvedVoices: Record<string, string>;
+  /** Effective voice engine (premium falls back to Edge when it is not available). */
+  provider: TTSProviderName;
+  billing: BillingConfig;
+  /** User's own ElevenLabs key (lib/localKeys) — premium voices without credits. */
+  hasTtsKey: boolean;
   paidLocked: boolean;
   showErrors: boolean;
 }
 
-export const StepSpeakers = ({ state, patch, models, modelsLoading, modelsError, defaultModelId, catalogue, resolvedVoices, paidLocked, showErrors }: StepSpeakersProps) => {
+/** Account page in a new tab: the wizard keeps its state and picks up new keys immediately. */
+const AccountLink = ({ children }: { children: string }) => (
+  <a href="/account" target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 text-accent hover:text-accent-hover">
+    {children}
+    <ArrowUpRight className="size-3" />
+  </a>
+);
+
+export const StepSpeakers = ({
+  state,
+  patch,
+  models,
+  modelsLoading,
+  modelsError,
+  defaultModelId,
+  catalogue,
+  resolvedVoices,
+  provider,
+  billing,
+  hasTtsKey,
+  paidLocked,
+  showErrors,
+}: StepSpeakersProps) => {
   const debaters = countDebaters(state.speakers);
+  const premiumAvailable = billing.elevenlabs_available || hasTtsKey;
+  // Without a catalogue the server assigns the voices, so there is nothing to pick.
+  const voicesAuto = Boolean(catalogue.error);
+  // Voice ids are provider-specific: switching the engine drops the explicit choices.
+  const setProvider = (next: TTSProviderName) => {
+    if (next !== state.provider) patch({ provider: next, voices: {} });
+  };
+  const takenBy = (index: number) =>
+    Object.fromEntries(
+      state.speakers.flatMap((s, i) => {
+        const voice = resolvedVoices[speakerId(i)];
+        return i !== index && voice ? [[voice, s.name.trim() || speakerTagOf(state.speakers, i)]] : [];
+      }),
+    );
   const { data: leaderboard } = useLeaderboard();
   const rankingFor = (modelId: string) => {
     const entries = leaderboard?.entries ?? [];
@@ -107,28 +148,58 @@ export const StepSpeakers = ({ state, patch, models, modelsLoading, modelsError,
       </div>
 
       {modelsError && <ErrorBox className="mt-4">Could not load the model list: {modelsError}</ErrorBox>}
-      {catalogue.error && (
-        <ErrorBox className="mt-4">
-          Could not load voices: {catalogue.error}{' '}
-          <button type="button" onClick={catalogue.reload} className="font-semibold underline underline-offset-2 hover:text-text cursor-pointer">
-            Retry
-          </button>
-        </ErrorBox>
-      )}
-      {catalogue.loading && (
-        <div className="mt-4 flex items-center gap-2 text-xs text-muted">
-          <Spinner className="size-3.5" /> Loading {state.provider === 'elevenlabs' ? 'premium' : 'Edge'} voices…
-        </div>
-      )}
       {paidLocked && (
         <Hint className="mt-3">
-          Paid models are locked: add credits in{' '}
-          <Link to="/account" className="text-accent hover:text-accent-hover">
-            Account
-          </Link>{' '}
-          or use your own OpenRouter key (step 3). Free models work right away.
+          Paid models are locked: add credits or your own OpenRouter key in <AccountLink>Account</AccountLink>. Free models work right away.
         </Hint>
       )}
+
+      <Card padding="md" className="mt-4">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <Label>Voice engine</Label>
+          <span className="text-xs text-muted">
+            Own ElevenLabs key? Add it in <AccountLink>Account</AccountLink>
+          </span>
+        </div>
+        <div className="mt-2.5 grid gap-2.5 [grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr))]">
+          <OptionCard
+            active={provider === 'edge'}
+            onClick={() => setProvider('edge')}
+            title="Edge neural"
+            right={<span className="font-mono text-[11px] text-accent">FREE</span>}
+            text="Good quality, word timestamps, instant."
+          />
+          <OptionCard
+            active={provider === 'elevenlabs'}
+            onClick={() => setProvider('elevenlabs')}
+            disabled={!premiumAvailable}
+            title_={premiumAvailable ? undefined : 'Premium voices are not configured on this server — add your own ElevenLabs key in Account'}
+            title="Premium neural"
+            right={<span className="font-mono text-[11px] text-accent">{hasTtsKey ? 'YOUR KEY' : `$${billing.tts_price_per_min.toFixed(2)} / min`}</span>}
+            text="ElevenLabs studio voices with emotion tags."
+          />
+        </div>
+        {!premiumAvailable && (
+          <Hint>
+            Premium voices are not available on this server right now{billing.elevenlabs_error ? ` (${billing.elevenlabs_error})` : ''}. Add your own ElevenLabs key in{' '}
+            <AccountLink>Account</AccountLink> to use them.
+          </Hint>
+        )}
+        {provider === 'elevenlabs' && hasTtsKey && <Hint tone="accent">Voices are billed to your ElevenLabs account, not to credits.</Hint>}
+        {catalogue.loading && (
+          <Hint className="flex items-center gap-2">
+            <Spinner className="size-3.5" /> Loading {provider === 'elevenlabs' ? 'premium' : 'Edge'} voices…
+          </Hint>
+        )}
+        {catalogue.error && (
+          <Hint>
+            Could not load the voice list ({catalogue.error}) — every speaker gets a distinct voice automatically.{' '}
+            <button type="button" onClick={catalogue.reload} className="font-semibold text-accent hover:text-accent-hover cursor-pointer">
+              Retry
+            </button>
+          </Hint>
+        )}
+      </Card>
 
       <div className="mt-4 grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr))]">
         {state.speakers.map((speaker, index) => (
@@ -146,6 +217,9 @@ export const StepSpeakers = ({ state, patch, models, modelsLoading, modelsError,
             ranks={ranks}
             voices={catalogue.voices}
             voicesLoading={catalogue.loading}
+            voicesAuto={voicesAuto}
+            voicesTakenBy={takenBy(index)}
+            showVoiceLanguages={provider === 'elevenlabs'}
             removable={speaker.role === 'debater' && debaters > MIN_DEBATERS}
             showErrors={showErrors}
             onChange={(changes) => updateSpeaker(index, changes)}

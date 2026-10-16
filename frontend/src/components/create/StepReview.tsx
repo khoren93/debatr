@@ -105,7 +105,7 @@ export const StepReview = ({ state, config, ready, models, voices, ownKey, credi
                   <div className="flex min-w-0 items-center gap-1.5 text-xs text-muted">
                     {modelId && <ModelIcon modelId={modelId} size={12} className="text-text-3" />}
                     <span className="truncate">
-                      {model?.name ?? (modelId ? shortModelName(modelId) : 'model pending')} · {voice?.name ?? voiceId ?? 'default voice'}
+                      {model?.name ?? (modelId ? shortModelName(modelId) : 'model pending')} · {voice?.name ?? voiceId ?? 'auto voice'}
                     </span>
                   </div>
                 </div>
@@ -153,7 +153,7 @@ export const StepReview = ({ state, config, ready, models, voices, ownKey, credi
           <ErrorBox>
             <div>
               Not enough credits for this run — it needs about {formatCost(cost ?? 0)}
-              {estimate.credits_before !== null ? ` and you have $${Math.max(0, estimate.credits_before).toFixed(2)}` : ''}. Top up, pick free models or add your own OpenRouter key in step 3.
+              {estimate.credits_before !== null ? ` and you have $${Math.max(0, estimate.credits_before).toFixed(2)}` : ''}. Top up, pick free models or add your own OpenRouter key in Account.
             </div>
             {paymentsMode !== 'disabled' && (
               <LinkButton to="/account" size="sm" className="mt-3">

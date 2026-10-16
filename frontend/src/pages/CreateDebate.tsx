@@ -33,7 +33,7 @@ import { useVoices } from '../hooks/useVoices';
 import { useLocalKey } from '../lib/localKeys';
 
 /**
- * Four-step wizard: topic → speakers → voice & format → review. `?draft=<id>` edits a saved draft,
+ * Four-step wizard: topic → speakers (models, voice engine, voices) → format → review. `?draft=<id>` edits a saved draft,
  * `?remix=<id>` starts a new debate prefilled from an existing one.
  */
 const CreateDebate = () => {
@@ -113,7 +113,8 @@ const CreateDebate = () => {
   const debaters = countDebaters(state.speakers);
   const provider = state.provider === 'elevenlabs' && !billing.elevenlabs_available && !elevenlabsKey ? 'edge' : state.provider;
   const catalogue = useVoices(provider, state.language, debaters, state.step >= 2, provider === 'elevenlabs' ? elevenlabsKey : '');
-  const resolvedVoices = resolveVoices(state, catalogue.voices, catalogue.defaults);
+  // Without a catalogue the server picks the voices (the Speakers step says so).
+  const resolvedVoices = catalogue.error ? {} : resolveVoices(state, catalogue.voices, catalogue.defaults);
 
   const defaultModelId = pickDefaultModel(models);
   const validation = { defaultModelId, modelsLoading };
@@ -227,11 +228,14 @@ const CreateDebate = () => {
           defaultModelId={defaultModelId}
           catalogue={catalogue}
           resolvedVoices={resolvedVoices}
+          provider={provider}
+          billing={billing}
+          hasTtsKey={elevenlabsKey.length > 0}
           paidLocked={paidLocked}
           showErrors={showErrors}
         />
       )}
-      {state.step === 3 && <StepFormat state={state} patch={patch} billing={billing} accountKeyMasked={user?.openrouter_key_masked ?? null} openrouterKey={openrouterKey} elevenlabsKey={elevenlabsKey} />}
+      {state.step === 3 && <StepFormat state={state} patch={patch} accountKeyMasked={user?.openrouter_key_masked ?? null} openrouterKey={openrouterKey} elevenlabsKey={elevenlabsKey} />}
       {state.step === 4 && (
         <StepReview
           state={state}

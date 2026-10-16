@@ -217,9 +217,11 @@ Run `make` to list every target. The most useful ones:
    (new accounts receive `SIGNUP_BONUS_USD` of credits, 0 by default).
 2. Click **"+ New debate"** and walk through the wizard:
    - **Topic**: type a question or pick one from the library, choose language, rounds and reply length.
-   - **Speakers**: a host plus two or more debaters, each with a model, a neural voice and a persona.
-   - **Voice & format**: spoken or written style, free Edge or premium ElevenLabs voices, which outputs
-     to produce (audio, 16:9 video, 9:16 Short) and the render quality.
+   - **Speakers**: a host plus two or more debaters, each with a model (OpenRouter's free router by
+     default), a voice and a persona. The voice engine is chosen here too: free Edge voices or premium
+     ElevenLabs voices.
+   - **Format**: spoken or written style, which outputs to produce (audio, 16:9 video, 9:16 Short)
+     and the render quality. Your own OpenRouter / ElevenLabs keys are managed on the Account page.
    - **Review**: the estimate shows cost, length, turns and your credits after the run.
 3. Hit **Start the debate** and watch it stream live. When it finishes the verdict is scored and the
    audio track is built automatically; open the debate to render the MP4s in your browser.

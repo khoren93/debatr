@@ -17,7 +17,7 @@ import { getLocalKey, setLocalKey } from '../../lib/localKeys';
 export const WIZARD_STORAGE_KEY = 'debatr.wizard.v1';
 
 export type WizardStep = 1 | 2 | 3 | 4;
-export const STEP_LABELS: readonly string[] = ['Topic', 'Speakers', 'Voice & format', 'Review'];
+export const STEP_LABELS: readonly string[] = ['Topic', 'Speakers', 'Format', 'Review'];
 
 export const MIN_ROUNDS = 1;
 export const MAX_ROUNDS = 5;
@@ -233,10 +233,13 @@ export const randomizeSpeaker = (speaker: Speaker, ctx: RandomizeContext): { spe
 
 // --- Models & voices ---------------------------------------------------------
 
-/** First free "xiaomi/mimo" model, else the first free model. */
+/** OpenRouter's "Free Models Router": routes each request to an available free model. */
+export const FREE_ROUTER_ID = 'openrouter/free';
+
+/** The free router, else the first free "xiaomi/mimo" model, else the first free model. */
 export const pickDefaultModel = (models: ModelInfo[]) => {
   const free = models.filter((m) => m.is_free);
-  return (free.find((m) => m.id.includes('xiaomi/mimo')) ?? free[0])?.id ?? '';
+  return (free.find((m) => m.id === FREE_ROUTER_ID) ?? free.find((m) => m.id.includes('xiaomi/mimo')) ?? free[0])?.id ?? '';
 };
 
 /** Effective voice for every speaker id (+ judge): explicit choice if still valid, else the default. */

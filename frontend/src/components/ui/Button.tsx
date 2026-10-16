@@ -43,11 +43,13 @@ interface LinkButtonProps {
   size?: ButtonSize;
   icon?: ReactNode;
   className?: string;
+  /** Open in a new tab (keeps an in-progress form intact). */
+  newTab?: boolean;
   children: ReactNode;
 }
 
-export const LinkButton = ({ to, variant = 'primary', size = 'md', icon, className = '', children }: LinkButtonProps) => (
-  <Link to={to} className={buttonClass(variant, size, className)}>
+export const LinkButton = ({ to, variant = 'primary', size = 'md', icon, className = '', newTab = false, children }: LinkButtonProps) => (
+  <Link to={to} className={buttonClass(variant, size, className)} {...(newTab ? { target: '_blank', rel: 'noreferrer' } : {})}>
     {icon}
     {children}
   </Link>

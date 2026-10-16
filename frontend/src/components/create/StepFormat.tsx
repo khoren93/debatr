@@ -1,32 +1,33 @@
-import { Link } from 'react-router-dom';
-import type { BillingConfig } from '../../api/types';
-import { setLocalKey } from '../../lib/localKeys';
-import { Card, Chip, Hint, Input, Label } from '../ui';
+import { KeyRound } from 'lucide-react';
+import { Card, Chip, Hint, Label, LinkButton } from '../ui';
 import { OptionCard } from './OptionCard';
 import { OUTPUT_OPTIONS, QUALITY_OPTIONS, type WizardState } from './wizardState';
 
 interface StepFormatProps {
   state: WizardState;
   patch: (patch: Partial<WizardState>) => void;
-  billing: BillingConfig;
   /** Masked key already stored on the account, if any. */
   accountKeyMasked: string | null;
-  /** Browser-only keys (lib/localKeys); editing them here updates the Account page too. */
+  /** Browser-only keys (lib/localKeys), managed on the Account page. */
   openrouterKey: string;
   elevenlabsKey: string;
 }
 
-export const StepFormat = ({ state, patch, billing, accountKeyMasked, openrouterKey, elevenlabsKey }: StepFormatProps) => {
+const KeyStatus = ({ label, value }: { label: string; value: string | null }) => (
+  <span className="inline-flex items-center gap-1.5 rounded-full border border-line-2 bg-ink px-2.5 py-1 text-[11px]">
+    <span className={`size-1.5 rounded-full ${value ? 'bg-ok' : 'bg-line-3'}`} aria-hidden="true" />
+    <span className="font-semibold text-text-3">{label}</span>
+    <span className="text-muted">{value ?? 'not set'}</span>
+  </span>
+);
+
+export const StepFormat = ({ state, patch, accountKeyMasked, openrouterKey, elevenlabsKey }: StepFormatProps) => {
   const toggleOutput = (value: WizardState['outputs'][number]) =>
     patch({
       outputs: state.outputs.includes(value)
         ? state.outputs.filter((o) => o !== value)
         : OUTPUT_OPTIONS.map((o) => o.value).filter((o) => o === value || state.outputs.includes(o)),
     });
-  const premiumPrice = `$${billing.tts_price_per_min.toFixed(2)} / min`;
-  const hasKey = openrouterKey.length > 0;
-  const hasTtsKey = elevenlabsKey.length > 0;
-  const premiumAvailable = billing.elevenlabs_available || hasTtsKey;
 
   return (
     <div className="mt-[30px] grid gap-3.5 animate-rise">
@@ -46,34 +47,6 @@ export const StepFormat = ({ state, patch, billing, accountKeyMasked, openrouter
             text="Structured prose with headings. Best for reading and Markdown export."
           />
         </div>
-      </Card>
-
-      <Card padding="md">
-        <Label>Voice engine</Label>
-        <div className="mt-2.5 grid gap-2.5 [grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr))]">
-          <OptionCard
-            active={state.provider === 'edge'}
-            onClick={() => patch({ provider: 'edge' })}
-            title="Edge neural"
-            right={<span className="font-mono text-[11px] text-accent">FREE</span>}
-            text="Good quality, word timestamps, instant."
-          />
-          <OptionCard
-            active={state.provider === 'elevenlabs'}
-            onClick={() => patch({ provider: 'elevenlabs' })}
-            disabled={!premiumAvailable}
-            title_={premiumAvailable ? undefined : 'Premium voices are not configured on this server — add your own ElevenLabs key below'}
-            title="Premium neural"
-            right={<span className="font-mono text-[11px] text-accent">{hasTtsKey ? 'YOUR KEY' : premiumPrice}</span>}
-            text="Studio-grade voices with emotion tags."
-          />
-        </div>
-        {!premiumAvailable && (
-          <Hint>
-            Premium voices are not available on this server right now{billing.elevenlabs_error ? ` (${billing.elevenlabs_error})` : ''} — the free Edge voices are used. Add your own ElevenLabs key below to use them anyway.
-          </Hint>
-        )}
-        {state.provider === 'elevenlabs' && hasTtsKey && <Hint tone="accent">Voices are billed to your ElevenLabs account, not to credits.</Hint>}
       </Card>
 
       <Card padding="md">
@@ -102,50 +75,23 @@ export const StepFormat = ({ state, patch, billing, accountKeyMasked, openrouter
         </div>
       </Card>
 
-      <details className="rounded-panel border border-line bg-surface px-5 py-4.5">
-        <summary className="flex cursor-pointer items-center justify-between gap-3 text-[13px] font-semibold text-text-3">
-          Use your own OpenRouter key
-          <span className={`font-normal ${hasKey ? 'text-accent' : 'text-muted'}`}>{hasKey ? 'key set ›' : 'optional ›'}</span>
-        </summary>
-        <Input
-          type="password"
-          autoComplete="off"
-          spellCheck={false}
-          placeholder="sk-or-…"
-          value={openrouterKey}
-          onChange={(e) => setLocalKey('openrouter', e.target.value)}
-          maxLength={300}
-          aria-label="OpenRouter API key"
-          className="mt-3 font-mono"
-        />
-        <Hint>Bypasses credit limits and unlocks paid models. Stored only in this browser.</Hint>
-        {accountKeyMasked && !hasKey && <Hint tone="accent">Your account already has a key ({accountKeyMasked}) — it is used automatically.</Hint>}
-      </details>
-
-      <details className="rounded-panel border border-line bg-surface px-5 py-4.5">
-        <summary className="flex cursor-pointer items-center justify-between gap-3 text-[13px] font-semibold text-text-3">
-          Use your own ElevenLabs key
-          <span className={`font-normal ${hasTtsKey ? 'text-accent' : 'text-muted'}`}>{hasTtsKey ? 'key set ›' : 'optional ›'}</span>
-        </summary>
-        <Input
-          type="password"
-          autoComplete="off"
-          spellCheck={false}
-          placeholder="sk_…"
-          value={elevenlabsKey}
-          onChange={(e) => setLocalKey('elevenlabs', e.target.value)}
-          maxLength={200}
-          aria-label="ElevenLabs API key"
-          className="mt-3 font-mono"
-        />
-        <Hint>
-          Premium voices on your own ElevenLabs account, including your cloned voices. Stored only in this browser — manage it in{' '}
-          <Link to="/account" className="text-accent hover:text-accent-hover">
-            Account
-          </Link>
-          .
-        </Hint>
-      </details>
+      <Card padding="md">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0 flex-1 basis-[260px]">
+            <Label>Your own API keys</Label>
+            <p className="mt-1 text-xs leading-relaxed text-muted">
+              Optional. An OpenRouter key unlocks paid models without credits; an ElevenLabs key makes premium voices free of credits. Keys are managed in Account and stay in this browser.
+            </p>
+          </div>
+          <LinkButton to="/account" variant="secondary" size="sm" newTab icon={<KeyRound className="size-3.5" />}>
+            Manage keys
+          </LinkButton>
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <KeyStatus label="OpenRouter" value={openrouterKey ? 'set in this browser' : accountKeyMasked ? `account key ${accountKeyMasked}` : null} />
+          <KeyStatus label="ElevenLabs" value={elevenlabsKey ? 'set in this browser' : null} />
+        </div>
+      </Card>
     </div>
   );
 };
