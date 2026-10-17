@@ -20,6 +20,8 @@ export interface TimelineSpeaker {
   mascot: Mascot;
   avatar_url: string | null;
   voice_id: string | null;
+  /** Full OpenRouter id ("openai/gpt-4o-mini") for the provider logo; missing in older timelines. */
+  model_id?: string;
 }
 
 export interface TimelineSegment {

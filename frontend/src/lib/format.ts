@@ -16,6 +16,12 @@ export const formatCost = (cost: number) => {
   return cost < 0.01 ? `$${cost.toFixed(4)}` : `$${cost.toFixed(2)}`;
 };
 
+/** Balance with two decimals: "$4.20", "−$0.12" (a balance that rounds to zero has no sign). */
+export const formatMoney = (n: number) => {
+  const cents = Math.round(n * 100);
+  return `${cents < 0 ? '−' : ''}$${(Math.abs(cents) / 100).toFixed(2)}`;
+};
+
 /** Money with two decimals and a sign for ledgers: "+$5.00" / "−$0.12". */
 export const formatSigned = (amount: number) => {
   const abs = Math.abs(amount);

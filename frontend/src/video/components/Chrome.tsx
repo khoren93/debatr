@@ -1,25 +1,20 @@
 import { interpolate, useCurrentFrame, useVideoConfig } from 'remotion';
 import type { Timeline } from '../../api/timeline';
-import { ACCENT, FONT } from '../constants';
+import { ACCENT, BRAND, DISPLAY_FONT, FONT, MONO_FONT } from '../constants';
 import { roundLabel } from '../utils';
+import { LogoTile } from './ModelLogo';
 
-/** One-line topic in a corner once the intro has shown it in big (context for viewers who skip). */
-export const TopicChip = ({ topic, sinceMs, maxChars, fontSize }: { topic: string; sinceMs: number; maxChars: number; fontSize: number }) => {
-  const o = interpolate(sinceMs, [0, 500], [0, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
-  const text = topic.length > maxChars ? `${topic.slice(0, maxChars - 1).trimEnd()}…` : topic;
-  return (
-    <div style={{ display: 'inline-flex', alignItems: 'center', gap: fontSize * 0.55, padding: `${fontSize * 0.45}px ${fontSize * 0.9}px`, borderRadius: 999, background: '#0f172acc', border: '2px solid #ffffff1f', fontFamily: FONT, opacity: o }}>
-      <span style={{ fontSize: fontSize * 0.75, letterSpacing: 4, color: ACCENT, fontWeight: 800 }}>DEBATR</span>
-      <span style={{ fontSize, fontWeight: 700, color: '#ffffffd9', whiteSpace: 'nowrap' }}>{text}</span>
-    </div>
-  );
-};
+const HOST = '#FFC46B';
 
-export const RoundChip =({ roundId, fontSize }: { roundId: string; fontSize: number }) => (
-  <div style={{ fontFamily: FONT, display: 'inline-block', padding: `${fontSize * 0.35}px ${fontSize * 0.9}px`, borderRadius: 999, background: roundId === 'verdict' ? '#FFC46B' : '#ffffff1a', border: '2px solid #ffffff33', color: roundId === 'verdict' ? '#3a2600' : '#fff', fontWeight: 800, fontSize, letterSpacing: 2, textTransform: 'uppercase' }}>
-    {roundLabel(roundId)}
+/** "ROUND 1" / "VERDICT" pill in the top-left corner. */
+export const RoundChip = ({ roundId, u }: { roundId: string; u: number }) => (
+  <div style={{ display: 'inline-block', padding: `${0.6 * u}px ${1.2 * u}px`, borderRadius: 999, border: '2px solid #ffffff24', fontFamily: MONO_FONT, fontSize: 1.05 * u, letterSpacing: 0.1 * 1.05 * u, color: HOST, whiteSpace: 'nowrap' }}>
+    {roundLabel(roundId).toUpperCase()}
   </div>
 );
+
+/** The brand in the top-right corner. */
+export const BrandMark = ({ u }: { u: number }) => <div style={{ fontFamily: MONO_FONT, fontSize: 1.05 * u, letterSpacing: 0.1 * 1.05 * u, color: ACCENT, whiteSpace: 'nowrap' }}>{BRAND}</div>;
 
 export const IntroCard = ({ timeline, big }: { timeline: Timeline; big: boolean }) => {
   const frame = useCurrentFrame();
@@ -30,8 +25,8 @@ export const IntroCard = ({ timeline, big }: { timeline: Timeline; big: boolean 
   const debaters = timeline.speakers.filter((s) => s.role === 'debater');
   return (
     <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: big ? 40 : 28, opacity: o, transform: `translateY(${y}px)`, fontFamily: FONT, padding: 60, textAlign: 'center' }}>
-      <div style={{ fontSize: big ? 34 : 26, letterSpacing: 8, color: ACCENT, fontWeight: 800 }}>DEBATR</div>
-      <div style={{ fontSize: big ? 84 : 64, fontWeight: 900, color: '#fff', lineHeight: 1.05, maxWidth: big ? 1500 : 900 }}>{timeline.topic}</div>
+      <div style={{ fontFamily: MONO_FONT, fontSize: big ? 30 : 26, letterSpacing: 8, color: ACCENT }}>{BRAND}</div>
+      <div style={{ fontFamily: DISPLAY_FONT, fontSize: big ? 84 : 64, fontWeight: 800, letterSpacing: big ? -2.5 : -2, color: '#F2F3F7', lineHeight: 1.05, maxWidth: big ? 1500 : 900 }}>{timeline.topic}</div>
       <div style={{ fontSize: big ? 44 : 36, fontWeight: 700, color: '#ffffffcc' }}>
         {debaters.map((d, i) => (
           <span key={d.id}>
@@ -51,8 +46,9 @@ export const VerdictCard = ({ timeline, big, sinceMs }: { timeline: Timeline; bi
   const winner = timeline.speakers.find((sp) => sp.id === timeline.verdict?.winner_id);
   return (
     <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 20, opacity: o, transform: `scale(${s})`, fontFamily: FONT, textAlign: 'center', padding: 60 }}>
-      <div style={{ fontSize: big ? 40 : 30, letterSpacing: 10, color: '#FFC46B', fontWeight: 900 }}>VERDICT</div>
-      <div style={{ fontSize: big ? 110 : 84, fontWeight: 900, color: winner?.color ?? '#fff', lineHeight: 1, textShadow: `0 0 60px ${winner?.color ?? '#fff'}66` }}>{winner?.name ?? '—'}</div>
+      <div style={{ fontFamily: MONO_FONT, fontSize: big ? 36 : 28, letterSpacing: 10, color: HOST }}>VERDICT</div>
+      {winner && <LogoTile speaker={winner} size={big ? 150 : 120} framed />}
+      <div style={{ fontFamily: DISPLAY_FONT, fontSize: big ? 110 : 84, fontWeight: 800, letterSpacing: -3, color: winner?.color ?? '#fff', lineHeight: 1, textShadow: `0 0 60px ${winner?.color ?? '#fff'}66` }}>{winner?.name ?? '—'}</div>
       <div style={{ fontSize: big ? 36 : 30, color: '#ffffffb3', fontWeight: 600 }}>{winner ? 'wins this debate' : 'no winner'}</div>
     </div>
   );
@@ -62,8 +58,8 @@ export const EndCard = ({ big, text, sinceMs }: { big: boolean; text: string; si
   const o = interpolate(Math.max(0, sinceMs) / 1000, [0, 0.4], [0, 1], { extrapolateRight: 'clamp' });
   return (
     <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, opacity: o, fontFamily: FONT, textAlign: 'center', padding: 60 }}>
-      <div style={{ fontSize: big ? 30 : 24, letterSpacing: 8, color: ACCENT, fontWeight: 800 }}>DEBATR</div>
-      <div style={{ fontSize: big ? 64 : 52, fontWeight: 900, color: '#fff', maxWidth: 1200 }}>{text}</div>
+      <div style={{ fontFamily: MONO_FONT, fontSize: big ? 28 : 24, letterSpacing: 8, color: ACCENT }}>{BRAND}</div>
+      <div style={{ fontFamily: DISPLAY_FONT, fontSize: big ? 64 : 52, fontWeight: 800, color: '#F2F3F7', maxWidth: 1200 }}>{text}</div>
     </div>
   );
 };

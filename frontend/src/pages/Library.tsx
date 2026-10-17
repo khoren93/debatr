@@ -7,7 +7,7 @@ import { useAuth } from '../auth/AuthContext';
 import { Page, PageTitle } from '../components/layout/AppShell';
 import { DebateCard, DurationChip, VerdictLine } from '../components/cards';
 import { Button, EmptyState, ErrorBox, Input, LinkButton, PageLoader, SectionLabel, Segmented, StagePill, Tag, type SegmentOption } from '../components/ui';
-import { formatCount, formatDateShort, stageOfSummary } from '../lib/format';
+import { formatCount, formatDateShort, formatMoney, stageOfSummary } from '../lib/format';
 
 type Filter = 'all' | 'live' | 'completed' | 'rendering' | 'draft';
 
@@ -22,7 +22,6 @@ const FILTERS: SegmentOption<Filter>[] = [
 const OUTPUT_ORDER: MediaOutput[] = ['audio', 'video', 'short'];
 const OUTPUT_TAGS: Record<MediaOutput, string> = { audio: 'MP3', video: 'MP4', short: 'SHORT' };
 
-const money = (n: number) => `$${n.toFixed(2)}`;
 
 /** "51 min" / "1 h 12 min" */
 const formatWatchTime = (ms: number) => {
@@ -98,7 +97,7 @@ const Library = () => {
     return (
       <>
         <div className="mt-[26px] grid grid-cols-[repeat(auto-fit,minmax(min(100%,160px),1fr))] gap-3">
-          <StatTile label="Credits" value={user ? money(user.credits_usd) : '—'} />
+          <StatTile label="Credits" value={user ? formatMoney(user.credits_usd) : '—'} />
           <StatTile label="Debates" value={debates.length} />
           <StatTile label="Videos" value={videos} />
           <StatTile label="Watch time" value={formatWatchTime(totalMs)} />

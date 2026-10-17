@@ -21,6 +21,16 @@ export const shortDurationInFrames = (t: Timeline, index: number): number => {
 export const segmentAt = (t: Timeline, ms: number): TimelineSegment | null =>
   t.segments.find((s) => ms >= s.start_ms && ms < s.end_ms) ?? null;
 
+/** The segment being spoken, or the last one before `ms` during a pause between turns. */
+export const speakingAt = (t: Timeline, ms: number): TimelineSegment | null => {
+  let last: TimelineSegment | null = null;
+  for (const s of t.segments) {
+    if (s.start_ms > ms) break;
+    last = s;
+  }
+  return last;
+};
+
 /** Loudness of a segment at an absolute time, 0..1 (interpolated). */
 export const levelAt = (seg: TimelineSegment | null, ms: number): number => {
   if (!seg || seg.levels.length === 0) return 0;

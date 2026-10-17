@@ -1,6 +1,6 @@
 import type { DefinitionScene, RankingScene, ScoreboardScene } from '../../api/visuals';
 import { DISPLAY_FONT, FONT, MONO_FONT } from '../constants';
-import { Mascot } from '../Mascot';
+import { LogoTile } from '../components/ModelLogo';
 import { INK, INK_DIM, backOut, compactNumber, easeInOut, easeOut, fitFont, formatNumber, ramp, seedOf, sketch, withUnit, type Pt } from './draw';
 import { DrawnIcon, InkLayer, Reveal, Stroke } from './Ink';
 import { seriesColors, type SceneCtx } from './scene';
@@ -176,8 +176,8 @@ export const ScoreboardView = ({ scene, ctx }: { scene: ScoreboardScene; ctx: Sc
   const headH = scene.headline ? 100 * k : 0;
   const size = Math.min(colW * 0.42, (h - headH) * 0.36, 210 * k);
   const crownH = 64 * k;
-  const mascotTop = crownH + 14 * k;
-  const nameTop = mascotTop + size + 18 * k;
+  const logoTop = crownH + 14 * k;
+  const nameTop = logoTop + size + 18 * k;
   const nameFs = Math.min(48 * k, ...debaters.map((d) => fitFont(d.name, colW - 30 * k, 1, 52 * k, 26 * k)));
   const revealAt = 700 + n * 250;
   const decided = easeOut(ramp(t, revealAt, 450));
@@ -187,7 +187,7 @@ export const ScoreboardView = ({ scene, ctx }: { scene: ScoreboardScene; ctx: Sc
     <>
       <InkLayer w={w} h={h}>
         {debaters.map((d, i) =>
-          d.id === scene.winner_id ? <Stroke key={d.id} d={sketch.ellipse(colW * (i + 0.5), mascotTop + size / 2, size * 1.35, size * 1.3, seed + i, { roughness: 1.3 })} p={easeOut(ramp(t, revealAt, 600))} color={d.color} width={5 * k} /> : null,
+          d.id === scene.winner_id ? <Stroke key={d.id} d={sketch.ellipse(colW * (i + 0.5), logoTop + size / 2, size * 1.35, size * 1.3, seed + i, { roughness: 1.3 })} p={easeOut(ramp(t, revealAt, 600))} color={d.color} width={5 * k} /> : null,
         )}
       </InkLayer>
       {debaters.map((d, i) => {
@@ -202,8 +202,8 @@ export const ScoreboardView = ({ scene, ctx }: { scene: ScoreboardScene; ctx: Sc
                 <DrawnIcon name="crown" size={crownH} color={d.color} p={easeInOut(ramp(t, revealAt + 100, 800))} strokeWidth={1.8} fill={t > revealAt + 900 ? `${d.color}40` : undefined} />
               </div>
             )}
-            <div style={{ position: 'absolute', left: (colW - size) / 2, top: mascotTop }}>
-              <Mascot kind={d.mascot} color={d.color} size={size} mouth={winner ? 0.5 * decided : 0.1} talking={winner && decided > 0} />
+            <div style={{ position: 'absolute', left: (colW - size) / 2, top: logoTop }}>
+              <LogoTile speaker={d} size={size} framed={winner && decided > 0} />
             </div>
             <div style={{ position: 'absolute', left: 10 * k, right: 10 * k, top: nameTop, textAlign: 'center', fontFamily: DISPLAY_FONT, fontWeight: 800, fontSize: nameFs, lineHeight: 1.1, color: d.color, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.name}</div>
             <div style={{ position: 'absolute', left: 10 * k, right: 10 * k, top: nameTop + nameFs * 1.2, textAlign: 'center', fontFamily: MONO_FONT, fontSize: 19 * k, color: INK_DIM, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{shortModel(d.model)}</div>
@@ -216,7 +216,7 @@ export const ScoreboardView = ({ scene, ctx }: { scene: ScoreboardScene; ctx: Sc
         );
       })}
       {draw && stamp > 0 && (
-        <div style={{ position: 'absolute', left: 0, right: 0, top: mascotTop + size * 0.35, display: 'flex', justifyContent: 'center' }}>
+        <div style={{ position: 'absolute', left: 0, right: 0, top: logoTop + size * 0.35, display: 'flex', justifyContent: 'center' }}>
           <div style={{ padding: `${8 * k}px ${30 * k}px`, border: `${5 * k}px solid ${INK}`, borderRadius: 14 * k, background: '#0c1226e6', fontFamily: FONT, fontWeight: 900, fontSize: 52 * k, letterSpacing: 8 * k, color: INK, opacity: Math.min(1, stamp * 2), transform: `rotate(-5deg) scale(${2 - stamp})` }}>DRAW</div>
         </div>
       )}

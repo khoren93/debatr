@@ -1,12 +1,13 @@
 import { Audio } from '@remotion/media';
 import { AbsoluteFill, Sequence, useCurrentFrame, useVideoConfig } from 'remotion';
-import type { Timeline, TimelineSegment, TimelineSpeaker } from '../api/timeline';
+import type { Timeline, TimelineSpeaker } from '../api/timeline';
 import { Background } from './components/Background';
 import { Captions } from './components/Captions';
-import { EndCard, IntroCard, RoundChip, TopicChip, VerdictCard } from './components/Chrome';
-import { HostChip, SpeakerCard } from './components/SpeakerCard';
-import { ACCENT, INTRO_MS, LONG_W } from './constants';
-import { frameToMs, msToFrame, segmentAt } from './utils';
+import { BrandMark, EndCard, IntroCard, RoundChip, VerdictCard } from './components/Chrome';
+import { SpeakerCard, SpeakingChip } from './components/SpeakerCard';
+import { debaterTag } from './speakers';
+import { INTRO_MS, LONG_W } from './constants';
+import { frameToMs, msToFrame, segmentAt, speakingAt } from './utils';
 import { SceneStage } from './visuals/SceneStage';
 
 export interface DebateProps {
@@ -16,16 +17,18 @@ export interface DebateProps {
 }
 
 const VERDICT_LEAD_MS = 2200;
-// Studio layout: host on top, debaters in side columns, the visual stage in the middle,
-// captions at the bottom.
-const STAGE = { x: 380, y: 150, w: 1160, h: 700 };
-const SIDE_W = 280;
-const SIDE_X = 50;
+const HOST_COLOR = '#FFC46B';
+// Studio layout (unit = 1% of the width, as in the mockup): round · speaker · brand on top,
+// debaters in side columns, the visual stage in the middle, captions at the bottom.
+const U = LONG_W / 100;
+const STAGE = { x: 380, y: 160, w: 1160, h: 690 };
+const SIDE_X = 3 * U;
+const SIDE_W = STAGE.x - SIDE_X - 24;
 
-const SideColumn = ({ speakers, x, seg, activeId }: { speakers: TimelineSpeaker[]; x: number; seg: TimelineSegment | null; activeId: string | undefined }) => (
+const SideColumn = ({ speakers, debaters, x, activeId }: { speakers: TimelineSpeaker[]; debaters: TimelineSpeaker[]; x: number; activeId: string | undefined }) => (
   <div style={{ position: 'absolute', left: x, top: STAGE.y, width: SIDE_W, height: STAGE.h, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: 28 }}>
     {speakers.map((d) => (
-      <SpeakerCard key={d.id} speaker={d} seg={seg} offsetMs={INTRO_MS} active={activeId === d.id} width={SIDE_W} compact />
+      <SpeakerCard key={d.id} speaker={d} tag={debaterTag(d, debaters)} active={activeId === d.id} width={speakers.length > 1 ? Math.min(SIDE_W, 250) : SIDE_W - 8} />
     ))}
   </div>
 );
@@ -35,15 +38,13 @@ export const DebateLong = ({ timeline, mediaBase }: DebateProps) => {
   const { fps } = useVideoConfig();
   const ms = frameToMs(frame, fps) - INTRO_MS;
   const seg = segmentAt(timeline, ms);
+  // Between turns the last speaker keeps the chip (no flicker in the short pauses).
+  const current = seg ?? speakingAt(timeline, ms);
   const debaters = timeline.speakers.filter((s) => s.role === 'debater');
-  const moderator = timeline.speakers.find((s) => s.role === 'moderator');
-  const judge = timeline.speakers.find((s) => s.role === 'judge');
-  const active = seg ? timeline.speakers.find((s) => s.id === seg.speaker_id) : null;
-  const hostActive = active?.role === 'moderator' || active?.role === 'judge';
-  const host = active?.role === 'judge' && judge ? judge : (moderator ?? judge);
+  const speaker = current ? timeline.speakers.find((s) => s.id === current.speaker_id) : undefined;
+  const active = seg ? speaker : undefined;
   const inIntro = ms < 0;
   const inOutro = ms >= timeline.total_ms;
-  const accent = active?.color ?? ACCENT;
   const half = Math.ceil(debaters.length / 2);
 
   const verdictSeg = timeline.segments.find((s) => s.turn_type === 'verdict');
@@ -52,7 +53,7 @@ export const DebateLong = ({ timeline, mediaBase }: DebateProps) => {
 
   return (
     <AbsoluteFill style={{ overflow: 'hidden' }}>
-      <Background accent={accent} />
+      <Background accent={speaker?.color ?? HOST_COLOR} />
       <Sequence from={msToFrame(INTRO_MS)} durationInFrames={msToFrame(timeline.total_ms) + 2} premountFor={fps}>
         <Audio src={`${mediaBase}/${timeline.full_audio_wav}`} />
       </Sequence>
@@ -61,24 +62,24 @@ export const DebateLong = ({ timeline, mediaBase }: DebateProps) => {
 
       {!inIntro && !inOutro && (
         <div style={{ position: 'absolute', inset: 0, opacity: showVerdict ? 0.05 : 1 }}>
-          <div style={{ position: 'absolute', top: 40, left: SIDE_X }}>
-            <TopicChip topic={timeline.topic} sinceMs={ms} maxChars={42} fontSize={22} />
+          <div style={{ position: 'absolute', top: 2.2 * U, left: 2.4 * U, right: 2.4 * U, height: 3.8 * U, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div>{current && <RoundChip roundId={current.round_id} u={U} />}</div>
+            <BrandMark u={U} />
           </div>
-          <div style={{ position: 'absolute', top: 42, right: SIDE_X }}>{seg && <RoundChip roundId={seg.round_id} fontSize={20} />}</div>
-          {host && (
-            <div style={{ position: 'absolute', top: 24, left: (LONG_W - 420) / 2 }}>
-              <HostChip speaker={host} seg={seg} offsetMs={INTRO_MS} active={hostActive} width={420} />
+          {speaker && (
+            <div style={{ position: 'absolute', top: 2.2 * U, left: 0, right: 0, height: 3.8 * U, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <SpeakingChip speaker={speaker} seg={seg} offsetMs={INTRO_MS} u={U} />
             </div>
           )}
 
-          <SideColumn speakers={debaters.slice(0, half)} x={SIDE_X} seg={seg} activeId={active?.id} />
-          <SideColumn speakers={debaters.slice(half)} x={LONG_W - SIDE_X - SIDE_W} seg={seg} activeId={active?.id} />
+          <SideColumn speakers={debaters.slice(0, half)} debaters={debaters} x={SIDE_X} activeId={active?.id} />
+          <SideColumn speakers={debaters.slice(half)} debaters={debaters} x={LONG_W - SIDE_X - SIDE_W} activeId={active?.id} />
 
-          <SceneStage timeline={timeline} mediaBase={mediaBase} seg={seg} ms={ms} x={STAGE.x} y={STAGE.y} w={STAGE.w} h={STAGE.h} k={1} />
+          <SceneStage timeline={timeline} mediaBase={mediaBase} seg={current} ms={ms} x={STAGE.x} y={STAGE.y} w={STAGE.w} h={STAGE.h} k={1} />
 
           {!showVerdict && (
-            <div style={{ position: 'absolute', left: 0, right: 0, bottom: 56 }}>
-              <Captions seg={seg} offsetMs={INTRO_MS} color={accent} fontSize={52} maxWidth={1500} />
+            <div style={{ position: 'absolute', left: 4 * U, right: 4 * U, bottom: 3 * U, display: 'flex', justifyContent: 'center' }}>
+              <Captions seg={seg} offsetMs={INTRO_MS} fontSize={2.4 * U} maxWidth={LONG_W - 8 * U} />
             </div>
           )}
         </div>

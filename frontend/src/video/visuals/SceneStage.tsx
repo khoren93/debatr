@@ -2,8 +2,7 @@ import { useEffect } from 'react';
 import type { Timeline, TimelineSegment } from '../../api/timeline';
 import type { Scene, SceneCheck, SceneDispute } from '../../api/visuals';
 import { DISPLAY_FONT, FONT, MONO_FONT } from '../constants';
-import { Mascot } from '../Mascot';
-import { levelAt, roundLabel } from '../utils';
+import { roundLabel } from '../utils';
 import { DefinitionView, RankingView, ScoreboardView } from './CardScenes';
 import { MatrixView, ScaleView, VennView } from './DiagramScenes';
 import { INK, INK_DIM, backOut, easeOut, fitFont, ramp } from './draw';
@@ -175,41 +174,21 @@ export const ScenePanel = ({ active, cast, mediaBase, w, h, k }: { active: Activ
   );
 };
 
-const turnLabel = (seg: TimelineSegment) => {
-  const kind = seg.turn_type.replace(/_/g, ' ');
-  return seg.round_id === 'verdict' ? 'Verdict' : `${kind} · ${roundLabel(seg.round_id)}`;
-};
-
-/** Idle stage: the topic (no one speaking / the host) or the speaking character in big. */
-const Spotlight = ({ timeline, seg, ms, w, h, k }: { timeline: Timeline; seg: TimelineSegment | null; ms: number; w: number; h: number; k: number }) => {
-  const speaker = seg ? timeline.speakers.find((s) => s.id === seg.speaker_id) : null;
-  if (!seg || !speaker || speaker.role === 'moderator') {
-    const topicFs = fitFont(timeline.topic, w * 0.86, 3, 76 * k, 40 * k);
-    return (
-      <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 22 * k, padding: `0 ${w * 0.07}px`, textAlign: 'center', fontFamily: FONT }}>
-        {seg && <div style={{ fontSize: 26 * k, fontWeight: 800, letterSpacing: 6 * k, textTransform: 'uppercase', color: '#FFC46B' }}>{roundLabel(seg.round_id)}</div>}
-        <div style={{ fontFamily: DISPLAY_FONT, fontSize: topicFs, fontWeight: 800, lineHeight: 1.1, color: INK, textShadow: '0 6px 30px #0009' }}>{timeline.topic}</div>
-      </div>
-    );
-  }
-  const size = Math.min(h * 0.5, 330 * k);
-  const level = levelAt(seg, ms);
+/** Idle stage (no scene up): the round over the debate's question, as in the studio mockup
+ *  (on the Short it sits just above the debaters' cards). */
+const Spotlight = ({ timeline, seg, w, k, align }: { timeline: Timeline; seg: TimelineSegment | null; w: number; k: number; align: 'center' | 'end' }) => {
+  const topicFs = fitFont(timeline.topic, w * 0.86, 3, 72 * k, 40 * k);
   return (
-    <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16 * k, fontFamily: FONT, textAlign: 'center' }}>
-      <div style={{ position: 'relative', width: size, height: size, transform: `scale(${1 + level * 0.04})` }}>
-        <div style={{ position: 'absolute', left: -size * 0.35, top: -size * 0.35, width: size * 1.7, height: size * 1.7, background: `radial-gradient(circle, ${speaker.color}${level > 0.3 ? '55' : '38'} 0%, transparent 62%)` }} />
-        <div style={{ position: 'absolute', inset: 0 }}>
-          <Mascot kind={speaker.mascot} color={speaker.color} size={size} mouth={level} talking />
-        </div>
-      </div>
-      <div style={{ fontFamily: DISPLAY_FONT, fontSize: 64 * k, fontWeight: 800, lineHeight: 1.05, color: speaker.color }}>{speaker.name}</div>
-      <div style={{ fontSize: 24 * k, fontWeight: 700, letterSpacing: 4 * k, textTransform: 'uppercase', color: INK_DIM }}>{turnLabel(seg)}</div>
+    <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: align === 'end' ? 'flex-end' : 'center', gap: 24 * k, padding: `0 ${w * 0.07}px ${align === 'end' ? 30 * k : 0}px`, textAlign: 'center' }}>
+      {seg && <div style={{ fontFamily: MONO_FONT, fontSize: 23 * k, letterSpacing: 0.3 * 23 * k, color: '#FFC46B' }}>{roundLabel(seg.round_id).toUpperCase()}</div>}
+      <div style={{ fontFamily: DISPLAY_FONT, fontSize: topicFs, fontWeight: 800, lineHeight: 1.08, letterSpacing: -0.03 * topicFs, color: INK }}>{timeline.topic}</div>
     </div>
   );
 };
 
-/** Centre of the frame: the active visual scene(s), or the spotlight between scenes. */
-export const SceneStage = ({ timeline, mediaBase, seg, ms, x, y, w, h, k }: { timeline: Timeline; mediaBase: string; seg: TimelineSegment | null; ms: number; x: number; y: number; w: number; h: number; k: number }) => {
+/** Centre of the frame: the active visual scene(s), or the spotlight between scenes. `seg` is the
+ *  turn being spoken (or the last one, during a pause). */
+export const SceneStage = ({ timeline, mediaBase, seg, ms, x, y, w, h, k, idleAlign = 'center' }: { timeline: Timeline; mediaBase: string; seg: TimelineSegment | null; ms: number; x: number; y: number; w: number; h: number; k: number; idleAlign?: 'center' | 'end' }) => {
   const { active, cover } = scenesAt(timeline.visuals, ms);
   const needsMap = hasMapScene(timeline);
   useEffect(() => {
@@ -219,7 +198,7 @@ export const SceneStage = ({ timeline, mediaBase, seg, ms, x, y, w, h, k }: { ti
     <div style={{ position: 'absolute', left: x, top: y, width: w, height: h }}>
       {cover < 1 && (
         <div style={{ position: 'absolute', inset: 0, opacity: 1 - cover }}>
-          <Spotlight timeline={timeline} seg={seg} ms={ms} w={w} h={h} k={k} />
+          <Spotlight timeline={timeline} seg={seg} w={w} k={k} align={idleAlign} />
         </div>
       )}
       {active.map((a) => (

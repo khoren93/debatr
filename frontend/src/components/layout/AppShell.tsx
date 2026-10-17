@@ -2,6 +2,7 @@ import { Link, NavLink, useLocation } from 'react-router-dom';
 import { Home, LayoutGrid, Play, Plus, Trophy, UserRound } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useAuth } from '../../auth/AuthContext';
+import { formatMoney } from '../../lib/format';
 import { Avatar, Logo, Progress } from '../ui';
 
 const NAV = [
@@ -13,8 +14,6 @@ const NAV = [
   { to: '/leaderboard', label: 'Ranking', icon: Trophy, desktopOnly: true },
   { to: '/account', label: 'Account', icon: UserRound },
 ];
-
-const money = (n: number) => `$${n.toFixed(2)}`;
 
 const CreditsCard = () => {
   const { user, loading } = useAuth();
@@ -40,7 +39,7 @@ const CreditsCard = () => {
     <div className="rounded-[14px] border border-line bg-surface p-3.5">
       <div className="font-mono text-[11px] uppercase tracking-[0.06em] text-muted">Credits</div>
       <div className="mt-1.5 flex items-baseline justify-between">
-        <span className="font-display text-[22px] font-bold">{money(user.credits_usd)}</span>
+        <span className="font-display text-[22px] font-bold">{formatMoney(user.credits_usd)}</span>
         <Link to="/account" className="text-xs text-accent hover:text-accent-hover">
           Top up
         </Link>
@@ -100,7 +99,7 @@ const MobileTopBar = () => {
       </Link>
       {user ? (
         <Link to="/account" className="flex items-center gap-2 rounded-full border border-line-2 bg-surface py-1.5 pl-3 pr-1.5 font-mono text-xs">
-          {money(user.credits_usd)}
+          {formatMoney(user.credits_usd)}
           <Avatar seed={user.avatar_seed} size={22} />
         </Link>
       ) : (

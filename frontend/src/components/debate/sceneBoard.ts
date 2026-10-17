@@ -1,7 +1,7 @@
 import type { Timeline, TimelineSpeaker } from '../../api/timeline';
 import type { Participant, TurnVisuals } from '../../api/types';
 import type { CheckVerdict, Scene, SceneCheck, SceneDispute, TimelineVisual } from '../../api/visuals';
-import { HOST_COLOR, JUDGE_COLOR, speakerColor } from '../../lib/format';
+import { HOST_COLOR, JUDGE_COLOR, shortModelName, speakerColor } from '../../lib/format';
 import type { SceneCast } from '../../video/visuals/SceneStage';
 
 /** Helpers of the transcript's scene board (TurnScenes). */
@@ -91,7 +91,7 @@ export const sceneCast = (participants: Participant[], timeline: Timeline | null
   const speakers: TimelineSpeaker[] = participants.map((p, i) => {
     const id = p.id ?? `participant_${i}`;
     const role = p.role === 'moderator' ? 'moderator' : 'debater';
-    return { id, name: p.name ?? `Speaker ${i + 1}`, role, model: p.model, color: role === 'moderator' ? HOST_COLOR : speakerColor(id, participants), mascot: 'orb', avatar_url: null, voice_id: null };
+    return { id, name: p.name ?? `Speaker ${i + 1}`, role, model: shortModelName(p.model), model_id: p.model, color: role === 'moderator' ? HOST_COLOR : speakerColor(id, participants), mascot: 'orb', avatar_url: null, voice_id: null };
   });
   speakers.push({ id: 'judge', name: 'Judge', role: 'judge', model: '', color: JUDGE_COLOR, mascot: 'cube', avatar_url: null, voice_id: null });
   return { speakers, language_code: languageCode };

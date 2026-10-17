@@ -52,6 +52,7 @@ def build_speakers(
                 color=color,
                 mascot=mascot,  # type: ignore[arg-type]
                 avatar_url=p.get("avatar_url"),
+                model_id=str(p.get("model_id") or ""),
             )
         )
     speakers.append(
@@ -62,6 +63,7 @@ def build_speakers(
             model=short_model_name(judge_model),
             color=JUDGE_COLOR,
             mascot="cube",
+            model_id=judge_model or "",
         )
     )
     return speakers

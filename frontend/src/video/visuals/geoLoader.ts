@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useDelayRender } from 'remotion';
 import type { Timeline } from '../../api/timeline';
+import { preloadLogos } from '../logos';
 import type { World } from './geo';
 
 /** The world map is a lazy chunk + a JSON asset, loaded only for debates with a map scene. */
@@ -28,7 +29,7 @@ export const hasMapScene = (timeline: Timeline) => Boolean(timeline.visuals?.som
 
 /** Load what the scenes of this timeline need before rendering frames (MP4 export). */
 export const preloadSceneAssets = async (timeline: Timeline): Promise<void> => {
-  if (hasMapScene(timeline)) await loadGeo();
+  await Promise.all([hasMapScene(timeline) ? loadGeo() : null, preloadLogos(timeline)]);
 };
 
 /** The loaded map; holds the frame (delayRender) while it is still loading. */

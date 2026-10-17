@@ -5,7 +5,8 @@ import { getErrorMessage } from '../../api/client';
 import { setLike } from '../../api/debates';
 import type { DebateDetail } from '../../api/types';
 import { formatCount } from '../../lib/format';
-import { buttonClass, useToast } from '../ui';
+import { useToast } from '../ui';
+import { TOOL_BUTTON } from './toolButton';
 
 interface Props {
   debate: DebateDetail;
@@ -50,10 +51,10 @@ export const LikeButton = ({ debate, onChange }: Props) => {
       aria-pressed={liked}
       title={title}
       aria-label={`${title} (${likes})`}
-      className={buttonClass('secondary', 'sm', `disabled:!opacity-100 disabled:!cursor-default ${liked ? '!border-con/50 text-con' : ''}`)}
+      className={`${TOOL_BUTTON} disabled:cursor-default disabled:hover:bg-surface ${liked ? '!border-like/45 text-like' : ''}`}
     >
-      <Heart className={`size-3.5 transition-transform ${liked ? 'scale-110 fill-current' : ''}`} />
-      {formatCount(likes)}
+      <Heart className={`size-4 transition-transform ${liked ? 'scale-110 fill-current' : ''}`} />
+      {likes > 0 ? formatCount(likes) : 'Like'}
     </button>
   );
 };

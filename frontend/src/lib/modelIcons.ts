@@ -69,9 +69,35 @@ export interface ModelIconInfo {
 /** "~anthropic/claude-x" -> "anthropic" (OpenRouter prefixes alias ids with "~"). */
 export const modelAuthor = (modelId: string) => (modelId.includes('/') ? modelId.split('/')[0].replace(/^~/, '').toLowerCase() : '');
 
+/** Bare model names without the author ("gpt-4o-mini" in timelines built before `model_id`). */
+const BY_NAME: [RegExp, string][] = [
+  [/^(gpt|o\d|chatgpt|codex)/, 'openai'],
+  [/^claude/, 'claude-color'],
+  [/^gemma/, 'gemma-color'],
+  [/^gemini/, 'gemini-color'],
+  [/^llama/, 'meta-color'],
+  [/^(mistral|mixtral|ministral|codestral|devstral|magistral|pixtral|voxtral)/, 'mistral-color'],
+  [/^(qwen|qwq)/, 'qwen-color'],
+  [/^deepseek/, 'deepseek-color'],
+  [/^grok/, 'grok'],
+  [/^glm/, 'zai'],
+  [/^kimi/, 'kimi-color'],
+  [/^nova/, 'nova-color'],
+  [/^command/, 'cohere-color'],
+  [/^sonar/, 'perplexity-color'],
+  [/^phi/, 'microsoft-color'],
+  [/^minimax/, 'minimax-color'],
+  [/^nemotron/, 'nvidia-color'],
+  [/^hermes/, 'nousresearch'],
+  [/^granite/, 'ibm'],
+  [/^(ling|ring)-/, 'antgroup-color'],
+  [/^(free|auto)$/, 'openrouter-color'],
+];
+
 export const modelIcon = (modelId: string | null | undefined): ModelIconInfo | null => {
   if (!modelId) return null;
   const id = modelId.replace(/^~/, '').toLowerCase();
-  const file = BY_FAMILY.find(([re]) => re.test(id))?.[1] ?? BY_AUTHOR[modelAuthor(id)];
+  const byName = id.includes('/') ? undefined : BY_NAME.find(([re]) => re.test(id))?.[1];
+  const file = byName ?? BY_FAMILY.find(([re]) => re.test(id))?.[1] ?? BY_AUTHOR[modelAuthor(id)];
   return file ? { src: `/model-icons/${file}.svg`, mono: !file.endsWith('-color') } : null;
 };

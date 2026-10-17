@@ -22,11 +22,13 @@ class TimelineSpeaker(BaseModel):
     id: str  # "participant_{i}" | "judge"
     name: str
     role: SpeakerRole
-    model: str
+    model: str  # short name for captions ("gpt-4o-mini")
     color: str
     mascot: Mascot
     avatar_url: str | None = None
     voice_id: str | None = None
+    # Full OpenRouter id ("openai/gpt-4o-mini"): the video draws the provider's logo from it.
+    model_id: str = ""
 
 
 class TimelineSegment(BaseModel):

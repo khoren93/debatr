@@ -47,7 +47,7 @@ frontend/           React 19 + Vite 8 + Tailwind 4 + TypeScript
   src/api/            axios client, typed API functions per area (auth, billing, debates,
                       gallery, media, models, topics), shared types.ts, timeline.ts
   src/auth/           AuthContext (useAuth), RequireAuth route guard
-  src/hooks/          useDebateStream (SSE), useDebateMedia (polling), useAudioClock, useTrendingTopics,
+  src/hooks/          useDebateStream (SSE), useDebateMedia (polling), useTrendingTopics,
                       useModels, useBillingConfig, useVoices (wizard voice catalogue),
                       useLeaderboard (cached model ranking), useElevenLabsKeyStatus (checks
                       the browser's ElevenLabs key)
@@ -60,10 +60,17 @@ frontend/           React 19 + Vite 8 + Tailwind 4 + TypeScript
                            ModelPicker (searchable OpenRouter list: logos, prices, rank, Latest
                            filter), VoicePicker (voice list with previews, debate-language / all scope),
                            PersonaPicker (persona preset dropdown), usePickerPopover
-  src/components/debate/   player, live card, turn timeline, transcript, verdict, audio tab,
-                           regenerate-audio dialog, exports aside (browser MP4 render), lineup,
-                           AudienceVote (blind vote), LikeButton, TurnScenes (scene board under
-                           each turn: Thumbnail stills, replay modal, fact-check/dispute badges)
+  src/components/debate/   DebatePlayer (Remotion Player with own controls: SegmentBar = seek bar
+                           by turns, PlayerShell/placeholders), LiveCard (live frame: cast, speaker,
+                           streamed captions), DebateActions (Like/Share/Remix/Export/… toolbar,
+                           SharePopover = link + gallery switch + moderation), ExportRail
+                           (slide-over: ExportCard browser MP4 render, MP3, PublishKit = YouTube
+                           title/description with chapters/tags + canvas thumbnails, youtubeKit.ts),
+                           Transcript (row click = seek, ● NOW), VerdictTab, DetailsTab (lineup,
+                           facts), AudienceVote (blind vote), RegenerateAudioDialog, TurnScenes
+                           (scene board under each turn: Thumbnail stills, replay modal,
+                           fact-check/dispute badges); helpers.ts: speakerLineup, videoChapters,
+                           timelineSrt, transcript/Markdown exports
   src/components/account/  Account page tabs (tabs.ts: `?tab=overview|keys|billing|security`,
                            accountPath): ProfileHeader, BalanceCard, UsageCards (bar per day),
                            Ledger (recent activity + full ledger), ProviderKeys (browser keys),
@@ -242,8 +249,10 @@ Stopping: `POST /api/debates/{id}/stop` sets the status, sets `debate:{id}:stop`
    Progress lives in `media_json` (polled by `GET /api/debates/{id}/media`); `media_status`
    is `none | queued | running | ready | error`.
 8. Files are served by `MediaStaticFiles` at `/api/media/files/{debate_id}/...` (Range
-   requests work). The debate page plays the track with karaoke words (`AudioTab`) and renders
-   MP4s **in the visitor's browser** (`components/debate/ExportCard.tsx` +
+   requests work). The debate page plays the video in the Remotion Player with its own controls
+   (`DebatePlayer`; transcript rows jump to their turn, `helpers.videoChapters` maps turns to the
+   long video / Short clock) and renders MP4s **in the visitor's browser** (`ExportRail` →
+   `components/debate/ExportCard.tsx` +
    `@remotion/web-renderer`) — the server never encodes video; finished renders are reported to
    `POST /api/debates/{id}/renders` for the usage stats. Premium voices on the system ElevenLabs
    key cost `TTS_CREDIT_PRICE_PER_1K_CHARS` in credits (charged after the build); own keys are free.
@@ -291,12 +300,19 @@ Stopping: `POST /api/debates/{id}/stop` sets the status, sets `debate:{id}:stop`
   `start_ms`/`end_ms`/`item_ms`, non-overlapping, recomputed on every audio build. `item_ms`
   follows the order of the scene's lists; `UNORDERED_ITEMS` (ranking, scale, map) search every
   element on its own, since a countdown or the two pans are not said in list order.
-- Rendering (`src/video/visuals/`): `SceneStage` sits in the centre of both compositions
-  (16:9: host chip on top, debaters in side columns 1+1 / 2+1 / 2+2, captions below; 9:16:
-  debater row, stage, captions) and shows the speaking character/topic when no scene is up.
+- Rendering (`src/video/visuals/`): the frame follows the mockup's player (unit = 1% of the
+  width): round chip top-left, the speaking chip (logo, name, model, level bars) top-centre,
+  "DEBATR" top-right, debater cards with the provider logo (`components/ModelLogo.tsx`; no
+  mascots or avatars), captions on a dark plate (current word in the accent). `SceneStage`
+  sits in the centre of both compositions (16:9: cards in side columns 1+1 / 2+1 / 2+2; 9:16:
+  stage, card row, captions) and shows the round + topic when no scene is up. Logos come from
+  `TimelineSpeaker.model_id` (older timelines: the short name, `modelIcons` BY_NAME).
   The web renderer serializes each `<svg>` into an image, so strokes animate via SVG attributes
   (`pathLength=1` + dashoffset), colours are attributes (no `currentColor`), text stays in HTML,
-  and rough.js shapes use a fixed seed per scene (random seeds jitter between frames).
+  and rough.js shapes use a fixed seed per scene (random seeds jitter between frames). It only
+  takes raster `mask-image`s (single-colour logo SVGs are painted to PNG data URLs in
+  `video/logos.ts`, preloaded before an export), only unsized, centred `radial-gradient`s (one
+  per element: see `components/Background.tsx`) and ignores box-shadow spread (use `outline`).
   Icon keys in `icons.ts` mirror `ICONS` in `schemas/visuals.py`.
 - `sketch`: the director names a concrete subject; `media/sketch.py` asks `MEDIA_SKETCH_MODEL`
   (Gemini 3.5 Flash Lite, ~4 s) for SVG line art and `sanitize_svg` keeps only path/line/circle/

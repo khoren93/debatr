@@ -1,7 +1,8 @@
 /** Helpers shared by the account and auth pages (kept in a .ts file for react-refresh). */
+import { formatMoney } from '../../lib/format';
 
 /** "$4.67" / "−$0.50" — always two decimals, real minus sign. */
-export const money = (n: number) => `${n < 0 ? '−' : ''}$${Math.abs(n).toFixed(2)}`;
+export const money = formatMoney;
 
 /** "$10" for whole amounts, "$2.50" otherwise (top-up chips and buttons). */
 export const moneyShort = (n: number) => (Number.isInteger(n) ? `$${n}` : money(n));

@@ -1,36 +1,46 @@
-import { useState } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useState, type ReactNode } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Check, Gavel } from 'lucide-react';
 import { getErrorMessage } from '../../api/client';
 import { castVote, retractVote } from '../../api/debates';
 import type { Audience, DebateDetail } from '../../api/types';
-import { shortModelName, speakerColor } from '../../lib/format';
-import { Card, LinkButton, ModelIcon, SectionLabel, SpeakerBadge, Spinner, useToast } from '../ui';
+import { shortModelName } from '../../lib/format';
+import { Spinner, useToast } from '../ui';
+import type { SpeakerInfo } from './helpers';
+import { SpeakerTile } from './SpeakerTile';
 
 interface Props {
   debate: DebateDetail;
+  /** Debaters of the lineup (no host, no judge). */
+  debaters: SpeakerInfo[];
   /** Results (and the judge's pick) are visible: the viewer voted, owns it or chose to peek. */
   revealed: boolean;
   onReveal: () => void;
   onChange: (audience: Audience) => void;
-  className?: string;
 }
 
 const percent = (n: number, total: number) => (total > 0 ? Math.round((n / total) * 100) : 0);
 
+const linkButton = 'font-medium text-accent hover:text-accent-hover cursor-pointer';
+
 /** "Who argued better?" — a blind audience vote, then the split next to the judge's pick. */
-export const AudienceVote = ({ debate, revealed, onReveal, onChange, className = '' }: Props) => {
+export const AudienceVote = ({ debate, debaters, revealed, onReveal, onChange }: Props) => {
   const toast = useToast();
   const location = useLocation();
+  const navigate = useNavigate();
   const [pending, setPending] = useState<string | null>(null);
   const audience = debate.engagement.audience;
-  const { participants } = debate;
-  const debaters = participants.map((p, i) => ({ p, id: p.id ?? `participant_${i}` })).filter(({ p }) => p.role !== 'moderator');
   const judgePick = debate.verdict && !debate.verdict.is_draw ? debate.verdict.winner_id : null;
   const showResults = revealed || audience.my_vote !== null;
   const canVote = audience.can_vote;
+  const signIn = audience.reason === 'sign_in';
+  const signInHref = `/login?next=${encodeURIComponent(location.pathname + location.search)}`;
 
   const vote = async (id: string) => {
+    if (signIn) {
+      navigate(signInHref);
+      return;
+    }
     if (!canVote || pending) return;
     setPending(id);
     try {
@@ -42,97 +52,111 @@ export const AudienceVote = ({ debate, revealed, onReveal, onChange, className =
     }
   };
 
-  const signInHref = `/login?next=${encodeURIComponent(location.pathname + location.search)}`;
-  let footer: React.ReactNode;
-  if (audience.reason === 'owner') footer = 'You cannot vote on your own debate — this is how the audience sees it.';
-  else if (audience.reason === 'sign_in') {
-    footer = (
+  const retract = async () => {
+    if (pending) return;
+    setPending(audience.my_vote);
+    try {
+      onChange(await retractVote(debate.id));
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+    } finally {
+      setPending(null);
+    }
+  };
+
+  const mine = debaters.find((d) => d.id === audience.my_vote);
+  let note: ReactNode;
+  if (audience.reason === 'owner') note = 'You cannot vote on your own debate — this is how the audience sees it.';
+  else if (mine) {
+    note = (
       <>
-        <LinkButton to={signInHref} size="sm">
-          Sign in to vote
-        </LinkButton>
+        <span>You voted for {mine.name}.</span>
+        <button type="button" onClick={retract} className={linkButton}>
+          Change vote
+        </button>
+      </>
+    );
+  } else if (signIn) {
+    note = (
+      <>
+        <span>Sign in to vote.</span>
         {!showResults && (
-          <button type="button" onClick={onReveal} className="text-muted underline-offset-2 hover:text-text hover:underline cursor-pointer">
+          <button type="button" onClick={onReveal} className={linkButton}>
             Show results and the verdict
           </button>
         )}
       </>
     );
-  } else if (audience.my_vote) footer = 'Tap another debater to move your vote, or your pick again to take it back.';
-  else if (!showResults) {
-    footer = (
+  } else if (!showResults) {
+    note = (
       <>
-        <span>Judge’s verdict and the audience split open after your vote.</span>
-        <button type="button" onClick={onReveal} className="text-muted underline-offset-2 hover:text-text hover:underline cursor-pointer">
+        <span>Results and the judge’s verdict appear after you vote.</span>
+        <button type="button" onClick={onReveal} className={linkButton}>
           Just show me
         </button>
       </>
     );
-  } else footer = 'Cast your vote to add it to the split.';
+  } else note = 'Cast your vote to add it to the split.';
 
   return (
-    <Card padding="sm" className={`!p-5 ${className}`}>
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <SectionLabel>Audience vote</SectionLabel>
+    <section className="rounded-panel border border-white/6 bg-surface p-[clamp(18px,2.4vw,24px)]">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="font-mono text-[11px] tracking-[0.08em] text-muted">AUDIENCE VOTE</div>
+          <h2 className="mt-2 font-display text-[clamp(20px,2vw,24px)] font-bold tracking-[-0.02em]">Who argued better?</h2>
+          <p className="mt-1 text-[13px] text-muted">Not who’s right — who made the stronger case.</p>
+        </div>
         {showResults && (
-          <span className="font-mono text-[11px] text-muted">
+          <div className="whitespace-nowrap font-mono text-xs text-muted">
             {audience.total} {audience.total === 1 ? 'vote' : 'votes'}
-          </span>
+          </div>
         )}
       </div>
-      <div className="mt-2 font-display text-xl font-bold tracking-[-0.02em]">Who argued better?</div>
-      <p className="mt-1 text-[13px] text-muted">Not who is right — who made the stronger case.</p>
 
       <div className="mt-4 grid gap-2.5 [grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr))]">
-        {debaters.map(({ p, id }) => {
-          const color = speakerColor(id, participants);
-          const count = audience.counts[id] ?? 0;
-          const share = percent(count, audience.total);
-          const mine = audience.my_vote === id;
+        {debaters.map((d) => {
+          const share = percent(audience.counts[d.id] ?? 0, audience.total);
+          const chosen = audience.my_vote === d.id;
+          const clickable = canVote || signIn;
           return (
             <button
-              key={id}
+              key={d.id}
               type="button"
-              onClick={() => vote(id)}
-              disabled={!canVote || pending !== null}
-              aria-pressed={mine}
-              className={`relative overflow-hidden rounded-[14px] border bg-ink p-3.5 text-left transition-colors ${canVote ? 'cursor-pointer hover:border-line-3' : 'cursor-default'} disabled:cursor-default`}
-              style={mine ? { borderColor: color } : undefined}
+              onClick={() => vote(d.id)}
+              disabled={!clickable || pending !== null}
+              aria-pressed={chosen}
+              className={`relative flex items-center gap-3 overflow-hidden rounded-[14px] border bg-ink px-4 py-3.5 text-left transition-colors ${clickable ? 'cursor-pointer hover:border-white/22' : 'cursor-default'} disabled:cursor-default`}
+              style={{ borderColor: chosen ? d.color : 'rgba(255,255,255,0.08)' }}
             >
-              {showResults && <span className="absolute inset-y-0 left-0 transition-[width] duration-500" style={{ width: `${share}%`, background: `${color}22` }} aria-hidden="true" />}
-              <span className="relative flex items-center gap-3">
-                <SpeakerBadge name={p.name} color={color} size={34} imageUrl={p.avatar} />
-                <span className="min-w-0 flex-1">
-                  <span className="flex items-center gap-1.5 text-sm font-bold">
-                    <span className="truncate">{p.name ?? 'Debater'}</span>
-                    {mine && <Check className="size-3.5 shrink-0" style={{ color }} aria-label="Your vote" />}
-                  </span>
-                  <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[11px] text-muted">
-                    <ModelIcon modelId={p.model} size={12} className="text-text-3" />
-                    <span className="truncate">{shortModelName(p.model)}</span>
-                  </span>
+              <span className="absolute inset-y-0 left-0 transition-[width] duration-600 ease-[cubic-bezier(.2,.8,.2,1)]" style={{ width: showResults ? `${share}%` : '0%', background: `${d.color}29` }} aria-hidden="true" />
+              <SpeakerTile model={d.model} color={d.color} size={40} className="relative !bg-surface" />
+              <span className="relative min-w-0 flex-1">
+                <span className="block truncate text-[15px] font-bold">{d.name}</span>
+                <span className="mt-0.5 block truncate font-mono text-[11px] text-muted">
+                  {d.tag} · {shortModelName(d.model)}
                 </span>
-                {pending === id ? (
-                  <Spinner className="size-4" />
-                ) : (
-                  showResults && (
-                    <span className="font-mono text-sm font-semibold" style={{ color }}>
-                      {share}%
-                    </span>
-                  )
+                {showResults && judgePick === d.id && (
+                  <span className="mt-1.5 inline-flex items-center gap-1 rounded-md bg-accent/12 px-1.5 py-0.5 font-mono text-[10px] text-accent">
+                    <Gavel className="size-3" /> JUDGE’S PICK
+                  </span>
                 )}
               </span>
-              {showResults && judgePick === id && (
-                <span className="relative mt-2.5 inline-flex items-center gap-1 rounded-md bg-host/15 px-1.5 py-0.5 font-mono text-[10px] text-host">
-                  <Gavel className="size-3" /> JUDGE’S PICK
+              {pending === d.id ? (
+                <Spinner className="relative size-4" />
+              ) : showResults ? (
+                <span className="relative flex items-center gap-1.5 font-display text-[22px] font-extrabold" style={{ color: d.color }}>
+                  {chosen && <Check className="size-4" aria-label="Your vote" />}
+                  {share}%
                 </span>
+              ) : (
+                <span className="relative rounded-full border border-white/14 px-3 py-[7px] text-xs font-semibold text-text-2">Vote</span>
               )}
             </button>
           );
         })}
       </div>
 
-      <div className="mt-3.5 flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-muted">{footer}</div>
-    </Card>
+      <div className="mt-3 flex flex-wrap items-center gap-x-2.5 gap-y-1.5 text-xs text-muted">{note}</div>
+    </section>
   );
 };
