@@ -4,8 +4,8 @@ Full-stack service that orchestrates structured debates between LLMs via OpenRou
 them to the browser in real time, voices them and renders videos in the browser. Users have
 accounts with prepaid credits (Stripe top-ups); finished debates can be published to a gallery.
 The `debatr` CLI / MCP server (`cli/`) drives the same public API from a terminal or an AI agent.
-The UI follows the Claude Design mockup in `design/AI Debates Studio.dc.html` (brand "Debatr",
-dark studio theme, accent `#D9FF3D`).
+The UI follows the Claude Design mockup (brand "Debatr", dark studio theme, accent `#D9FF3D`);
+a local export may sit in the git-ignored `design/` folder (`Debatr Studio.html`).
 
 ## Layout
 
@@ -82,7 +82,7 @@ cli/                `debatr` package (PyPI): CLI + MCP server, Python 3.10+, uv,
   src/debatr/config.py  server URL + token resolution, saved logins (0600 config.json)
   src/debatr/markers.py, styling.py, render.py  live terminal output (markers hidden, inline Markdown)
   tests/              pytest on a fake server (httpx.MockTransport) and the SDK's in-process client
-design/             the Claude Design mockup (`AI Debates Studio.dc.html` + `support.js`)
+design/             local Claude Design export (`Debatr Studio.html`), git-ignored
 docker-compose.yml  full stack; docker-compose.dev.yml = only Postgres + Redis for native dev
 ```
 

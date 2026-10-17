@@ -60,5 +60,8 @@ yarn-error.log
 # Standalone media demo (not part of the app)
 demo/
 
+# Local Claude Design exports (the design lives in Claude Design; the code is the source of truth)
+design/
+
 # Private planning notes (public roadmap lives in README.md)
 PROGRESS.md
