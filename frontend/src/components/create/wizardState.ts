@@ -377,7 +377,7 @@ export const configFromDebate = (debate: DebateDetail): DebateConfig => {
       .filter((p) => isRole(p.role))
       .map((p) => ({
         role: p.role as ParticipantRole,
-        model_id: p.model,
+        model_id: p.router || p.model, // a remix asks the Free Router again
         display_name: p.name?.trim() || (p.role === 'moderator' ? 'The Host' : 'Debater'),
         voice_name: p.voice_name ?? undefined,
       })),

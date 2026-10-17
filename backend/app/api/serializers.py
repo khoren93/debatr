@@ -24,6 +24,7 @@ from app.schemas.schemas import (
     VerdictFeedback,
     VerdictOut,
 )
+from app.services.free_router import is_free_router
 from app.services.media.languages import language_code
 from app.services.scheduler import speaker_role_for
 from app.services.studio import turn_visuals_out
@@ -125,17 +126,25 @@ def outputs(debate: Debate) -> list[str]:
 
 
 def participants_out(debate: Debate) -> list[ParticipantOut]:
+    configured: list[dict[str, Any]] = (debate.config_json or {}).get("participants") or []
     return [
         ParticipantOut(
             id=f"participant_{i}",  # rows are inserted in config order
             name=p.persona_name,
             role=p.role,
             model=p.model_id,
+            router=router_of(configured[i] if i < len(configured) else {}, p.model_id),
             voice_name=p.voice_name,
             avatar=p.avatar_url,
         )
         for i, p in enumerate(debate.participants)
     ]
+
+
+def router_of(configured: dict[str, Any], model_id: str) -> str | None:
+    """The router that picked `model_id` for a participant configured with it (Free Router)."""
+    requested = str(configured.get("model_id") or "")
+    return requested if is_free_router(requested) and model_id != requested else None
 
 
 def debater_models(debate: Debate) -> dict[str, str]:

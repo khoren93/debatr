@@ -287,6 +287,8 @@ class ParticipantOut(BaseModel):
     name: str | None
     role: str
     model: str
+    # Set when a router picked `model` (Free Router: the model of the first answer is kept).
+    router: str | None = None
     voice_name: str | None = None
     avatar: str | None = None
 

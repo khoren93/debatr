@@ -107,6 +107,15 @@ async def test_stream_yields_deltas_and_usage():
     assert "max_tokens" not in payload
 
 
+async def test_stream_names_the_model_that_answers():
+    def handler(request: httpx.Request) -> httpx.Response:
+        chunk = {**_delta("Hi"), "model": "upstage/solar-pro-3:free"}
+        return httpx.Response(200, content=_sse(chunk))
+
+    chunks = await _collect(_client(handler))
+    assert [c.model for c in chunks] == ["upstage/solar-pro-3:free"]
+
+
 async def test_stream_retries_with_merged_system_prompt_on_400():
     requests = []
 

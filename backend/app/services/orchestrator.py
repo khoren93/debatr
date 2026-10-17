@@ -10,6 +10,7 @@ checked for the gallery and published when its owner asked for that (`services/m
 import asyncio
 import logging
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -23,6 +24,13 @@ from app.models.models import Debate, Turn, utcnow
 from app.services import queue_manager
 from app.services.credits import charge_debate_sync, charge_images_sync
 from app.services.events import publish_event
+from app.services.free_router import (
+    is_free_router,
+    participant_row,
+    pinned_model,
+    routed_model,
+    worth_pinning,
+)
 from app.services.markers import extract_markers, has_markers
 from app.services.media.tts.elevenlabs import system_key_status
 from app.services.moderation import apply_check, check_debate, publish_sync, should_auto_publish
@@ -64,6 +72,7 @@ class GenerationResult:
     usage: dict[str, Any] = field(default_factory=dict)
     error: str | None = None
     stopped: bool = False
+    model: str | None = None  # as named by the response (a router names the model it picked)
 
 
 def _normalize_usage(raw: dict[str, Any] | None) -> dict[str, Any]:
@@ -218,6 +227,8 @@ def _generate(
             async for chunk in client.stream_chat_completion(model_id, messages, api_key=api_key):
                 if chunk.usage:
                     result.usage = _normalize_usage(chunk.usage)
+                if chunk.model:
+                    result.model = chunk.model
                 if not chunk.delta:
                     continue
                 result.text += chunk.delta
@@ -238,6 +249,46 @@ def _generate(
         return result
 
     return asyncio.run(run())
+
+
+def _generate_as(
+    debate: Debate,
+    index: int,
+    speaker: dict[str, Any],
+    generate: Callable[[str], GenerationResult],
+) -> tuple[GenerationResult, str]:
+    """Generate a participant's turn; returns the result and the model that answered it.
+
+    A Free Router participant speaks with the free model its first answer was routed to
+    (`services/free_router`); when that model fails before writing anything, the router
+    answers the turn instead and the pin stays."""
+    requested = str(speaker.get("model_id") or settings.DEFAULT_MODEL_ID)
+    if not is_free_router(requested):
+        return generate(requested), requested
+    row = participant_row(debate.participants, index, speaker.get("role"))
+    pinned = pinned_model(requested, row)
+    if pinned:
+        result = generate(pinned)
+        if result.text or result.stopped or not result.error:
+            return result, pinned
+        logger.warning(
+            "Pinned %s failed for debate %s (%s), asking the router",
+            pinned,
+            debate.id,
+            result.error,
+        )
+    result = generate(requested)
+    answered = routed_model(result.model)
+    if (
+        answered
+        and row is not None
+        and not pinned
+        and not result.error
+        and worth_pinning(answered, result.text)
+    ):
+        row.model_id = answered  # committed with the turn
+        logger.info("Debate %s: participant %s pinned to %s", debate.id, index, answered)
+    return result, answered or requested
 
 
 def _save_turn(
@@ -445,7 +496,6 @@ def process_turn_job(debate_id: str, seq_index: int) -> None:
             speaker_name = speaker.get("display_name") or (
                 "Moderator" if turn.is_moderator else f"Debater {turn.speaker_index}"
             )
-            model_id = speaker.get("model_id") or settings.DEFAULT_MODEL_ID
             history = _history(db, debate.id)
             speaker_id = f"participant_{turn.speaker_index}"
             claims = (
@@ -473,7 +523,14 @@ def process_turn_job(debate_id: str, seq_index: int) -> None:
             )
 
             api_key = _provider_key(debate_id)
-            result = _generate(debate_id, seq_index, speaker_name, model_id, messages, api_key)
+            result, model_id = _generate_as(
+                debate,
+                turn.speaker_index,
+                speaker,
+                lambda model: _generate(
+                    debate_id, seq_index, speaker_name, model, messages, api_key
+                ),
+            )
             visuals: dict[str, Any] = {}
             if has_markers(result.text):
                 # [visual: …] / [dispute N: …] are for the studio, not the transcript or voice.
@@ -522,8 +579,10 @@ def conduct_verdict_job(debate_id: str, seq_index: int) -> None:
         try:
             conf: dict[str, Any] = debate.config_json or {}
             participants: list[dict[str, Any]] = conf.get("participants", [])
-            moderator = next((p for p in participants if p.get("role") == "moderator"), None)
-            model_id = (moderator or {}).get("model_id") or settings.DEFAULT_MODEL_ID
+            moderator_index = next(
+                (i for i, p in enumerate(participants) if p.get("role") == "moderator"), -1
+            )
+            moderator = participants[moderator_index] if moderator_index >= 0 else {}
             api_key = _provider_key(debate_id)
 
             publish_event(
@@ -539,8 +598,13 @@ def conduct_verdict_job(debate_id: str, seq_index: int) -> None:
             )
             evidence = verdict_evidence(_turns(db, debate.id))
             messages = build_verdict_messages(conf, _history(db, debate.id), evidence)
-            result = _generate(
-                debate_id, seq_index, VERDICT_SPEAKER_NAME, model_id, messages, api_key
+            result, model_id = _generate_as(
+                debate,
+                moderator_index,
+                moderator,
+                lambda model: _generate(
+                    debate_id, seq_index, VERDICT_SPEAKER_NAME, model, messages, api_key
+                ),
             )
             saved = _save_turn(
                 db,

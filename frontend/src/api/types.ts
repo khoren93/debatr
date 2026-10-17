@@ -99,6 +99,8 @@ export interface Participant {
   name: string | null;
   role: ParticipantRole | string;
   model: string;
+  /** Set when a router picked `model` (Free Router: the model of the first answer is kept). */
+  router?: string | null;
   voice_name: string | null;
   avatar: string | null;
 }

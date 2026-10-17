@@ -33,6 +33,7 @@ from app.schemas.timeline import (
 )
 from app.schemas.visuals import ImageScene, SketchScene, TimelineVisual
 from app.services.credits import charge_images_sync, charge_media_sync, has_balance
+from app.services.free_router import resolved_participants
 from app.services.media import ffmpeg
 from app.services.media.alignment import WordTiming, clamp_words, merge_chunks
 from app.services.media.highlights import (
@@ -496,7 +497,8 @@ def _build(
     studio (what AI pictures cost)."""
     debate_id = str(debate.id)
     conf: dict[str, Any] = debate.config_json or {}
-    participants: list[dict[str, Any]] = conf.get("participants", [])
+    # The video shows the models that actually spoke (a Free Router's pinned model).
+    participants = resolved_participants(conf.get("participants", []), debate.participants)
     code = language_code(conf.get("language"))
     language = str(conf.get("language") or "English")
     paths = MediaPaths(debate_id)

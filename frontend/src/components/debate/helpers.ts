@@ -1,10 +1,28 @@
 import type { Timeline } from '../../api/timeline';
 import type { DebateDetail, Participant, Turn } from '../../api/types';
+import { FREE_ROUTER_ID } from '../../lib/modelNames';
 import { JUDGE_COLOR, TURN_TYPE_LABELS, isErrorTurn, roleTag, roundLabel, speakerColor, speakerColorByName, splitEmotionTag } from '../../lib/format';
 import { INTRO_MS, SHORT_HOOK_MS } from '../../video/constants';
 import { frameToMs, highlightRange, longDurationInFrames, shortDurationInFrames } from '../../video/utils';
 
 export type VideoFormat = 'long' | 'short';
+
+const MIN_PIN_WORDS = 20; // mirror backend services/free_router.py
+const NON_CHAT_MARKERS = ['guard', 'safety', 'moderation'];
+
+/**
+ * A live turn of a Free Router participant pins the free model it was routed to (the worker does
+ * the same, backend services/free_router.py), so the cast shows it before the page reloads.
+ * Classifiers and stub answers do not pin (the router may pick a content-safety model).
+ */
+export const pinRoutedModel = (participants: Participant[], turn: Turn): Participant[] => {
+  const used = turn.model_used;
+  if (turn.error || !used || used === FREE_ROUTER_ID || !used.endsWith(':free')) return participants;
+  if (turn.text.split(/\s+/).filter(Boolean).length < MIN_PIN_WORDS || NON_CHAT_MARKERS.some((m) => used.toLowerCase().includes(m))) return participants;
+  const index = isJudgeTurn(turn) ? participants.findIndex((p) => p.role === 'moderator') : participants.findIndex((p, i) => (p.id ?? `participant_${i}`) === turn.speaker_id);
+  if (index < 0 || participants[index].model !== FREE_ROUTER_ID) return participants;
+  return participants.map((p, i) => (i === index ? { ...p, model: used, router: FREE_ROUTER_ID } : p));
+};
 
 /** Colour for a turn: by speaker id when present, otherwise by name (older debates). */
 export const turnColor = (turn: Pick<Turn, 'speaker_id' | 'speaker_name' | 'turn_type'>, participants: Participant[]) => {

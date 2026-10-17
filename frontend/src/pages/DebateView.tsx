@@ -20,7 +20,7 @@ import { RegenerateAudioDialog } from '../components/debate/RegenerateAudioDialo
 import { SpeakerTile } from '../components/debate/SpeakerTile';
 import { Transcript, type StreamingTurn } from '../components/debate/Transcript';
 import { VerdictTab } from '../components/debate/VerdictTab';
-import { isJudgeTurn, speakerLineup, speakerOfTurn, speakerTitle, turnColor, turnTypeLabel, videoChapters, type SpeakerInfo, type VideoFormat } from '../components/debate/helpers';
+import { isJudgeTurn, pinRoutedModel, speakerLineup, speakerOfTurn, speakerTitle, turnColor, turnTypeLabel, videoChapters, type SpeakerInfo, type VideoFormat } from '../components/debate/helpers';
 import { useDebateMedia } from '../hooks/useDebateMedia';
 import { useDebateStream } from '../hooks/useDebateStream';
 import { STAGE_COLORS, STAGE_LABELS, formatCount, formatDateShort, formatDuration, roundLabel, shortModelName, stageOf } from '../lib/format';
@@ -142,7 +142,7 @@ const DebateView = ({ id, slug }: Props) => {
           : { seq_index: e.seq_index, speaker_name: e.speaker_name ?? 'Speaker', speaker_role: 'debater', turn_type: 'argument', round_id: '', text: e.delta },
       ),
     onTurnCompleted: (turn) => {
-      setDebate((d) => (d ? { ...d, turns: insertTurn(d.turns, turn) } : d));
+      setDebate((d) => (d ? { ...d, turns: insertTurn(d.turns, turn), participants: pinRoutedModel(d.participants, turn) } : d));
       setStreaming(null);
     },
     onTurnError: (turn) => {

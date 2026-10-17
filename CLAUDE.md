@@ -24,7 +24,8 @@ backend/            FastAPI API + RQ worker (Python 3.12+, managed with uv)
                       shared response models
   app/services/       orchestrator (RQ jobs), scheduler (turn order), prompt_builder,
                       api_tokens (token budget, private-by-default, device flow in Redis),
-                      openrouter_client, events (pub/sub), queue_manager, credits (ledger),
+                      openrouter_client, free_router (pins a Free Router participant's model),
+                      events (pub/sub), queue_manager, credits (ledger),
                       ledger (row category/title, monthly usage per day, CSV export),
                       estimate (pre-run cost), verdict (structured verdict), moderation (AI gallery
                       check + auto-publish), views (view counter),
@@ -179,6 +180,15 @@ docker compose up -d --build                     # full stack on http://localhos
 4. `openrouter_client.stream_chat_completion()` streams deltas and returns usage
    (tokens + cost). On HTTP 400 with a system prompt it retries once with the system prompt
    merged into the user message. Mid-stream `{"error": ...}` chunks raise `OpenRouterError`.
+   `StreamChunk.model` is the model that answered. `openrouter/free` picks a random free model
+   per request, so `services/free_router` pins the `:free` model of a participant's first real
+   answer (≥ 20 words, no guard/safety classifier — the router picks those too) in
+   `DebateParticipant.model_id` (lineup, gallery filter, leaderboard, video
+   via `resolved_participants`); `config_json` keeps the router, so remixes/drafts ask it again
+   (`ParticipantOut.router`). A pinned model that fails before writing anything falls back to the
+   router for that turn (free models often 429 upstream). `Turn.model_used` = the model that
+   answered for router turns, the configured id otherwise. Names stay "Free Router A/B" (the
+   host introduces them before any debater speaks).
 5. The worker publishes events to Redis channel `debate:{id}`; `GET /api/debates/{id}/stream`
    relays them as SSE and closes on a terminal event (or immediately if the debate is already
    finished). After the verdict turn `services/verdict.py` structures it with the cheap

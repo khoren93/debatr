@@ -40,6 +40,7 @@ class OpenRouterError(Exception):
 class StreamChunk:
     delta: str = ""
     usage: dict[str, Any] | None = None
+    model: str | None = None  # the model that answers (a router names the one it picked)
 
 
 def error_from_payload(payload: Any, status_code: int | None = None) -> OpenRouterError:
@@ -201,8 +202,13 @@ class OpenRouterClient:
                         if choices:
                             delta = (choices[0].get("delta") or {}).get("content") or ""
                         usage = chunk.get("usage")
+                        answered = chunk.get("model")
                         if delta or usage:
-                            yield StreamChunk(delta=delta, usage=usage)
+                            yield StreamChunk(
+                                delta=delta,
+                                usage=usage,
+                                model=answered if isinstance(answered, str) else None,
+                            )
                 return
             except httpx.TimeoutException as e:
                 raise OpenRouterError(f"Timed out waiting for {model}") from e
