@@ -67,6 +67,37 @@ class User(Base):
         passive_deletes=True,
         order_by="CreditTransaction.created_at.desc()",
     )
+    api_tokens: Mapped[list["ApiToken"]] = relationship(
+        "ApiToken",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        order_by="ApiToken.created_at.desc()",
+    )
+
+
+class ApiToken(Base):
+    """Personal API token for the CLI, scripts and AI agents (MCP), sent as
+    `Authorization: Bearer debatr_…`. Only a SHA-256 hash of the secret is stored; the plaintext
+    is shown once, when the token is created (see app.services.api_tokens)."""
+
+    __tablename__ = "api_tokens"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    name: Mapped[str] = mapped_column(String(100))
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    token_last4: Mapped[str] = mapped_column(String(8))
+    # Credits the token may spend in total: the runs it started, with their voices and pictures.
+    # None = no limit. Runs on the user's own OpenRouter key cost no credits.
+    spend_limit_usd: Mapped[Decimal | None] = mapped_column(Numeric(14, 6), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    user: Mapped["User"] = relationship("User", back_populates="api_tokens")
 
 
 class CreditTransaction(Base):
@@ -106,6 +137,14 @@ class Debate(Base):
     # Owner. NULL for debates created before accounts existed.
     user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    # API token that started the run (CLI / agents); its charges count against the token's
+    # spending limit. NULL for runs started in the browser.
+    api_token_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("api_tokens.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
     )
 
     # draft | queued | running | completed | error | stopped

@@ -6,7 +6,9 @@
 - POST /api/debates/{id}/media            start (or restart) the audio build
 - DELETE /api/debates/{id}/media          remove generated files
 Video is rendered in the browser from the timeline; the server never encodes video.
-Premium voices on the system key are charged to the owner's credits.
+Premium voices on the system key are charged to the owner's credits. API tokens with a spending
+limit (agents) cannot start such paid builds; their debates' automatic builds are covered by the
+estimate checked when the run started.
 """
 
 import logging
@@ -24,7 +26,7 @@ from sqlalchemy.orm import selectinload
 from starlette.concurrency import run_in_threadpool
 
 from app.api.serializers import can_manage, can_view
-from app.core.auth import get_current_user, is_admin_session
+from app.core.auth import get_current_user, is_admin_session, request_api_token
 from app.core.config import TERMINAL_DEBATE_STATUSES, settings
 from app.core.db import get_db
 from app.core.redis import get_async_redis, tts_key_key
@@ -255,6 +257,16 @@ async def generate_debate_media(
     if body.provider not in PROVIDER_NAMES:
         raise HTTPException(status_code=400, detail="Unknown provider")
     own_tts_key = bool(body.user_tts_key)
+    trusted = _is_trusted(request, x_media_token)
+    token = request_api_token(request)
+    paid_voices = body.provider == "elevenlabs" and not own_tts_key and not trusted
+    paid_pictures = body.visuals and body.images == "ai" and not trusted
+    if token is not None and token.spend_limit_usd is not None and (paid_voices or paid_pictures):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="API tokens with a spending limit cannot buy premium voices or AI pictures: "
+            "use the free voices and photos, your own ElevenLabs key, or the website.",
+        )
     if body.provider == "elevenlabs":
         if not own_tts_key:
             ok, reason = await run_in_threadpool(system_key_status)
@@ -263,7 +275,7 @@ async def generate_debate_media(
                     status_code=409, detail=f"Premium voices are unavailable: {reason}"
                 )
         # The system key is paid: charge the owner's credits (trusted callers are exempt).
-        if not own_tts_key and not _is_trusted(request, x_media_token):
+        if not own_tts_key and not trusted:
             if user is None:
                 raise HTTPException(status_code=401, detail="Sign in to use premium voices")
             if float(user.credits_usd or 0) <= 0:
@@ -284,8 +296,7 @@ async def generate_debate_media(
                 )
 
     # AI pictures run on the system key and are paid from the balance.
-    wants_ai = body.visuals and body.images == "ai" and not _is_trusted(request, x_media_token)
-    if wants_ai and (user is None or float(user.credits_usd or 0) <= 0):
+    if paid_pictures and (user is None or float(user.credits_usd or 0) <= 0):
         raise HTTPException(
             status_code=status.HTTP_402_PAYMENT_REQUIRED,
             detail="AI pictures need credits: top up or use free photos instead.",

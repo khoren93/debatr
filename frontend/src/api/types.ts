@@ -281,6 +281,8 @@ export interface Estimate {
   paid_models: string[];
   credits_before: number | null;
   credits_after: number | null;
+  /** What the API token making the request may still spend (null in the browser). */
+  token_budget_usd: number | null;
   sufficient: boolean;
 }
 
@@ -302,6 +304,42 @@ export interface User {
   credits_usd: number;
   openrouter_key_masked: string | null;
   created_at: string;
+}
+
+/** Personal API token for the `debatr` CLI, scripts and AI agents (MCP). */
+export interface ApiToken {
+  id: string;
+  name: string;
+  /** "debatr_…a1b2" */
+  token_hint: string;
+  created_at: string;
+  last_used_at: string | null;
+  expires_at: string | null;
+  expired: boolean;
+  /** null = no limit; 0 = free models only. */
+  spend_limit_usd: number | null;
+  spent_usd: number;
+}
+
+/** Returned once, when the token is created. */
+export interface ApiTokenCreated extends ApiToken {
+  token: string;
+}
+
+export interface NewApiToken {
+  name: string;
+  expires_in_days: number | null;
+  spend_limit_usd: number | null;
+}
+
+export type DeviceStatus = 'pending' | 'approved' | 'denied' | 'expired';
+
+/** A `debatr login` request waiting for approval in the browser. */
+export interface DeviceRequest {
+  user_code: string;
+  client_name: string;
+  status: DeviceStatus;
+  expires_at: string;
 }
 
 export type PaymentsMode = 'stripe' | 'dev' | 'disabled';

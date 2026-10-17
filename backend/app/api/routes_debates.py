@@ -2,13 +2,15 @@
 
 Every debate belongs to the signed-in user who created it. Public debates (gallery /
 share link) and ownerless legacy rows are readable by anyone; only owners and the admin
-session can change them.
+session can change them. Runs started with an API token (CLI, agents) remember the token, stay
+private unless the request asks to publish them and must fit in the token's spending limit.
 """
 
 import contextlib
 import logging
 import shutil
 import uuid
+from decimal import Decimal
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -19,7 +21,7 @@ from sqlalchemy.orm import selectinload
 from starlette.concurrency import run_in_threadpool
 
 from app.api.serializers import can_manage, can_view, detail_out, share_url, summary_out
-from app.core.auth import get_current_user, is_admin_session, require_user
+from app.core.auth import get_current_user, is_admin_session, request_api_token, require_user
 from app.core.config import settings
 from app.core.db import get_db
 from app.core.ratelimit import enforce_debate_create_limit
@@ -39,6 +41,7 @@ from app.schemas.schemas import (
     StartDebateRequest,
     StopDebateResponse,
 )
+from app.services import api_tokens
 from app.services.engagement import engagement_out
 from app.services.estimate import Pricing, estimate_debate, pricing_from_models
 from app.services.media.paths import MediaPaths
@@ -118,8 +121,13 @@ def _paid_models(config: DebateConfig, pricing: Pricing) -> list[str]:
 
 
 async def _estimate(
-    config: DebateConfig, user: User | None, own_key: bool, own_tts_key: bool = False
+    config: DebateConfig,
+    user: User | None,
+    own_key: bool,
+    own_tts_key: bool = False,
+    budget: Decimal | None = None,
 ) -> EstimateOut:
+    """`budget`: what the API token making the request may still spend (None = no limit)."""
     pricing = pricing_from_models(await openrouter_client.get_models())
     est = estimate_debate(
         config.persisted(),
@@ -147,12 +155,25 @@ async def _estimate(
         out.sufficient = out.credits_cost_usd <= 0 or before >= out.credits_cost_usd
     else:
         out.sufficient = out.credits_cost_usd <= 0
+    if budget is not None:
+        out.token_budget_usd = float(budget)
+        out.sufficient = out.sufficient and out.credits_cost_usd <= float(budget)
     return out
 
 
 def _require_sufficient(est: EstimateOut) -> None:
     if est.sufficient:
         return
+    if est.token_budget_usd is not None and est.credits_cost_usd > est.token_budget_usd:
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail=(
+                f"API token spending limit reached: this run needs about "
+                f"${est.credits_cost_usd:.2f} and the token may spend "
+                f"${est.token_budget_usd:.2f} more. Raise its limit on the Account page or "
+                "use free models."
+            ),
+        )
     raise HTTPException(
         status_code=status.HTTP_402_PAYMENT_REQUIRED,
         detail=(
@@ -162,9 +183,28 @@ def _require_sufficient(est: EstimateOut) -> None:
     )
 
 
-def _apply_config(debate: Debate, config: DebateConfig, own_key: bool) -> None:
+def _billing(own_key: bool, est: EstimateOut | None) -> dict[str, Any]:
+    """`config_json.billing`. The estimate of a started run lets an API token's spending limit
+    count runs that have not been charged yet (services.api_tokens.pending_estimate)."""
+    billing: dict[str, Any] = {"own_key": own_key}
+    if est is not None:
+        media = (0.0 if est.own_tts_key else est.tts_cost_usd) + (
+            est.images_cost_usd * settings.CREDIT_MARKUP
+        )
+        billing["estimate_usd"] = est.credits_cost_usd
+        billing["media_estimate_usd"] = round(media, 6)
+    return billing
+
+
+async def _token_budget(db: AsyncSession, request: Request) -> Decimal | None:
+    return await api_tokens.budget_left(db, request_api_token(request))
+
+
+def _apply_config(
+    debate: Debate, config: DebateConfig, own_key: bool, est: EstimateOut | None = None
+) -> None:
     debate.title = config.topic.strip()
-    debate.config_json = {**config.persisted(), "billing": {"own_key": own_key}}
+    debate.config_json = {**config.persisted(), "billing": _billing(own_key, est)}
     debate.participants = [
         DebateParticipant(
             role=p.role,
@@ -207,12 +247,15 @@ async def _enqueue(
 
 @router.post("/estimate", response_model=EstimateOut)
 async def estimate(
-    config: DebateConfig, user: User | None = Depends(get_current_user)
+    config: DebateConfig,
+    request: Request,
+    user: User | None = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ) -> EstimateOut:
     """Cost, length and credit impact of a configuration before running it."""
     _key, own_key = _resolve_provider_key(user, config.user_provider_key)
     own_tts_key = _tts_key(config, config.user_tts_key) is not None
-    return await _estimate(config, user, own_key, own_tts_key)
+    return await _estimate(config, user, own_key, own_tts_key, await _token_budget(db, request))
 
 
 @router.get("", response_model=list[DebateSummary])
@@ -250,17 +293,29 @@ async def list_debates(
 )
 async def create_debate(
     config: DebateConfig,
+    request: Request,
     user: User = Depends(require_user),
     db: AsyncSession = Depends(get_db),
 ) -> DebateResponse:
     """Create a debate and queue it, or save it as a draft when `draft` is true."""
+    token = request_api_token(request)
+    if token is not None:
+        config = api_tokens.with_token_defaults(config)
     provider_key, own_key = _resolve_provider_key(user, config.user_provider_key)
     tts_key = _tts_key(config, config.user_tts_key)
+    est: EstimateOut | None = None
     if not config.draft:
-        _require_sufficient(await _estimate(config, user, own_key, tts_key is not None))
+        est = await _estimate(
+            config, user, own_key, tts_key is not None, await _token_budget(db, request)
+        )
+        _require_sufficient(est)
 
-    debate = Debate(user_id=user.id, status="draft" if config.draft else "queued")
-    _apply_config(debate, config, own_key)
+    debate = Debate(
+        user_id=user.id,
+        status="draft" if config.draft else "queued",
+        api_token_id=token.id if token is not None and not config.draft else None,
+    )
+    _apply_config(debate, config, own_key, est)
     db.add(debate)
     await db.commit()
     debate_id = str(debate.id)
@@ -283,6 +338,8 @@ async def update_draft(
     _require_manage(debate, user, request)
     if debate.status != "draft":
         raise HTTPException(status_code=409, detail="Only drafts can be edited")
+    if request_api_token(request) is not None:
+        config = api_tokens.with_token_defaults(config)
     _key, own_key = _resolve_provider_key(user, config.user_provider_key)
     _apply_config(debate, config, own_key)
     await db.commit()
@@ -307,8 +364,14 @@ async def start_draft(
     config = DebateConfig.model_validate(stored)
     provider_key, own_key = _resolve_provider_key(user, body.user_provider_key if body else None)
     tts_key = _tts_key(config, body.user_tts_key if body else None)
-    _require_sufficient(await _estimate(config, user, own_key, tts_key is not None))
-    debate.config_json = {**config.persisted(), "billing": {"own_key": own_key}}
+    est = await _estimate(
+        config, user, own_key, tts_key is not None, await _token_budget(db, request)
+    )
+    _require_sufficient(est)
+    debate.config_json = {**config.persisted(), "billing": _billing(own_key, est)}
+    # Whoever starts the run answers for it: its charges count against this token's limit.
+    token = request_api_token(request)
+    debate.api_token_id = token.id if token is not None else None
     debate.status = "queued"
     debate.error_message = None
     await db.commit()

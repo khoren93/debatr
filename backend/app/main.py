@@ -12,6 +12,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from app.admin.auth import authentication_backend
 from app.admin.views import (
+    ApiTokenAdmin,
     CreditTransactionAdmin,
     DebateAdmin,
     LikeAdmin,
@@ -31,6 +32,7 @@ from app.api import (
     routes_presets,
     routes_reactions,
     routes_stream,
+    routes_tokens,
 )
 from app.core.config import settings
 from app.core.db import engine
@@ -96,6 +98,7 @@ app.add_middleware(
 # Admin panel
 admin = Admin(app, engine, authentication_backend=authentication_backend, base_url="/api/admin")
 admin.add_view(UserAdmin)
+admin.add_view(ApiTokenAdmin)
 admin.add_view(CreditTransactionAdmin)
 admin.add_view(DebateAdmin)
 admin.add_view(LikeAdmin)
@@ -106,6 +109,7 @@ admin.add_view(SessionAdmin)
 
 # Routers
 app.include_router(routes_auth.router, prefix="/api/auth", tags=["auth"])
+app.include_router(routes_tokens.router, prefix="/api/auth", tags=["api tokens"])
 app.include_router(routes_billing.router, prefix="/api/billing", tags=["billing"])
 app.include_router(routes_models.router, prefix="/api/models", tags=["models"])
 app.include_router(routes_presets.router, prefix="/api/presets", tags=["presets"])

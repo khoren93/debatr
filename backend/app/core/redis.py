@@ -54,3 +54,19 @@ def tts_key_key(debate_id: str) -> str:
 
 def rate_limit_key(bucket: str, client_id: str) -> str:
     return f"ratelimit:{bucket}:{client_id}"
+
+
+def device_request_key(device_code_hash: str) -> str:
+    """State of one `debatr login` device request (app.services.api_tokens), by the hash of its
+    secret device code."""
+    return f"device:{device_code_hash}"
+
+
+def device_user_code_key(user_code: str) -> str:
+    """The code the user confirms in the browser -> hash of the device code."""
+    return f"device:user:{user_code}"
+
+
+def device_claim_key(device_code_hash: str) -> str:
+    """Set once when the request is approved or denied, so it is decided only once."""
+    return f"device:{device_code_hash}:claim"

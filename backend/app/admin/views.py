@@ -8,6 +8,7 @@ from starlette.responses import RedirectResponse
 
 from app.core.db import AsyncSessionLocal
 from app.models.models import (
+    ApiToken,
     CreditTransaction,
     Debate,
     DebateLike,
@@ -40,12 +41,38 @@ class UserAdmin(ModelView, model=User):
         User.openrouter_key_enc,
         User.debates,
         User.transactions,
+        User.api_tokens,
     ]
     can_create = False
     can_delete = True
     name = "User"
     name_plural = "Users"
     icon = "fa-solid fa-user"
+
+
+class ApiTokenAdmin(ModelView, model=ApiToken):
+    """Personal API tokens (CLI / agents). Only the hash is stored; deleting revokes."""
+
+    column_list = [
+        ApiToken.id,
+        ApiToken.user_id,
+        ApiToken.name,
+        ApiToken.token_last4,
+        ApiToken.spend_limit_usd,
+        ApiToken.created_at,
+        ApiToken.last_used_at,
+        ApiToken.expires_at,
+    ]
+    column_searchable_list = [ApiToken.name]
+    column_sortable_list = [ApiToken.created_at, ApiToken.last_used_at]
+    column_default_sort = (ApiToken.created_at, True)
+    column_details_exclude_list = [ApiToken.token_hash]
+    can_create = False
+    can_edit = False
+    can_delete = True
+    name = "API token"
+    name_plural = "API tokens"
+    icon = "fa-solid fa-key"
 
 
 class CreditTransactionAdmin(ModelView, model=CreditTransaction):

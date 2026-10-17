@@ -133,7 +133,8 @@ const MobileTabs = () => (
 /** Desktop sidebar + mobile top bar / bottom tabs around the routed page. */
 export const AppShell = ({ children }: { children: ReactNode }) => {
   const { pathname } = useLocation();
-  const bare = pathname === '/login' || pathname === '/register';
+  // Focused pages with their own centred layout (AuthLayout): no sidebar or tabs.
+  const bare = pathname === '/login' || pathname === '/register' || pathname === '/device';
   return (
     <div className="relative flex min-h-screen bg-ink">
       {/* The sidebar stays pinned to the left edge; only the page content is capped and centred. */}

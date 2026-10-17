@@ -11,6 +11,7 @@ from app.core.redis import get_async_redis, rate_limit_key
 logger = logging.getLogger(__name__)
 
 WINDOW_SECONDS = 3600
+DEVICE_CODE_LOOKUPS_PER_HOUR = 60
 
 
 def _client_id(request: Request) -> str:
@@ -64,4 +65,16 @@ async def enforce_login_limit(request: Request) -> None:
         limit=settings.LOGIN_RATE_LIMIT,
         window_seconds=WINDOW_SECONDS,
         what="sign-in attempts",
+    )
+
+
+async def enforce_device_code_limit(request: Request) -> None:
+    """Cap look-ups of `debatr login` codes per IP: a signed-in user could otherwise guess the
+    pending code of someone else's terminal and hand it a token of their own account."""
+    await enforce_limit(
+        request,
+        bucket="device_code",
+        limit=DEVICE_CODE_LOOKUPS_PER_HOUR,
+        window_seconds=WINDOW_SECONDS,
+        what="device code checks",
     )

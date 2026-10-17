@@ -20,7 +20,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.concurrency import run_in_threadpool
 
-from app.core.auth import require_user
+from app.core.auth import require_session_user, require_user
 from app.core.config import settings
 from app.core.db import get_db
 from app.core.security import random_token
@@ -110,7 +110,9 @@ def _create_checkout(user: User, amount: int) -> str:
 
 @router.post("/checkout", response_model=CheckoutOut)
 async def checkout(
-    body: CheckoutRequest, user: User = Depends(require_user), db: AsyncSession = Depends(get_db)
+    body: CheckoutRequest,
+    user: User = Depends(require_session_user),
+    db: AsyncSession = Depends(get_db),
 ) -> CheckoutOut:
     if body.amount_usd not in settings.topup_amounts:
         raise HTTPException(status_code=400, detail="Unsupported top-up amount")
@@ -193,7 +195,7 @@ async def stripe_webhook(request: Request, db: AsyncSession = Depends(get_db)) -
 @router.get("/confirm", response_model=ConfirmOut)
 async def confirm_checkout(
     session_id: str = Query(min_length=8, max_length=200),
-    user: User = Depends(require_user),
+    user: User = Depends(require_session_user),
     db: AsyncSession = Depends(get_db),
 ) -> ConfirmOut:
     """Called by the success page: credits the session if the webhook has not done it yet."""

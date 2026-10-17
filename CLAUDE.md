@@ -3,6 +3,7 @@
 Full-stack service that orchestrates structured debates between LLMs via OpenRouter, streams
 them to the browser in real time, voices them and renders videos in the browser. Users have
 accounts with prepaid credits (Stripe top-ups); finished debates can be published to a gallery.
+The `debatr` CLI / MCP server (`cli/`) drives the same public API from a terminal or an AI agent.
 The UI follows the Claude Design mockup in `design/AI Debates Studio.dc.html` (brand "Debatr",
 dark studio theme, accent `#D9FF3D`).
 
@@ -13,11 +14,13 @@ backend/            FastAPI API + RQ worker (Python 3.12+, managed with uv)
   app/main.py         FastAPI app, session + CORS middleware, admin panel, /api/health
   app/worker.py       RQ worker entrypoint (`python -m app.worker`)
   app/core/           config (pydantic-settings), db (async SQLAlchemy), redis, logging,
-                      ratelimit, auth (session-cookie login deps), security (bcrypt, Fernet), ids
-  app/api/            routers: auth, billing (Stripe), debates, gallery (+ leaderboard), reactions
-                      (likes/votes), models, presets, stream (SSE), media; serializers.py builds
-                      the shared response models
+                      ratelimit, auth (session cookie or Bearer API token; session-only deps),
+                      security (bcrypt, Fernet, API token format/hash), ids
+  app/api/            routers: auth, tokens (API tokens + `debatr login` device flow), billing
+                      (Stripe), debates, gallery (+ leaderboard), reactions (likes/votes), models,
+                      presets, stream (SSE), media; serializers.py builds the shared response models
   app/services/       orchestrator (RQ jobs), scheduler (turn order), prompt_builder,
+                      api_tokens (token budget, private-by-default, device flow in Redis),
                       openrouter_client, events (pub/sub), queue_manager, credits (ledger),
                       estimate (pre-run cost), verdict (structured verdict), moderation (AI gallery
                       check + auto-publish), views (view counter),
@@ -56,7 +59,8 @@ frontend/           React 19 + Vite 8 + Tailwind 4 + TypeScript
                            regenerate-audio dialog, exports aside (browser MP4 render), lineup,
                            AudienceVote (blind vote), LikeButton, TurnScenes (scene board under
                            each turn: Thumbnail stills, replay modal, fact-check/dispute badges)
-  src/components/account/  credits, usage, local keys, ledger, security cards; auth layout/fields
+  src/components/account/  credits, usage, local keys, API tokens (ApiTokensCard, TokenOptionsFields,
+                           CopyBlock), ledger, security cards; auth layout/fields
   src/video/          Remotion compositions (DebateLong 16:9, DebateShort 9:16, ScenePoster =
                       one scene for the transcript board) + render.ts;
                       visuals/ = scene renderer (SceneStage, 22 scene views, rough.js strokes,
@@ -65,7 +69,19 @@ frontend/           React 19 + Vite 8 + Tailwind 4 + TypeScript
   src/pages/          Landing (/), Library (/library), Gallery (/gallery), Leaderboard (/leaderboard),
                       CreateDebate (/create, `?draft=<id>`, `?remix=<id>`),
                       DebateView (/debate/:id and public /d/:slug), Account (/account),
-                      Login (/login), Register (/register)
+                      Device (/device?code=…, approves `debatr login`), Login (/login),
+                      Register (/register)
+  src/lib/cli.ts      install / login / MCP setup snippets shown on the Account page
+cli/                `debatr` package (PyPI): CLI + MCP server, Python 3.10+, uv, only the public API
+  src/debatr/cli.py   Typer commands (login, run, watch, show, list, stop, delete, publish, audio,
+                      models, gallery, leaderboard, whoami, logout, mcp)
+  src/debatr/api.py   async httpx client (ApiError messages, SSE parser), shared with the MCP server
+  src/debatr/mcp_server.py  MCPServer (mcp>=2.3) tools: start/get/estimate/stop debates, models,
+                      gallery, leaderboard, account; DEBATR_MAX_COST_USD cap
+  src/debatr/debate.py  build_config (mirrors DebateConfig), debate refs, digest (--json / agents)
+  src/debatr/config.py  server URL + token resolution, saved logins (0600 config.json)
+  src/debatr/markers.py, styling.py, render.py  live terminal output (markers hidden, inline Markdown)
+  tests/              pytest on a fake server (httpx.MockTransport) and the SDK's in-process client
 design/             the Claude Design mockup (`AI Debates Studio.dc.html` + `support.js`)
 docker-compose.yml  full stack; docker-compose.dev.yml = only Postgres + Redis for native dev
 ```
@@ -96,6 +112,16 @@ npm install
 npm run dev        # Vite on :5173, proxies /api -> http://localhost:8000 (incl. SSE)
 npm run check      # tsc + eslint
 npm run build
+```
+
+CLI (run from `cli/`; `make cli a="…"` runs it against the local stack):
+
+```bash
+uv sync
+uv run debatr --url http://localhost login     # device flow: approve in the browser
+uv run debatr --url http://localhost run "Tabs or spaces?" --rounds 1 --length very_short
+uv run debatr --url http://localhost mcp       # MCP server on stdio
+uv run ruff check . && uv run pyright && uv run pytest -q
 ```
 
 Infrastructure:
@@ -293,6 +319,36 @@ Stopping: `POST /api/debates/{id}/stop` sets the status, sets `debate:{id}:stop`
   next speakers and the judge (`studio.verdict_evidence`), and `totals_json.claims` (per
   participant) feeds the leaderboard's Accuracy column.
 
+### API tokens, the CLI and MCP
+
+- `api_tokens` (`debatr_` + 256 random bits; only `token_hash` = SHA-256 is stored, plus last4,
+  `spend_limit_usd`, `expires_at`, `last_used_at` refreshed at most once a minute). `get_current_user`
+  accepts `Authorization: Bearer …` before the cookie; a bad, revoked or expired token is a 401
+  (with `WWW-Authenticate`), never an anonymous request. `request_api_token(request)` tells routes
+  a token is in use; `require_session_user` (password, profile, stored OpenRouter key, token
+  management, device approval, Stripe checkout/confirm) answers 403 to tokens.
+- Spending limit: `debates.api_token_id` = the token that started the run (create or draft start;
+  the browser clears it). `services/api_tokens.budget_left` = limit − net ledger of those debates −
+  `config_json.billing.estimate_usd` of its queued/running runs (`media_estimate_usd` while their
+  automatic media build runs); `_estimate` sets `EstimateOut.token_budget_usd` and `sufficient`,
+  `_require_sufficient` answers 402. Limited tokens cannot start paid media builds (`POST /media`
+  with premium voices or AI pictures → 403). `with_token_defaults`: token debates are private
+  unless `auto_publish` is sent explicitly (`model_fields_set`).
+- `debatr login` = device flow (RFC 8628 style): `POST /api/auth/device` (login rate limit) →
+  `{device_code, user_code "WDJB-MJHT", verification_uri_complete = SITE_URL/device?code=…}`;
+  the signed-in browser approves on `/device` (`GET|POST /api/auth/device/{code}[/approve|/deny]`,
+  60 per hour per IP so codes cannot be guessed; creates the token with name / limit / expiry); the CLI polls `POST /api/auth/device/token`
+  (`pending | approved | denied | expired`) and receives the token once (GETDEL). Requests live in
+  Redis 10 min (`device:{sha256(device_code)}`, `device:user:{code}`, a `:claim` key so a request is
+  decided once); the waiting token is Fernet-encrypted.
+- The CLI streams `GET /stream` itself: `LiveView` prints a turn only from its `turn_started`
+  (joined mid-turn → whole text on `turn_completed`), catches up from `GET /debates/{id}` on
+  `connected` and after reconnects, hides studio markers (`markers.StreamedTurn` holds back a
+  trailing `[`/blanks) and styles inline Markdown (`styling.InlineMarkdown`).
+- MCP (`debatr mcp`, stdio): `start_debate` returns at once; `get_debate(wait_seconds)` follows the
+  SSE stream with `ctx.report_progress` per turn (clients usually cancel calls after ~60 s, hence
+  the default 45). The token is re-read from env/config on every call; ApiError → ToolError.
+
 ### Credits and payments
 
 - `users.credits_usd` is the balance; `credit_transactions` is the append-only ledger. Every
@@ -321,7 +377,14 @@ Stopping: `POST /api/debates/{id}/stop` sets the status, sets `debate:{id}:stop`
   never raw axios. No `alert`/`confirm`: use `useToast` and `ConfirmDialog`. Styling uses the
   theme tokens from `src/index.css` (`bg-surface`, `text-muted`, `font-display`, `rounded-panel`…).
 - Brand name and copy live in `src/lib/brand.ts`; speaker colours in `src/lib/format.ts` mirror
-  `backend/app/services/media/timeline.py` (PALETTE / MODERATOR_COLOR / JUDGE_COLOR).
+  `backend/app/services/media/timeline.py` (PALETTE / MODERATOR_COLOR / JUDGE_COLOR) and
+  `cli/src/debatr/render.py`.
+- The CLI is a separate package that only uses the public API: when `DebateConfig`, `DebateDetail`
+  or SSE events change, update `cli/src/debatr/debate.py` / `render.py` and the fake server in
+  `cli/tests/conftest.py`. Its version lives in `cli/src/debatr/__init__.py`; pushing a
+  `cli-vX.Y.Z` tag publishes it to PyPI (`.github/workflows/cli-release.yml`, trusted publishing,
+  environment `pypi`). `hideStudioMarkers` in `lib/format.ts` and `cli/src/debatr/markers.py` are
+  twins.
 - Tests are pure (no DB/Redis). Use `httpx.MockTransport` via `OpenRouterClient(transport=...)`
   for client tests. Put integration checks behind Docker.
 

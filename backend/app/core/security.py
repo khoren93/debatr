@@ -54,3 +54,34 @@ def mask_key(last4: str | None, prefix: str = "sk-or-") -> str | None:
 
 def random_token(nbytes: int = 16) -> str:
     return secrets.token_urlsafe(nbytes)
+
+
+# --- API tokens (CLI, scripts, MCP agents) ------------------------------------
+
+# A fixed prefix makes leaked tokens easy to recognise (and to register with secret scanners).
+API_TOKEN_PREFIX = "debatr_"
+_API_TOKEN_BYTES = 32  # 256 bits of randomness -> 43 url-safe characters
+_API_TOKEN_MIN_LENGTH = len(API_TOKEN_PREFIX) + 40
+_API_TOKEN_MAX_LENGTH = len(API_TOKEN_PREFIX) + 64
+
+
+def new_api_token() -> str:
+    return API_TOKEN_PREFIX + secrets.token_urlsafe(_API_TOKEN_BYTES)
+
+
+def hash_api_token(token: str) -> str:
+    """Lookup hash of an API token. Tokens are 256-bit random values, so a fast unsalted hash is
+    enough (unlike passwords) and keeps the lookup a single indexed query."""
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def looks_like_api_token(value: str) -> bool:
+    return (
+        value.startswith(API_TOKEN_PREFIX)
+        and _API_TOKEN_MIN_LENGTH <= len(value) <= _API_TOKEN_MAX_LENGTH
+        and value.isascii()
+    )
+
+
+def mask_api_token(last4: str) -> str:
+    return f"{API_TOKEN_PREFIX}…{last4}"

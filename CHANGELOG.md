@@ -38,6 +38,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Fact-check** (wizard switch, paid like the debate): a web search checks the figures and
   quotes on screen — verified, disputed or unverified, with sources. Opponents see the results,
   the judge weighs them, and the model leaderboard shows each model's accuracy.
+- **`debatr` command-line tool** (`cli/`, `uv tool install debatr`): sign in by approving your
+  computer in the browser (`debatr login`), then run a debate with one command and watch the
+  turns stream into the terminal, with the judge's verdict at the end. Also `watch`, `show`
+  (Markdown / JSON export), `list`, `stop`, `publish`, `audio` (MP3 download), `models`,
+  `gallery` and `leaderboard`; `--json` everywhere for scripts. Paid runs are estimated first
+  and need a confirmation or `--yes` / `--max-cost`.
+- **MCP server for AI agents** (`debatr mcp`): Claude, Cursor and other MCP clients can start a
+  debate, wait for it with progress per turn and read the verdict and transcript, browse the
+  gallery and the model leaderboard. A per-debate cost cap (`DEBATR_MAX_COST_USD`) applies.
+- **API tokens** (Account → API tokens): personal tokens for the CLI, scripts and agents, each
+  with an optional spending limit and expiry, shown once and revocable at any time. A token can
+  run and manage debates but never change the password, stored keys or payments, or create
+  other tokens. Debates started with a token are private unless the request publishes them.
 
 ### Changed
 

@@ -165,6 +165,8 @@ class EstimateOut(BaseModel):
     paid_models: list[str] = Field(default_factory=list)
     credits_before: float | None = None
     credits_after: float | None = None
+    # What the API token making the request may still spend (null: browser or no limit).
+    token_budget_usd: float | None = None
     sufficient: bool = True
 
 

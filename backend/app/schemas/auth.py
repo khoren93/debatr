@@ -2,6 +2,7 @@
 
 import re
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -68,3 +69,80 @@ class SetOpenRouterKeyRequest(BaseModel):
 
 class OkResponse(BaseModel):
     ok: bool = True
+
+
+# --- API tokens ---------------------------------------------------------------
+
+
+class CreateApiTokenRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    # None = the token never expires.
+    expires_in_days: int | None = Field(default=None, ge=1, le=3650)
+    # Credits the token may spend in total; None = no limit, 0 = free models only.
+    spend_limit_usd: float | None = Field(default=None, ge=0, le=100_000)
+
+    @field_validator("name")
+    @classmethod
+    def _name(cls, value: str) -> str:
+        value = " ".join(value.split())
+        if not value:
+            raise ValueError("Give the token a name")
+        return value
+
+
+class ApiTokenOut(BaseModel):
+    id: str
+    name: str
+    token_hint: str  # "debatr_…a1b2"
+    created_at: datetime
+    last_used_at: datetime | None = None
+    expires_at: datetime | None = None
+    expired: bool = False
+    spend_limit_usd: float | None = None
+    # Credits charged for the runs the token started (and their voices / pictures).
+    spent_usd: float = 0.0
+
+
+class ApiTokenCreated(ApiTokenOut):
+    token: str  # the secret, shown only in this response
+
+
+# --- `debatr login` (device authorization, RFC 8628 style) ---------------------
+
+DeviceStatus = Literal["pending", "approved", "denied", "expired"]
+
+
+class DeviceStartRequest(BaseModel):
+    client_name: str = Field(default="Debatr CLI", min_length=1, max_length=100)
+
+    @field_validator("client_name")
+    @classmethod
+    def _client_name(cls, value: str) -> str:
+        return " ".join(value.split()) or "Debatr CLI"
+
+
+class DeviceStartOut(BaseModel):
+    device_code: str  # secret, only the CLI knows it
+    user_code: str  # "WDJB-MJHT", confirmed by the user in the browser
+    verification_uri: str
+    verification_uri_complete: str
+    expires_in: int  # seconds
+    interval: int  # seconds between polls
+
+
+class DeviceInfoOut(BaseModel):
+    user_code: str
+    client_name: str
+    status: DeviceStatus
+    expires_at: datetime
+
+
+class DevicePollRequest(BaseModel):
+    device_code: str = Field(min_length=1, max_length=200)
+
+
+class DevicePollOut(BaseModel):
+    status: DeviceStatus
+    # Only once, in the first poll after the approval.
+    token: str | None = None
+    api_token: ApiTokenOut | None = None

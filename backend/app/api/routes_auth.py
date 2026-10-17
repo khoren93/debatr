@@ -1,4 +1,7 @@
-"""Accounts: register, login, profile, personal OpenRouter key."""
+"""Accounts: register, login, profile, personal OpenRouter key.
+
+Changing the account (profile, password, stored key) needs the browser session; API tokens can
+only read it (`GET /me`)."""
 
 import logging
 
@@ -6,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.auth import get_current_user, login_session, logout_session, require_user
+from app.core.auth import get_current_user, login_session, logout_session, require_session_user
 from app.core.config import settings
 from app.core.db import get_db
 from app.core.ratelimit import enforce_login_limit
@@ -120,7 +123,7 @@ async def me(user: User | None = Depends(get_current_user)) -> UserOut | None:
 @router.patch("/me", response_model=UserOut)
 async def update_profile(
     body: UpdateProfileRequest,
-    user: User = Depends(require_user),
+    user: User = Depends(require_session_user),
     db: AsyncSession = Depends(get_db),
 ) -> UserOut:
     if body.display_name is not None:
@@ -134,7 +137,7 @@ async def update_profile(
 @router.post("/me/password", response_model=OkResponse)
 async def change_password(
     body: ChangePasswordRequest,
-    user: User = Depends(require_user),
+    user: User = Depends(require_session_user),
     db: AsyncSession = Depends(get_db),
 ) -> OkResponse:
     if not verify_password(body.current_password, user.password_hash):
@@ -147,7 +150,7 @@ async def change_password(
 @router.put("/me/openrouter-key", response_model=UserOut)
 async def set_openrouter_key(
     body: SetOpenRouterKeyRequest,
-    user: User = Depends(require_user),
+    user: User = Depends(require_session_user),
     db: AsyncSession = Depends(get_db),
 ) -> UserOut:
     """Store a personal OpenRouter key (encrypted). Paid models then run on it, not on credits."""
@@ -162,7 +165,7 @@ async def set_openrouter_key(
 
 @router.delete("/me/openrouter-key", response_model=UserOut)
 async def remove_openrouter_key(
-    user: User = Depends(require_user), db: AsyncSession = Depends(get_db)
+    user: User = Depends(require_session_user), db: AsyncSession = Depends(get_db)
 ) -> UserOut:
     user.openrouter_key_enc = None
     user.openrouter_key_last4 = None

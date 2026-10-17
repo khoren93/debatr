@@ -24,6 +24,29 @@ jobs:
       - run: uv run pyright
       - run: uv run pytest -q
 
+  cli:
+    name: CLI + MCP server (Python ${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ["3.10", "3.13"]
+    defaults:
+      run:
+        working-directory: cli
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: cli/uv.lock
+          python-version: ${{ matrix.python }}
+      - run: uv sync --frozen
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run pyright
+      - run: uv run pytest -q
+      - run: uv build
+
   frontend:
     name: Frontend (tsc, eslint, build)
     runs-on: ubuntu-latest

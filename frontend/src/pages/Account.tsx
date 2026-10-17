@@ -6,6 +6,7 @@ import { useAuth } from '../auth/AuthContext';
 import { Page } from '../components/layout/AppShell';
 import { useToast } from '../components/ui';
 import { useBillingConfig } from '../hooks/useBillingConfig';
+import { ApiTokensCard } from '../components/account/ApiTokensCard';
 import { CreditsCard } from '../components/account/CreditsCard';
 import { LocalKeysCard } from '../components/account/LocalKeysCard';
 import { ProfileHeader } from '../components/account/ProfileHeader';
@@ -70,6 +71,7 @@ const Account = () => {
           <LocalKeysCard user={user} onUser={setUser} />
         </div>
       </div>
+      <ApiTokensCard className="mt-3.5" />
       <TransactionsCard reloadKey={user.credits_usd} className="mt-3.5" />
     </Page>
   );

@@ -7,7 +7,7 @@ s            ?=
 
 .DEFAULT_GOAL := help
 .PHONY: help install dev-up dev-down api worker media-worker web migrate migration \
-	lint format typecheck test check build up down restart logs ps deploy prod-logs prod-ps
+	lint format typecheck test check build cli up down restart logs ps deploy prod-logs prod-ps
 
 help: ## Show this list
 	@grep -E '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | \
@@ -15,8 +15,9 @@ help: ## Show this list
 
 # --- Native development ---------------------------------------------------------------
 
-install: ## Install backend (uv) and frontend (npm) dependencies
+install: ## Install backend (uv), CLI (uv) and frontend (npm) dependencies
 	cd backend && uv sync
+	cd cli && uv sync
 	cd frontend && npm install
 
 dev-up: ## Start Postgres + Redis for native dev
@@ -44,24 +45,32 @@ migration: ## Create a migration: make migration m="describe change"
 	@test -n "$(m)" || (echo 'Usage: make migration m="describe change"' && exit 1)
 	cd backend && uv run alembic revision --autogenerate -m "$(m)"
 
+cli: ## Run the CLI from the repo against the local stack: make cli a="run 'Tabs or spaces?'"
+	cd cli && uv run debatr --url $${DEBATR_URL:-http://localhost} $(a)
+
 # --- Quality --------------------------------------------------------------------------
 
 lint: ## Ruff + eslint
 	cd backend && uv run ruff check .
+	cd cli && uv run ruff check .
 	cd frontend && npm run lint
 
 format: ## Ruff format + autofix
 	cd backend && uv run ruff check --fix . && uv run ruff format .
+	cd cli && uv run ruff check --fix . && uv run ruff format .
 
 typecheck: ## Pyright + tsc
 	cd backend && uv run pyright
+	cd cli && uv run pyright
 	cd frontend && npm run typecheck
 
-test: ## Backend tests
+test: ## Backend and CLI tests
 	cd backend && uv run pytest -q
+	cd cli && uv run pytest -q
 
 check: ## Everything CI runs (lint, format check, types, tests, build)
 	cd backend && uv run ruff check . && uv run ruff format --check . && uv run pyright && uv run pytest -q
+	cd cli && uv run ruff check . && uv run ruff format --check . && uv run pyright && uv run pytest -q
 	cd frontend && npm run check && npm run build
 
 build: ## Production frontend build

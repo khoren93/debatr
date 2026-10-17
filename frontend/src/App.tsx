@@ -10,6 +10,7 @@ import Leaderboard from './pages/Leaderboard';
 import Account from './pages/Account';
 import Login from './pages/Login';
 import Register from './pages/Register';
+import Device from './pages/Device';
 
 // The wizard and the debate page pull in Remotion (player + browser renderer): load them lazily.
 const CreateDebate = lazy(() => import('./pages/CreateDebate'));
@@ -72,6 +73,14 @@ function App() {
           element={
             <RequireAuth>
               <Account />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/device"
+          element={
+            <RequireAuth>
+              <Device />
             </RequireAuth>
           }
         />

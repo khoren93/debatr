@@ -57,6 +57,16 @@ Users sign up, run free models or bring their own OpenRouter key, buy credits wi
 - **👤 Your studio**: a library of drafts and finished debates, credits topped up via Stripe, or
   your own OpenRouter key to run models at your own cost.
 
+### 🤖 From the terminal and for AI agents
+- **⌨️ `debatr` CLI**: `uv tool install debatr`, approve your computer in the browser once and run
+  a debate with one command. The turns stream into your terminal; `--json` makes it scriptable,
+  and transcripts and audio export from there too.
+- **🔌 MCP server**: give Claude, Cursor and other agents a debate tool (`debatr mcp`). They can
+  stage a debate between any models to stress-test a decision or see both sides of a question,
+  then read the verdict.
+- **🔑 API tokens**: one per device or agent, each with an optional spending limit and expiry,
+  revocable at any time. A token runs debates but can never touch your password, keys or payments.
+
 ### 🐳 Self-host it
 - One `docker compose up`: Postgres, Redis, API, workers and a Caddy-served frontend.
 
@@ -104,6 +114,12 @@ Users sign up, run free models or bring their own OpenRouter key, buy credits wi
 - **State/Routing**: React Router, Axios
 - **Streaming**: Server-Sent Events (SSE)
 - **Video**: Remotion Player + `@remotion/web-renderer` (MP4 encoded in the visitor's browser)
+
+### CLI and MCP server
+- **Package**: [`debatr`](cli/README.md) (Python 3.10+, [Typer](https://typer.tiangolo.com/) +
+  [Rich](https://rich.readthedocs.io/), httpx), installable with `uv tool install debatr`
+- **Agents**: [MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk) (stdio server)
+- **Auth**: personal API tokens (`Authorization: Bearer debatr_…`) and a browser device login
 
 ### DevOps
 - **Containers**: Docker Compose (Postgres, Redis, API, worker, Caddy)
@@ -236,6 +252,25 @@ Run `make` to list every target. The most useful ones:
 5. **Account**: top up credits (Stripe), see this month's usage, store a personal OpenRouter key so paid
    models run on your own account instead of credits.
 
+### ⌨️ Terminal and AI agents
+
+The [`debatr` CLI](cli/README.md) talks to any Debatr server over its public API:
+
+```bash
+uv tool install debatr
+debatr login                                  # approve this computer in the browser
+debatr run "Should cities ban cars?" -d anthropic/claude-sonnet-4.5 -d openai/gpt-5
+debatr show <id> --format markdown -o debate.md
+```
+
+For AI agents, `debatr mcp` is an MCP server, e.g. for Claude Code:
+`claude mcp add debatr --scope user -- uvx debatr mcp`. Agents start a debate, wait for it with
+progress per turn and read the verdict. They spend credits only within the token's spending
+limit and `DEBATR_MAX_COST_USD` per debate, and their debates stay private unless they publish.
+
+Scripts and CI can use a token from **Account → API tokens** (`DEBATR_TOKEN`). For a self-hosted
+server pass `--url http://localhost` (or set `DEBATR_URL`).
+
 ### 💳 Credits
 
 - Every run charges the OpenRouter cost reported for the debate × `CREDIT_MARKUP` once it finishes.
@@ -268,6 +303,10 @@ The system uses an event-driven architecture to handle long-running LLM generati
    picks highlights for Shorts and writes `timeline.json`. The browser renders MP4s from that timeline.
 8. **Accounts**: the login lives in the signed session cookie; personal OpenRouter keys are stored
    encrypted and only ever handed to the worker through Redis for the duration of a run.
+9. **API tokens**: the CLI, scripts and agents send `Authorization: Bearer debatr_…`. Only a
+   SHA-256 hash is stored; `debatr login` gets its token through a device flow (a short code
+   confirmed in the browser). Runs remember the token that started them, so its spending limit
+   counts their charges; account settings and payments accept only the browser session.
 
 **Configuration** (see `.env.example`): `OPENROUTER_API_KEY`, `ELEVENLABS_API_KEY`, `ALLOWED_ORIGINS`,
 `SIGNUP_BONUS_USD`, `CREDIT_MARKUP`, `TTS_CREDIT_PRICE_PER_1K_CHARS`, `TOPUP_AMOUNTS_USD`,
