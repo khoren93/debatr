@@ -52,9 +52,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   run and manage debates but never change the password, stored keys or payments, or create
   other tokens. Debates started with a token are private unless the request publishes them.
 - **Resume a failed debate**: when a model fails to answer, the debate stops and its owner can
-  resume it (Resume in the error banner, `debatr resume DEBATE`, the `resume_debate` MCP tool,
-  `POST /api/debates/{id}/resume`). The failed turn runs again with the same models, the turns
-  before it stay, and only the turns that are left are checked against the balance and charged.
+  resume it (Resume in the error banner, `POST /api/debates/{id}/resume`, and in CLI 0.2.0
+  `debatr resume DEBATE` and the `resume_debate` MCP tool). The failed turn runs again with the
+  same models, the turns before it stay, and only the turns that are left are checked against
+  the balance and charged.
 
 ### Changed
 
