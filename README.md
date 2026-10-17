@@ -239,7 +239,7 @@ Run `make` to list every target. The most useful ones:
 1. Open the web interface at `https://your-domain.com` (or `http://localhost`) and create an account
    (new accounts receive `SIGNUP_BONUS_USD` of credits, 0 by default).
 2. Click **"+ New debate"** and walk through the wizard:
-   - **Topic**: type a question or pick one from the library, choose language, rounds and reply length.
+   - **Topic**: type a question or pick one of today's trending topics from the news, choose language, rounds and reply length.
    - **Speakers**: a host plus two or more debaters, each with a model (OpenRouter's free router by
      default), a voice and a persona. The voice engine is chosen here too: free Edge voices or premium
      ElevenLabs voices.

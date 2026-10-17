@@ -1,0 +1,55 @@
+"""Periodic jobs: `python -m app.scheduler` (one process; the `scheduler` service in Docker).
+
+RQ's cron scheduler only enqueues: the workers run the jobs. The trending-topics refresh is
+enqueued every hour and decides itself whether a new batch is due (TRENDING_REFRESH_HOURS), so a
+restart never builds an extra batch. `--refresh-trending` builds a batch right now, in-process.
+"""
+
+import argparse
+import logging
+
+from redis import Redis
+from rq.cron import CronScheduler
+
+from app.core.config import settings
+from app.core.logging import setup_logging
+from app.core.redis import get_sync_redis
+from app.services.queue_manager import QUEUE_NAME
+from app.services.trending import JOB_TIMEOUT, refresh_trending_job
+
+logger = logging.getLogger(__name__)
+
+TRENDING_TICK_SECONDS = 3600
+
+
+def build_scheduler(conn: Redis) -> CronScheduler:
+    cron = CronScheduler(connection=conn, logging_level=settings.LOG_LEVEL)
+    cron.register(
+        refresh_trending_job,
+        queue_name=QUEUE_NAME,
+        interval=TRENDING_TICK_SECONDS,
+        job_timeout=JOB_TIMEOUT,
+        result_ttl=300,
+    )
+    return cron
+
+
+def main(argv: list[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(description="AI Debates periodic jobs")
+    parser.add_argument(
+        "--refresh-trending", action="store_true", help="build a trending batch now and exit"
+    )
+    args = parser.parse_args(argv)
+
+    setup_logging()
+    if args.refresh_trending:
+        refresh_trending_job(force=True)
+        return
+    conn = get_sync_redis()
+    conn.ping()
+    logger.info("Starting the scheduler (trending refresh check every %d s)", TRENDING_TICK_SECONDS)
+    build_scheduler(conn).start()
+
+
+if __name__ == "__main__":
+    main()

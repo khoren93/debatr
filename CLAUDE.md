@@ -13,12 +13,15 @@ a local export may sit in the git-ignored `design/` folder (`Debatr Studio.html`
 backend/            FastAPI API + RQ worker (Python 3.12+, managed with uv)
   app/main.py         FastAPI app, session + CORS middleware, admin panel, /api/health
   app/worker.py       RQ worker entrypoint (`python -m app.worker`)
+  app/scheduler.py    periodic jobs (`python -m app.scheduler`, RQ cron: hourly trending check;
+                      `--refresh-trending` builds a batch now)
   app/core/           config (pydantic-settings), db (async SQLAlchemy), redis, logging,
                       ratelimit, auth (session cookie or Bearer API token; session-only deps),
                       security (bcrypt, Fernet, API token format/hash), ids
   app/api/            routers: auth, tokens (API tokens + `debatr login` device flow), billing
                       (Stripe), debates, gallery (+ leaderboard), reactions (likes/votes), models,
-                      presets, stream (SSE), media; serializers.py builds the shared response models
+                      presets, topics (trending), stream (SSE), media; serializers.py builds the
+                      shared response models
   app/services/       orchestrator (RQ jobs), scheduler (turn order), prompt_builder,
                       api_tokens (token budget, private-by-default, device flow in Redis),
                       openrouter_client, events (pub/sub), queue_manager, credits (ledger),
@@ -27,7 +30,8 @@ backend/            FastAPI API + RQ worker (Python 3.12+, managed with uv)
                       check + auto-publish), views (view counter),
                       engagement (likes/audience votes), ranking (trending score, model leaderboard),
                       studio (live scenes per turn, disputes, judge evidence), factcheck (web
-                      check of on-screen figures), markers ([visual: …] / [dispute N: …])
+                      check of on-screen figures), markers ([visual: …] / [dispute N: …]),
+                      trending (RSS news → daily debate topics with source links)
   app/services/media/ audio pipeline: script (markdown→speech), tts/ (elevenlabs, edge),
                       ffmpeg, highlights (LLM picks shorts), visuals (LLM visual director),
                       sketch (SVG line art → sanitized path data), images (Commons photos / AI
@@ -41,9 +45,9 @@ backend/            FastAPI API + RQ worker (Python 3.12+, managed with uv)
 frontend/           React 19 + Vite 8 + Tailwind 4 + TypeScript
   src/index.css       Tailwind theme tokens (colors ink/surface/accent/pro/con/host…, fonts, radii)
   src/api/            axios client, typed API functions per area (auth, billing, debates,
-                      gallery, media, models), shared types.ts, timeline.ts
+                      gallery, media, models, topics), shared types.ts, timeline.ts
   src/auth/           AuthContext (useAuth), RequireAuth route guard
-  src/hooks/          useDebateStream (SSE), useDebateMedia (polling), useAudioClock,
+  src/hooks/          useDebateStream (SSE), useDebateMedia (polling), useAudioClock, useTrendingTopics,
                       useModels, useBillingConfig, useVoices (wizard voice catalogue),
                       useLeaderboard (cached model ranking), useElevenLabsKeyStatus (checks
                       the browser's ElevenLabs key)
@@ -102,6 +106,8 @@ uv sync                                   # create .venv and install (incl. dev 
 uv run uvicorn app.main:app --reload      # API on :8000 (docs at /api/docs)
 RQ_SIMPLE_WORKER=true uv run python -m app.worker   # worker for both queues (SimpleWorker avoids fork issues on macOS)
 uv run python -m app.worker --queues media          # media-only worker (needs ffmpeg on PATH)
+uv run python -m app.scheduler                      # periodic jobs (optional natively, see "Trending topics")
+uv run python -m app.scheduler --refresh-trending   # build a trending-topics batch now (`make trending`)
 uv run alembic upgrade head               # apply migrations
 uv run alembic revision --autogenerate -m "describe change"
 uv run ruff check . && uv run ruff format .   # lint + format
@@ -354,6 +360,31 @@ Stopping: `POST /api/debates/{id}/stop` sets the status, sets `debate:{id}:stop`
   SSE stream with `ctx.report_progress` per turn (clients usually cancel calls after ~60 s, hence
   the default 45). The token is re-read from env/config on every call; ApiError → ToolError.
 
+### Trending topics (news → debate topics)
+
+- `services/trending.py`: `refresh_trending_job` reads the RSS feeds in `FEEDS` (BBC, Guardian,
+  NPR, NYT, Al Jazeera, DW, Google News with the real outlet from `<source>`, Hacker News, Ars,
+  Verge, ScienceDaily), keeps headlines ≤ 48 h old with http(s) links, drops blocked ones, sends a
+  round-robin pool (3 headlines per wanted topic, 60–400) to `TRENDING_MODEL` (Gemini Flash,
+  ~$0.02/batch, system key) and keeps only topics that cite pool headlines (no invented stories).
+  Rank = model heat + 1.5 per extra outlet carrying the story (up to 3). The best
+  `TRENDING_TOPIC_COUNT` are saved as a `TrendingBatch` with `TrendingTopic` rows (`question`,
+  `label`, `brief` — what happened, because the debaters do not know recent news — `category`
+  from `TOPIC_CATEGORIES`, `heat`, `outlets`, `sources_json` = original articles). The newest batch
+  is the one shown; older batches stay as the archive (`stats_json`: feeds, headlines, dropped
+  topics with reasons). Repeats across days are fine by design.
+- Safety, three layers, all strict: `BLOCKED_TERMS` (sexual content, violence/gore, tragedies,
+  suicide…) on every headline before the model sees it and on the generated text, then a second
+  focused review call (`SAFETY_RULES`, "when in doubt, reject"). No usable review answer → the
+  batch is not saved (fails closed) and visitors keep the previous one. Admin: Trending topics →
+  Hide; Trending batches → "Build a new batch now".
+- Schedule: `TRENDING_REFRESH_HOURS` (24 in production, 720 in dev `.env`, 0 = off). The
+  `scheduler` service enqueues the job hourly; the job builds only when `is_due` (newest batch
+  older than the interval minus 30 min slack) and holds `trending:refresh:lock`, so restarts and
+  extra triggers never add batches. `GET /api/topics/trending` (public) also enqueues it on a
+  stale read (at most every 10 min via `trending:refresh:queued`), so native dev works without
+  the scheduler. The wizard's "Trending today" chips fill `topic` + `description` (= brief).
+
 ### Credits and payments
 
 - `users.credits_usd` is the balance; `credit_transactions` is the append-only ledger. Every
@@ -416,7 +447,8 @@ Stopping: `POST /api/debates/{id}/stop` sets the status, sets `debate:{id}:stop`
   undecryptable (users must re-enter them).
 - Media: `MEDIA_ROOT` is `./media` natively and the `media_data` volume (`/media`) in Docker;
   the worker image target installs ffmpeg, the api target does not. Docker runs `worker`
-  (`--queues default`) and `media-worker` (`--queues media`); natively one worker takes both.
+  (`--queues default`), `media-worker` (`--queues media`) and `scheduler` (RQ cron, api image);
+  natively one worker takes both queues.
 - ElevenLabs voice lists: `/v1/voices` holds only the account's voices (premade ones are English).
   For other languages `tts/elevenlabs.list_voices` adds native Voice Library voices
   (`/v1/shared-voices?language=`, no surcharged ones) — on paid plans only: free plans get

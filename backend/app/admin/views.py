@@ -3,6 +3,7 @@ from typing import Any
 
 from sqladmin import ModelView, action
 from sqladmin.filters import BooleanFilter, StaticValuesFilter
+from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import RedirectResponse
 
@@ -15,11 +16,15 @@ from app.models.models import (
     DebateParticipant,
     DebateVote,
     Session,
+    TrendingBatch,
+    TrendingTopic,
     Turn,
     User,
 )
 from app.services.engagement import recount
 from app.services.moderation import mark_admin_decision, publish_async, wants_public
+from app.services.queue_manager import enqueue_trending_refresh
+from app.services.trending import TOPIC_CATEGORIES
 
 
 class UserAdmin(ModelView, model=User):
@@ -240,3 +245,85 @@ class SessionAdmin(ModelView, model=Session):
     name = "Legacy session"
     name_plural = "Legacy sessions"
     icon = "fa-solid fa-clock-rotate-left"
+
+
+def _back(request: Request, view: ModelView) -> RedirectResponse:
+    referer = request.headers.get("referer")
+    return RedirectResponse(referer or request.url_for("admin:list", identity=view.identity))
+
+
+class TrendingBatchAdmin(ModelView, model=TrendingBatch):
+    """Trending-topic refreshes; the newest batch is what the wizard shows."""
+
+    column_list = [
+        TrendingBatch.created_at,
+        TrendingBatch.model,
+        TrendingBatch.topic_count,
+        TrendingBatch.cost_usd,
+        TrendingBatch.id,
+    ]
+    column_details_exclude_list = [TrendingBatch.topics]
+    column_sortable_list = [TrendingBatch.created_at, TrendingBatch.cost_usd]
+    column_default_sort = (TrendingBatch.created_at, True)
+    can_create = False
+    can_edit = False
+    can_delete = True
+    name = "Trending batch"
+    name_plural = "Trending batches"
+    icon = "fa-solid fa-newspaper"
+
+    @action(
+        name="build_now",
+        label="Build a new batch now",
+        confirmation_message="Fetch the news and build a new batch now (takes about a minute)?",
+    )
+    async def build_now(self, request: Request) -> RedirectResponse:
+        await run_in_threadpool(enqueue_trending_refresh, True)
+        return _back(request, self)
+
+
+class TrendingTopicAdmin(ModelView, model=TrendingTopic):
+    """Topics of every batch. Hide one to take it off the site at once."""
+
+    column_list = [
+        TrendingTopic.rank,
+        TrendingTopic.question,
+        TrendingTopic.category,
+        TrendingTopic.heat,
+        TrendingTopic.outlets,
+        TrendingTopic.is_hidden,
+        TrendingTopic.created_at,
+    ]
+    column_searchable_list = [TrendingTopic.question, TrendingTopic.label]
+    column_filters = [
+        StaticValuesFilter(
+            TrendingTopic.category, values=[(c, c) for c in TOPIC_CATEGORIES], title="Category"
+        ),
+        BooleanFilter(TrendingTopic.is_hidden, title="Hidden"),
+    ]
+    column_sortable_list = [TrendingTopic.created_at, TrendingTopic.rank, TrendingTopic.heat]
+    column_default_sort = [(TrendingTopic.created_at, True), (TrendingTopic.rank, False)]
+    form_excluded_columns = [TrendingTopic.batch, TrendingTopic.created_at]
+    can_create = False
+    can_delete = True
+    name = "Trending topic"
+    name_plural = "Trending topics"
+    icon = "fa-solid fa-fire"
+
+    async def _set_hidden(self, request: Request, hidden: bool) -> RedirectResponse:
+        pks = [pk for pk in request.query_params.get("pks", "").split(",") if pk]
+        async with AsyncSessionLocal() as db:
+            for pk in pks:
+                topic = await db.get(TrendingTopic, uuid.UUID(pk))
+                if topic is not None:
+                    topic.is_hidden = hidden
+            await db.commit()
+        return _back(request, self)
+
+    @action(name="hide", label="Hide from the site")
+    async def hide(self, request: Request) -> RedirectResponse:
+        return await self._set_hidden(request, True)
+
+    @action(name="show", label="Show again")
+    async def show(self, request: Request) -> RedirectResponse:
+        return await self._set_hidden(request, False)

@@ -69,6 +69,11 @@ class Settings(BaseSettings):
     FACT_CHECK_MODEL: str = "perplexity/sonar"
     FACT_CHECK_MAX_PER_TURN: int = 2
     FACT_CHECK_PRICE_USD: float = 0.006  # per check, for estimates
+    # Trending topics (services/trending.py): RSS headlines -> debate topics, one batch per run.
+    # Hours between batches; 0 turns automatic refreshes off (the admin can still build one).
+    TRENDING_REFRESH_HOURS: int = 24
+    TRENDING_MODEL: str = "google/gemini-2.5-flash"  # system key, ~$0.02 per batch
+    TRENDING_TOPIC_COUNT: int = 50
     MEDIA_GAP_MS: int = 600
     MEDIA_LOUDNESS_LUFS: float = -16.0
     FFMPEG_BIN: str = "ffmpeg"

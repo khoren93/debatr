@@ -26,6 +26,7 @@ dependencies = [
     "bcrypt>=5.0.0",
     "stripe>=16.0.0",
     "cryptography>=50.0.2",
+    "feedparser>=6.0.14",
 ]
 
 [dependency-groups]

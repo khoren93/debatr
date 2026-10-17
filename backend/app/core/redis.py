@@ -70,3 +70,13 @@ def device_user_code_key(user_code: str) -> str:
 def device_claim_key(device_code_hash: str) -> str:
     """Set once when the request is approved or denied, so it is decided only once."""
     return f"device:{device_code_hash}:claim"
+
+
+def trending_lock_key() -> str:
+    """Held while a trending-topics batch is being built (app.services.trending)."""
+    return "trending:refresh:lock"
+
+
+def trending_queued_key() -> str:
+    """Set by the API when it enqueues a refresh, so stale reads enqueue it only once."""
+    return "trending:refresh:queued"

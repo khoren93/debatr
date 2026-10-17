@@ -97,6 +97,23 @@ services:
       redis:
         condition: service_healthy
 
+  # Periodic jobs (RQ cron): enqueues the hourly trending-topics check; the worker runs it.
+  scheduler:
+    build:
+      context: ./backend
+      target: api
+    restart: always
+    command: python -m app.scheduler
+    env_file:
+      - .env
+    environment:
+      <<: *backend-env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
   frontend:
     container_name: ai-debates-frontend-1
     build:

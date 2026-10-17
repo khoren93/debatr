@@ -11,6 +11,7 @@ MEDIA_QUEUE_NAME = "media"  # TTS / timeline builds (long-running, separate work
 
 _ORCHESTRATOR = "app.services.orchestrator"
 _MEDIA_JOBS = "app.services.media.jobs"
+_TRENDING = "app.services.trending"
 
 
 def get_queue(name: str = QUEUE_NAME) -> Queue:
@@ -58,4 +59,14 @@ def enqueue_media_build(debate_id: str) -> None:
         queue_name=MEDIA_QUEUE_NAME,
         timeout=settings.MEDIA_JOB_TIMEOUT,
         debate_id=debate_id,
+    )
+
+
+def enqueue_trending_refresh(force: bool = False) -> None:
+    """Build a new trending-topics batch if one is due (`force`: now)."""
+    _enqueue(
+        f"{_TRENDING}.refresh_trending_job",
+        queue_name=QUEUE_NAME,
+        timeout=900,  # trending.JOB_TIMEOUT
+        force=force,
     )

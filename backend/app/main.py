@@ -18,6 +18,8 @@ from app.admin.views import (
     LikeAdmin,
     ParticipantAdmin,
     SessionAdmin,
+    TrendingBatchAdmin,
+    TrendingTopicAdmin,
     TurnAdmin,
     UserAdmin,
     VoteAdmin,
@@ -33,6 +35,7 @@ from app.api import (
     routes_reactions,
     routes_stream,
     routes_tokens,
+    routes_topics,
 )
 from app.core.config import settings
 from app.core.db import engine
@@ -105,6 +108,8 @@ admin.add_view(LikeAdmin)
 admin.add_view(VoteAdmin)
 admin.add_view(ParticipantAdmin)
 admin.add_view(TurnAdmin)
+admin.add_view(TrendingBatchAdmin)
+admin.add_view(TrendingTopicAdmin)
 admin.add_view(SessionAdmin)
 
 # Routers
@@ -113,6 +118,7 @@ app.include_router(routes_tokens.router, prefix="/api/auth", tags=["api tokens"]
 app.include_router(routes_billing.router, prefix="/api/billing", tags=["billing"])
 app.include_router(routes_models.router, prefix="/api/models", tags=["models"])
 app.include_router(routes_presets.router, prefix="/api/presets", tags=["presets"])
+app.include_router(routes_topics.router, prefix="/api/topics", tags=["topics"])
 app.include_router(routes_gallery.router, prefix="/api/gallery", tags=["gallery"])
 app.include_router(routes_debates.router, prefix="/api/debates", tags=["debates"])
 app.include_router(routes_reactions.router, prefix="/api/debates", tags=["reactions"])

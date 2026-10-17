@@ -434,3 +434,34 @@ class LeaderboardOut(BaseModel):
     entries: list[LeaderboardEntry]
     total_debates: int
     total_votes: int
+
+
+# --- Trending topics (services/trending.py) ---
+class TrendingSource(BaseModel):
+    title: str
+    url: str
+    outlet: str
+    published_at: datetime | None = None
+
+
+class TrendingTopicOut(BaseModel):
+    id: str
+    rank: int  # 1 = hottest
+    label: str  # short chip title
+    question: str  # the motion, ready for DebateConfig.topic
+    brief: str  # what happened, for DebateConfig.description
+    category: str
+    heat: int  # 1-10
+    outlets: int  # distinct outlets that carry the story
+    sources: list[TrendingSource]
+
+
+class TrendingCategory(BaseModel):
+    id: str
+    count: int
+
+
+class TrendingTopicsOut(BaseModel):
+    updated_at: datetime | None  # when the batch was built; None before the first one
+    topics: list[TrendingTopicOut]
+    categories: list[TrendingCategory]  # every category in display order, with its topic count

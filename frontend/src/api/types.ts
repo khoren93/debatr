@@ -574,3 +574,40 @@ export interface MediaCapabilities {
   /** Why premium voices are unavailable (key missing or rejected). */
   elevenlabs_error: string | null;
 }
+
+// --- Trending topics (GET /topics/trending, backend services/trending.py) ---
+export type TrendingCategoryId = 'politics' | 'world' | 'business' | 'tech' | 'science' | 'health' | 'culture' | 'sports' | 'lifestyle';
+
+export interface TrendingSource {
+  title: string;
+  /** Link to the original article (http/https only). */
+  url: string;
+  outlet: string;
+  published_at: string | null;
+}
+
+export interface TrendingTopic {
+  id: string;
+  /** 1 = hottest. */
+  rank: number;
+  /** Short chip title. */
+  label: string;
+  /** The motion, ready for `topic`. */
+  question: string;
+  /** What happened (the models do not know recent news), ready for `description`. */
+  brief: string;
+  category: TrendingCategoryId | string;
+  /** 1-10. */
+  heat: number;
+  /** Distinct outlets that carry the story. */
+  outlets: number;
+  sources: TrendingSource[];
+}
+
+export interface TrendingTopics {
+  /** When the batch was built; null before the first one. */
+  updated_at: string | null;
+  topics: TrendingTopic[];
+  /** Every category in display order, with its topic count. */
+  categories: { id: TrendingCategoryId | string; count: number }[];
+}

@@ -39,11 +39,14 @@ def complete_message(
     *,
     api_key: str | None = None,
     max_tokens: int | None = None,
+    read_timeout: float | None = None,
 ) -> tuple[str, list[dict[str, Any]], dict[str, Any]]:
     """Non-streamed completion. Returns (text, annotations, usage); annotations carry the web
     search citations of `:online` / search models."""
     body = asyncio.run(
-        OpenRouterClient().chat_completion(model, messages, api_key=api_key, max_tokens=max_tokens)
+        OpenRouterClient().chat_completion(
+            model, messages, api_key=api_key, max_tokens=max_tokens, read_timeout=read_timeout
+        )
     )
     choices = body.get("choices") or [{}]
     message = (choices[0] or {}).get("message") or {}

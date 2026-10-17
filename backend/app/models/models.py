@@ -302,3 +302,48 @@ class Preset(Base):
     name: Mapped[str] = mapped_column(String)
     description: Mapped[str | None] = mapped_column(String, nullable=True)
     preset_json: Mapped[dict[str, Any]] = mapped_column(JSON)
+
+
+class TrendingBatch(Base):
+    """One run of the trending-topics builder (services/trending.py). The newest batch is what
+    the wizard shows; older ones stay as an archive for statistics."""
+
+    __tablename__ = "trending_batches"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, index=True
+    )
+    model: Mapped[str] = mapped_column(String(100))
+    topic_count: Mapped[int] = mapped_column(Integer, default=0)
+    cost_usd: Mapped[Decimal] = mapped_column(Numeric(14, 6), default=Decimal(0))
+    # feeds (ok/total), headlines (fresh/blocked/sent), dropped topics with reasons.
+    stats_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, server_default="{}")
+
+    topics: Mapped[list["TrendingTopic"]] = relationship(
+        "TrendingTopic", back_populates="batch", cascade="all, delete-orphan"
+    )
+
+
+class TrendingTopic(Base):
+    """A debate topic made from today's news, with the articles it came from."""
+
+    __tablename__ = "trending_topics"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    batch_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("trending_batches.id", ondelete="CASCADE"), index=True
+    )
+    rank: Mapped[int] = mapped_column(Integer)  # 1 = hottest
+    label: Mapped[str] = mapped_column(String(80))
+    question: Mapped[str] = mapped_column(String(300))
+    brief: Mapped[str] = mapped_column(Text, default="")  # what happened; goes to `description`
+    category: Mapped[str] = mapped_column(String(20))  # trending.TOPIC_CATEGORIES
+    heat: Mapped[int] = mapped_column(Integer, default=5)  # the model's 1-10 estimate
+    outlets: Mapped[int] = mapped_column(Integer, default=1)  # distinct outlets that cover it
+    # [{"title", "url", "outlet", "published_at"}]
+    sources_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    is_hidden: Mapped[bool] = mapped_column(Boolean, default=False)  # hidden by an admin
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    batch: Mapped["TrendingBatch"] = relationship("TrendingBatch", back_populates="topics")

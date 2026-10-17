@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { TOPIC_TEMPLATES } from '../../data/topics';
+import { useTrendingTopics } from '../../hooks/useTrendingTopics';
 import { Card, Chip, Hint, Label, Segmented, Select, Textarea } from '../ui';
 import { LANGUAGES, LENGTH_OPTIONS, MAX_ROUNDS, MIN_ROUNDS, MIN_TOPIC_LENGTH, lengthOption, topicValid, type WizardState } from './wizardState';
 
@@ -9,12 +9,15 @@ interface StepTopicProps {
   showErrors: boolean;
 }
 
-const LIBRARY_PREVIEW = 8;
+const TRENDING_PREVIEW = 8;
+// Long questions wrap instead of widening the page on phones.
+const WRAP = 'whitespace-normal! text-left';
 const ROUND_OPTIONS = Array.from({ length: MAX_ROUNDS - MIN_ROUNDS + 1 }, (_, i) => ({ value: MIN_ROUNDS + i, label: String(MIN_ROUNDS + i) }));
 
 export const StepTopic = ({ state, patch, showErrors }: StepTopicProps) => {
   const [showAll, setShowAll] = useState(false);
-  const library = showAll ? TOPIC_TEMPLATES : TOPIC_TEMPLATES.slice(0, LIBRARY_PREVIEW);
+  const trending = useTrendingTopics().data?.topics ?? [];
+  const trendingShown = showAll ? trending : trending.slice(0, TRENDING_PREVIEW);
   const knownLanguage = LANGUAGES.some((l) => l.value === state.language);
 
   return (
@@ -32,17 +35,23 @@ export const StepTopic = ({ state, patch, showErrors }: StepTopicProps) => {
         />
         {showErrors && !topicValid(state) && <Hint tone="danger">Give the speakers a topic of at least {MIN_TOPIC_LENGTH} characters.</Hint>}
 
-        <div className="mt-4 text-xs text-muted">Or start from the library</div>
-        <div className="mt-2.5 flex flex-wrap gap-2">
-          {library.map((t) => (
-            <Chip key={t.topic} active={state.topic === t.topic} title={t.desc} onClick={() => patch({ topic: t.topic, description: t.desc })}>
-              {t.topic}
-            </Chip>
-          ))}
-          <button type="button" onClick={() => setShowAll((v) => !v)} className="px-2 text-[13px] text-muted hover:text-text cursor-pointer">
-            {showAll ? 'Show fewer' : `Show all ${TOPIC_TEMPLATES.length} ›`}
-          </button>
-        </div>
+        {trending.length > 0 && (
+          <>
+            <div className="mt-4 text-xs text-muted">Trending today</div>
+            <div className="mt-2.5 flex flex-wrap gap-2">
+              {trendingShown.map((t) => (
+                <Chip key={t.id} active={state.topic === t.question} title={t.brief} onClick={() => patch({ topic: t.question, description: t.brief })} className={WRAP}>
+                  {t.question}
+                </Chip>
+              ))}
+              {trending.length > TRENDING_PREVIEW && (
+                <button type="button" onClick={() => setShowAll((v) => !v)} className="px-2 text-[13px] text-muted hover:text-text cursor-pointer">
+                  {showAll ? 'Show fewer' : `Show all ${trending.length} ›`}
+                </button>
+              )}
+            </div>
+          </>
+        )}
 
         <Label className="mt-[22px]" hint="(optional)">
           Angle for the models

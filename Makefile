@@ -6,7 +6,7 @@ PROD_COMPOSE := docker compose -f docker-compose.yml -f docker-compose.prod.yml
 s            ?=
 
 .DEFAULT_GOAL := help
-.PHONY: help install dev-up dev-down api worker media-worker web migrate migration \
+.PHONY: help install dev-up dev-down api worker media-worker scheduler trending web migrate migration \
 	lint format typecheck test check build cli up down restart logs ps deploy prod-logs prod-ps
 
 help: ## Show this list
@@ -34,6 +34,12 @@ worker: ## Run the RQ worker for both queues
 
 media-worker: ## Run a media-only worker (needs ffmpeg)
 	cd backend && uv run python -m app.worker --queues media
+
+scheduler: ## Run the periodic jobs (hourly trending-topics check)
+	cd backend && uv run python -m app.scheduler
+
+trending: ## Build a fresh batch of trending topics now
+	cd backend && uv run python -m app.scheduler --refresh-trending
 
 web: ## Run the Vite dev server on :5173
 	cd frontend && npm run dev
