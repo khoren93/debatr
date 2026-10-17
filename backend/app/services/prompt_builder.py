@@ -75,7 +75,9 @@ def _context_block(conf: dict[str, Any]) -> str:
     news = conf.get("news") or {}
     if str(news.get("brief") or "").strip():
         outlet = str(news.get("outlet") or "").strip()
-        lines += f"News background{f' ({outlet})' if outlet else ''}: {news['brief'].strip()}\n"
+        title = str(news.get("title") or "").strip()
+        source = ", ".join(part for part in (outlet, f'"{title}"' if title else "") if part)
+        lines += f"News background{f' ({source})' if source else ''}: {news['brief'].strip()}\n"
     if conf.get("description"):
         lines += f"Context: {conf['description']}\n"
     return lines

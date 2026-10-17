@@ -279,9 +279,11 @@ export const RegenerateAudioDialog = ({ open, onClose, debate, media, onQueued }
                         options={voices.map((v) => ({ value: v.id, label: v.name, hint: v.description ?? undefined }))}
                       />
                     </div>
-                    <button type="button" onClick={() => preview(voice)} disabled={!voice?.preview_url} title="Voice sample" className="grid size-9 shrink-0 place-items-center rounded-[10px] border border-line-2 bg-surface-2 text-text disabled:opacity-40 cursor-pointer">
-                      <Play className="size-3 fill-current" />
-                    </button>
+                    {voice?.preview_url && (
+                      <button type="button" onClick={() => preview(voice)} title="Voice sample" className="grid size-9 shrink-0 place-items-center rounded-[10px] border border-line-2 bg-surface-2 text-text cursor-pointer">
+                        <Play className="size-3 fill-current" />
+                      </button>
+                    )}
                   </div>
                 );
               })}

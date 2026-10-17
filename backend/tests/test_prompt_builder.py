@@ -127,7 +127,11 @@ def test_verdict_gets_the_fact_check_evidence():
 def test_news_background_reaches_every_prompt():
     conf = {
         **CONF,
-        "news": {"brief": "The city banned pineapple toppings last week.", "outlet": "BBC News"},
+        "news": {
+            "brief": "The city banned pineapple toppings last week.",
+            "outlet": "BBC News",
+            "title": "Pineapple pizza banned",
+        },
     }
     turn = SCHEDULE[1]
     prompts = [
@@ -136,7 +140,7 @@ def test_news_background_reaches_every_prompt():
         build_verdict_messages(conf, HISTORY)[1]["content"],
     ]
     for user in prompts:
-        assert "News background (BBC News): The city banned pineapple toppings" in user
+        assert 'News background (BBC News, "Pineapple pizza banned"): The city banned' in user
         assert "Context: A culinary showdown." in user
     plain = build_debater_messages(CONF, CONF["participants"][1], turn, HISTORY)[1]["content"]
     assert "News background" not in plain

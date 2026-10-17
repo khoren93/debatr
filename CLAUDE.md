@@ -58,9 +58,10 @@ frontend/           React 19 + Vite 8 + Tailwind 4 + TypeScript
   src/components/layout/AppShell.tsx  sidebar + mobile top bar/bottom tabs, Page, PageTitle
   src/components/cards/    DebateCard (library / gallery / landing)
   src/components/create/   three-step wizard + wizardState.ts (state, persistence, config mapping):
-                           StepTopic (TrendingBrowser = today's news topics with search, categories,
-                           Hot/New + sticky "Your debate" panel), StepSpeakers (SpeakerRow per
-                           speaker: model / voice / persona fields + preview, prompt, dice, remove),
+                           StepTopic (TrendingBrowser = today's news topics in rank order with search,
+                           categories, 10 per page + sticky "Your debate" panel), StepSpeakers
+                           (SpeakerRow per speaker: model / voice / persona fields + voice preview
+                           when the voice has a sample, prompt editor, remove; no randomizer),
                            StepLaunch (style, outputs, scenes, keys + summary, estimate, start);
                            ModelPicker (searchable OpenRouter list: logos, prices, rank, Latest
                            filter), VoicePicker (voice list with previews, debate-language / all scope),
@@ -404,10 +405,11 @@ Stopping: `POST /api/debates/{id}/stop` sets the status, sets `debate:{id}:stop`
   older than the interval minus 30 min slack) and holds `trending:refresh:lock`, so restarts and
   extra triggers never add batches. `GET /api/topics/trending` (public) also enqueues it on a
   stale read (at most every 10 min via `trending:refresh:queued`), so native dev works without
-  the scheduler. Step 1 of the wizard lists them; picking one sets `topic` and the story
-  (`DebateConfig.news`: brief, outlet, title, url, published_at), sent while "Ground in the …
-  article" is on. `prompt_builder._context_block` puts it into every prompt as "News background"
-  (before the user's angle, `description`).
+  the scheduler. Step 1 of the wizard lists them; picking one sets `topic` and links the story
+  (`DebateConfig.news`: brief, outlet, title, url, published_at), which always goes to the models:
+  `prompt_builder._context_block` puts it into every prompt as "News background" (before the
+  user's angle, `description`). A link never outlives its question: editing the question, clicking
+  the picked card again or "×" unlinks it; switching topics also clears the angle.
 
 ### Credits and payments
 

@@ -47,10 +47,11 @@ export interface WizardState {
   topic: string;
   /** The user's angle for the models (optional). */
   description: string;
-  /** Story behind the picked trending topic, null for an own topic. */
+  /**
+   * Story of the picked trending topic, null for an own topic. While set, `topic` is that topic's
+   * question unchanged (editing it unlinks the story) and the brief always goes to the models.
+   */
   news: NewsPick | null;
-  /** Send the story's brief to the models ("Ground in the … article"). */
-  ground: boolean;
   /** English language name ("Russian"), the value the backend expects. */
   language: string;
   num_rounds: number;
@@ -173,7 +174,6 @@ export const initialState = (): WizardState => ({
   topic: '',
   description: '',
   news: null,
-  ground: true,
   language: 'English',
   num_rounds: 2,
   length_preset: 'short',
@@ -234,34 +234,6 @@ export const reindexVoices = (voices: Record<string, string>, removed: number) =
   return out;
 };
 
-const RANDOM_STYLES = STYLE_PRESETS.filter((s) => s.id !== 'rude');
-
-const pick = <T>(list: readonly T[]): T | undefined => (list.length ? list[Math.floor(Math.random() * list.length)] : undefined);
-
-export interface RandomizeContext {
-  takenVoices: string[];
-  models: ModelInfo[];
-  voices: VoiceInfo[];
-}
-
-/** Random free model, persona and (when a catalogue is loaded) voice for one speaker. The host
- *  keeps its moderator prompt. */
-export const randomizeSpeaker = (speaker: Speaker, ctx: RandomizeContext): { speaker: Speaker; voiceId: string | null } => {
-  const free = ctx.models.filter((m) => m.is_free);
-  const model = pick(free.length ? free : ctx.models);
-  const style = pick(RANDOM_STYLES) ?? STYLE_PRESETS[0];
-  const fresh = ctx.voices.filter((v) => !ctx.takenVoices.includes(v.id));
-  const voice = pick(fresh.length ? fresh : ctx.voices);
-  return {
-    speaker: {
-      ...speaker,
-      model_id: model?.id ?? speaker.model_id,
-      prompt: speaker.role === 'moderator' ? speaker.prompt : applyStyle(speaker.prompt, style),
-    },
-    voiceId: voice?.id ?? null,
-  };
-};
-
 // --- Models & voices ---------------------------------------------------------
 
 /** The free router, else the first free "xiaomi/mimo" model, else the first free model. */
@@ -297,9 +269,9 @@ export interface BuildOptions {
   elevenlabsKey?: string;
 }
 
-/** The story to send: only with the switch on (`topic_id` is a wizard detail). */
+/** The linked story (`topic_id` is a wizard detail and stays in the browser). */
 const newsOf = (state: WizardState): NewsContext | undefined => {
-  if (!state.ground || !state.news?.brief.trim()) return undefined;
+  if (!state.news?.brief.trim()) return undefined;
   const { brief, outlet, title, url, published_at } = state.news;
   return { brief: brief.trim(), outlet, title, url, published_at };
 };
@@ -368,7 +340,6 @@ export const stateFromConfig = (config: DebateConfig, base: WizardState): Wizard
     topic: config.topic,
     description: config.description ?? '',
     news: config.news?.brief ? { ...config.news } : null,
-    ground: Boolean(config.news?.brief),
     language: normalizeLanguage(config.language, base.language),
     num_rounds: clamp(config.num_rounds, MIN_ROUNDS, MAX_ROUNDS),
     length_preset: LENGTH_VALUES.includes(config.length_preset) ? config.length_preset : base.length_preset,
@@ -500,8 +471,8 @@ export const sanitizeState = (raw: unknown): WizardState => {
     step: step >= 1 ? (Math.min(LAST_STEP, Math.floor(step)) as WizardStep) : 1,
     topic: str(raw.topic),
     description: str(raw.description),
-    news: sanitizeNews(raw.news),
-    ground: typeof raw.ground === 'boolean' ? raw.ground : base.ground,
+    // Older states could switch the story off ("ground"): a linked topic now always sends it.
+    news: raw.ground === false ? null : sanitizeNews(raw.news),
     language: normalizeLanguage(str(raw.language), base.language),
     num_rounds: Number.isFinite(rounds) ? clamp(Math.round(rounds), MIN_ROUNDS, MAX_ROUNDS) : base.num_rounds,
     length_preset: oneOf(raw.length_preset, LENGTH_VALUES, base.length_preset),

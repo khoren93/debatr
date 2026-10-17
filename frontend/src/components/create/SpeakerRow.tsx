@@ -1,4 +1,4 @@
-import { Dice5, PenLine, Trash2 } from 'lucide-react';
+import { PenLine, Trash2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { ModelInfo, VoiceInfo } from '../../api/types';
 import { applyStyle, clearStyle, detectStyle } from '../../data/styles';
@@ -11,7 +11,7 @@ import { VoicePreviewButton } from './VoicePreviewButton';
 import type { Speaker } from './wizardState';
 
 /** Columns of the wide layout; the header row above the debaters uses the same template. */
-export const ROW_COLUMNS = 'min-[1100px]:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1.15fr)_170px]';
+export const ROW_COLUMNS = 'min-[1100px]:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1.15fr)_126px]';
 
 interface SpeakerRowProps {
   speaker: Speaker;
@@ -45,7 +45,6 @@ interface SpeakerRowProps {
   onChange: (patch: Partial<Speaker>) => void;
   onVoice: (voiceId: string) => void;
   onToggleExpanded: () => void;
-  onRandomize: () => void;
   onRemove: () => void;
 }
 
@@ -63,7 +62,7 @@ const RowAction = ({ title, onClick, active, color, children }: { title: string;
   </button>
 );
 
-/** One speaker of step 2: model, voice and persona fields plus preview / prompt / dice / remove. */
+/** One speaker of step 2: model, voice and persona fields plus preview / prompt / remove. */
 export const SpeakerRow = ({
   speaker,
   name,
@@ -87,7 +86,6 @@ export const SpeakerRow = ({
   onChange,
   onVoice,
   onToggleExpanded,
-  onRandomize,
   onRemove,
 }: SpeakerRowProps) => {
   const style = detectStyle(speaker.prompt);
@@ -132,12 +130,10 @@ export const SpeakerRow = ({
         }}
       />
       <div className="flex items-center gap-1.5 min-[1100px]:justify-end">
-        <VoicePreviewButton url={sample} playing={Boolean(sample) && preview.playing === sample} onToggle={() => preview.toggle(sample)} color={color} />
+        {/* Edge voices have no samples: no button rather than a dead one. */}
+        {sample && <VoicePreviewButton url={sample} playing={preview.playing === sample} onToggle={() => preview.toggle(sample)} color={color} />}
         <RowAction title="Edit system prompt" onClick={onToggleExpanded} active={expanded} color={color}>
           <PenLine className="size-4" />
-        </RowAction>
-        <RowAction title="Randomize" onClick={onRandomize}>
-          <Dice5 className="size-4" />
         </RowAction>
         {removable && (
           <RowAction title="Remove" onClick={onRemove}>

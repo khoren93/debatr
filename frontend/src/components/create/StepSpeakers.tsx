@@ -1,4 +1,4 @@
-import { ArrowUpRight, Dice5, Lock, Plus } from 'lucide-react';
+import { ArrowUpRight, Lock, Plus } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import type { BillingConfig, ModelInfo, TTSProviderName } from '../../api/types';
 import { useLeaderboard } from '../../hooks/useLeaderboard';
@@ -11,7 +11,6 @@ import {
   MIN_DEBATERS,
   countDebaters,
   defaultDebater,
-  randomizeSpeaker,
   reindexVoices,
   speakerColorOf,
   speakerId,
@@ -146,38 +145,6 @@ export const StepSpeakers = ({
 
   const setVoice = (index: number, voiceId: string) => patch({ voices: { ...state.voices, [speakerId(index)]: voiceId } });
 
-  const randomizeOne = (index: number) => {
-    const others = state.speakers.filter((_, i) => i !== index);
-    const { speaker, voiceId } = randomizeSpeaker(state.speakers[index], {
-      takenVoices: others.map((_, i) => resolvedVoices[speakerId(i < index ? i : i + 1)]).filter(Boolean),
-      models,
-      voices: catalogue.voices,
-    });
-    patch({
-      speakers: state.speakers.map((s, i) => (i === index ? speaker : s)),
-      voices: voiceId ? { ...state.voices, [speakerId(index)]: voiceId } : state.voices,
-    });
-  };
-
-  const randomizeAll = () => {
-    const speakers: Speaker[] = [];
-    const voices = { ...state.voices };
-    const takenVoices: string[] = [];
-    state.speakers.forEach((original, index) => {
-      const { speaker, voiceId } = randomizeSpeaker(original, {
-        takenVoices,
-        models,
-        voices: catalogue.voices,
-      });
-      speakers.push(speaker);
-      if (voiceId) {
-        voices[speakerId(index)] = voiceId;
-        takenVoices.push(voiceId);
-      }
-    });
-    patch({ speakers, voices });
-  };
-
   const addSpeaker = () => {
     if (debaters >= MAX_DEBATERS) return;
     patch({ speakers: [...state.speakers, defaultDebater(debaters)] });
@@ -215,7 +182,6 @@ export const StepSpeakers = ({
         onChange={(changes) => updateSpeaker(index, changes)}
         onVoice={(voiceId) => setVoice(index, voiceId)}
         onToggleExpanded={() => setExpanded((key) => (key === speaker.key ? null : speaker.key))}
-        onRandomize={() => randomizeOne(index)}
         onRemove={() => removeSpeaker(index)}
       />
     );
@@ -224,17 +190,7 @@ export const StepSpeakers = ({
 
   return (
     <div className="mt-7 grid gap-[22px] animate-rise">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="text-sm text-muted">Cast the speakers. Each gets a model, a voice and a persona.</div>
-        <button
-          type="button"
-          onClick={randomizeAll}
-          disabled={modelsLoading || catalogue.loading}
-          className="inline-flex items-center gap-2 text-[13px] font-semibold text-accent hover:text-accent-hover cursor-pointer disabled:cursor-wait disabled:opacity-60"
-        >
-          <Dice5 className="size-4" /> Randomize everything
-        </button>
-      </div>
+      <div className="text-sm text-muted">Cast the speakers. Each gets a model, a voice and a persona.</div>
 
       {(modelsError || paidLocked) && (
         <div className="-mt-2 grid gap-2">

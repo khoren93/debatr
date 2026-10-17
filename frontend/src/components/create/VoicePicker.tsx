@@ -50,8 +50,6 @@ export const VoicePicker = ({ value, voices, loading, auto, takenBy, showLanguag
   const preview = useVoicePreview();
 
   const selected = voices.find((v) => v.id === value);
-  // Edge voices have no samples: no preview buttons at all rather than disabled ones.
-  const hasPreviews = voices.some((v) => v.preview_url);
   // ElevenLabs voices are multilingual: offer the ones verified for the debate language first.
   const native = voices.filter((v) => language.code && v.languages.includes(language.code));
   const hasScope = showLanguages && native.length > 0 && native.length < voices.length;
@@ -274,8 +272,8 @@ export const VoicePicker = ({ value, voices, loading, auto, takenBy, showLanguag
                   title={v.id}
                   className={`mx-1.5 flex cursor-pointer items-center gap-2.5 rounded-[10px] px-2 py-2 ${active === v.id ? 'bg-surface-3' : ''}`}
                 >
-                  {hasPreviews ? (
-                    <VoicePreviewButton url={v.preview_url} playing={Boolean(v.preview_url) && preview.playing === v.preview_url} onToggle={() => preview.toggle(v.preview_url)} size="sm" />
+                  {v.preview_url ? (
+                    <VoicePreviewButton url={v.preview_url} playing={preview.playing === v.preview_url} onToggle={() => preview.toggle(v.preview_url)} size="sm" />
                   ) : (
                     <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-surface-3 text-muted">
                       <Mic className="size-3" />

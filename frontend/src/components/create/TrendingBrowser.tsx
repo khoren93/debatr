@@ -7,7 +7,10 @@ import { formatAge, sourceDomain } from '../../lib/format';
 interface TrendingBrowserProps {
   /** The topic whose story the wizard holds (highlighted card). */
   isPicked: (topic: TrendingTopic) => boolean;
-  onPick: (topic: TrendingTopic) => void;
+  /** Link a topic; `all` = the loaded batch (to recognise briefs copied into the angle). */
+  onPick: (topic: TrendingTopic, all: TrendingTopic[]) => void;
+  /** A click on the picked card unlinks it. */
+  onUnpick: () => void;
   /** "Debate it as your own topic" from a search without results. */
   onUseQuery: (query: string) => void;
 }
@@ -26,9 +29,9 @@ const CATEGORIES: Record<string, { label: string; color: string }> = {
 };
 const categoryOf = (id: string) => CATEGORIES[id] ?? { label: id.charAt(0).toUpperCase() + id.slice(1), color: '#B4B8C6' };
 
-const PAGE = 12;
+/** Topics per "Show more" page; the batch comes hottest first and stays in that order. */
+const PAGE = 10;
 const HOT_BADGES = 5;
-type Sort = 'hot' | 'new';
 
 /** Outlet favicon on a light tile (Google's favicon service, no referrer). */
 export const Favicon = ({ url }: { url: string | undefined }) => {
@@ -41,8 +44,6 @@ export const Favicon = ({ url }: { url: string | undefined }) => {
 };
 
 const randomOf = <T,>(list: T[]): T | undefined => list[Math.floor(Math.random() * list.length)];
-
-const newest = (topic: TrendingTopic) => Math.max(0, ...topic.sources.map((s) => (s.published_at ? new Date(s.published_at).getTime() : 0)));
 
 /** "UPDATED TODAY · 07:00" in the viewer's time zone. */
 const updatedLabel = (iso: string) => {
@@ -69,7 +70,7 @@ const TopicCard = ({ topic, source, selected, badge, onPick }: { topic: Trending
       }`}
     >
       {/* The whole card picks the topic; the "Read" link sits above this button. */}
-      <button type="button" onClick={onPick} aria-pressed={selected} aria-label={topic.question} className="absolute inset-0 rounded-[16px] cursor-pointer focus-visible:outline-2 focus-visible:outline-accent" />
+      <button type="button" onClick={onPick} aria-pressed={selected} aria-label={topic.question} title={selected ? 'Click again to unselect' : undefined} className="absolute inset-0 rounded-[16px] cursor-pointer focus-visible:outline-2 focus-visible:outline-accent" />
       <div className="pointer-events-none flex items-center justify-between gap-2">
         <span className="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.08em]" style={{ color: category.color }}>
           <span className="size-1.5 rounded-full" style={{ background: category.color }} />
@@ -111,10 +112,9 @@ const TopicCard = ({ topic, source, selected, badge, onPick }: { topic: Trending
 };
 
 /** Step 1, left column: today's news topics with search, categories and Hot / New order. */
-export const TrendingBrowser = ({ isPicked, onPick, onUseQuery }: TrendingBrowserProps) => {
+export const TrendingBrowser = ({ isPicked, onPick, onUnpick, onUseQuery }: TrendingBrowserProps) => {
   const { data, error, loading, retry } = useTrendingTopics();
   const [query, setQuery] = useState('');
-  const [sort, setSort] = useState<Sort>('hot');
   const [category, setCategory] = useState('all');
   const [limit, setLimit] = useState(PAGE);
 
@@ -122,14 +122,15 @@ export const TrendingBrowser = ({ isPicked, onPick, onUseQuery }: TrendingBrowse
   const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
   const found = topics.filter((t) => matches(t, terms));
   const inCategory = found.filter((t) => category === 'all' || t.category === category);
-  const list = sort === 'new' ? [...inCategory].sort((a, b) => newest(b) - newest(a)) : inCategory;
+  const list = inCategory;
   const shown = list.slice(0, limit);
   const categories = (data?.categories ?? []).filter((c) => c.count > 0);
-  const badges = sort === 'hot' && category === 'all' && terms.length === 0;
+  const badges = category === 'all' && terms.length === 0;
 
   const surprise = () => {
-    const topic = randomOf(list.length ? list : topics);
-    if (topic) onPick(topic);
+    const pool = (list.length ? list : topics).filter((t) => !isPicked(t));
+    const topic = randomOf(pool);
+    if (topic) onPick(topic, topics);
   };
   const changeCategory = (id: string) => {
     setCategory(id);
@@ -159,8 +160,8 @@ export const TrendingBrowser = ({ isPicked, onPick, onUseQuery }: TrendingBrowse
         </button>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2.5">
-        <label className="flex h-11 min-w-0 flex-[1_1_260px] items-center gap-2.5 rounded-field border border-line bg-surface px-3.5 text-muted focus-within:border-accent">
+      <div>
+        <label className="flex h-11 min-w-0 items-center gap-2.5 rounded-field border border-line bg-surface px-3.5 text-muted focus-within:border-accent">
           <Search className="size-4 shrink-0" />
           <input
             value={query}
@@ -178,20 +179,6 @@ export const TrendingBrowser = ({ isPicked, onPick, onUseQuery }: TrendingBrowse
             </button>
           )}
         </label>
-        <div className="flex gap-1 rounded-field border border-line bg-surface p-1" role="tablist" aria-label="Order">
-          {(['hot', 'new'] as const).map((s) => (
-            <button
-              key={s}
-              type="button"
-              role="tab"
-              aria-selected={sort === s}
-              onClick={() => setSort(s)}
-              className={`rounded-[9px] px-3.5 py-2 text-[13px] font-semibold transition-colors cursor-pointer ${sort === s ? 'bg-text text-ink' : 'text-muted hover:text-text'}`}
-            >
-              {s === 'hot' ? 'Hot' : 'New'}
-            </button>
-          ))}
-        </div>
       </div>
 
       {categories.length > 1 && (
@@ -241,7 +228,7 @@ export const TrendingBrowser = ({ isPicked, onPick, onUseQuery }: TrendingBrowse
       {shown.length > 0 && (
         <div className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(min(100%,270px),1fr))]">
           {shown.map((t) => (
-            <TopicCard key={t.id} topic={t} source={t.sources[0]} selected={isPicked(t)} badge={badges && t.rank <= HOT_BADGES} onPick={() => onPick(t)} />
+            <TopicCard key={t.id} topic={t} source={t.sources[0]} selected={isPicked(t)} badge={badges && t.rank <= HOT_BADGES} onPick={() => (isPicked(t) ? onUnpick() : onPick(t, topics))} />
           ))}
         </div>
       )}
