@@ -368,19 +368,37 @@ export interface ConfirmResponse {
   credits_usd: number;
 }
 
+/** What a ledger row paid for (backend services/ledger.py). */
+export type TransactionCategory = 'models' | 'voices' | 'pictures' | 'topup' | 'bonus' | 'refund' | 'adjustment';
+
 export interface Transaction {
   id: string;
   amount_usd: number;
   balance_after_usd: number;
   kind: string;
+  category: TransactionCategory | string;
+  /** Debate title for charges, the description otherwise. */
+  title: string;
   description: string | null;
   debate_id: string | null;
   provider: string | null;
   created_at: string;
 }
 
+/** One UTC day of this month's usage. */
+export interface UsageDay {
+  /** "2026-10-14" */
+  date: string;
+  tokens: number;
+  voice_ms: number;
+  renders: number;
+  spent_usd: number;
+}
+
 export interface Usage {
   period_start: string;
+  /** Every day from period_start through today. */
+  days: UsageDay[];
   debates: number;
   tokens_in: number;
   tokens_out: number;

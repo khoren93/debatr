@@ -1,25 +1,73 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { confirmCheckout } from '../api/billing';
+import { confirmCheckout, getUsage, listTransactions } from '../api/billing';
 import { getErrorMessage } from '../api/client';
+import type { Transaction, Usage, User } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { Page } from '../components/layout/AppShell';
-import { useToast } from '../components/ui';
+import { Segmented, useToast } from '../components/ui';
 import { useBillingConfig } from '../hooks/useBillingConfig';
 import { ApiTokensCard } from '../components/account/ApiTokensCard';
-import { CreditsCard } from '../components/account/CreditsCard';
-import { LocalKeysCard } from '../components/account/LocalKeysCard';
+import { BalanceCard } from '../components/account/BalanceCard';
+import { LedgerCard, RecentActivityCard } from '../components/account/Ledger';
 import { ProfileHeader } from '../components/account/ProfileHeader';
+import { ProviderKeys } from '../components/account/ProviderKeys';
 import { SecurityCard } from '../components/account/SecurityCard';
-import { TransactionsCard } from '../components/account/TransactionsCard';
-import { UsageCard } from '../components/account/UsageCard';
+import { UsageCards } from '../components/account/UsageCards';
 import { money } from '../components/account/helpers';
+import { ACCOUNT_TABS, parseAccountTab, type AccountTab } from '../components/account/tabs';
+
+const RECENT = 3;
+
+/** Balance + top-up, this month's usage and the latest ledger rows. */
+const Overview = ({ user, onRefresh, onTab }: { user: User; onRefresh: () => void; onTab: (tab: AccountTab) => void }) => {
+  const { config, loaded } = useBillingConfig();
+  const [usage, setUsage] = useState<Usage | null>(null);
+  const [usageError, setUsageError] = useState<string | null>(null);
+  const [recent, setRecent] = useState<Transaction[] | null>(null);
+  const [recentError, setRecentError] = useState<string | null>(null);
+  // A balance change (top-up, finished run) means new usage and ledger rows.
+  const reloadKey = user.credits_usd;
+
+  useEffect(() => {
+    let cancelled = false;
+    getUsage()
+      .then((u) => {
+        if (cancelled) return;
+        setUsage(u);
+        setUsageError(null);
+      })
+      .catch((err) => {
+        if (!cancelled) setUsageError(getErrorMessage(err));
+      });
+    listTransactions(RECENT)
+      .then((rows) => {
+        if (cancelled) return;
+        setRecent(rows);
+        setRecentError(null);
+      })
+      .catch((err) => {
+        if (!cancelled) setRecentError(getErrorMessage(err));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadKey]);
+
+  return (
+    <div className="grid animate-rise grid-cols-1 gap-[clamp(14px,2vw,20px)]">
+      <BalanceCard user={user} config={config} configLoaded={loaded} usage={usage} onToppedUp={onRefresh} onShowKeys={() => onTab('keys')} />
+      <UsageCards usage={usage} error={usageError} />
+      <RecentActivityCard items={recent} error={recentError} onViewAll={() => onTab('billing')} />
+    </div>
+  );
+};
 
 const Account = () => {
   const { user, refresh, setUser } = useAuth();
-  const { config, loaded } = useBillingConfig();
   const toast = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
+  const tab = parseAccountTab(searchParams.get('tab'));
   // Stripe sends the visitor back to /account?topup=success&session_id=… (or ?topup=cancel).
   // The key guards against StrictMode's double effect run so a session is confirmed once.
   const handledTopup = useRef<string | null>(null);
@@ -56,23 +104,38 @@ const Account = () => {
       .finally(() => void refresh());
   }, [searchParams, setSearchParams, toast, refresh]);
 
+  const showTab = (next: AccountTab) => {
+    const params = new URLSearchParams(searchParams);
+    if (next === 'overview') params.delete('tab');
+    else params.set('tab', next);
+    setSearchParams(params, { replace: true });
+  };
+
   if (!user) return null;
 
   return (
-    <Page>
-      <ProfileHeader user={user} onUser={setUser} />
-      <div className="mt-[26px] grid grid-cols-[repeat(auto-fit,minmax(min(100%,300px),1fr))] gap-3.5">
-        <div className="grid content-start gap-3.5">
-          <CreditsCard user={user} config={config} configLoaded={loaded} onToppedUp={() => void refresh()} />
+    <Page className="mx-auto grid max-w-[1080px] grid-cols-1 content-start gap-[clamp(18px,2.4vw,28px)]">
+      <ProfileHeader user={user} onUser={setUser}>
+        <Segmented options={ACCOUNT_TABS} value={tab} onChange={showTab} className="bg-surface!" />
+      </ProfileHeader>
+
+      {tab === 'overview' && <Overview user={user} onRefresh={() => void refresh()} onTab={showTab} />}
+      {tab === 'keys' && (
+        <div className="grid animate-rise grid-cols-1 gap-3.5">
+          <ProviderKeys user={user} onUser={setUser} />
+          <ApiTokensCard className="mt-3.5" />
+        </div>
+      )}
+      {tab === 'billing' && (
+        <div className="animate-rise">
+          <LedgerCard reloadKey={user.credits_usd} />
+        </div>
+      )}
+      {tab === 'security' && (
+        <div className="animate-rise">
           <SecurityCard />
         </div>
-        <div className="grid content-start gap-3.5">
-          <UsageCard reloadKey={user.credits_usd} />
-          <LocalKeysCard user={user} onUser={setUser} />
-        </div>
-      </div>
-      <ApiTokensCard className="mt-3.5" />
-      <TransactionsCard reloadKey={user.credits_usd} className="mt-3.5" />
+      )}
     </Page>
   );
 };

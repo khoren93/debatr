@@ -5,6 +5,7 @@ import { getErrorMessage, getErrorStatus } from '../api/client';
 import { approveDevice, denyDevice, getDeviceRequest } from '../api/tokens';
 import type { DeviceRequest } from '../api/types';
 import { AuthLayout } from '../components/account/AuthLayout';
+import { accountPath } from '../components/account/tabs';
 import { FormField } from '../components/account/FormField';
 import { tokenRequest, type TokenOptions } from '../components/account/tokenOptions';
 import { TokenOptionsFields } from '../components/account/TokenOptionsFields';
@@ -66,9 +67,9 @@ const Done = ({ outcome }: { outcome: Outcome }) =>
     <AuthLayout kicker="Connect a device" title="Device connected" subtitle="Go back to your terminal: the CLI is signed in. You can close this tab.">
       <div className="flex items-center gap-3 rounded-field border border-ok/30 bg-ok/10 px-4 py-3 text-sm text-text-2">
         <CheckCircle2 className="size-5 shrink-0 text-ok" />
-        The token is listed under Account → API tokens, where you can revoke it at any time.
+        The token is listed under Account → API keys, where you can revoke it at any time.
       </div>
-      <Link to="/account" className="mt-4 inline-block text-sm font-semibold text-accent hover:text-accent-hover">
+      <Link to={accountPath('keys')} className="mt-4 inline-block text-sm font-semibold text-accent hover:text-accent-hover">
         Manage tokens
       </Link>
     </AuthLayout>

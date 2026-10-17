@@ -1,14 +1,22 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Check, Pencil, RefreshCw, X } from 'lucide-react';
 import { updateProfile } from '../../api/auth';
 import { getErrorMessage } from '../../api/client';
 import type { User } from '../../api/types';
 import { Avatar, Button, Input, useToast } from '../ui';
+import { monthYear } from './helpers';
 
 const randomSeed = () => Math.random().toString(36).slice(2, 10);
 
-/** Avatar, inline-editable display name and "email · new avatar" line. */
-export const ProfileHeader = ({ user, onUser }: { user: User; onUser: (user: User) => void }) => {
+interface ProfileHeaderProps {
+  user: User;
+  onUser: (user: User) => void;
+  /** Right-hand slot (the page tabs). */
+  children?: ReactNode;
+}
+
+/** Avatar with a "new avatar" button, inline-editable display name, email and member-since line. */
+export const ProfileHeader = ({ user, onUser, children }: ProfileHeaderProps) => {
   const toast = useToast();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
@@ -49,24 +57,22 @@ export const ProfileHeader = ({ user, onUser }: { user: User; onUser: (user: Use
     }
   };
 
-  const spin = shuffling ? 'animate-spin' : '';
-
   return (
-    <div className="flex items-center gap-4">
-      <button
-        type="button"
-        onClick={shuffleAvatar}
-        disabled={shuffling}
-        title="New avatar"
-        aria-label="Generate a new avatar"
-        className="group relative shrink-0 cursor-pointer rounded-[18px] disabled:cursor-wait"
-      >
-        <Avatar seed={user.avatar_seed} size={56} rounded="lg" />
-        <span className="absolute inset-0 grid place-items-center rounded-[18px] bg-ink/60 opacity-0 transition-opacity group-hover:opacity-100">
-          <RefreshCw className={`size-4 ${spin}`} />
-        </span>
-      </button>
-      <div className="min-w-0 flex-1">
+    <div className="flex flex-wrap items-center gap-[18px]">
+      <div className="relative shrink-0">
+        <Avatar seed={user.avatar_seed} size={64} rounded="lg" />
+        <button
+          type="button"
+          onClick={shuffleAvatar}
+          disabled={shuffling}
+          title="New avatar"
+          aria-label="Generate a new avatar"
+          className="absolute -right-1.5 -bottom-1.5 grid size-[26px] cursor-pointer place-items-center rounded-[9px] border-2 border-ink bg-surface-2 text-text-3 transition-colors hover:text-accent disabled:cursor-wait"
+        >
+          <RefreshCw className={`size-3 ${shuffling ? 'animate-spin' : ''}`} strokeWidth={2.4} />
+        </button>
+      </div>
+      <div className="min-w-[200px] flex-1">
         {editing ? (
           <form
             onSubmit={(e) => {
@@ -94,31 +100,28 @@ export const ProfileHeader = ({ user, onUser }: { user: User; onUser: (user: Use
             </Button>
           </form>
         ) : (
-          <div className="flex items-center gap-2">
-            <h1 className="truncate font-display text-[clamp(24px,3vw,34px)] font-extrabold leading-tight tracking-[-0.03em]">{user.display_name}</h1>
+          <div className="flex items-center gap-2.5">
+            <h1 className="truncate font-display text-[clamp(26px,3vw,36px)] leading-none font-extrabold tracking-[-0.03em]">{user.display_name}</h1>
             <button
               type="button"
               onClick={startEdit}
-              className="shrink-0 cursor-pointer rounded-lg p-1.5 text-muted hover:bg-surface-2 hover:text-text"
+              className="shrink-0 cursor-pointer rounded-lg p-1 text-dim transition-colors hover:text-text"
               aria-label="Edit name"
+              title="Edit name"
             >
               <Pencil className="size-3.5" />
             </button>
           </div>
         )}
-        <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[13px] text-muted">
-          <span className="truncate">{user.email}</span>
-          <span aria-hidden="true">·</span>
-          <button
-            type="button"
-            onClick={shuffleAvatar}
-            disabled={shuffling}
-            className="inline-flex cursor-pointer items-center gap-1 text-muted hover:text-text disabled:opacity-50"
-          >
-            <RefreshCw className={`size-3 ${spin}`} /> new avatar
-          </button>
+        <div className="mt-1.5 flex flex-wrap gap-x-1.5 text-sm text-muted">
+          <span className="min-w-0 truncate">{user.email}</span>
+          <span className="max-sm:hidden" aria-hidden="true">
+            ·
+          </span>
+          <span>Member since {monthYear(user.created_at)}</span>
         </div>
       </div>
+      {children}
     </div>
   );
 };

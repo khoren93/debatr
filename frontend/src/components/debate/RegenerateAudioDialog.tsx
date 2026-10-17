@@ -9,6 +9,7 @@ import { useBillingConfig } from '../../hooks/useBillingConfig';
 import { ttsKeyUsable, useElevenLabsKeyStatus } from '../../hooks/useElevenLabsKeyStatus';
 import { formatCost } from '../../lib/format';
 import { setLocalKey, useLocalKey } from '../../lib/localKeys';
+import { accountPath } from '../account/tabs';
 import { Button, ConfirmDialog, ErrorBox, Hint, Input, Label, Modal, Select, useToast } from '../ui';
 
 const MODEL_LABELS: Record<string, string> = {
@@ -219,7 +220,7 @@ export const RegenerateAudioDialog = ({ open, onClose, debate, media, onQueued }
                 ttsKey === storedKey && (
                   <Hint>
                     Using the key saved in this browser{caps?.elevenlabs ? ' — clear the field to pay with credits instead' : ''}.{' '}
-                    <Link to="/account" className="text-accent hover:text-accent-hover">
+                    <Link to={accountPath('keys')} className="text-accent hover:text-accent-hover">
                       Manage keys
                     </Link>
                   </Hint>

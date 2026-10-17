@@ -52,3 +52,39 @@ export const timeAgo = (iso: string, now: number = Date.now()) => {
   }
   return 'just now';
 };
+
+/** "Oct 2026" */
+export const monthYear = (iso: string) => new Date(iso).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+
+/** "18:42" in the visitor's time zone. */
+export const clockTime = (iso: string) => new Date(iso).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+
+/** Local calendar day of a timestamp, for grouping ledger rows ("2026-10-14"). */
+export const localDay = (iso: string) => {
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
+const BROWSERS: [RegExp, string][] = [
+  [/Edg\//, 'Edge'],
+  [/OPR\/|Opera/, 'Opera'],
+  [/Firefox\/|FxiOS/, 'Firefox'],
+  [/Chrome\/|CriOS/, 'Chrome'],
+  [/Safari\//, 'Safari'],
+];
+const SYSTEMS: [RegExp, string][] = [
+  [/iPhone|iPad|iPod/, 'iOS'],
+  [/Android/, 'Android'],
+  [/CrOS/, 'ChromeOS'],
+  [/Mac OS X|Macintosh/, 'macOS'],
+  [/Windows/, 'Windows'],
+  [/Linux/, 'Linux'],
+];
+
+/** "Chrome on macOS" from a user agent string (null when nothing is recognised). */
+export const describeDevice = (ua: string) => {
+  const browser = BROWSERS.find(([re]) => re.test(ua))?.[1];
+  const system = SYSTEMS.find(([re]) => re.test(ua))?.[1];
+  if (browser && system) return `${browser} on ${system}`;
+  return browser ?? system ?? null;
+};

@@ -4,8 +4,9 @@
 - POST /api/billing/checkout      start a Stripe Checkout (or credit instantly in dev mode)
 - GET  /api/billing/confirm       credit a paid Checkout session (success page fallback)
 - POST /api/billing/webhook       Stripe webhook (checkout.session.completed)
-- GET  /api/billing/transactions  ledger
-- GET  /api/billing/usage         this month's consumption
+- GET  /api/billing/transactions  ledger (newest first, paged with limit/offset)
+- GET  /api/billing/transactions.csv  the whole ledger as a CSV download
+- GET  /api/billing/usage         this month's consumption (totals + per-day buckets)
 """
 
 import logging
@@ -15,7 +16,7 @@ from decimal import Decimal
 from typing import Any
 
 import stripe
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.concurrency import run_in_threadpool
@@ -33,6 +34,7 @@ from app.schemas.billing import (
     TransactionOut,
     UsageOut,
 )
+from app.services import ledger
 from app.services.credits import apply_transaction
 from app.services.media.tts.elevenlabs import system_key_status
 
@@ -56,6 +58,8 @@ def transaction_out(tx: CreditTransaction) -> TransactionOut:
         amount_usd=float(tx.amount_usd),
         balance_after_usd=float(tx.balance_after_usd),
         kind=tx.kind,
+        category=ledger.category(tx),
+        title=ledger.title(tx),
         description=tx.description,
         debate_id=str(tx.debate_id) if tx.debate_id else None,
         provider=tx.provider,
@@ -215,23 +219,43 @@ async def confirm_checkout(
 @router.get("/transactions", response_model=list[TransactionOut])
 async def list_transactions(
     limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
     user: User = Depends(require_user),
     db: AsyncSession = Depends(get_db),
 ) -> list[TransactionOut]:
     stmt = (
         select(CreditTransaction)
         .where(CreditTransaction.user_id == user.id)
-        .order_by(CreditTransaction.created_at.desc())
+        .order_by(CreditTransaction.created_at.desc(), CreditTransaction.id.desc())
+        .offset(offset)
         .limit(limit)
     )
     rows = (await db.execute(stmt)).scalars().all()
     return [transaction_out(tx) for tx in rows]
 
 
+@router.get("/transactions.csv")
+async def export_transactions(
+    user: User = Depends(require_user), db: AsyncSession = Depends(get_db)
+) -> Response:
+    stmt = (
+        select(CreditTransaction)
+        .where(CreditTransaction.user_id == user.id)
+        .order_by(CreditTransaction.created_at.desc(), CreditTransaction.id.desc())
+    )
+    rows = (await db.execute(stmt)).scalars().all()
+    filename = f"{ledger.slug(settings.PROJECT_NAME)}-ledger-{datetime.now(UTC):%Y-%m-%d}.csv"
+    return Response(
+        content=ledger.ledger_csv(rows),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 @router.get("/usage", response_model=UsageOut)
 async def usage(user: User = Depends(require_user), db: AsyncSession = Depends(get_db)) -> UsageOut:
     now = datetime.now(UTC)
-    start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    start = ledger.month_start(now)
     debates = (
         (
             await db.execute(
@@ -241,15 +265,6 @@ async def usage(user: User = Depends(require_user), db: AsyncSession = Depends(g
         .scalars()
         .all()
     )
-    out = UsageOut(period_start=start, debates=len(debates))
-    for d in debates:
-        totals = d.totals_json or {}
-        out.tokens_in += int(totals.get("tokens_in") or 0)
-        out.tokens_out += int(totals.get("tokens_out") or 0)
-        media = d.media_json or {}
-        if d.media_status == "ready":
-            out.voice_ms += int((media.get("stats") or {}).get("total_ms") or 0)
-        out.renders += sum(int(v or 0) for v in (media.get("renders") or {}).values())
     txs = (
         (
             await db.execute(
@@ -261,18 +276,4 @@ async def usage(user: User = Depends(require_user), db: AsyncSession = Depends(g
         .scalars()
         .all()
     )
-    for tx in txs:
-        amount = float(tx.amount_usd)
-        if amount < 0:
-            out.spent_usd += -amount
-            if tx.kind == "debate":
-                out.llm_usd += -amount
-            elif tx.kind == "media":
-                out.tts_usd += -amount
-        elif tx.kind in ("topup", "bonus", "refund"):
-            out.topped_up_usd += amount
-    out.spent_usd = round(out.spent_usd, 6)
-    out.topped_up_usd = round(out.topped_up_usd, 6)
-    out.llm_usd = round(out.llm_usd, 6)
-    out.tts_usd = round(out.tts_usd, 6)
-    return out
+    return ledger.build_usage(now, debates, txs)

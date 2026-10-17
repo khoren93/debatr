@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import type { BillingConfig, ModelInfo, TTSProviderName } from '../../api/types';
 import { useLeaderboard } from '../../hooks/useLeaderboard';
 import type { VoiceCatalogue } from '../../hooks/useVoices';
+import { accountPath, type AccountTab } from '../account/tabs';
 import { Card, ErrorBox, Hint, Label, Spinner } from '../ui';
 import { SpeakerCard } from './SpeakerCard';
 import {
@@ -74,8 +75,8 @@ const EngineOption = ({
 );
 
 /** Account page in a new tab: the wizard keeps its state and picks up new keys immediately. */
-const AccountLink = ({ children }: { children: string }) => (
-  <a href="/account" target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 text-accent hover:text-accent-hover">
+const AccountLink = ({ children, tab }: { children: string; tab?: AccountTab }) => (
+  <a href={accountPath(tab)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 text-accent hover:text-accent-hover">
     {children}
     <ArrowUpRight className="size-3" />
   </a>
@@ -231,19 +232,19 @@ export const StepSpeakers = ({
             />
           </div>
           <span className="text-xs text-muted">
-            Own ElevenLabs key? <AccountLink>Account</AccountLink>
+            Own ElevenLabs key? <AccountLink tab="keys">Account</AccountLink>
           </span>
         </div>
         {ttsKeyError && (
           <Hint tone="danger">
             ElevenLabs rejected the key saved in this browser ({ttsKeyError}), so {premiumLocked ? 'premium voices stay locked' : 'premium voices are paid from your credits'}. Replace it in{' '}
-            <AccountLink>Account</AccountLink>.
+            <AccountLink tab="keys">Account</AccountLink>.
           </Hint>
         )}
         {!premiumAvailable && (
           <Hint>
             Premium voices are not available on this server right now{billing.elevenlabs_error ? ` (${billing.elevenlabs_error})` : ''}. Add your own ElevenLabs key in{' '}
-            <AccountLink>Account</AccountLink> to use them.
+            <AccountLink tab="keys">Account</AccountLink> to use them.
           </Hint>
         )}
         {premiumAvailable && premiumLocked && (

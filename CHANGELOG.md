@@ -63,6 +63,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   visual stage in the centre and captions below; the topic is shown big at the start and then
   stays as a small chip in the corner. The Short gets the same stage between the debaters and
   the captions.
+- **Redesigned Account page** with tabs (Overview, API keys, Billing, Security; `?tab=` links):
+  a balance panel with a low-balance warning, top-up amounts with "~N debates" and this month's
+  spending; tokens, voice minutes and renders with a bar per day; recent activity with what each
+  charge paid for (model tokens, premium voices, AI pictures); one card per provider key; the
+  full ledger grouped by day with paging and a CSV export (`GET /api/billing/transactions.csv`);
+  password and session settings. `/api/billing/usage` now returns per-day buckets and ledger
+  rows carry a `category` and a clean `title`.
 
 ### Fixed
 

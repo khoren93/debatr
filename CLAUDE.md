@@ -22,6 +22,7 @@ backend/            FastAPI API + RQ worker (Python 3.12+, managed with uv)
   app/services/       orchestrator (RQ jobs), scheduler (turn order), prompt_builder,
                       api_tokens (token budget, private-by-default, device flow in Redis),
                       openrouter_client, events (pub/sub), queue_manager, credits (ledger),
+                      ledger (row category/title, monthly usage per day, CSV export),
                       estimate (pre-run cost), verdict (structured verdict), moderation (AI gallery
                       check + auto-publish), views (view counter),
                       engagement (likes/audience votes), ranking (trending score, model leaderboard),
@@ -59,8 +60,11 @@ frontend/           React 19 + Vite 8 + Tailwind 4 + TypeScript
                            regenerate-audio dialog, exports aside (browser MP4 render), lineup,
                            AudienceVote (blind vote), LikeButton, TurnScenes (scene board under
                            each turn: Thumbnail stills, replay modal, fact-check/dispute badges)
-  src/components/account/  credits, usage, local keys, API tokens (ApiTokensCard, TokenOptionsFields,
-                           CopyBlock), ledger, security cards; auth layout/fields
+  src/components/account/  Account page tabs (tabs.ts: `?tab=overview|keys|billing|security`,
+                           accountPath): ProfileHeader, BalanceCard, UsageCards (bar per day),
+                           Ledger (recent activity + full ledger), ProviderKeys (browser keys),
+                           API tokens (ApiTokensCard, TokenOptionsFields, CopyBlock), SecurityCard;
+                           auth layout/fields
   src/video/          Remotion compositions (DebateLong 16:9, DebateShort 9:16, ScenePoster =
                       one scene for the transcript board) + render.ts;
                       visuals/ = scene renderer (SceneStage, 22 scene views, rough.js strokes,
@@ -68,7 +72,7 @@ frontend/           React 19 + Vite 8 + Tailwind 4 + TypeScript
                       PictureScenes: sketch strokes + Ken Burns pictures)
   src/pages/          Landing (/), Library (/library), Gallery (/gallery), Leaderboard (/leaderboard),
                       CreateDebate (/create, `?draft=<id>`, `?remix=<id>`),
-                      DebateView (/debate/:id and public /d/:slug), Account (/account),
+                      DebateView (/debate/:id and public /d/:slug), Account (/account?tab=…),
                       Device (/device?code=…, approves `debatr login`), Login (/login),
                       Register (/register)
   src/lib/cli.ts      install / login / MCP setup snippets shown on the Account page
@@ -359,7 +363,12 @@ Stopping: `POST /api/debates/{id}/stop` sets the status, sets `debate:{id}:stop`
   `v1.checkout.sessions`); `POST /api/billing/webhook` (`checkout.session.completed` / `async_payment_succeeded`) and
   `GET /api/billing/confirm?session_id=` (called by the Account page after redirect) credit it.
   `DEV_FAKE_PAYMENTS=true` (non-production) credits instantly without Stripe.
-- `GET /api/billing/usage` aggregates the current month (tokens, voice ms, renders, spend).
+- `GET /api/billing/usage` aggregates the current month (tokens, voice ms, renders, spend) plus
+  one UTC-day bucket per day (`services/ledger.build_usage`; debate metrics count on the day the
+  debate was created). `GET /api/billing/transactions` pages with `limit`/`offset`; rows carry
+  `category` (models | voices | pictures | topup | bonus | refund | adjustment) and `title`
+  (debate title without the "Premium voices: " prefix). `GET /api/billing/transactions.csv`
+  exports the whole ledger (formula-looking cells are escaped).
 - A personal OpenRouter key (`PUT /api/auth/me/openrouter-key`) is validated against OpenRouter,
   stored encrypted with `SECRET_KEY` (`core/security.py`) and shown masked (`…last4`).
 
@@ -434,7 +443,7 @@ Stopping: `POST /api/debates/{id}/stop` sets the status, sets `debate:{id}:stop`
   accounts have `user_id=NULL`: readable via their link, manageable only from the admin panel.
 - The wizard keeps its in-progress state in `localStorage` (`debatr.wizard.v1`). Browser-only
   keys (`debatr.openrouter_key`, `debatr.elevenlabs_key`) live in `src/lib/localKeys.ts`
-  (`useLocalKey`), are managed on the Account page (`LocalKeysCard`; the wizard only shows their
+  (`useLocalKey`), are managed on the Account page (`ProviderKeys`, `?tab=keys`; the wizard only shows their
   status and links there in a new tab — the `storage` event syncs them back), and are
   sent as transient `user_provider_key` / `user_tts_key` (never in `config_json`, stripped from
   draft saves). The wizard's default model is `openrouter/free` (`FREE_ROUTER_ID`). With `user_tts_key` the API parks it in Redis (`debate:{id}:tts_key`) so

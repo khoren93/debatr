@@ -2,6 +2,7 @@ import { KeyRound, PenTool, SearchCheck } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { ImageSource } from '../../api/types';
 import type { TtsKeyCheck, TtsKeyStatus } from '../../hooks/useElevenLabsKeyStatus';
+import { accountPath } from '../account/tabs';
 import { Card, Chip, Hint, Label, LinkButton, Segmented } from '../ui';
 import { OptionCard } from './OptionCard';
 import { OUTPUT_OPTIONS, QUALITY_OPTIONS, type WizardState } from './wizardState';
@@ -169,7 +170,7 @@ export const StepFormat = ({ state, patch, accountKeyMasked, openrouterKey, ttsK
               Optional. An OpenRouter key unlocks paid models without credits; an ElevenLabs key makes premium voices free of credits. Keys are managed in Account and stay in this browser.
             </p>
           </div>
-          <LinkButton to="/account" variant="secondary" size="sm" newTab icon={<KeyRound className="size-3.5" />}>
+          <LinkButton to={accountPath('keys')} variant="secondary" size="sm" newTab icon={<KeyRound className="size-3.5" />}>
             Manage keys
           </LinkButton>
         </div>
