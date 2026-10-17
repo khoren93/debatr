@@ -1,3 +1,4 @@
+from dataclasses import replace
 from itertools import pairwise
 
 import pytest
@@ -737,3 +738,134 @@ def test_sides_named_after_debaters_get_the_exact_names() -> None:
     }
     [scene] = parse_scenes(reply, limit=2, debaters=debaters)
     assert (scene.left.label, scene.right.label) == ("Debater 1", "Debater 2")
+
+
+def test_director_prompt_carries_hints_sketches_and_pictures() -> None:
+    brief = TurnBrief(
+        seq_index=3,
+        speaker_id="participant_1",
+        speaker_name="Nova",
+        role="debater",
+        turn_type="opening",
+        text=SPEECH,
+        hints=(("bar chart - Denmark 50%, Germany 30%", "the grid"),),
+        images=True,
+    )
+    system, user = (
+        m["content"]
+        for m in build_director_messages(brief, topic="T", language="English", budget=2)
+    )
+    assert '"type":"sketch"' in system and '"type":"image"' in system
+    assert "a real place or thing worth seeing -> image" in system
+    assert '1. bar chart - Denmark 50%, Germany 30% (right after: "the grid")' in user
+    plain = replace(brief, hints=(), images=False)
+    system, user = (
+        m["content"]
+        for m in build_director_messages(plain, topic="T", language="English", budget=2)
+    )
+    assert '"type":"image"' not in system and '"type":"sketch"' in system
+    assert "asked the studio" not in user
+
+
+def test_scene_budget_counts_hints() -> None:
+    short = " ".join(["word"] * 20)  # ~8 s
+    assert scene_budget(short, "debater") == 0
+    assert scene_budget(short, "debater", hints=2) == 1
+    long = " ".join(["word"] * 100)  # ~38 s -> 2 scenes
+    assert scene_budget(long, "debater", hints=3) == 3
+
+
+def test_parse_scenes_keeps_one_picture_and_respects_the_switch() -> None:
+    payload = {
+        "scenes": [
+            {"type": "photo", "subject": "wind farm", "anchor": "x"},
+            {"type": "image", "subject": "coal plant", "anchor": "y"},
+            {"type": "drawing", "subject": "a piggy bank", "anchor": "z"},
+        ]
+    }
+    kinds = [s.type for s in parse_scenes(payload, 5)]
+    assert kinds == ["image", "sketch"]
+    assert [s.type for s in parse_scenes(payload, 5, images=False)] == ["sketch"]
+
+
+def test_hint_numbers_count_as_said() -> None:
+    hinted = {"scenes": [{"type": "stat", "value": 73, "suffix": "%", "label": "x", "anchor": "a"}]}
+    assert parse_scenes(hinted, 2, speech=SPEECH) == []
+    assert len(parse_scenes(hinted, 2, speech=f"{SPEECH} chart: 73%")) == 1
+
+
+def test_keys_are_stable_and_survive_filled_fields() -> None:
+    from app.schemas.visuals import ImageScene, assign_keys, key_seq, scene_key
+
+    scene = ImageScene.model_validate({"type": "image", "subject": "wind farm", "anchor": "x"})
+    key = scene_key(4, scene)
+    filled = scene.model_copy(update={"src": "visuals/0123456789abcdef.webp", "kind": "photo"})
+    assert scene_key(4, filled) == key and key_seq(key) == 4
+    assert [s.key for s in assign_keys(4, [scene])] == [key]
+
+
+def test_scene_summaries_and_checkable_types() -> None:
+    from app.services.media.visuals import is_checkable, is_disputable, scene_summary
+
+    bars = _scene(
+        {
+            "type": "bars",
+            "title": "Wind",
+            "unit": "%",
+            "items": [{"label": "Denmark", "value": 50}, {"label": "Germany", "value": 30.5}],
+        }
+    )
+    assert scene_summary(bars) == 'bars "Wind": Denmark 50%, Germany 30.5%'
+    quote = _scene({"type": "quote", "text": "To be", "author": "Hamlet"})
+    assert scene_summary(quote) == 'quote: "To be" — Hamlet'
+    headline = _scene({"type": "headline", "text": "Go big"})
+    definition = _scene({"type": "definition", "term": "UBI", "text": "Money for all"})
+    assert is_checkable(bars) and is_checkable(quote)
+    assert not is_checkable(headline) and not is_checkable(definition)
+    assert is_disputable(definition) and not is_disputable(headline)
+    ranking = _scene({"type": "ranking", "items": [{"label": "A"}, {"label": "B"}]})
+    assert not is_checkable(ranking) and is_disputable(ranking)
+
+
+def test_timeline_visual_carries_check_and_disputes() -> None:
+    visual = TimelineVisual.model_validate(
+        {
+            "id": "v1_0",
+            "seq_index": 1,
+            "speaker_id": "participant_1",
+            "start_ms": 0,
+            "end_ms": 5000,
+            "key": "1:abc",
+            "check": {"verdict": "disputed", "note": "n", "sources": [{"url": "https://a.org"}]},
+            "disputes": [
+                {"by_id": "participant_2", "by_name": "Rex", "seq_index": 4, "reason": "r"}
+            ],
+            "scene": {"type": "stat", "value": 1, "label": "x"},
+        }
+    )
+    assert visual.check is not None and visual.check.sources[0].title == ""
+    assert visual.disputes[0].by_name == "Rex"
+
+
+def test_tiny_charts_from_requests_are_rescued() -> None:
+    speech = "Public transport use rose by over 30 percent, sales went from 10 to 12 percent."
+    payload = {
+        "scenes": [
+            {
+                "type": "bar_chart",
+                "anchor": "rose by over 30 percent",
+                "title": "Transit use",
+                "unit": "%",
+                "items": [{"label": "Copenhagen", "value": 30}],
+            },
+            {
+                "type": "line",
+                "anchor": "sales went",
+                "points": [{"label": "before", "value": 10}, {"label": "after", "value": 12}],
+            },
+        ]
+    }
+    stat, bars = parse_scenes(payload, 3, speech=speech)
+    assert isinstance(stat, StatScene) and stat.value == 30 and stat.suffix == "%"
+    assert stat.label == "Transit use" and stat.anchor == "rose by over 30 percent"
+    assert isinstance(bars, BarsScene) and [i.value for i in bars.items] == [10, 12]

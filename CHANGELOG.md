@@ -24,6 +24,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Judge's scoreboard**: when the judge announces the result, the stage shows the debaters
   side by side and crowns the winner (or stamps a draw), built from the structured verdict
   without another model call.
+- **Sketches and pictures**: the director can ask for a hand-drawn illustration of an object or
+  metaphor (an illustrator model draws it as SVG; the server keeps only plain line data, which
+  the video inks in stroke by stroke) and, if you choose so, a picture of a real place or thing:
+  a freely licensed photo from Wikimedia Commons with its author and licence, or an AI image
+  paid from your balance. A vision model checks every picture before it is used.
+- **Live scenes**: scenes are designed right after every turn and appear under the text while
+  the debate runs (click one to replay it); the audio build reuses them.
+- **Debaters direct the visuals**: with visual scenes on, debaters may ask for a visual
+  (`[visual: …]`) and challenge one of their opponent's on-screen figures
+  (`[dispute N: …]`); the markers are neither voiced nor shown, and a challenged scene carries a
+  "disputed by …" stamp.
+- **Fact-check** (wizard switch, paid like the debate): a web search checks the figures and
+  quotes on screen — verified, disputed or unverified, with sources. Opponents see the results,
+  the judge weighs them, and the model leaderboard shows each model's accuracy.
 
 ### Changed
 

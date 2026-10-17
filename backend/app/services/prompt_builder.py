@@ -70,6 +70,27 @@ def _formatting_rules(output_style: str) -> str:
     return "\nFORMATTING: Use Markdown (bold, italics, short lists) to make your text readable."
 
 
+def visuals_on(conf: dict[str, Any]) -> bool:
+    """The show draws scenes while debaters speak (mirrors services.studio.visuals_enabled)."""
+    plan = conf.get("media_plan") or {}
+    return bool(plan) and bool(plan.get("visuals", True))
+
+
+VISUAL_RULES = (
+    "\nVISUALS: While you speak, the show draws charts, numbers and sketches on screen. You may "
+    "request up to two visuals by writing [visual: what to show, with the exact figures or items] "
+    "right after the sentence it illustrates, e.g. [visual: bar chart - wind power share: "
+    "Denmark 50%, Germany 30%]. Requests are not read aloud. Only show facts you also state in "
+    "your speech, and never invent figures."
+)
+DISPUTE_RULES = (
+    "If one of these visuals is wrong or misleading — above all one the fact-check disputed — "
+    "challenge it: say why in your speech and write [dispute <number>: <short reason>] right "
+    "there (at most one per turn); the challenge is stamped on screen. Challenge only what you "
+    "can explain."
+)
+
+
 def _common_rules(language: str, words: int, output_style: str = "markdown") -> str:
     return (
         f"\nIMPORTANT: Write your response in {language}."
@@ -84,23 +105,35 @@ def build_debater_messages(
     speaker: dict[str, Any],
     turn: ScheduledTurn,
     history: list[dict[str, Any]],
+    visual_claims: str = "",
 ) -> list[dict[str, str]]:
+    """`visual_claims`: numbered lines describing the opponents' on-screen scenes (with their
+    fact-checks), which this speaker may challenge (services.studio)."""
     words = length_words(conf.get("length_preset", "medium"))
     language = conf.get("language", "English")
     persona = speaker.get("persona_custom") or "You are a skilled, well-informed debater."
+    visuals = visuals_on(conf)
 
     system = (
         f"You are a participant in a structured debate. Your name is {speaker['display_name']}.\n"
         f"Persona and stance: {persona}\n"
         f"Style: {intensity_description(int(conf.get('intensity', 5)))}"
         + _common_rules(language, words, conf.get("output_style", "markdown"))
+        + (VISUAL_RULES if visuals else "")
     )
 
+    claims = (
+        "\nVisuals your opponents have put on screen (with the studio's web fact-check where "
+        f"available):\n{visual_claims}\n{DISPUTE_RULES}\n"
+        if visuals and visual_claims.strip()
+        else ""
+    )
     user = (
         f"Debate topic: {conf.get('topic')}\n"
         + (f"Context: {conf['description']}\n" if conf.get("description") else "")
         + f"\nParticipants:\n{_participants_block(conf.get('participants', []))}\n"
         f"\nDebate so far:\n{_history_block(history)}\n"
+        f"{claims}"
         f"\nRound {turn.round_number} of {conf.get('num_rounds', 1)}. "
         f"{_TURN_INSTRUCTIONS.get(turn.turn_type, _TURN_INSTRUCTIONS['argument'])}\n"
         f"It is now your turn, {speaker['display_name']}."
@@ -157,8 +190,10 @@ def build_moderator_messages(
 
 
 def build_verdict_messages(
-    conf: dict[str, Any], history: list[dict[str, Any]]
+    conf: dict[str, Any], history: list[dict[str, Any]], evidence: str = ""
 ) -> list[dict[str, str]]:
+    """`evidence`: web fact-checks of the on-screen figures and the debaters' challenges
+    (services.studio.verdict_evidence)."""
     language = conf.get("language", "English")
     if conf.get("output_style") == "spoken":
         structure = (
@@ -182,10 +217,17 @@ def build_verdict_messages(
         f"{structure}\n"
         f"\nWrite in {language}. Style: objective, professional, analytical."
     )
+    evidence_block = (
+        f"\n{evidence}\nWeigh accuracy: figures the fact-check refuted weaken a debater's case, a "
+        "well-founded challenge strengthens it. Mention it briefly where it matters.\n"
+        if evidence.strip()
+        else ""
+    )
     user = (
         f"Debate topic: {conf.get('topic')}\n"
         + (f"Context: {conf['description']}\n" if conf.get("description") else "")
         + f"\nFull transcript:\n{_history_block(history)}\n"
-        "\nPlease deliver your final verdict now."
+        + evidence_block
+        + "\nPlease deliver your final verdict now."
     )
     return [{"role": "system", "content": system}, {"role": "user", "content": user}]

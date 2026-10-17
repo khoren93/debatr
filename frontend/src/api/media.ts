@@ -46,3 +46,6 @@ export const fetchTimeline = (url: string) => api.get<Timeline>(url, { baseURL: 
 
 /** Absolute folder URL for the renderer (Remotion needs full URLs for audio). */
 export const absoluteMediaBase = (base: string) => `${window.location.origin}${base}`;
+
+/** The debate's media folder even before an audio build: pictures of the live scenes live there. */
+export const debateFilesBase = (debateId: string) => absoluteMediaBase(`/api/media/files/${debateId}`);

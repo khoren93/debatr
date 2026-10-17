@@ -39,6 +39,9 @@ class DebateRecord:
     models: dict[str, str]  # participant_id -> model_id
     votes: dict[str, int] = field(default_factory=dict)  # participant_id -> audience votes
     judge_winner: str | None = None  # participant_id, None for a draw or no verdict
+    # participant_id -> {checked, verified, disputed, unverified}: web fact-checks of the
+    # figures and quotes the debater put on screen (totals_json["claims"]).
+    claims: dict[str, dict[str, int]] = field(default_factory=dict)
 
 
 @dataclass
@@ -52,6 +55,9 @@ class ModelStanding:
     audience_contests: int = 0  # debates against another model that got at least one vote
     judge_wins: int = 0
     judge_contests: int = 0  # debates against another model that the judge decided
+    claims_checked: int = 0
+    claims_verified: int = 0
+    claims_disputed: int = 0
 
     @property
     def vote_share(self) -> float | None:
@@ -110,6 +116,14 @@ def build_leaderboard(records: Iterable[DebateRecord]) -> list[ModelStanding]:
             s.debates += 1
             s.votes += votes.get(model, 0)
             s.votes_in_debates += total
+        for pid, counts in record.claims.items():
+            claimant = record.models.get(pid)
+            if claimant is None or not isinstance(counts, dict):
+                continue
+            s = standings[claimant]
+            s.claims_checked += int(counts.get("checked") or 0)
+            s.claims_verified += int(counts.get("verified") or 0)
+            s.claims_disputed += int(counts.get("disputed") or 0)
         if len(models) < 2:
             continue  # a mirror match says nothing about which model is better
 

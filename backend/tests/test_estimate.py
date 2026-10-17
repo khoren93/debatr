@@ -95,3 +95,29 @@ def test_own_tts_key_keeps_voices_off_credits():
     assert paid.tts_cost_usd > 0
     assert own.tts_cost_usd == paid.tts_cost_usd
     assert own.credits_cost_usd == round(paid.credits_cost_usd - paid.tts_cost_usd, 6)
+
+
+def test_fact_check_and_ai_pictures_add_credits():
+    conf = _conf(
+        media_plan={"visuals": True, "images": "ai", "outputs": ["audio"]}, fact_check=True
+    )
+    pricing = {"openai/gpt-4o-mini": (0.0, 0.0)}
+    est = _estimate(conf, pricing, fact_check_price=0.006, image_price=0.009, max_images=3)
+    debater_turns = 4  # 2 rounds x 2 debaters
+    assert est.factcheck_cost_usd == round(debater_turns * 0.006, 6)
+    assert est.images_cost_usd == round(3 * 0.009, 6)
+    assert est.credits_cost_usd == round((est.factcheck_cost_usd + est.images_cost_usd) * 1.2, 6)
+    # An own OpenRouter key pays the fact-checks; AI pictures still come from the balance.
+    own = _estimate(
+        conf, pricing, own_key=True, fact_check_price=0.006, image_price=0.009, max_images=3
+    )
+    assert own.credits_cost_usd == round(own.images_cost_usd * 1.2, 6)
+    # Fact-checks need the visual scenes; pictures need the audio build.
+    off = _estimate(
+        _conf(media_plan={"visuals": False, "images": "ai", "outputs": ["audio"]}, fact_check=True),
+        pricing,
+        fact_check_price=0.006,
+        image_price=0.009,
+        max_images=3,
+    )
+    assert off.factcheck_cost_usd == 0 and off.images_cost_usd == 0

@@ -3,6 +3,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.schemas.visuals import Scene, SceneCheck
+
 LengthPreset = Literal["very_short", "short", "medium", "long"]
 ParticipantRole = Literal["moderator", "debater"]
 # "spoken" asks the models for plain spoken prose (no Markdown) suited for TTS and video.
@@ -11,6 +13,8 @@ DebateStatus = Literal["draft", "queued", "running", "completed", "error", "stop
 MediaOutput = Literal["audio", "video", "short"]
 VideoQuality = Literal["720p", "1080p", "4k"]
 TTSProvider = Literal["elevenlabs", "edge"]
+# Pictures in the visual scenes: none, free photos (Wikimedia Commons) or AI images (paid).
+ImageSource = Literal["off", "stock", "ai"]
 
 GALLERY_CATEGORIES: tuple[str, ...] = ("tech", "society", "science", "culture", "money", "fun")
 GallerySort = Literal["new", "trending", "top"]
@@ -89,7 +93,8 @@ class MediaPlan(BaseModel):
     voices: dict[str, str] = Field(default_factory=dict)  # speaker id -> provider voice id
     outputs: list[MediaOutput] = Field(default_factory=lambda: ["audio", "video", "short"])
     quality: VideoQuality = "1080p"
-    visuals: bool = True  # charts / drawn scenes synced with the speech in the video
+    visuals: bool = True  # charts / drawn scenes, live next to the text and in the video
+    images: ImageSource = "off"  # pictures among the scenes
 
 
 class DebateConfig(BaseModel):
@@ -105,6 +110,9 @@ class DebateConfig(BaseModel):
     media_plan: MediaPlan | None = None
     # Publish to the gallery once finished and approved by the AI check (services/moderation).
     auto_publish: bool = True
+    # Web fact-check of the figures and quotes shown in the visual scenes (services/factcheck),
+    # billed like the debate. Needs media_plan.visuals.
+    fact_check: bool = False
     # Save without starting (status=draft). Request-only.
     draft: bool = False
     # Optional BYOK OpenRouter key. Never persisted to the database.
@@ -147,6 +155,8 @@ class EstimateOut(BaseModel):
     llm_cost_usd: float
     tts_chars: int
     tts_cost_usd: float
+    factcheck_cost_usd: float = 0.0
+    images_cost_usd: float = 0.0
     credits_cost_usd: float
     duration_ms: int
     render_ms: int
@@ -212,6 +222,27 @@ class DebateTotals(BaseModel):
     turns_count: int = 0
 
 
+class TurnSceneOut(BaseModel):
+    key: str
+    scene: Scene
+    checkable: bool = False  # sent to the fact-checker (the result may still be pending)
+    check: SceneCheck | None = None
+
+
+class TurnDisputeOut(BaseModel):
+    key: str  # the challenged scene (of an earlier turn)
+    reason: str = ""
+
+
+class TurnVisualsOut(BaseModel):
+    """Live scenes of a turn (services/studio)."""
+
+    # designing | checking (sketches / fact-checks running) | ready | error | none
+    status: str = "none"
+    scenes: list[TurnSceneOut] = Field(default_factory=list)
+    disputes: list[TurnDisputeOut] = Field(default_factory=list)  # made by this turn
+
+
 class TurnOut(BaseModel):
     seq_index: int
     round_id: str
@@ -224,6 +255,7 @@ class TurnOut(BaseModel):
     model_used: str
     usage: TurnUsage = Field(default_factory=TurnUsage)
     created_at: datetime | None = None
+    visuals: TurnVisualsOut | None = None
 
 
 class ParticipantOut(BaseModel):
@@ -390,6 +422,10 @@ class LeaderboardEntry(BaseModel):
     audience_contests: int = 0
     judge_wins: int = 0
     judge_contests: int = 0
+    # Web fact-checks of the model's on-screen figures and quotes.
+    claims_checked: int = 0
+    claims_verified: int = 0
+    claims_disputed: int = 0
 
 
 class LeaderboardOut(BaseModel):

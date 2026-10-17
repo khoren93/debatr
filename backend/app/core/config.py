@@ -55,6 +55,20 @@ class Settings(BaseSettings):
     # highlights model. Runs on the system key and is not billed to the user (~$0.01/debate).
     MEDIA_VISUALS_MODEL: str = "google/gemini-2.5-flash"
     MEDIA_VISUALS_CONCURRENCY: int = 4
+    # Illustrator of "sketch" scenes (SVG line art, sanitized), system key, not billed; empty =
+    # the visuals model. anthropic/claude-haiku-5.5 draws cleaner but takes ~13 s.
+    MEDIA_SKETCH_MODEL: str = "google/gemini-3.5-flash-lite"
+    # "image" scenes: free photos from Wikimedia Commons or AI pictures (MediaOptions.images).
+    # AI pictures are paid from the owner's balance (cost x CREDIT_MARKUP); the visuals model
+    # checks every picture before it is used.
+    MEDIA_IMAGE_MODEL: str = "black-forest-labs/flux-3-image-klein"
+    MEDIA_IMAGE_PRICE_USD: float = 0.009  # per AI picture, for estimates
+    MEDIA_MAX_IMAGES: int = 6  # pictures per debate
+    # Web fact-check of on-screen figures and quotes (DebateConfig.fact_check). Runs during the
+    # debate on the debate's OpenRouter key and is billed like the debate.
+    FACT_CHECK_MODEL: str = "perplexity/sonar"
+    FACT_CHECK_MAX_PER_TURN: int = 2
+    FACT_CHECK_PRICE_USD: float = 0.006  # per check, for estimates
     MEDIA_GAP_MS: int = 600
     MEDIA_LOUDNESS_LUFS: float = -16.0
     FFMPEG_BIN: str = "ffmpeg"

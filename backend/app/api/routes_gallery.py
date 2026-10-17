@@ -121,7 +121,8 @@ async def leaderboard(db: AsyncSession = Depends(get_db)) -> LeaderboardOut:
             await db.execute(
                 select(Debate)
                 .options(
-                    load_only(Debate.id, Debate.verdict_json), selectinload(Debate.participants)
+                    load_only(Debate.id, Debate.verdict_json, Debate.totals_json),
+                    selectinload(Debate.participants),
                 )
                 .where(*finished)
             )
@@ -144,6 +145,7 @@ async def leaderboard(db: AsyncSession = Depends(get_db)) -> LeaderboardOut:
             models=debater_models(d),
             votes=votes.get(d.id, {}),
             judge_winner=(d.verdict_json or {}).get("winner_id"),
+            claims=(d.totals_json or {}).get("claims") or {},
         )
         for d in debates
     ]
@@ -164,6 +166,9 @@ async def leaderboard(db: AsyncSession = Depends(get_db)) -> LeaderboardOut:
                 audience_contests=s.audience_contests,
                 judge_wins=s.judge_wins,
                 judge_contests=s.judge_contests,
+                claims_checked=s.claims_checked,
+                claims_verified=s.claims_verified,
+                claims_disputed=s.claims_disputed,
             )
         )
     return LeaderboardOut(

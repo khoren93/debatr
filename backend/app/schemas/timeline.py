@@ -65,7 +65,8 @@ class TimelineStats(BaseModel):
     tts_ms: int = 0
     estimated_usd: float | None = None
     cached_turns: int = 0
-    visuals_usd: float | None = None  # LLM cost of the visual director (not billed)
+    visuals_usd: float | None = None  # director, sketches, picture checks (system key, not billed)
+    images_usd: float | None = None  # AI pictures (billed to the owner)
 
 
 class Timeline(BaseModel):

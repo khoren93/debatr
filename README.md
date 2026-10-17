@@ -39,9 +39,13 @@ Users sign up, run free models or bring their own OpenRouter key, buy credits wi
   karaoke-style transcript and an MP3 of the whole debate.
 - **📹 YouTube video and a Short in minutes**: a 16:9 episode plus a 9:16 Short cut around the
   strongest moments, rendered right in your browser.
-- **✏️ Visual scenes**: charts, maps, balances, matrices, Venn diagrams, top lists, schemes and
-  pictograms are drawn in the centre of the video exactly when a speaker mentions them — only
-  with numbers the speaker actually said — and the judge's scoreboard crowns the winner.
+- **✏️ Visual scenes**: charts, maps, balances, matrices, Venn diagrams, top lists, schemes,
+  hand-drawn sketches and photos appear next to every turn while the debate runs and in the
+  video exactly when a speaker mentions them — only with numbers the speaker actually said — and
+  the judge's scoreboard crowns the winner. Debaters can ask for visuals and challenge each
+  other's figures on screen.
+- **🔎 Fact-check**: a web search checks the figures and quotes on screen, the opponents and the
+  judge see the result, and the leaderboard shows how accurate each model's figures are.
 - **📝 Transcript export**: take the full debate with you as Markdown.
 
 ### 🌍 Share and discover

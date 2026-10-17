@@ -1,15 +1,16 @@
 import { useEffect } from 'react';
 import type { Timeline, TimelineSegment } from '../../api/timeline';
-import type { Scene } from '../../api/visuals';
+import type { Scene, SceneCheck, SceneDispute } from '../../api/visuals';
 import { DISPLAY_FONT, FONT, MONO_FONT } from '../constants';
 import { Mascot } from '../Mascot';
 import { levelAt, roundLabel } from '../utils';
 import { DefinitionView, RankingView, ScoreboardView } from './CardScenes';
 import { MatrixView, ScaleView, VennView } from './DiagramScenes';
-import { INK, INK_DIM, fitFont } from './draw';
+import { INK, INK_DIM, backOut, easeOut, fitFont, ramp } from './draw';
 import { hasMapScene, loadGeo } from './geoLoader';
 import { MapView } from './MapView';
 import { BarsView, LineView, PieView, ProportionView, StatView } from './NumberScenes';
+import { ImageView, SketchView } from './PictureScenes';
 import { FlowView, IconsView, TimelineView } from './SchemeScenes';
 import type { SceneCtx } from './scene';
 import { BulletsView, HeadlineView, QuoteView, RebuttalView, VersusView } from './TextScenes';
@@ -17,6 +18,8 @@ import { relativeItems, scenesAt, type ActiveScene } from './timing';
 
 const NUMERIC = new Set<Scene['type']>(['stat', 'bars', 'line', 'pie', 'proportion']);
 const UNTITLED = new Set<Scene['type']>(['headline', 'quote', 'definition', 'scoreboard']);
+const CHECK_COLORS: Record<SceneCheck['verdict'], string> = { verified: '#34D399', disputed: '#FF7A66', unverified: '#ffffff8c' };
+const DISPUTE_COLOR = '#FFB020';
 
 /** Scenes showing numbers the speaker said get the "claim" note (they are not fact-checked). */
 const isNumeric = (scene: Scene) =>
@@ -64,22 +67,77 @@ const SceneBody = ({ scene, ctx }: { scene: Scene; ctx: SceneCtx }) => {
       return <MapView scene={scene} ctx={ctx} />;
     case 'scoreboard':
       return <ScoreboardView scene={scene} ctx={ctx} />;
+    case 'sketch':
+      return <SketchView scene={scene} ctx={ctx} />;
+    case 'image':
+      return <ImageView scene={scene} ctx={ctx} />;
     default:
       return null; // a scene type from a newer timeline
   }
 };
 
-/** The board a scene is drawn on: panel, speaker tag, title, "claim" note for numbers. */
-const ScenePanel = ({ active, timeline, w, h, k }: { active: ActiveScene; timeline: Timeline; w: number; h: number; k: number }) => {
+const domain = (url: string) => {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '');
+  } catch {
+    return '';
+  }
+};
+
+/** Tiny hand-drawn tick / cross / question mark for the fact-check badge (SVG attributes only). */
+const CheckMark = ({ verdict, size, color }: { verdict: SceneCheck['verdict']; size: number; color: string }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" style={{ display: 'block', flexShrink: 0 }}>
+    {verdict === 'verified' && <path d="M4 12.5 L9.5 18 L20 6" fill="none" stroke={color} strokeWidth={3.2} strokeLinecap="round" strokeLinejoin="round" />}
+    {verdict === 'disputed' && <path d="M5 5 L19 19 M19 5 L5 19" fill="none" stroke={color} strokeWidth={3.2} strokeLinecap="round" />}
+    {verdict === 'unverified' && <path d="M8 8.5 C8 4 16 4 16 8.5 C16 11.5 12 11.5 12 15 M12 19.5 L12 20" fill="none" stroke={color} strokeWidth={3} strokeLinecap="round" />}
+  </svg>
+);
+
+/** "claim · speaker" for unchecked figures, the fact-check result once checked. */
+const ClaimNote = ({ check, speaker, k, t }: { check: SceneCheck | null | undefined; speaker: string; k: number; t: number }) => {
+  if (!check) return <span style={{ color: INK_DIM }}>claim · {speaker}</span>;
+  const color = CHECK_COLORS[check.verdict];
+  const source = check.sources[0] ? domain(check.sources[0].url) : '';
+  const label = check.verdict === 'verified' ? 'fact-checked' : check.verdict === 'disputed' ? 'contradicted by sources' : 'unverified claim';
+  const extra = check.verdict === 'disputed' && check.note ? check.note : source;
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 * k, color, opacity: easeOut(ramp(t, 700, 500)), whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+      <CheckMark verdict={check.verdict} size={22 * k} color={color} />
+      <span style={{ fontWeight: 700 }}>{label}</span>
+      {extra && <span style={{ color: INK_DIM, overflow: 'hidden', textOverflow: 'ellipsis' }}>· {extra}</span>}
+    </span>
+  );
+};
+
+/** Stamp of the speakers who challenged the scene later in the debate. */
+const DisputeStamp = ({ disputes, k, t }: { disputes: SceneDispute[]; k: number; t: number }) => {
+  const names = [...new Set(disputes.map((d) => d.by_name))].join(', ');
+  const p = ramp(t, 1100, 420);
+  if (p <= 0) return null;
+  return (
+    <div style={{ position: 'absolute', right: 30 * k, bottom: 16 * k, padding: `${6 * k}px ${14 * k}px`, border: `${3 * k}px solid ${DISPUTE_COLOR}`, borderRadius: 10 * k, fontFamily: MONO_FONT, fontWeight: 800, fontSize: 18 * k, letterSpacing: 2 * k, textTransform: 'uppercase', color: DISPUTE_COLOR, background: '#0c1226e6', opacity: Math.min(1, p * 2), transform: `rotate(-4deg) scale(${1.5 - 0.5 * backOut(p)})`, whiteSpace: 'nowrap' }}>
+      disputed by {names}
+    </div>
+  );
+};
+
+export interface SceneCast {
+  speakers: Timeline['speakers'];
+  language_code: string;
+}
+
+/** The board a scene is drawn on: panel, speaker tag, title, "claim" note / fact-check. */
+export const ScenePanel = ({ active, cast, mediaBase, w, h, k }: { active: ActiveScene; cast: SceneCast; mediaBase: string; w: number; h: number; k: number }) => {
   const { visual, t, opacity, enter } = active;
   const scene = visual.scene;
-  const speaker = timeline.speakers.find((s) => s.id === visual.speaker_id);
+  const speaker = cast.speakers.find((s) => s.id === visual.speaker_id);
   const color = speaker?.color ?? INK;
   const title = UNTITLED.has(scene.type) ? '' : scene.title;
-  const numeric = isNumeric(scene);
+  const disputes = visual.disputes ?? [];
+  const note = isNumeric(scene) || Boolean(visual.check);
   const pad = 44 * k;
   const head = title ? 78 * k : 34 * k;
-  const foot = numeric ? 40 * k : 0;
+  const foot = note || disputes.length ? 40 * k : 0;
   const ctx: SceneCtx = {
     id: visual.id,
     t,
@@ -90,8 +148,9 @@ const ScenePanel = ({ active, timeline, w, h, k }: { active: ActiveScene; timeli
     k,
     color,
     speaker: speaker?.name ?? '',
-    locale: timeline.language_code,
-    cast: timeline.speakers,
+    locale: cast.language_code,
+    cast: cast.speakers,
+    mediaBase,
   };
   return (
     <div style={{ position: 'absolute', inset: 0, opacity, transform: `translateY(${(1 - enter) * 26 * k}px) scale(${0.97 + 0.03 * enter})` }}>
@@ -106,7 +165,12 @@ const ScenePanel = ({ active, timeline, w, h, k }: { active: ActiveScene; timeli
       <div style={{ position: 'absolute', left: pad, top: pad + head, width: ctx.w, height: ctx.h }}>
         <SceneBody scene={scene} ctx={ctx} />
       </div>
-      {numeric && <div style={{ position: 'absolute', left: pad, bottom: 22 * k, fontFamily: MONO_FONT, fontSize: 18 * k, letterSpacing: 1 * k, color: INK_DIM }}>claim · {speaker?.name}</div>}
+      {note && (
+        <div style={{ position: 'absolute', left: pad, right: disputes.length ? w * 0.42 : pad, bottom: 22 * k, display: 'flex', fontFamily: MONO_FONT, fontSize: 18 * k, letterSpacing: 1 * k }}>
+          <ClaimNote check={visual.check} speaker={speaker?.name ?? ''} k={k} t={t} />
+        </div>
+      )}
+      {disputes.length > 0 && <DisputeStamp disputes={disputes} k={k} t={t} />}
     </div>
   );
 };
@@ -145,7 +209,7 @@ const Spotlight = ({ timeline, seg, ms, w, h, k }: { timeline: Timeline; seg: Ti
 };
 
 /** Centre of the frame: the active visual scene(s), or the spotlight between scenes. */
-export const SceneStage = ({ timeline, seg, ms, x, y, w, h, k }: { timeline: Timeline; seg: TimelineSegment | null; ms: number; x: number; y: number; w: number; h: number; k: number }) => {
+export const SceneStage = ({ timeline, mediaBase, seg, ms, x, y, w, h, k }: { timeline: Timeline; mediaBase: string; seg: TimelineSegment | null; ms: number; x: number; y: number; w: number; h: number; k: number }) => {
   const { active, cover } = scenesAt(timeline.visuals, ms);
   const needsMap = hasMapScene(timeline);
   useEffect(() => {
@@ -159,7 +223,7 @@ export const SceneStage = ({ timeline, seg, ms, x, y, w, h, k }: { timeline: Tim
         </div>
       )}
       {active.map((a) => (
-        <ScenePanel key={a.visual.id} active={a} timeline={timeline} w={w} h={h} k={k} />
+        <ScenePanel key={a.visual.id} active={a} cast={timeline} mediaBase={mediaBase} w={w} h={h} k={k} />
       ))}
     </div>
   );

@@ -219,3 +219,10 @@ export const shortModelName = (modelId: string) => {
 };
 
 export const providerOf = (modelId: string) => (modelId.includes('/') ? modelId.split('/')[0] : '');
+
+/** Hide the studio markers ([visual: …], [dispute N: …]) while a turn streams; the worker strips
+ *  them before the turn is saved. A marker still being typed at the end is hidden too. */
+export const hideStudioMarkers = (text: string) =>
+  text
+    .replace(/[ \t]*\[\s*(?:visual|dispute)\b[^\]\n]*\]/gi, '')
+    .replace(/[ \t]*\[\s*(?:v(?:i(?:s(?:u(?:a(?:l)?)?)?)?)?|d(?:i(?:s(?:p(?:u(?:t(?:e)?)?)?)?)?)?)(?:\b[^\]\n]*)?$/i, '');

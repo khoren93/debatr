@@ -26,6 +26,7 @@ from app.schemas.schemas import (
 )
 from app.services.media.languages import language_code
 from app.services.scheduler import speaker_role_for
+from app.services.studio import turn_visuals_out
 
 
 def is_owner(debate: Debate, viewer: User | None) -> bool:
@@ -68,6 +69,7 @@ def turn_out(turn: Turn) -> TurnOut:
         model_used=turn.model_used,
         usage=TurnUsage.model_validate(turn.usage_json or {}),
         created_at=turn.created_at,
+        visuals=turn_visuals_out(turn),
     )
 
 

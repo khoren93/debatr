@@ -18,9 +18,16 @@ from app.schemas.visuals import (
     ICONS,
     UNORDERED_ITEMS,
     BarsScene,
+    BulletsScene,
+    DefinitionScene,
     DirectorScene,
+    FlowScene,
+    HeadlineScene,
+    IconsScene,
+    ImageScene,
     LineScene,
     MapScene,
+    MatrixScene,
     PieScene,
     ProportionScene,
     QuoteScene,
@@ -28,7 +35,9 @@ from app.schemas.visuals import (
     RebuttalScene,
     ScaleScene,
     ScoreboardScene,
+    SketchScene,
     StatScene,
+    TimelineScene,
     TimelineVisual,
     VennScene,
     VersusScene,
@@ -39,8 +48,8 @@ from app.services.media.highlights import locate_quote, normalize_token
 
 logger = logging.getLogger(__name__)
 
-# Bump when the prompt or the scene contract changes: invalidates cached plans.
-PROMPT_VERSION = "2"
+# Bump when the prompt or the scene contract changes: invalidates stored plans.
+PROMPT_VERSION = "3"
 
 WORDS_PER_SECOND = 2.6  # typical TTS pace, for the scene budget before audio exists
 SECONDS_PER_SCENE = 18
@@ -71,6 +80,8 @@ TYPE_ALIASES: dict[str, str] = {
     "venn_diagram": "venn", "rank": "ranking", "top": "ranking", "top_list": "ranking",
     "leaderboard": "ranking", "pyramid": "ranking", "term": "definition", "glossary": "definition",
     "dictionary": "definition", "world_map": "map", "geo": "map", "countries": "map",
+    "drawing": "sketch", "illustration": "sketch", "doodle": "sketch", "picture": "image",
+    "photo": "image", "photograph": "image",
 }  # fmt: skip
 
 
@@ -85,6 +96,13 @@ class TurnBrief:
     previous_text: str | None = None
     opponent: str | None = None  # name of the debater who spoke just before (for rebuttals)
     debaters: tuple[str, ...] = ()  # everyone's exact names, for labels such as scale pans
+    hints: tuple[tuple[str, str], ...] = ()  # the speaker's [visual: …] requests: (text, after)
+    images: bool = False  # the show may use photos / AI pictures
+
+    @property
+    def hint_text(self) -> str:
+        """The speaker's requests as text: their numbers count as the speaker's words."""
+        return " ".join(text for text, _after in self.hints)
 
 
 def build_briefs(segments: list[TimelineSegment], roles: dict[str, str]) -> list[TurnBrief]:
@@ -125,15 +143,16 @@ def build_briefs(segments: list[TimelineSegment], roles: dict[str, str]) -> list
     return briefs
 
 
-def scene_budget(text: str, role: str) -> int:
-    """How many scenes a turn deserves: about one per SECONDS_PER_SCENE of speech."""
+def scene_budget(text: str, role: str, hints: int = 0) -> int:
+    """How many scenes a turn deserves: about one per SECONDS_PER_SCENE of speech, and at least
+    one per visual the speaker asked for."""
     seconds = len(text.split()) / WORDS_PER_SECOND
     if role == "moderator":
         return 1 if seconds >= 15 else 0
     if seconds < 10:
-        return 0
+        return min(hints, 1) if seconds >= 5 else 0
     limit = 2 if role == "judge" else MAX_SCENES_PER_TURN
-    return max(1, min(limit, round(seconds / SECONDS_PER_SCENE)))
+    return max(1, hints, min(limit, round(seconds / SECONDS_PER_SCENE)))
 
 
 CATALOGUE = """\
@@ -176,7 +195,17 @@ CATALOGUE = """\
 - headline: {"type":"headline","anchor":"...","text":"...","emphasis":"..."}
   The single most quotable idea, max 8 words; emphasis = 1-2 of its words to highlight.
 - icons: {"type":"icons","anchor":"...","items":[{"icon":ICON,"label":"...","anchor":"..."}]}
-  1-3 concrete things the speaker names, drawn as simple pictograms. "Cars, planes and ships all burn oil"."""
+  1-3 concrete things the speaker names, drawn as simple pictograms. "Cars, planes and ships all burn oil".
+- sketch: {"type":"sketch","anchor":"...","title":"...","subject":"...","caption":"..."}
+  A hand-drawn illustration of ONE concrete object, scene or metaphor the speaker evokes; an
+  illustrator draws it from "subject" (in English, concrete and drawable, e.g. "a piggy bank
+  melting in the sun", "an offshore wind turbine"); never people's faces, text or logos.
+  caption = a few words in the debate language. "Our savings melt like ice in the sun"."""
+
+IMAGE_ENTRY = """- image: {"type":"image","anchor":"...","title":"...","subject":"...","caption":"..."}
+  A real-world picture of a place, object or phenomenon the speaker names ("subject" in English,
+  e.g. "offshore wind farm at sea", "coal power plant with cooling towers"). Never a person, a
+  crowd close-up, a logo, a brand, a chart or text. At most one per turn. "The Great Barrier Reef is bleaching"."""
 
 # Which type fits which content, so the director does not default to bullets.
 CHOOSING = (
@@ -185,8 +214,10 @@ CHOOSING = (
     "outweighs -> scale; options rated on two criteria -> matrix; what two ideas share -> venn; "
     "two sides in parallel -> versus; causes and effects -> flow; dates -> timeline; someone "
     "else's words -> quote; the opponent's point answered -> rebuttal; the punchline -> "
-    "headline; concrete things -> icons; a list of points -> bullets (only when nothing above fits)"
+    "headline; a vivid object or metaphor -> sketch; concrete things -> icons; a list of points "
+    "-> bullets (only when nothing above fits)"
 )
+CHOOSING_IMAGE = "; a real place or thing worth seeing -> image"
 
 
 # What fits each kind of turn, so a debate does not become a row of identical scenes.
@@ -196,11 +227,11 @@ TURN_HINTS: dict[str, str] = {
     "judge": "This is the judge's verdict: prefer scale (which side outweighs), versus (the "
     "strengths of each side) or bullets. Numbers only if the judge states scores. The studio "
     "shows the winner on its own scoreboard: do not design a scene announcing the winner.",
-    "opening": "Opening statement: build the case — prefer flow, definition, map, icons, "
-    "bullets, or a chart when numbers are said. Use rebuttal only for a direct attack on the "
-    "opponent's words.",
-    "argument": "Main argument: prefer flow, scale, matrix, map, bullets, or a chart when "
-    "numbers are said.",
+    "opening": "Opening statement: build the case — prefer flow, definition, map, a sketch of a "
+    "vivid image the speaker evokes, icons, bullets, or a chart when numbers are said. Use "
+    "rebuttal only for a direct attack on the opponent's words.",
+    "argument": "Main argument: prefer flow, scale, matrix, map, a sketch, bullets, or a chart "
+    "when numbers are said.",
     "rebuttal": "Rebuttal turn: rebuttal, scale or versus fit best; a chart if numbers are said.",
     "closing": "Closing statement: prefer a headline, scale or bullets that sum up the case; a "
     "rebuttal only if it clearly answers the opponent's last point.",
@@ -215,18 +246,20 @@ def build_director_messages(
         "of the screen shows animated, hand-drawn scenes: charts, numbers, schemes and "
         "pictograms that illustrate exactly what is being said at that moment. You design "
         "those scenes as JSON data; the studio draws them. Reply with JSON only.\n\n"
-        f"Scene types:\n{CATALOGUE}\n\n"
+        f"Scene types:\n{CATALOGUE}\n{IMAGE_ENTRY if brief.images else ''}\n"
         f"ICON is one of: {', '.join(ICONS)}, or null.\n\n"
         "Rules:\n"
         '1. Every scene MUST have "anchor": 3-8 consecutive words copied EXACTLY from the '
         "speech (same language, same spelling) at the moment the scene should appear. Optional "
         '"until": exact words where it may disappear. Item anchors are the exact words where '
         "that item is said. Scenes follow the order of the speech and must not overlap.\n"
-        "2. Data: every number must be said in the speech. Never invent, estimate, complete or "
-        "score anything; a speech without numbers gets non-numeric scenes.\n"
+        "2. Data: every number must be said in the speech (or in the speaker's own visual "
+        "requests). Never invent, estimate, complete or score anything; a speech without numbers "
+        "gets non-numeric scenes.\n"
         f"3. All visible text in {language}. Labels at most 4 words, titles at most 8 words, "
         "no Markdown, no emoji.\n"
-        f"4. Pick the type by content: {CHOOSING}. Vary types within the turn. Fewer strong "
+        f"4. Pick the type by content: {CHOOSING}{CHOOSING_IMAGE if brief.images else ''}. "
+        "Vary types within the turn. Fewer strong "
         "scenes beat many weak ones; an empty list is fine.\n"
         '5. Return {"scenes": [...]}.'
     )
@@ -248,6 +281,17 @@ def build_director_messages(
     else:
         parts.append("No opponent turn precedes this one: do not use rebuttal.")
     parts.append(f"Speech to illustrate:\n{brief.text}")
+    if brief.hints:
+        requests = "\n".join(
+            f"{i}. {text}" + (f' (right after: "{after}")' if after else "")
+            for i, (text, after) in enumerate(brief.hints, start=1)
+        )
+        parts.append(
+            "The speaker asked the studio to show these visuals. Design them first, anchored right "
+            "after the quoted words, with the scene type that fits the data rather than the one "
+            "named in the request (one figure is a stat, 2-6 compared values are bars, a trend "
+            "needs 3+ points):\n" + requests
+        )
     hint = TURN_HINTS.get(brief.role if brief.role != "debater" else brief.turn_type)
     if hint:
         parts.append(hint)
@@ -344,6 +388,30 @@ def _label_debaters(scene: Any, debaters: tuple[str, ...]) -> None:
             item.label = debater_label(item.label, debaters)
 
 
+def _coerce_chart(kind: str, item: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+    """Rescue charts too small for their type (often from a debater's request): one value
+    becomes a stat, a two-point trend becomes bars."""
+    key = "points" if kind == "line" else "items"
+    values = item.get(key)
+    if kind not in ("bars", "pie", "line") or not isinstance(values, list):
+        return kind, item
+    points = [v for v in values if isinstance(v, dict)]
+    if len(points) == 1:
+        only = points[0]
+        unit = str(item.get("unit") or "")
+        stat = {
+            "anchor": item.get("anchor") or only.get("anchor") or "",
+            "until": item.get("until") or "",
+            "value": only.get("value"),
+            "suffix": unit if len(unit) <= 3 else "",
+            "label": item.get("title") or only.get("label") or "",
+        }
+        return "stat", stat
+    if kind == "line" and len(points) == 2:
+        return "bars", {**{k: v for k, v in item.items() if k != "points"}, "items": points}
+    return kind, item
+
+
 def parse_scenes(
     payload: Any,
     limit: int,
@@ -352,12 +420,14 @@ def parse_scenes(
     speaker: str = "",
     opponent: str | None = None,
     debaters: tuple[str, ...] = (),
+    images: bool = True,
 ) -> list[Any]:
     """Valid scene specs from the director's reply; invalid scenes are skipped, not fatal.
 
     With `speech` the content rules are enforced too: numbers must come from the speech, a
     quote may not be the speaker's own words, a rebuttal needs the opponent's turn before.
-    Sides named after a debater get the debater's exact name."""
+    Sides named after a debater get the debater's exact name. Pictures are dropped when the
+    show does not use them, and a turn gets at most one."""
     items = payload.get("scenes") if isinstance(payload, dict) else payload
     if not isinstance(items, list):
         return []
@@ -370,10 +440,15 @@ def parse_scenes(
             if kind in ("cycle", "pyramid"):
                 item = {**item, "layout": kind}
             kind = TYPE_ALIASES[kind]
+        kind, item = _coerce_chart(kind, item)
         try:
             scene = _SCENE.validate_python({**item, "type": kind})
         except ValidationError as e:
             logger.debug("Dropping invalid %s scene: %s", kind or "untyped", e.errors()[:2])
+            continue
+        if isinstance(scene, ImageScene) and (
+            not images or any(isinstance(s, ImageScene) for s in scenes)
+        ):
             continue
         if speech:
             if not is_grounded(scene, speech):
@@ -548,6 +623,7 @@ def align_scenes(scenes: list[Any], segment: TimelineSegment) -> list[TimelineVi
                 end_ms=segment.start_ms + p.end,
                 item_ms=[segment.start_ms + t for t in items],
                 anchored=p.anchored,
+                key=getattr(p.scene, "key", ""),
                 scene=p.scene,
             )
         )
@@ -630,3 +706,101 @@ def make_room(visuals: list[TimelineVisual], pinned: TimelineVisual) -> list[Tim
         items = [min(max(t, start), last) for t in v.item_ms]
         out.append(v.model_copy(update={"start_ms": start, "end_ms": end, "item_ms": items}))
     return sorted(out, key=lambda v: v.start_ms)
+
+
+# --- scene summaries (prompts of debaters, fact-checker and judge) ------------------------
+
+
+def _n(value: float, unit: str = "") -> str:
+    text = str(int(value)) if float(value).is_integer() else f"{value:g}"
+    return f"{text}{unit}" if len(unit) <= 1 else f"{text} {unit}"
+
+
+def _clip_summary(text: str, limit: int = 240) -> str:
+    text = " ".join(text.split())
+    return text if len(text) <= limit else text[: limit - 1].rstrip() + "…"
+
+
+def scene_summary(scene: Any) -> str:
+    """One line describing what a scene shows, e.g. 'bars "Wind share": Denmark 40%, US 15%'."""
+    title = f' "{scene.title}"' if getattr(scene, "title", "") else ""
+    out: str
+    if isinstance(scene, StatScene):
+        trend = f" (trend {scene.trend})" if scene.trend else ""
+        out = f"stat: {scene.prefix}{_n(scene.value)}{scene.suffix} — {scene.label}{trend}"
+    elif isinstance(scene, BarsScene | PieScene):
+        items = ", ".join(f"{i.label} {_n(i.value, scene.unit)}" for i in scene.items)
+        out = f"{scene.type}{title}: {items}"
+    elif isinstance(scene, LineScene):
+        points = ", ".join(f"{p.label}: {_n(p.value, scene.unit)}" for p in scene.points)
+        out = f"line{title}: {points}"
+    elif isinstance(scene, ProportionScene):
+        out = f"proportion: {_n(scene.count)} of {_n(scene.total)} — {scene.label}"
+    elif isinstance(scene, RankingScene):
+        items = ", ".join(
+            f"{i}. {item.label}"
+            + ("" if item.value is None else f" ({_n(item.value, scene.unit)})")
+            for i, item in enumerate(scene.items, start=1)
+        )
+        out = f"ranking{title}: {items}"
+    elif isinstance(scene, MapScene):
+        regions = ", ".join(
+            (r.label or "/".join(r.codes))
+            + ("" if r.value is None else f" {_n(r.value, scene.unit)}")
+            for r in scene.regions
+        )
+        out = f"map{title}: {regions}"
+    elif isinstance(scene, TimelineScene):
+        out = f"timeline{title}: " + "; ".join(f"{e.date} — {e.label}" for e in scene.events)
+    elif isinstance(scene, QuoteScene):
+        out = f'quote: "{scene.text}"' + (f" — {scene.author}" if scene.author else "")
+    elif isinstance(scene, DefinitionScene):
+        out = f"definition: {scene.term} — {scene.text}"
+    elif isinstance(scene, RebuttalScene):
+        out = f'rebuttal: "{scene.claim}" answered with "{scene.response}"'
+    elif isinstance(scene, HeadlineScene):
+        out = f"headline: {scene.text}"
+    elif isinstance(scene, BulletsScene):
+        out = f"bullets{title}: " + "; ".join(i.text for i in scene.items)
+    elif isinstance(scene, VersusScene | ScaleScene):
+        left = ", ".join(i if isinstance(i, str) else i.text for i in scene.left.items)
+        right = ", ".join(i if isinstance(i, str) else i.text for i in scene.right.items)
+        out = f"{scene.type}{title}: {scene.left.label} ({left}) vs {scene.right.label} ({right})"
+    elif isinstance(scene, MatrixScene):
+        out = f"matrix{title}: {scene.x_axis} vs {scene.y_axis}: " + ", ".join(
+            i.label for i in scene.items
+        )
+    elif isinstance(scene, VennScene):
+        out = f"venn{title}: " + " ∩ ".join(s.label for s in scene.sets)
+    elif isinstance(scene, FlowScene):
+        out = f"flow{title}: " + " → ".join(s.label for s in scene.steps)
+    elif isinstance(scene, IconsScene):
+        out = "icons: " + ", ".join(i.label for i in scene.items)
+    elif isinstance(scene, SketchScene):
+        out = f"drawing: {scene.subject}"
+    elif isinstance(scene, ImageScene):
+        out = f"picture: {scene.subject}"
+    else:
+        out = str(getattr(scene, "type", "scene"))
+    return _clip_summary(out)
+
+
+def is_checkable(scene: Any) -> bool:
+    """Scenes stating facts a web search can confirm: figures, dates and attributed quotes."""
+    if isinstance(scene, StatScene | BarsScene | LineScene | PieScene | ProportionScene):
+        return True
+    if isinstance(scene, RankingScene):
+        return any(i.value is not None for i in scene.items)
+    if isinstance(scene, MapScene):
+        return any(r.value is not None for r in scene.regions)
+    if isinstance(scene, TimelineScene):
+        return True
+    return isinstance(scene, QuoteScene) and bool(scene.author)
+
+
+def is_disputable(scene: Any) -> bool:
+    """Scenes an opponent may challenge on screen: facts, definitions and rebuttals (a rebuttal
+    may misrepresent what the opponent said)."""
+    return is_checkable(scene) or isinstance(
+        scene, QuoteScene | DefinitionScene | RebuttalScene | RankingScene | MapScene
+    )

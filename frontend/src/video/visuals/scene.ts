@@ -13,6 +13,7 @@ export interface SceneCtx {
   speaker: string; // speaker name
   locale: string; // debate language code, for number formatting
   cast: TimelineSpeaker[]; // everyone in the debate (the scoreboard draws the debaters)
+  mediaBase: string; // absolute URL of the debate's media folder (pictures)
 }
 
 /** A colour that is not the speaker's, for second series / the other side. */

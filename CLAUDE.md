@@ -21,10 +21,13 @@ backend/            FastAPI API + RQ worker (Python 3.12+, managed with uv)
                       openrouter_client, events (pub/sub), queue_manager, credits (ledger),
                       estimate (pre-run cost), verdict (structured verdict), moderation (AI gallery
                       check + auto-publish), views (view counter),
-                      engagement (likes/audience votes), ranking (trending score, model leaderboard)
+                      engagement (likes/audience votes), ranking (trending score, model leaderboard),
+                      studio (live scenes per turn, disputes, judge evidence), factcheck (web
+                      check of on-screen figures), markers ([visual: …] / [dispute N: …])
   app/services/media/ audio pipeline: script (markdown→speech), tts/ (elevenlabs, edge),
                       ffmpeg, highlights (LLM picks shorts), visuals (LLM visual director),
-                      jobs (build_media_job), timeline
+                      sketch (SVG line art → sanitized path data), images (Commons photos / AI
+                      pictures + vision check), jobs (build_media_job), timeline
   app/schemas/timeline.py  Timeline contract shared with frontend/src/api/timeline.ts;
                       visuals.py = scene specs shared with frontend/src/api/visuals.ts
   app/models/         SQLAlchemy ORM models (User, CreditTransaction, Debate, Turn, …)
@@ -51,11 +54,14 @@ frontend/           React 19 + Vite 8 + Tailwind 4 + TypeScript
                            PersonaPicker (persona preset dropdown), usePickerPopover
   src/components/debate/   player, live card, turn timeline, transcript, verdict, audio tab,
                            regenerate-audio dialog, exports aside (browser MP4 render), lineup,
-                           AudienceVote (blind vote), LikeButton
+                           AudienceVote (blind vote), LikeButton, TurnScenes (scene board under
+                           each turn: Thumbnail stills, replay modal, fact-check/dispute badges)
   src/components/account/  credits, usage, local keys, ledger, security cards; auth layout/fields
-  src/video/          Remotion compositions (DebateLong 16:9, DebateShort 9:16) + render.ts;
-                      visuals/ = scene renderer (SceneStage, 20 scene views, rough.js strokes,
-                      drawn Lucide pictograms in icons.ts, lazy world map in geo.ts)
+  src/video/          Remotion compositions (DebateLong 16:9, DebateShort 9:16, ScenePoster =
+                      one scene for the transcript board) + render.ts;
+                      visuals/ = scene renderer (SceneStage, 22 scene views, rough.js strokes,
+                      drawn Lucide pictograms in icons.ts, lazy world map in geo.ts,
+                      PictureScenes: sketch strokes + Ken Burns pictures)
   src/pages/          Landing (/), Library (/library), Gallery (/gallery), Leaderboard (/leaderboard),
                       CreateDebate (/create, `?draft=<id>`, `?remix=<id>`),
                       DebateView (/debate/:id and public /d/:slug), Account (/account),
@@ -113,7 +119,9 @@ docker compose up -d --build                     # full stack on http://localhos
    `POST /api/debates/{id}/start` queues a draft; `PATCH` replaces a draft's config.
 2. The worker chains RQ jobs: `start_debate_job` → `process_turn_job(seq_index)` per turn →
    `conduct_verdict_job` → `finish_debate_job`. Each job opens its own blocking DB session
-   (`NullPool`, safe across RQ forks).
+   (`NullPool`, safe across RQ forks). With visual scenes on, every saved turn first goes
+   through `studio.design_turn` (scenes, sketches, fact-checks; see "Visual scenes") before the
+   next turn is queued.
 3. `scheduler.build_schedule()` is the single source of truth for turn order:
    each round = moderator (intro / transition) + every debater; debater turn types are
    `opening` / `rebuttal` / `closing` (or `argument` for single-round debates). The verdict
@@ -130,8 +138,10 @@ docker compose up -d --build                     # full stack on http://localhos
    `_auto_media` queues the audio build when `config_json.media_plan.outputs` contains `audio`.
 
 SSE events: `connected`, `debate_started`, `turn_started`, `turn_delta`, `turn_completed`,
-`turn_error`, `verdict_ready`, `media_progress`, `debate_completed`, `debate_error`,
-`debate_stopped`. `turn_completed` / `turn_error` carry the full serialized turn (`TurnOut`).
+`turn_error`, `turn_visuals`, `verdict_ready`, `media_progress`, `debate_completed`,
+`debate_error`, `debate_stopped`. `turn_completed` / `turn_error` carry the full serialized turn
+(`TurnOut`); `turn_visuals` carries `{seq_index, visuals: TurnVisualsOut}` (designing →
+checking → ready).
 
 Debate statuses: `draft | queued | running | completed | error | stopped`.
 Access: owners and the admin session manage a debate; public (`is_public`, `slug`, `/d/{slug}`,
@@ -207,16 +217,22 @@ Stopping: `POST /api/debates/{id}/stop` sets the status, sets `debate:{id}:stop`
    `output_style=spoken` in `DebateConfig` asks the models for plain spoken prose with
    optional `[emotion]` tags, which ElevenLabs v3 understands.
 
-### Visual scenes (charts and drawn schemes in the video)
+### Visual scenes (charts, drawn schemes, sketches and pictures)
 
 - `services/media/visuals.py` ("visual director", `MEDIA_VISUALS_MODEL`, default Gemini Flash,
-  system key, not billed; cost in `timeline.stats.visuals_usd`) runs per turn in parallel after
-  the mix. `scene_budget` ≈ one scene per 18 s of speech; the reply holds one spare scene and
-  `diversify` drops repeats across turns. Turn plans are cached in `turns/{seq}.visuals.json`
-  (hash of text, opponent, model, `PROMPT_VERSION`); `force` re-plans. A failure only loses scenes.
+  system key, not billed) designs a turn's scenes. `scene_budget` ≈ one scene per 18 s of speech
+  (at least one per debater hint); the reply holds one spare scene and `diversify` drops repeats
+  across turns. With `media_plan.visuals` on, `services/studio.design_turn` runs it **live**
+  right after each turn is saved (the next turn waits): plan → keys (`scene_key`: turn + hash of
+  the director's fields) → picks (`diversify` over the turns so far) → sketches and fact-checks
+  in parallel → `turns.visuals_json` (format in the studio docstring) + SSE `turn_visuals`. The
+  media build reuses a stored plan when `PROMPT_VERSION` and the spoken text hash match
+  (`usable_plan`), designs the missing turns (in parallel; `force` re-plans all) and writes them
+  back, so the transcript board shows what the video shows. A failure only loses scenes.
 - Scenes are typed data only (`app/schemas/visuals.py`) — never code or markup. The director
-  may design 19 types (`DirectorScene`: stat, bars, line, pie, proportion, ranking, map, bullets,
-  versus, scale, matrix, venn, definition, flow, timeline, quote, rebuttal, headline, icons); the
+  may design 21 types (`DirectorScene`: stat, bars, line, pie, proportion, ranking, map, bullets,
+  versus, scale, matrix, venn, definition, flow, timeline, quote, rebuttal, headline, icons,
+  sketch, image — image only when `images` is not `off`, one per turn); the
   prompt carries a JSON template, a sample phrase per type and a "which type fits" guide
   (`CHOOSING`). The models clip long strings instead of rejecting; `parse_scenes(speech=…)`
   enforces content rules: numbers must appear in the speech (`is_grounded`, small integers ≤ 12
@@ -245,6 +261,37 @@ Stopping: `POST /api/debates/{id}/stop` sets the status, sets `debate:{id}:stop`
   (`pathLength=1` + dashoffset), colours are attributes (no `currentColor`), text stays in HTML,
   and rough.js shapes use a fixed seed per scene (random seeds jitter between frames).
   Icon keys in `icons.ts` mirror `ICONS` in `schemas/visuals.py`.
+- `sketch`: the director names a concrete subject; `media/sketch.py` asks `MEDIA_SKETCH_MODEL`
+  (Gemini 3.5 Flash Lite, ~4 s) for SVG line art and `sanitize_svg` keeps only path/line/circle/
+  ellipse/rect/polyline/polygon/g (no text, links, styles, `<use>`; DOCTYPE/ENTITY rejected),
+  converts shapes to path data and validates `d`/`transform` against strict regexes (again on
+  every load). `SketchView` inks the strokes in order, timed by path length. A failed drawing
+  drops the scene.
+- `image` (`MediaOptions.images`: `off | stock | ai`, wizard "Pictures"): resolved only in the
+  media build (`media/images.ImageStudio`, at most `MEDIA_MAX_IMAGES`). `stock` searches
+  Wikimedia Commons (free licences only, no logos/maps/flags, files from upload/thumb hosts);
+  `ai` generates with `MEDIA_IMAGE_MODEL` (FLUX Klein, `POST /images`, ~$0.009) when the owner has
+  a balance and falls back to photos. The visuals model checks every picture (subject, no
+  identifiable people, logos, gore, text) before use. Pictures are re-encoded to WebP under
+  `MEDIA_ROOT/{id}/visuals/<hash>.webp` (cache by subject) and served same-origin, so
+  `<Img>` works in the web renderer. AI pictures are charged after the build
+  (`credits.charge_images_sync`, cost × markup); `POST /media` answers 402 for `ai` without a
+  balance.
+- Debater hints and disputes (`services/markers.py`): with scenes on, `prompt_builder` lets
+  debaters write `[visual: …]` (≤ 2, anchored after the words before it) and offers the
+  opponents' disputable scenes as a numbered list (`studio.visual_claims`, with fact-check
+  results) to challenge with `[dispute N: reason]`. The worker strips both before saving the
+  turn (the frontend hides them while streaming, `hideStudioMarkers`), stores hints/disputes in
+  `visuals_json`; hint numbers count as said for grounding. Disputed scenes get a "disputed by …"
+  stamp in the video (`TimelineVisual.disputes`) and on the board.
+- Fact-check (`DebateConfig.fact_check`, needs scenes; `services/factcheck.py`): up to
+  `FACT_CHECK_MAX_PER_TURN` checkable scenes per debater turn (figures, dates, attributed quotes)
+  go to `FACT_CHECK_MODEL` (`perplexity/sonar`, web search, ~$0.005) on the debate's key; the
+  cost joins `totals_json.analysis_cost` (billed like the debate; estimated with
+  `FACT_CHECK_PRICE_USD`). Results (`SceneCheck`: verified | disputed | unverified, note,
+  sources from the JSON and `message.annotations`) replace the "claim · speaker" note, reach the
+  next speakers and the judge (`studio.verdict_evidence`), and `totals_json.claims` (per
+  participant) feeds the leaderboard's Accuracy column.
 
 ### Credits and payments
 
@@ -308,6 +355,13 @@ Stopping: `POST /api/debates/{id}/stop` sets the status, sets `debate:{id}:stop`
   when a new provider appears; unknown authors get a letter tile.
 - Browser MP4 export: `@remotion/web-renderer` rounds scaled sizes up and H.264 needs even
   sides, so 720p uses exactly `SCALE_720P = 2 / 3` (0.6667 gave 1281×721 and failed).
+- Scene pictures: Homebrew's ffmpeg has no libwebp encoder, so native builds store JPEG
+  (`ffmpeg.to_web_image` falls back; Debian's ffmpeg in Docker writes WebP). Wikimedia's API
+  wants a descriptive User-Agent; its search matches every word, so `images.search_queries`
+  retries with fewer words. `DELETE /media` keeps `visuals/` (the transcript board shows the
+  pictures too).
+- Live scenes delay the next turn (director ~2 s; with fact-checks or AI pictures 5–17 s) because
+  later speakers must see the scenes they may dispute; `design_turn` never raises.
 - Old rows may have `turn_type=moderator_comment` and inline `"[Error ...]"` text; both are still
   handled (`scheduler.MODERATOR_TURN_TYPES`, `lib/format.isErrorTurn`). Debates created before
   accounts have `user_id=NULL`: readable via their link, manageable only from the admin panel.

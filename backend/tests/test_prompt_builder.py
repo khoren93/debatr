@@ -82,3 +82,27 @@ def test_length_and_intensity_helpers():
     assert "polite" in intensity_description(1)
     assert "persuasive" in intensity_description(5)
     assert "passionate" in intensity_description(10)
+
+
+def test_visual_requests_and_claims_only_with_visual_scenes():
+    turn = SCHEDULE[4]
+    plain = build_debater_messages(CONF, CONF["participants"][1], turn, HISTORY, "[1] Bob: stat")
+    assert "[visual:" not in plain[0]["content"] and "[1] Bob" not in plain[1]["content"]
+
+    conf = {**CONF, "media_plan": {"visuals": True}}
+    claims = "[1] Bob: stat: 90% — fall in prices — fact-check: disputed (It was 40%.)"
+    system, user = (
+        m["content"]
+        for m in build_debater_messages(conf, conf["participants"][1], turn, HISTORY, claims)
+    )
+    assert "[visual: what to show" in system
+    assert claims in user and "[dispute <number>: <short reason>]" in user
+    no_claims = build_debater_messages(conf, conf["participants"][1], turn, HISTORY)
+    assert "[dispute" not in no_claims[1]["content"]
+
+
+def test_verdict_gets_the_fact_check_evidence():
+    evidence = "Web fact-check of the figures:\n- Alice showed stat: 90% — disputed: It was 40%."
+    user = build_verdict_messages(CONF, HISTORY, evidence)[1]["content"]
+    assert evidence in user and "Weigh accuracy" in user
+    assert "Weigh accuracy" not in build_verdict_messages(CONF, HISTORY)[1]["content"]

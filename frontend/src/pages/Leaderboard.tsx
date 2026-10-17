@@ -21,7 +21,18 @@ const PROVISIONAL_VOTES = 5;
 const record = (wins: number, contests: number) => (contests > 0 ? `${wins}/${contests}` : '—');
 const pct = (share: number | null) => (share === null ? '—' : `${Math.round(share * 100)}%`);
 
-const COLS = 'grid-cols-[28px_minmax(0,1fr)_64px] md:grid-cols-[36px_minmax(0,1fr)_76px_96px_90px_90px_80px]';
+const COLS = 'grid-cols-[28px_minmax(0,1fr)_64px] md:grid-cols-[36px_minmax(0,1fr)_76px_96px_90px_90px_96px_80px]';
+
+/** Fact-check accuracy: verified share of the checked figures that got a clear answer. */
+const accuracy = (entry: LeaderboardEntry) => {
+  const decided = entry.claims_verified + entry.claims_disputed;
+  if (entry.claims_checked === 0) return { label: '—', title: 'No fact-checked figures yet' };
+  const share = decided > 0 ? `${Math.round((entry.claims_verified / decided) * 100)}%` : '?';
+  return {
+    label: `${share} · ${entry.claims_checked}`,
+    title: `${entry.claims_verified} verified, ${entry.claims_disputed} disputed, ${entry.claims_checked - decided} unverified of ${entry.claims_checked} fact-checked figures`,
+  };
+};
 
 const Row = ({ entry, rank }: { entry: LeaderboardEntry; rank: number }) => {
   const provisional = entry.votes < PROVISIONAL_VOTES;
@@ -58,6 +69,9 @@ const Row = ({ entry, rank }: { entry: LeaderboardEntry; rank: number }) => {
       </span>
       <span className="hidden text-right font-mono text-[13px] md:block">{record(entry.audience_wins, entry.audience_contests)}</span>
       <span className="hidden text-right font-mono text-[13px] md:block">{record(entry.judge_wins, entry.judge_contests)}</span>
+      <span className={`hidden text-right font-mono text-[13px] md:block ${entry.claims_disputed > entry.claims_verified ? 'text-con' : ''}`} title={accuracy(entry).title}>
+        {accuracy(entry).label}
+      </span>
       <span className="hidden text-right font-mono text-[13px] text-accent md:block">{entry.debates} →</span>
     </Link>
   );
@@ -110,6 +124,9 @@ const Leaderboard = () => {
           </span>
           <span className="hidden text-right md:block" title="Debates the AI judge gave it, out of decided debates">
             Judge wins
+          </span>
+          <span className="hidden text-right md:block" title="Share of its on-screen figures the web fact-check confirmed · figures checked">
+            Accuracy
           </span>
           <span className="hidden text-right md:block">Debates</span>
         </div>

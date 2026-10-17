@@ -283,8 +283,19 @@ async def generate_debate_media(
                     ),
                 )
 
+    # AI pictures run on the system key and are paid from the balance.
+    wants_ai = body.visuals and body.images == "ai" and not _is_trusted(request, x_media_token)
+    if wants_ai and (user is None or float(user.credits_usd or 0) <= 0):
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail="AI pictures need credits: top up or use free photos instead.",
+        )
     options = MediaOptions(
-        provider=body.provider, model_id=body.model_id, voices=body.voices, visuals=body.visuals
+        provider=body.provider,
+        model_id=body.model_id,
+        voices=body.voices,
+        visuals=body.visuals,
+        images=body.images,
     )
     state = dict(debate.media_json or {})
     state.update(
@@ -325,6 +336,20 @@ async def generate_debate_media(
     return MediaAccepted(debate_id=debate_id, media_status="queued", message="Audio build queued")
 
 
+def _remove_audio(paths: MediaPaths) -> None:
+    """Delete the build (track, timeline, cached turns) but keep `visuals/`: the pictures of the
+    scenes are shown on the transcript too."""
+    if not paths.dir.exists():
+        return
+    for child in paths.dir.iterdir():
+        if child == paths.visuals_dir:
+            continue
+        if child.is_dir():
+            shutil.rmtree(child, ignore_errors=True)
+        else:
+            child.unlink(missing_ok=True)
+
+
 @router.delete("/debates/{debate_id}/media", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_debate_media(
     debate_id: str,
@@ -338,7 +363,7 @@ async def delete_debate_media(
     if debate.media_status == "running":
         raise HTTPException(status_code=409, detail="A media build is in progress")
     paths = MediaPaths(debate_id)
-    await run_in_threadpool(shutil.rmtree, paths.dir, True)
+    await run_in_threadpool(_remove_audio, paths)
     debate.media_status = "none"
     debate.media_json = {}
     await db.commit()

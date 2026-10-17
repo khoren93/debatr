@@ -74,7 +74,7 @@ export const DebateLong = ({ timeline, mediaBase }: DebateProps) => {
           <SideColumn speakers={debaters.slice(0, half)} x={SIDE_X} seg={seg} activeId={active?.id} />
           <SideColumn speakers={debaters.slice(half)} x={LONG_W - SIDE_X - SIDE_W} seg={seg} activeId={active?.id} />
 
-          <SceneStage timeline={timeline} seg={seg} ms={ms} x={STAGE.x} y={STAGE.y} w={STAGE.w} h={STAGE.h} k={1} />
+          <SceneStage timeline={timeline} mediaBase={mediaBase} seg={seg} ms={ms} x={STAGE.x} y={STAGE.y} w={STAGE.w} h={STAGE.h} k={1} />
 
           {!showVerdict && (
             <div style={{ position: 'absolute', left: 0, right: 0, bottom: 56 }}>

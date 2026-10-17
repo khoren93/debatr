@@ -53,6 +53,8 @@ class Estimate:
     llm_cost_usd: float
     tts_chars: int
     tts_cost_usd: float
+    factcheck_cost_usd: float
+    images_cost_usd: float
     credits_cost_usd: float
     duration_ms: int
     render_ms: int
@@ -86,7 +88,13 @@ def estimate_debate(
     tts_price_per_1k: float,
     markup: float,
     default_model: str = "",
+    fact_check_price: float = 0.0,
+    image_price: float = 0.0,
+    max_images: int = 0,
 ) -> Estimate:
+    """Provider costs and credits of a run. Fact-checks (one per debater turn on average) run
+    on the debate's key; AI pictures always on the system key, so they are charged even with an
+    own OpenRouter key."""
     participants: list[dict[str, Any]] = list(conf.get("participants") or [])
     num_rounds = int(conf.get("num_rounds") or 1)
     words_per_turn = length_words(str(conf.get("length_preset") or "medium"))
@@ -97,8 +105,12 @@ def estimate_debate(
     moderator = next((p for p in participants if p.get("role") == "moderator"), None)
     judge_model = str((moderator or {}).get("model_id") or default_model)
 
+    plan: dict[str, Any] = conf.get("media_plan") or {}
+    visuals = bool(plan) and bool(plan.get("visuals", True))
+    debater_turns = 0
     planned: list[tuple[str, int]] = []  # (model id, words)
     for turn in build_schedule(participants, num_rounds):
+        debater_turns += 0 if turn.is_moderator else 1
         speaker = participants[turn.speaker_index]
         words = min(words_per_turn, MODERATOR_MAX_WORDS) if turn.is_moderator else words_per_turn
         planned.append((str(speaker.get("model_id") or default_model), words))
@@ -124,7 +136,15 @@ def estimate_debate(
     )
     tts_chars = int(total_words * CHARS_PER_WORD)
     tts_cost = tts_chars / 1000 * tts_price_per_1k if tts_provider == "elevenlabs" else 0.0
-    credits = (0.0 if own_key else cost * markup) + (0.0 if own_tts_key else tts_cost)
+    checks = debater_turns if visuals and conf.get("fact_check") else 0
+    factcheck_cost = checks * fact_check_price
+    wants_images = visuals and plan.get("images") == "ai" and "audio" in (plan.get("outputs") or [])
+    images_cost = min(max_images, debater_turns) * image_price if wants_images else 0.0
+    credits = (
+        (0.0 if own_key else (cost + factcheck_cost) * markup)
+        + (0.0 if own_tts_key else tts_cost)
+        + images_cost * markup
+    )
     return Estimate(
         turns=len(planned),
         words=total_words,
@@ -133,6 +153,8 @@ def estimate_debate(
         llm_cost_usd=round(cost, 6),
         tts_chars=tts_chars,
         tts_cost_usd=round(tts_cost, 6),
+        factcheck_cost_usd=round(factcheck_cost, 6),
+        images_cost_usd=round(images_cost, 6),
         credits_cost_usd=round(credits, 6),
         duration_ms=duration_ms,
         render_ms=int(duration_ms * RENDER_SPEED),

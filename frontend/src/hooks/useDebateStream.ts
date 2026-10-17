@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { debateStreamUrl } from '../api/debates';
-import type { DebateTerminalEvent, MediaStatus, Turn, TurnDeltaEvent, TurnStartedEvent, VerdictReadyEvent } from '../api/types';
+import type { DebateTerminalEvent, MediaStatus, Turn, TurnDeltaEvent, TurnStartedEvent, TurnVisualsEvent, VerdictReadyEvent } from '../api/types';
 
 export interface MediaProgressEvent {
   debate_id: string;
@@ -19,6 +19,8 @@ export interface StreamHandlers {
   onTurnCompleted?: (turn: Turn) => void;
   onTurnError?: (turn: Turn) => void;
   onVerdictReady?: (e: VerdictReadyEvent) => void;
+  /** A turn's visual scenes were designed, drawn or fact-checked (services/studio.py). */
+  onTurnVisuals?: (e: TurnVisualsEvent) => void;
   onMediaProgress?: (e: MediaProgressEvent) => void;
   onDebateCompleted?: (e: DebateTerminalEvent) => void;
   onDebateError?: (e: DebateTerminalEvent) => void;
@@ -72,6 +74,7 @@ export function useDebateStream(debateId: string | undefined, enabled: boolean, 
     on<Turn>('turn_completed', (t) => handlersRef.current.onTurnCompleted?.(t));
     on<Turn>('turn_error', (t) => handlersRef.current.onTurnError?.(t));
     on<VerdictReadyEvent>('verdict_ready', (e) => handlersRef.current.onVerdictReady?.(e));
+    on<TurnVisualsEvent>('turn_visuals', (e) => handlersRef.current.onTurnVisuals?.(e));
     on<MediaProgressEvent>('media_progress', (e) => handlersRef.current.onMediaProgress?.(e));
 
     const terminal: Record<(typeof TERMINAL_EVENTS)[number], (e: DebateTerminalEvent) => void> = {

@@ -1,6 +1,7 @@
 import type {
   DebateConfig,
   DebateDetail,
+  ImageSource,
   LengthPreset,
   MediaOutput,
   ModelInfo,
@@ -55,8 +56,12 @@ export interface WizardState {
   voices: Record<string, string>;
   outputs: MediaOutput[];
   quality: VideoQuality;
-  /** Charts / drawn scenes in the video, designed per turn during the audio build. */
+  /** Charts / drawn scenes, designed live after every turn and shown in the video. */
   visuals: boolean;
+  /** Pictures among the scenes: free photos or AI images (paid from the balance). */
+  images: ImageSource;
+  /** Web fact-check of the figures and quotes in the scenes (paid like the debate). */
+  fact_check: boolean;
   /** Publish to the gallery once finished and approved by the AI check. */
   auto_publish: boolean;
 }
@@ -162,6 +167,8 @@ export const initialState = (): WizardState => ({
   outputs: ['audio', 'video', 'short'],
   quality: '1080p',
   visuals: true,
+  images: 'off',
+  fact_check: false,
   auto_publish: true,
 });
 
@@ -292,7 +299,9 @@ export const buildConfig = (state: WizardState, opts: BuildOptions): DebateConfi
     outputs: state.outputs,
     quality: state.quality,
     visuals: state.visuals,
+    images: state.visuals && state.outputs.includes('audio') ? state.images : 'off',
   },
+  fact_check: state.visuals && state.fact_check,
   auto_publish: state.auto_publish,
   user_provider_key: opts.openrouterKey?.trim() || undefined,
   user_tts_key: (opts.provider === 'elevenlabs' && state.outputs.includes('audio') && opts.elevenlabsKey?.trim()) || undefined,
@@ -338,6 +347,8 @@ export const stateFromConfig = (config: DebateConfig, base: WizardState): Wizard
     outputs: plan?.outputs ?? base.outputs,
     quality: plan?.quality ?? base.quality,
     visuals: plan?.visuals ?? base.visuals,
+    images: plan?.images ?? base.images,
+    fact_check: config.fact_check ?? base.fact_check,
     auto_publish: config.auto_publish ?? base.auto_publish,
   };
 };
@@ -455,6 +466,8 @@ export const sanitizeState = (raw: unknown): WizardState => {
     outputs: sanitizeOutputs(raw.outputs, base.outputs),
     quality: oneOf(raw.quality, ['720p', '1080p', '4k'] as const, base.quality),
     visuals: typeof raw.visuals === 'boolean' ? raw.visuals : base.visuals,
+    images: oneOf(raw.images, ['off', 'stock', 'ai'] as const, base.images),
+    fact_check: typeof raw.fact_check === 'boolean' ? raw.fact_check : base.fact_check,
     auto_publish: typeof raw.auto_publish === 'boolean' ? raw.auto_publish : base.auto_publish,
   };
 };

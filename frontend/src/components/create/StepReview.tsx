@@ -76,7 +76,10 @@ export const StepReview = ({ state, config, ready, models, voices, ownKey, credi
     `${lengthOption(state.length_preset).label.toLowerCase()} replies`,
     state.output_style === 'spoken' ? 'spoken' : 'written',
     state.outputs.length ? state.outputs.map((o) => OUTPUT_LABELS[o] ?? o).join(' + ') : 'text only',
-    ...(state.visuals && state.outputs.includes('audio') ? ['visual scenes'] : []),
+    ...(config.media_plan?.visuals ? ['visual scenes'] : []),
+    ...(config.media_plan?.visuals && config.media_plan.images === 'stock' && state.outputs.includes('audio') ? ['free photos'] : []),
+    ...(config.media_plan?.visuals && config.media_plan.images === 'ai' && state.outputs.includes('audio') ? ['AI images'] : []),
+    ...(config.fact_check ? ['fact-check'] : []),
   ].join(' · ');
 
   return (
@@ -141,6 +144,18 @@ export const StepReview = ({ state, config, ready, models, voices, ownKey, credi
           )}
           {estimate && estimate.paid_models.length > 0 && !estimate.own_key && (
             <Hint className="mt-2">Paid models: {estimate.paid_models.map(shortModelName).join(', ')} — billed to your credits.</Hint>
+          )}
+          {estimate && (estimate.factcheck_cost_usd > 0 || estimate.images_cost_usd > 0) && (
+            <Hint className="mt-2">
+              Includes{' '}
+              {[
+                estimate.factcheck_cost_usd > 0 ? `fact-checks ~${formatCost(estimate.factcheck_cost_usd)}${estimate.own_key ? ' (on your key)' : ''}` : '',
+                estimate.images_cost_usd > 0 ? `AI images ~${formatCost(estimate.images_cost_usd)}` : '',
+              ]
+                .filter(Boolean)
+                .join(' and ')}
+              .
+            </Hint>
           )}
           <div className="mt-4 flex items-center justify-between rounded-field bg-ink px-3.5 py-3 text-[13px] text-text-3">
             <span>Credits after run</span>

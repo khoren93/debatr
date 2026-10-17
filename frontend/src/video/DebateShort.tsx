@@ -72,7 +72,7 @@ export const DebateShort = ({ timeline, mediaBase, highlightIndex }: ShortProps)
               <SpeakerCard key={d.id} speaker={d} seg={seg} offsetMs={offsetMs} active={active?.id === d.id} width={cardWidth} compact />
             ))}
           </div>
-          <SceneStage timeline={timeline} seg={seg} ms={absMs} x={STAGE.x} y={STAGE.y} w={STAGE.w} h={STAGE.h} k={STAGE_K} />
+          <SceneStage timeline={timeline} mediaBase={mediaBase} seg={seg} ms={absMs} x={STAGE.x} y={STAGE.y} w={STAGE.w} h={STAGE.h} k={STAGE_K} />
           <div style={{ position: 'absolute', left: 0, right: 0, top: 1300, height: 440, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <Captions seg={seg} offsetMs={offsetMs} color={accent} fontSize={72} maxWidth={1000} combineMs={900} />
           </div>

@@ -219,3 +219,56 @@ def concat_with_gaps(files: list[Path], gap_ms: int, dst_wav: Path, dst_mp3: Pat
         timeout_s=900,
     )
     ffmpeg(["-i", str(dst_wav), "-c:a", "libmp3lame", "-b:a", "160k", str(dst_mp3)], timeout_s=900)
+
+
+# --- pictures for the visual scenes ------------------------------------------------------
+
+
+def to_webp(src: Path, dst: Path, *, max_width: int = 1600, quality: int = 80) -> None:
+    """Re-encode a picture as WebP, at most `max_width` wide (also strips its metadata)."""
+    scale = f"scale=w='min({max_width},iw)':h=-2"
+    ffmpeg(
+        [
+            *["-i", str(src), "-frames:v", "1", "-vf", scale],
+            *["-c:v", "libwebp", "-quality", str(quality), "-map_metadata", "-1", str(dst)],
+        ],
+        timeout_s=60,
+    )
+
+
+def to_jpeg(src: Path, dst: Path, *, width: int = 512, quality: int = 5) -> None:
+    """JPEG of a picture, at most `width` wide (the vision check looks at a small one)."""
+    scale = f"scale=w='min({width},iw)':h=-2"
+    ffmpeg(
+        [
+            "-i",
+            str(src),
+            "-frames:v",
+            "1",
+            "-vf",
+            scale,
+            "-q:v",
+            str(quality),
+            "-map_metadata",
+            "-1",
+            str(dst),
+        ],
+        timeout_s=60,
+    )
+
+
+def to_web_image(src: Path, stem: Path, *, max_width: int = 1600) -> Path:
+    """WebP next to `stem` (stem + ".webp"); JPEG when this ffmpeg has no WebP encoder (e.g.
+    a Homebrew build without libwebp). Returns the written file."""
+    webp = stem.with_suffix(".webp")
+    try:
+        to_webp(src, webp, max_width=max_width)
+        return webp
+    except FfmpegError as e:
+        if e.returncode is None:
+            raise
+        logger.warning("No WebP encoder (%s), writing JPEG", str(e).strip()[-120:])
+        webp.unlink(missing_ok=True)
+    jpeg = stem.with_suffix(".jpg")
+    to_jpeg(src, jpeg, width=max_width, quality=3)
+    return jpeg

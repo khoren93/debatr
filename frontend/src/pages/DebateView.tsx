@@ -4,7 +4,7 @@ import { ArrowLeft, Download, Eye, Lock, Repeat2, ShieldAlert, Share2, Square, T
 import { getErrorMessage, getErrorStatus } from '../api/client';
 import { deleteDebate, getDebate, stopDebate } from '../api/debates';
 import { getPublicDebate } from '../api/gallery';
-import { absoluteMediaBase } from '../api/media';
+import { absoluteMediaBase, debateFilesBase } from '../api/media';
 import { ACTIVE_STATUSES, type Audience, type DebateDetail, type Turn } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { Page } from '../components/layout/AppShell';
@@ -121,6 +121,7 @@ const DebateView = ({ id, slug }: Props) => {
       setStreaming(null);
     },
     onVerdictReady: (e) => setDebate((d) => (d ? { ...d, verdict: e.verdict } : d)),
+    onTurnVisuals: (e) => setDebate((d) => (d ? { ...d, turns: d.turns.map((t) => (t.seq_index === e.seq_index ? { ...t, visuals: e.visuals } : t)) } : d)),
     onDebateCompleted: () => {
       setStreaming(null);
       refetch();
@@ -251,6 +252,8 @@ const DebateView = ({ id, slug }: Props) => {
   const durationMs = timeline?.total_ms ?? debate.duration_ms;
   const totals = debate.totals;
   const currentSpeaker = streaming ? { name: streaming.speaker_name, color: turnColor({ ...streaming, speaker_id: undefined }, participants) } : null;
+  const lastStatus = debate.turns.at(-1)?.visuals?.status;
+  const studio = !streaming && (lastStatus === 'designing' || lastStatus === 'checking') ? lastStatus : null;
   const backTo = slug || !isOwner ? { to: '/gallery', label: 'Gallery' } : { to: '/library', label: 'Library' };
   const audience = debate.engagement.audience;
   const showVote = debate.is_public && audience.reason !== 'not_public' && audience.reason !== 'not_finished';
@@ -338,7 +341,7 @@ const DebateView = ({ id, slug }: Props) => {
       <div className="mt-6 grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
         <div className="min-w-0">
           {isActive ? (
-            <LiveCard status={debate.status === 'queued' ? 'queued' : 'running'} roundLabel={streaming?.round_id ? `LIVE · ${roundLabel(streaming.round_id).toUpperCase()}` : null} speakerName={currentSpeaker?.name ?? null} speakerColor={currentSpeaker?.color ?? '#D9FF3D'} canStop={isOwner} stopping={busy && confirm === 'stop'} onStop={() => setConfirm('stop')} />
+            <LiveCard status={debate.status === 'queued' ? 'queued' : 'running'} roundLabel={streaming?.round_id ? `LIVE · ${roundLabel(streaming.round_id).toUpperCase()}` : null} speakerName={currentSpeaker?.name ?? null} speakerColor={currentSpeaker?.color ?? '#D9FF3D'} canStop={isOwner} stopping={busy && confirm === 'stop'} onStop={() => setConfirm('stop')} studio={studio} />
           ) : (
             <PlayerCard media={media} timeline={timeline} mediaBase={mediaBase} format={format} onFormat={setFormat} highlightIndex={highlightIndex} isOwner={isOwner} completed={completed} onGenerate={() => setRegenOpen(true)} />
           )}
@@ -362,7 +365,7 @@ const DebateView = ({ id, slug }: Props) => {
             ))}
           </div>
 
-          {tab === 'transcript' && <Transcript turns={debate.turns} streaming={streaming} participants={participants} timeline={timeline} markdown={debate.settings.output_style === 'markdown'} isActive={isActive} activeSeq={activeSeq} hideVerdict={verdictHidden} onRevealVerdict={reveal} />}
+          {tab === 'transcript' && <Transcript turns={debate.turns} streaming={streaming} participants={participants} timeline={timeline} mediaBase={mediaBase || debateFilesBase(debate.id)} languageCode={debate.settings.language_code} markdown={debate.settings.output_style === 'markdown'} isActive={isActive} activeSeq={activeSeq} hideVerdict={verdictHidden} onRevealVerdict={reveal} />}
           {tab === 'verdict' && <VerdictTab verdict={debate.verdict} verdictTurn={verdictTurn} participants={participants} judgeVoice={judgeVoice} isActive={isActive} markdown={debate.settings.output_style === 'markdown'} hidden={verdictHidden} onReveal={reveal} />}
           {tab === 'audio' && <AudioTab media={media} timeline={timeline} isOwner={isOwner} completed={completed} onGenerate={() => setRegenOpen(true)} audioRef={audioRef} />}
           <div ref={bottomRef} />

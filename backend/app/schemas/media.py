@@ -14,6 +14,8 @@ class MediaOptions(BaseModel):
     model_id: str = Field(default="eleven_v3", max_length=100)
     voices: dict[str, str] = Field(default_factory=dict)  # speaker_id -> provider voice id
     visuals: bool = True  # design charts / drawn scenes synced with the speech
+    # Pictures among the scenes: free photos (Wikimedia Commons) or AI images (paid).
+    images: Literal["off", "stock", "ai"] = "off"
 
 
 class GenerateMediaRequest(MediaOptions):

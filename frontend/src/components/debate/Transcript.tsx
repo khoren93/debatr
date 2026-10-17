@@ -1,10 +1,13 @@
+import type { ReactNode } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { Timeline } from '../../api/timeline';
 import type { Participant, Turn, TurnStartedEvent } from '../../api/types';
-import { isErrorTurn, roundHeading, splitEmotionTag, turnErrorMessage } from '../../lib/format';
+import { hideStudioMarkers, isErrorTurn, roundHeading, splitEmotionTag, turnErrorMessage } from '../../lib/format';
 import { EmptyState, ErrorBox, SpeakerBadge } from '../ui';
 import { msLabel, turnColor } from './helpers';
+import { disputesByKey, sceneCast } from './sceneBoard';
+import { TurnScenes } from './TurnScenes';
 import { VerdictGate } from './VerdictTab';
 
 export interface StreamingTurn extends TurnStartedEvent {
@@ -16,6 +19,9 @@ interface Props {
   streaming: StreamingTurn | null;
   participants: Participant[];
   timeline: Timeline | null;
+  /** Absolute URL of the media folder ("" before the audio build): pictures in the scenes. */
+  mediaBase: string;
+  languageCode: string;
   markdown: boolean;
   isActive: boolean;
   activeSeq?: number | null;
@@ -31,12 +37,14 @@ interface RowProps {
   markdown: boolean;
   streaming?: boolean;
   active?: boolean;
+  /** The turn's visual scenes, under the text. */
+  board?: ReactNode;
 }
 
-const Row = ({ turn, participants, time, markdown, streaming = false, active = false }: RowProps) => {
+const Row = ({ turn, participants, time, markdown, streaming = false, active = false, board }: RowProps) => {
   const color = turnColor(turn, participants);
   const error = !streaming && isErrorTurn({ error: turn.error ?? null, text: turn.text });
-  const { tone, body } = splitEmotionTag(turn.text);
+  const { tone, body } = splitEmotionTag(streaming ? hideStudioMarkers(turn.text) : turn.text);
   return (
     <div id={`turn-${turn.seq_index}`} className={`grid grid-cols-[36px_1fr] gap-3 rounded-[14px] p-2 -m-2 transition-colors ${active ? 'bg-surface' : ''}`}>
       <SpeakerBadge name={turn.speaker_name} color={color} size={36} imageUrl={participants.find((p) => p.name === turn.speaker_name)?.avatar} />
@@ -61,13 +69,14 @@ const Row = ({ turn, participants, time, markdown, streaming = false, active = f
             {streaming && body && <span className="ml-1 inline-block h-4 w-2 animate-pulse-dot bg-accent align-middle" />}
           </p>
         )}
+        {!error && board}
       </div>
     </div>
   );
 };
 
 /** Transcript tab: turns grouped by round with mono headings. */
-export const Transcript = ({ turns, streaming, participants, timeline, markdown, isActive, activeSeq = null, hideVerdict = false, onRevealVerdict }: Props) => {
+export const Transcript = ({ turns, streaming, participants, timeline, mediaBase, languageCode, markdown, isActive, activeSeq = null, hideVerdict = false, onRevealVerdict }: Props) => {
   if (turns.length === 0 && !streaming) {
     return <EmptyState className="mt-5" title={isActive ? 'Waiting for the first speaker…' : 'No turns were recorded'} />;
   }
@@ -75,7 +84,14 @@ export const Transcript = ({ turns, streaming, participants, timeline, markdown,
   timeline?.segments.forEach((s) => startMs.set(s.seq_index, s.start_ms));
   const timeFor = (seq: number) => (startMs.has(seq) ? msLabel(startMs.get(seq) ?? 0) : `#${seq + 1}`);
 
-  const rows: React.ReactNode[] = [];
+  const cast = sceneCast(participants, timeline, languageCode);
+  const disputes = disputesByKey(turns);
+  const board = (turn: Turn) => {
+    const fromVideo = timeline?.visuals?.filter((v) => v.seq_index === turn.seq_index) ?? [];
+    if (!turn.visuals && fromVideo.length === 0) return null;
+    return <TurnScenes seq={turn.seq_index} speakerId={turn.speaker_id ?? ''} visuals={turn.visuals} timelineVisuals={fromVideo} disputes={disputes} cast={cast} mediaBase={mediaBase} />;
+  };
+  const rows: ReactNode[] = [];
   let lastRound: string | null = null;
   const heading = (roundId: string, turnType: string) => (
     <div key={`h-${roundId}-${turnType}`} className="mt-2 font-mono text-[11px] tracking-[0.12em] text-muted">
@@ -95,7 +111,7 @@ export const Transcript = ({ turns, streaming, participants, timeline, markdown,
       );
       continue;
     }
-    rows.push(<Row key={turn.seq_index} turn={turn} participants={participants} time={timeFor(turn.seq_index)} markdown={markdown} active={activeSeq === turn.seq_index} />);
+    rows.push(<Row key={turn.seq_index} turn={turn} participants={participants} time={timeFor(turn.seq_index)} markdown={markdown} active={activeSeq === turn.seq_index} board={board(turn)} />);
   }
   if (streaming) {
     if (streaming.round_id && streaming.round_id !== lastRound) rows.push(heading(streaming.round_id, streaming.turn_type));

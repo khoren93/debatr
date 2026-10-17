@@ -1,3 +1,5 @@
+import type { Scene, SceneCheck } from './visuals';
+
 export type DebateStatus = 'draft' | 'queued' | 'running' | 'completed' | 'error' | 'stopped';
 export type ParticipantRole = 'moderator' | 'debater';
 export type LengthPreset = 'very_short' | 'short' | 'medium' | 'long';
@@ -6,6 +8,8 @@ export type MediaStatus = 'none' | 'queued' | 'running' | 'ready' | 'error';
 export type TTSProviderName = 'elevenlabs' | 'edge';
 export type MediaOutput = 'audio' | 'video' | 'short';
 export type VideoQuality = '720p' | '1080p' | '4k';
+/** Pictures among the visual scenes: none, free photos (Wikimedia Commons) or AI images (paid). */
+export type ImageSource = 'off' | 'stock' | 'ai';
 
 export const ACTIVE_STATUSES: readonly DebateStatus[] = ['queued', 'running'];
 export const GALLERY_CATEGORIES = ['tech', 'society', 'science', 'culture', 'money', 'fun'] as const;
@@ -58,6 +62,23 @@ export interface DebateTotals {
   turns_count: number;
 }
 
+/** Live scenes of a turn (backend services/studio.py). */
+export interface TurnScene {
+  key: string;
+  scene: Scene;
+  /** Sent to the fact-checker (the result may still be pending). */
+  checkable: boolean;
+  check: SceneCheck | null;
+}
+
+export interface TurnVisuals {
+  /** designing | checking (sketches / fact-checks running) | ready | error | none */
+  status: 'designing' | 'checking' | 'ready' | 'error' | 'none';
+  scenes: TurnScene[];
+  /** Scenes of earlier turns this turn challenged. */
+  disputes: { key: string; reason: string }[];
+}
+
 export interface Turn {
   seq_index: number;
   round_id: string;
@@ -70,6 +91,7 @@ export interface Turn {
   model_used: string;
   usage: TurnUsage;
   created_at: string | null;
+  visuals?: TurnVisuals | null;
 }
 
 export interface Participant {
@@ -101,8 +123,10 @@ export interface MediaPlan {
   voices: Record<string, string>; // speaker id -> provider voice id
   outputs: MediaOutput[];
   quality: VideoQuality;
-  /** Charts / drawn scenes synced with the speech (built with the audio; default on). */
+  /** Charts / drawn scenes, live next to the text and in the video (default on). */
   visuals?: boolean;
+  /** Pictures among the scenes (default off). */
+  images?: ImageSource;
 }
 
 export interface DebateSummary {
@@ -225,6 +249,8 @@ export interface DebateConfig {
   media_plan?: MediaPlan;
   /** Publish to the gallery once finished and approved by the AI check (default true). */
   auto_publish?: boolean;
+  /** Web fact-check of the figures and quotes in the visual scenes (paid like the debate). */
+  fact_check?: boolean;
   draft?: boolean;
   user_provider_key?: string;
   /** Browser-only ElevenLabs key for the automatic audio build (never stored server-side). */
@@ -245,6 +271,8 @@ export interface Estimate {
   llm_cost_usd: number;
   tts_chars: number;
   tts_cost_usd: number;
+  factcheck_cost_usd: number;
+  images_cost_usd: number;
   credits_cost_usd: number;
   duration_ms: number;
   render_ms: number;
@@ -367,6 +395,10 @@ export interface LeaderboardEntry {
   audience_contests: number;
   judge_wins: number;
   judge_contests: number;
+  /** Web fact-checks of the model's on-screen figures and quotes. */
+  claims_checked: number;
+  claims_verified: number;
+  claims_disputed: number;
 }
 
 export interface Leaderboard {
@@ -403,6 +435,11 @@ export interface VerdictReadyEvent {
   verdict: Verdict;
 }
 
+export interface TurnVisualsEvent {
+  seq_index: number;
+  visuals: TurnVisuals;
+}
+
 // --- Media (audio + browser-side video) --------------------------------------
 
 export interface MediaOptions {
@@ -411,6 +448,8 @@ export interface MediaOptions {
   voices: Record<string, string>; // speaker id -> provider voice id
   /** Design visual scenes for the video (default true). */
   visuals?: boolean;
+  /** Pictures among the scenes (default off). */
+  images?: ImageSource;
 }
 
 export interface GenerateMediaRequest extends MediaOptions {

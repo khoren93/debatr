@@ -21,8 +21,9 @@ from app.core.redis import get_sync_redis, provider_key_key, stop_flag_key, tts_
 from app.core.sync_db import get_sync_session
 from app.models.models import Debate, Turn, utcnow
 from app.services import queue_manager
-from app.services.credits import charge_debate_sync
+from app.services.credits import charge_debate_sync, charge_images_sync
 from app.services.events import publish_event
+from app.services.markers import extract_markers, has_markers
 from app.services.media.tts.elevenlabs import system_key_status
 from app.services.moderation import apply_check, check_debate, publish_sync, should_auto_publish
 from app.services.openrouter_client import OpenRouterClient, OpenRouterError
@@ -32,6 +33,18 @@ from app.services.prompt_builder import (
     build_verdict_messages,
 )
 from app.services.scheduler import ScheduledTurn, build_schedule, speaker_role_for
+from app.services.studio import (
+    claims_prompt,
+    claims_summary,
+    design_turn,
+    initial_visuals,
+    live_pictures_cost,
+    resolve_disputes,
+    turn_visuals_out,
+    verdict_evidence,
+    visual_claims,
+    visuals_enabled,
+)
 from app.services.verdict import structure_verdict
 
 logger = logging.getLogger(__name__)
@@ -65,6 +78,7 @@ def _normalize_usage(raw: dict[str, Any] | None) -> dict[str, Any]:
 
 
 def _serialize_turn(turn: Turn) -> dict[str, Any]:
+    visuals = turn_visuals_out(turn)
     return {
         "seq_index": turn.seq_index,
         "round_id": turn.round_id,
@@ -77,13 +91,18 @@ def _serialize_turn(turn: Turn) -> dict[str, Any]:
         "model_used": turn.model_used,
         "usage": turn.usage_json or {},
         "created_at": turn.created_at.isoformat() if turn.created_at else None,
+        "visuals": visuals.model_dump(mode="json") if visuals else None,
     }
 
 
+def _turns(db: Session, debate_id: uuid.UUID) -> list[Turn]:
+    return list(
+        db.scalars(select(Turn).where(Turn.debate_id == debate_id).order_by(Turn.seq_index)).all()
+    )
+
+
 def _history(db: Session, debate_id: uuid.UUID) -> list[dict[str, Any]]:
-    turns = db.scalars(
-        select(Turn).where(Turn.debate_id == debate_id).order_by(Turn.seq_index)
-    ).all()
+    turns = _turns(db, debate_id)
     return [
         {"speaker_name": t.speaker_name, "text": t.text, "turn_type": t.turn_type}
         for t in turns
@@ -108,15 +127,24 @@ def _compute_totals(db: Session, debate: Debate) -> dict[str, Any]:
         totals["tokens_out"] += int(usage.get("completion_tokens") or 0)
         totals["cost"] += float(usage.get("cost") or 0.0)
     totals["cost"] = round(totals["cost"], 6)
+    claims = claims_summary(sorted(turns, key=lambda t: t.seq_index))
+    if claims:
+        totals["claims"] = claims  # fact-check verdicts per debater (model leaderboard)
     return totals
 
 
 def _charge(db: Session, debate: Debate) -> None:
-    """Charge the owner's credits for a finished run (never lets a billing error kill the job)."""
+    """Charge the owner's credits for a finished run (never lets a billing error kill the job):
+    the models (and fact-checks) and the AI pictures of the live scenes."""
     try:
         tx = charge_debate_sync(db, debate)
         if tx is not None:
             logger.info("Charged %s credits for debate %s", -tx.amount_usd, debate.id)
+        usd, count = live_pictures_cost(_turns(db, debate.id))
+        if count:
+            tx = charge_images_sync(db, debate, usd=usd, count=count, build_ref="live")
+            if tx is not None:
+                logger.info("Charged %s credits for pictures of %s", -tx.amount_usd, debate.id)
     except Exception:
         logger.exception("Failed to charge credits for debate %s", debate.id)
         db.rollback()
@@ -223,6 +251,7 @@ def _save_turn(
     speaker_name: str,
     model_id: str,
     result: GenerationResult,
+    visuals: dict[str, Any] | None = None,
 ) -> Turn:
     turn = Turn(
         debate_id=debate.id,
@@ -236,6 +265,7 @@ def _save_turn(
         word_count=len(result.text.split()),
         model_used=model_id,
         usage_json=result.usage,
+        visuals_json=visuals or {},
     )
     db.add(turn)
     db.commit()
@@ -344,6 +374,7 @@ def _auto_media(db: Session, debate: Debate) -> None:
                 "model_id": str(plan.get("model_id") or settings.TTS_DEFAULT_MODEL_ID),
                 "voices": voices,
                 "visuals": bool(plan.get("visuals", True)),
+                "images": str(plan.get("images") or "off"),
             },
             "force": False,
             "own_tts_key": own_tts_key,
@@ -416,8 +447,18 @@ def process_turn_job(debate_id: str, seq_index: int) -> None:
             )
             model_id = speaker.get("model_id") or settings.DEFAULT_MODEL_ID
             history = _history(db, debate.id)
-            build = build_moderator_messages if turn.is_moderator else build_debater_messages
-            messages = build(conf, speaker, turn, history)
+            speaker_id = f"participant_{turn.speaker_index}"
+            claims = (
+                visual_claims(_turns(db, debate.id), speaker_id, speaker_name)
+                if visuals_enabled(conf) and not turn.is_moderator
+                else []
+            )
+            if turn.is_moderator:
+                messages = build_moderator_messages(conf, speaker, turn, history)
+            else:
+                messages = build_debater_messages(
+                    conf, speaker, turn, history, visual_claims=claims_prompt(claims)
+                )
 
             publish_event(
                 debate_id,
@@ -431,22 +472,32 @@ def process_turn_job(debate_id: str, seq_index: int) -> None:
                 },
             )
 
-            result = _generate(
-                debate_id, seq_index, speaker_name, model_id, messages, _provider_key(debate_id)
-            )
-            _save_turn(
+            api_key = _provider_key(debate_id)
+            result = _generate(debate_id, seq_index, speaker_name, model_id, messages, api_key)
+            visuals: dict[str, Any] = {}
+            if has_markers(result.text):
+                # [visual: …] / [dispute N: …] are for the studio, not the transcript or voice.
+                result.text, hints, marks = extract_markers(result.text)
+                visuals = initial_visuals(hints, resolve_disputes(marks, claims))
+            saved = _save_turn(
                 db,
                 debate,
                 seq_index=seq_index,
                 round_id=turn.round_id,
                 turn_type=turn.turn_type,
-                speaker_id=f"participant_{turn.speaker_index}",
+                speaker_id=speaker_id,
                 speaker_name=speaker_name,
                 model_id=model_id,
                 result=result,
+                visuals=visuals,
             )
 
             if result.stopped or _stop_requested(debate_id):
+                _finalize_stopped(db, debate)
+                return
+            if not result.error:
+                design_turn(db, debate, saved, api_key=api_key)
+            if _stop_requested(debate_id):
                 _finalize_stopped(db, debate)
                 return
             queue_manager.enqueue_turn(debate_id, seq_index + 1)
@@ -486,11 +537,12 @@ def conduct_verdict_job(debate_id: str, seq_index: int) -> None:
                     "round_id": "verdict",
                 },
             )
-            messages = build_verdict_messages(conf, _history(db, debate.id))
+            evidence = verdict_evidence(_turns(db, debate.id))
+            messages = build_verdict_messages(conf, _history(db, debate.id), evidence)
             result = _generate(
                 debate_id, seq_index, VERDICT_SPEAKER_NAME, model_id, messages, api_key
             )
-            _save_turn(
+            saved = _save_turn(
                 db,
                 debate,
                 seq_index=seq_index,
@@ -507,6 +559,7 @@ def conduct_verdict_job(debate_id: str, seq_index: int) -> None:
                 except Exception:
                     logger.exception("Verdict structuring crashed for debate %s", debate_id)
                     db.rollback()
+                design_turn(db, debate, saved, api_key=api_key)
             queue_manager.enqueue_finish(debate_id)
         except Exception as e:
             logger.exception("Verdict for debate %s crashed", debate_id)

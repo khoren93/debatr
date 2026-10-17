@@ -9,10 +9,12 @@ interface Props {
   canStop: boolean;
   stopping: boolean;
   onStop: () => void;
+  /** Between turns: the studio designs the last turn's scenes or fact-checks them. */
+  studio?: 'designing' | 'checking' | null;
 }
 
 /** Player placeholder while the debate is being generated. */
-export const LiveCard = ({ status, roundLabel, speakerName, speakerColor, canStop, stopping, onStop }: Props) => (
+export const LiveCard = ({ status, roundLabel, speakerName, speakerColor, canStop, stopping, onStop, studio = null }: Props) => (
   <div className="relative overflow-hidden rounded-panel border border-line-2 bg-ink-2" style={{ aspectRatio: '16/9', background: 'linear-gradient(90deg,#16224a 0 50%,#3d1a16 50% 100%)' }}>
     <div className="absolute inset-y-0 left-1/2 w-px bg-white/15" />
     <div className="absolute inset-x-0 top-0 flex items-center justify-between p-4 font-mono text-[10px] tracking-[0.1em]">
@@ -24,9 +26,9 @@ export const LiveCard = ({ status, roundLabel, speakerName, speakerColor, canSto
     <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 p-6 text-center">
       <Bars color={speakerColor} height={34} />
       <div>
-        <div className="font-mono text-[10px] tracking-[0.1em] text-muted">NOW SPEAKING</div>
-        <div className="mt-1 font-display text-[clamp(20px,3vw,32px)] font-extrabold tracking-tight" style={{ color: speakerColor }}>
-          {speakerName ?? (status === 'queued' ? 'Queued…' : 'Thinking…')}
+        <div className="font-mono text-[10px] tracking-[0.1em] text-muted">{!speakerName && studio ? 'THE STUDIO' : 'NOW SPEAKING'}</div>
+        <div className="mt-1 font-display text-[clamp(20px,3vw,32px)] font-extrabold tracking-tight" style={{ color: speakerName || !studio ? speakerColor : '#D9FF3D' }}>
+          {speakerName ?? (studio === 'designing' ? 'Drawing the scenes…' : studio === 'checking' ? 'Fact-checking the figures…' : status === 'queued' ? 'Queued…' : 'Thinking…')}
         </div>
       </div>
       {canStop && (

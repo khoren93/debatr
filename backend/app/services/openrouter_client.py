@@ -209,6 +209,66 @@ class OpenRouterClient:
             except httpx.HTTPError as e:
                 raise OpenRouterError(f"Connection error: {e}") from e
 
+    async def chat_completion(
+        self,
+        model: str,
+        messages: list[Message],
+        api_key: str | None = None,
+        max_tokens: int | None = None,
+        read_timeout: float | None = None,
+    ) -> dict[str, Any]:
+        """One non-streamed completion: the full response body, so callers can read
+        `message.annotations` (web search citations) as well as the text and usage."""
+        payload: dict[str, Any] = {"model": model, "messages": messages, "usage": {"include": True}}
+        if max_tokens:
+            payload["max_tokens"] = max_tokens
+        try:
+            async with self._client(read_timeout) as client:
+                response = await client.post(
+                    f"{self.base_url}/chat/completions",
+                    json=payload,
+                    headers=self._headers(api_key),
+                )
+        except httpx.TimeoutException as e:
+            raise OpenRouterError(f"Timed out waiting for {model}") from e
+        except httpx.HTTPError as e:
+            raise OpenRouterError(f"Connection error: {e}") from e
+        if response.status_code != 200:
+            raise parse_error_body(response.content, response.status_code)
+        body = response.json()
+        if not isinstance(body, dict) or body.get("error"):
+            raise error_from_payload(body)
+        return body
+
+    async def generate_image(
+        self,
+        model: str,
+        prompt: str,
+        *,
+        aspect_ratio: str = "16:9",
+        resolution: str | None = "1K",
+        api_key: str | None = None,
+    ) -> dict[str, Any]:
+        """Text-to-image via `POST /images`: {"data": [{"b64_json", "media_type"}], "usage"}."""
+        payload: dict[str, Any] = {"model": model, "prompt": prompt, "aspect_ratio": aspect_ratio}
+        if resolution:
+            payload["resolution"] = resolution
+        try:
+            async with self._client(180.0) as client:
+                response = await client.post(
+                    f"{self.base_url}/images", json=payload, headers=self._headers(api_key)
+                )
+        except httpx.TimeoutException as e:
+            raise OpenRouterError(f"Timed out waiting for {model}") from e
+        except httpx.HTTPError as e:
+            raise OpenRouterError(f"Connection error: {e}") from e
+        if response.status_code != 200:
+            raise parse_error_body(response.content, response.status_code)
+        body = response.json()
+        if not isinstance(body, dict) or not body.get("data"):
+            raise OpenRouterError(f"{model} returned no image")
+        return body
+
     async def validate_model(
         self, model: str, api_key: str | None = None
     ) -> tuple[bool, str | None]:

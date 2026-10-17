@@ -130,6 +130,9 @@ async def _estimate(
         tts_price_per_1k=settings.TTS_CREDIT_PRICE_PER_1K_CHARS,
         markup=settings.CREDIT_MARKUP,
         default_model=settings.DEFAULT_MODEL_ID,
+        fact_check_price=settings.FACT_CHECK_PRICE_USD,
+        image_price=settings.MEDIA_IMAGE_PRICE_USD,
+        max_images=settings.MEDIA_MAX_IMAGES,
     )
     out = EstimateOut(
         **est.as_dict(),

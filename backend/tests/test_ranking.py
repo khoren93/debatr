@@ -86,3 +86,22 @@ def test_more_votes_beat_a_lucky_streak() -> None:
     ]
     by_id = {s.model_id: s for s in build_leaderboard(records)}
     assert by_id["steady"].rating > by_id["lucky"].rating
+
+
+def test_fact_checks_add_up_per_model() -> None:
+    claims = {
+        "participant_1": {"checked": 3, "verified": 2, "disputed": 1, "unverified": 0},
+        "participant_2": {"checked": 1, "verified": 0, "disputed": 1, "unverified": 0},
+        "participant_9": {"checked": 5, "verified": 5},  # not a debater of this record
+    }
+    records = [
+        DebateRecord(models={"participant_1": "a", "participant_2": "b"}, claims=claims),
+        DebateRecord(
+            models={"participant_1": "a", "participant_2": "a"},
+            claims={"participant_2": {"checked": 2, "verified": 2}},
+        ),
+    ]
+    board = {s.model_id: s for s in build_leaderboard(records)}
+    assert (board["a"].claims_checked, board["a"].claims_verified) == (5, 4)
+    assert board["a"].claims_disputed == 1
+    assert (board["b"].claims_checked, board["b"].claims_disputed) == (1, 1)

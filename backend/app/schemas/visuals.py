@@ -6,12 +6,21 @@ lenient on input because they parse LLM output: long strings are clipped and lon
 instead of rejecting the whole scene. Only data travels here — never markup or code.
 """
 
+import hashlib
+import json
 import math
 import re
 from collections.abc import Callable
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, model_validator
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    BeforeValidator,
+    ConfigDict,
+    Field,
+    model_validator,
+)
 
 from app.schemas.geo import normalize_countries
 
@@ -188,6 +197,9 @@ class _Base(BaseModel):
 
 
 class _Scene(_Base):
+    # Stable id within the debate ("{seq}:{hash}", see `scene_key`); set by the studio, never
+    # by the director. Fact-checks and disputes refer to scenes by it.
+    key: Annotated[str, BeforeValidator(_clip(40))] = ""
     # Exact words of the speech where the scene appears (and optionally disappears).
     anchor: Anchor = ""
     until: Anchor = ""
@@ -436,6 +448,104 @@ class MapScene(_Scene):
         return self
 
 
+# --- drawn illustrations and pictures (stage 0.3) ---------------------------------------
+
+_PATH_RE = re.compile(r"^[MmLlHhVvCcSsQqTtAaZz0-9eE.,+\-\s]+$")
+_TRANSFORM_RE = re.compile(
+    r"^(?:\s*(?:matrix|translate|scale|rotate|skewX|skewY)\s*\([-+0-9.eE,\s]*\)\s*,?)*\s*$"
+)
+MAX_PATH_CHARS = 6000
+MAX_SKETCH_STROKES = 160
+
+
+def _path_data(value: str) -> str:
+    """SVG path data: commands and numbers only (it is rendered as an attribute value)."""
+    text = " ".join(value.split())
+    if not text or len(text) > MAX_PATH_CHARS or not _PATH_RE.fullmatch(text):
+        raise ValueError("invalid path data")
+    if text[0] not in "Mm":
+        raise ValueError("path data must start with a move")
+    return text
+
+
+def _transform(value: str) -> str:
+    text = " ".join(value.split())
+    if len(text) > 200 or not _TRANSFORM_RE.fullmatch(text):
+        raise ValueError("invalid transform")
+    return text
+
+
+def _stroke_width(value: Any) -> float:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return 1.0
+    return min(4.0, max(0.4, number)) if math.isfinite(number) else 1.0
+
+
+class SketchStroke(_Base):
+    """One line of a drawing, in the drawing's own coordinates (`SketchDrawing.view`)."""
+
+    d: Annotated[str, AfterValidator(_path_data)]
+    t: Annotated[str, AfterValidator(_transform)] = ""  # SVG transform of the line
+    accent: bool = False  # drawn in the speaker's colour
+    fill: bool = False  # the shape gets a light wash once drawn
+    w: Annotated[float, BeforeValidator(_stroke_width)] = 1.0  # relative width
+
+
+def _view_box(value: Any) -> list[float]:
+    numbers = [float(v) for v in value] if isinstance(value, list) else []
+    if len(numbers) != 4 or not all(math.isfinite(n) for n in numbers):
+        raise ValueError("view needs four numbers")
+    if not (0 < numbers[2] <= 10_000 and 0 < numbers[3] <= 10_000):
+        raise ValueError("view size out of range")
+    return numbers
+
+
+class SketchDrawing(_Base):
+    view: Annotated[list[float], BeforeValidator(_view_box)]  # min-x, min-y, width, height
+    strokes: Annotated[list[SketchStroke], Field(min_length=1, max_length=MAX_SKETCH_STROKES)]
+
+
+class SketchScene(_Scene):
+    """A hand-drawn illustration. The director names the subject; the illustrator model draws
+    it as SVG, which `services/media/sketch.py` reduces to path data (`drawing`)."""
+
+    type: Literal["sketch"]
+    subject: Annotated[str, BeforeValidator(_clip(160)), Field(min_length=3)]  # English
+    caption: Annotated[str, BeforeValidator(_clip(90))] = ""
+    drawing: SketchDrawing | None = None
+
+
+_IMAGE_SRC_RE = re.compile(r"^visuals/[0-9a-f]{16,64}\.(?:webp|jpg)$")
+
+
+def _image_src(value: str) -> str:
+    if value and not _IMAGE_SRC_RE.fullmatch(value):
+        raise ValueError("invalid image path")
+    return value
+
+
+def _https_url(value: str) -> str:
+    text = value.strip()
+    if text and (len(text) > 500 or not re.fullmatch(r"https?://[^\s\"'<>]+", text)):
+        raise ValueError("invalid url")
+    return text
+
+
+class ImageScene(_Scene):
+    """A real-world picture: a free photo (Wikimedia Commons) or an AI image. The director
+    describes the subject; the media build finds or generates it (`services/media/images.py`)."""
+
+    type: Literal["image"]
+    subject: Annotated[str, BeforeValidator(_clip(160)), Field(min_length=3)]  # English
+    caption: Annotated[str, BeforeValidator(_clip(90))] = ""
+    src: Annotated[str, AfterValidator(_image_src)] = ""  # relative to the debate media folder
+    kind: Literal["photo", "ai"] | None = None
+    credit: Annotated[str, BeforeValidator(_clip(140))] = ""  # author, licence, source
+    source_url: Annotated[str, AfterValidator(_https_url)] = ""
+
+
 class ScoreboardScene(_Scene):
     """The judge's result, built from `debates.verdict_json` by code (never by the director)."""
 
@@ -465,7 +575,9 @@ DirectorScene = Annotated[
     | VennScene
     | RankingScene
     | DefinitionScene
-    | MapScene,
+    | MapScene
+    | SketchScene
+    | ImageScene,
     Field(discriminator="type"),
 ]
 # Everything a timeline may carry.
@@ -489,14 +601,46 @@ Scene = Annotated[
     | RankingScene
     | DefinitionScene
     | MapScene
+    | SketchScene
+    | ImageScene
     | ScoreboardScene,
     Field(discriminator="type"),
 ]
 SCENE_TYPES: tuple[str, ...] = (
     "stat", "bars", "line", "pie", "proportion", "bullets", "versus", "quote", "rebuttal",
     "headline", "flow", "timeline", "icons", "scale", "matrix", "venn", "ranking", "definition",
-    "map",
+    "map", "sketch", "image",
 )  # fmt: skip
+# Fields the studio fills in after the director (they do not change a scene's identity).
+RESOLVED_FIELDS = frozenset({"key", "drawing", "src", "kind", "credit", "source_url"})
+
+
+def scene_key(seq_index: int, scene: Any) -> str:
+    """Stable id of a director scene: the turn plus a hash of what the director designed, so a
+    re-plan that produces the same scene keeps its fact-check and disputes."""
+    data = scene.model_dump(mode="json", exclude=set(RESOLVED_FIELDS))
+    digest = hashlib.sha1(json.dumps(data, sort_keys=True).encode()).hexdigest()[:10]
+    return f"{seq_index}:{digest}"
+
+
+def assign_keys(seq_index: int, scenes: list[Any]) -> list[Any]:
+    """Give every scene of a turn its key (identical scenes get a suffix)."""
+    seen: set[str] = set()
+    for scene in scenes:
+        key = scene_key(seq_index, scene)
+        n = 2
+        while key in seen:
+            key = f"{scene_key(seq_index, scene)}-{n}"
+            n += 1
+        seen.add(key)
+        scene.key = key
+    return scenes
+
+
+def key_seq(key: str) -> int | None:
+    """The turn a scene key belongs to."""
+    head = key.split(":", 1)[0]
+    return int(head) if head.isdigit() else None
 
 
 def item_anchors(scene: Any) -> list[str]:
@@ -523,6 +667,31 @@ def item_anchors(scene: Any) -> list[str]:
 UNORDERED_ITEMS = (RankingScene, ScaleScene, MapScene)
 
 
+CheckVerdict = Literal["verified", "disputed", "unverified"]
+
+
+class CheckSource(_Base):
+    url: Annotated[str, AfterValidator(_https_url), Field(min_length=8)]
+    title: Annotated[str, BeforeValidator(_clip(120))] = ""
+
+
+class SceneCheck(_Base):
+    """Web fact-check of a scene's figures or quote (`services/factcheck.py`)."""
+
+    verdict: CheckVerdict
+    note: Annotated[str, BeforeValidator(_clip(240))] = ""
+    sources: Annotated[list[CheckSource], BeforeValidator(_take(3))] = Field(default_factory=list)
+
+
+class SceneDispute(_Base):
+    """A later speaker challenged the scene (`[dispute N: reason]` in their turn)."""
+
+    by_id: str  # participant id
+    by_name: Annotated[str, BeforeValidator(_clip(64))]
+    seq_index: int  # the turn that disputed it
+    reason: Annotated[str, BeforeValidator(_clip(200))] = ""
+
+
 class TimelineVisual(BaseModel):
     id: str
     seq_index: int
@@ -531,4 +700,7 @@ class TimelineVisual(BaseModel):
     end_ms: int
     item_ms: list[int] = Field(default_factory=list)  # absolute reveal time per element
     anchored: bool = True  # False: the anchor phrase was not found, the timing is estimated
+    key: str = ""  # the scene's key ("" for the scoreboard)
+    check: SceneCheck | None = None
+    disputes: list[SceneDispute] = Field(default_factory=list)
     scene: Scene

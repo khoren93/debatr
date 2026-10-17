@@ -182,3 +182,31 @@ def charge_media_sync(
         provider_ref=f"debate:{debate.id}:media:{build_ref}",
         meta={"chars": chars, "price_per_1k": settings.TTS_CREDIT_PRICE_PER_1K_CHARS},
     )
+
+
+def has_balance(debate: Debate) -> bool:
+    """Paid system-key extras (AI pictures) need money on the owner's balance; ownerless legacy
+    rows are run by the admin."""
+    return debate.user is None or to_usd(debate.user.credits_usd) > ZERO
+
+
+def charge_images_sync(
+    db: Session, debate: Debate, *, usd: float, count: int, build_ref: str
+) -> CreditTransaction | None:
+    """Charge the AI pictures of a media build (provider cost x markup)."""
+    if debate.user_id is None:
+        return None
+    amount = to_usd(to_usd(usd) * markup())
+    if amount <= ZERO:
+        return None
+    return apply_transaction_sync(
+        db,
+        debate.user_id,
+        -amount,
+        "media",
+        description=f"AI pictures: {(debate.title or 'Debate')[:250]}",
+        debate_id=debate.id,
+        provider="system",
+        provider_ref=f"debate:{debate.id}:images:{build_ref}",
+        meta={"images": count, "provider_cost_usd": usd, "markup": float(markup())},
+    )

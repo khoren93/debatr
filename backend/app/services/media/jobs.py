@@ -10,7 +10,7 @@ import logging
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -31,8 +31,8 @@ from app.schemas.timeline import (
     TimelineVerdict,
     TimelineWord,
 )
-from app.schemas.visuals import TimelineVisual
-from app.services.credits import charge_media_sync
+from app.schemas.visuals import ImageScene, SketchScene, TimelineVisual
+from app.services.credits import charge_images_sync, charge_media_sync, has_balance
 from app.services.media import ffmpeg
 from app.services.media.alignment import WordTiming, clamp_words, merge_chunks
 from app.services.media.highlights import (
@@ -43,10 +43,12 @@ from app.services.media.highlights import (
     parse_highlights,
     snap_highlight,
 )
+from app.services.media.images import ImageStudio
 from app.services.media.languages import language_code
 from app.services.media.llm import complete, extract_json
 from app.services.media.paths import MediaPaths
 from app.services.media.script import clean_markdown, even_words, split_for_tts, strip_audio_tags
+from app.services.media.sketch import illustrate
 from app.services.media.state import set_media_state
 from app.services.media.timeline import build_speakers
 from app.services.media.tts import SpeakerRef, SynthRequest, TTSProvider, get_provider
@@ -56,14 +58,20 @@ from app.services.media.visuals import (
     TurnBrief,
     align_scenes,
     build_briefs,
-    build_director_messages,
     diversify,
     make_room,
-    parse_scenes,
-    scene_budget,
     scoreboard_visual,
 )
 from app.services.scheduler import speaker_role_for
+from app.services.studio import (
+    budget_of,
+    check_of,
+    disputes_by_key,
+    hints_of,
+    plan_scenes,
+    text_hash,
+    usable_plan,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -252,44 +260,108 @@ def _pick_highlights(
         return fallback_highlights(segments, total_ms), None
 
 
-def _plan_turn(
-    paths: MediaPaths, brief: TurnBrief, *, topic: str, language: str, model: str, force: bool
-) -> tuple[list[Any], float]:
-    """Candidate scene specs for one turn, the spare included (cached by content, so new
-    voices reuse them). Returns (scenes, usd spent)."""
-    budget = scene_budget(brief.text, brief.role)
-    if budget == 0:
-        return [], 0.0
-    cache = paths.turn_visuals(brief.seq_index)
-    parts = [PROMPT_VERSION, model, topic, language, brief.role, brief.turn_type, brief.text]
-    parts += [brief.opponent or "", brief.previous_text or "", ",".join(brief.debaters)]
-    key = "|".join([*parts, str(budget)])
-    digest = hashlib.sha256(key.encode()).hexdigest()
-    if not force and cache.exists():
-        try:
-            meta = json.loads(cache.read_text())
-            if meta.get("hash") == digest:
-                return parse_scenes(meta.get("scenes"), budget + 1, debaters=brief.debaters), 0.0
-        except (OSError, ValueError):
-            logger.warning("Unreadable visuals cache %s, planning again", cache)
-    messages = build_director_messages(brief, topic=topic, language=language, budget=budget)
-    text, usage = complete(model, messages, max_tokens=1600)
-    try:
-        payload = extract_json(text)
-    except ValueError:
-        payload = None
-    scenes = parse_scenes(
-        payload,
-        budget + 1,
-        speech=brief.text,
-        speaker=brief.speaker_name,
-        opponent=brief.opponent,
-        debaters=brief.debaters,
+@dataclass
+class VisualsResult:
+    visuals: list[TimelineVisual]
+    usd: float | None  # system-key cost: director, sketches, picture checks (not billed)
+    images: ImageStudio | None  # what AI pictures cost (billed after the build)
+
+
+def _store_plan(turn: Turn, brief: TurnBrief, scenes: list[Any]) -> None:
+    """Keep a plan made by the media build on the turn (the live page shows it too). Checks of
+    scenes that survived a re-plan are kept; hints and disputes always are."""
+    vj = dict(turn.visuals_json or {})
+    keys = {s.key for s in scenes}
+    vj.update(
+        {
+            "status": "ready",
+            "version": PROMPT_VERSION,
+            "text_hash": text_hash(turn.text),
+            "images": brief.images,
+            "budget": budget_of(brief),
+            "scenes": [s.model_dump(mode="json") for s in scenes],
+            "checks": {k: v for k, v in (vj.get("checks") or {}).items() if k in keys},
+            "checking": [k for k in vj.get("checking") or [] if k in keys],
+        }
     )
-    cache.write_text(
-        json.dumps({"hash": digest, "scenes": [s.model_dump(mode="json") for s in scenes]})
-    )
-    return scenes, float((usage or {}).get("cost") or 0.0)
+    turn.visuals_json = vj
+
+
+def _update_scenes(turn: Turn, picked: list[Any]) -> None:
+    """Store what the build chose and filled in (drawings, pictures) on the turn."""
+    vj = dict(turn.visuals_json or {})
+    filled = {s.key: s.model_dump(mode="json") for s in picked}
+    vj["scenes"] = [filled.get(str(raw.get("key")), raw) for raw in vj.get("scenes") or []]
+    vj["picked"] = [s.key for s in picked]
+    turn.visuals_json = vj
+
+
+def _fill_scenes(
+    db: Session,
+    debate: Debate,
+    picked: dict[int, list[Any]],
+    studio: ImageStudio | None,
+    *,
+    sketch_model: str,
+) -> float:
+    """Draw the picked sketches that have no drawing yet and find the pictures (at most
+    MEDIA_MAX_IMAGES). Scenes that end up empty are dropped. Returns the usd spent."""
+    todo_sketches = [
+        (seq, s)
+        for seq in picked
+        for s in picked[seq]
+        if isinstance(s, SketchScene) and not s.drawing
+    ]
+    wanted = "ai" if studio is not None and studio.allow_ai else "photo"
+    todo_images = [
+        (seq, s)
+        for seq in sorted(picked)
+        for s in picked[seq]
+        if isinstance(s, ImageScene) and not (s.src and s.kind == wanted)  # found live
+    ]
+    if todo_sketches or todo_images:
+        set_media_state(db, debate, step="visuals", message="Drawing sketches, finding pictures…")
+    filled: dict[str, Any] = {}
+    usd = 0.0
+    with ThreadPoolExecutor(max_workers=max(1, settings.MEDIA_VISUALS_CONCURRENCY)) as pool:
+        sketch_jobs = {
+            s.key: pool.submit(illustrate, s.subject, model=sketch_model) for _, s in todo_sketches
+        }
+        image_jobs = {}
+        if studio is not None:
+            for _, scene in todo_images[: settings.MEDIA_MAX_IMAGES]:
+                image_jobs[scene.key] = pool.submit(studio.resolve, scene)
+        for key, future in sketch_jobs.items():
+            try:
+                drawing, cost = future.result()
+                usd += cost
+                if drawing is not None:
+                    filled[key] = drawing
+            except Exception as e:
+                logger.warning("Sketch %s failed: %s", key, e)
+        for key, future in image_jobs.items():
+            try:
+                resolved = future.result()
+                if resolved is not None:
+                    filled[key] = resolved
+            except Exception as e:
+                logger.warning("Picture %s failed: %s", key, e)
+
+    for seq, scenes in picked.items():
+        kept: list[Any] = []
+        for scene in scenes:
+            if isinstance(scene, SketchScene):
+                drawing = scene.drawing or filled.get(scene.key)
+                if drawing is None:
+                    continue
+                scene = scene.model_copy(update={"drawing": drawing})
+            elif isinstance(scene, ImageScene):
+                scene = filled.get(scene.key) or scene
+                if not scene.src:
+                    continue
+            kept.append(scene)
+        picked[seq] = kept
+    return usd + (studio.check_usd if studio else 0.0)
 
 
 def _plan_visuals(
@@ -298,30 +370,51 @@ def _plan_visuals(
     paths: MediaPaths,
     segments: list[TimelineSegment],
     speakers_by_id: dict[str, TimelineSpeaker],
+    turns: list[Turn],
     *,
     topic: str,
     language: str,
+    options: MediaOptions,
+    allow_ai_images: bool,
     force: bool,
-) -> tuple[list[TimelineVisual], float | None]:
-    """Ask the visual director for every turn in parallel and align the scenes to the words.
-    A failing turn only loses its scenes."""
+) -> VisualsResult:
+    """Scenes of every turn: the plans stored during the debate (`services/studio`), the
+    director for turns without one (in parallel), then sketches and pictures, aligned to the
+    words. A failing turn only loses its scenes."""
     if not settings.OPENROUTER_API_KEY:
-        return [], None
+        return VisualsResult([], None, None)
     model = settings.MEDIA_VISUALS_MODEL or settings.MEDIA_HIGHLIGHTS_MODEL
+    images = options.images != "off"
     roles = {s.id: s.role for s in speakers_by_id.values()}
-    briefs = [b for b in build_briefs(segments, roles) if scene_budget(b.text, b.role) > 0]
-    total = len(briefs)
+    turns_by_seq = {t.seq_index: t for t in turns}
+    briefs: list[TurnBrief] = []
+    for b in build_briefs(segments, roles):
+        turn = turns_by_seq.get(b.seq_index)
+        brief = replace(b, hints=hints_of(turn.visuals_json) if turn else (), images=images)
+        if budget_of(brief) > 0:
+            briefs.append(brief)
+
+    planned: dict[int, list[Any]] = {}
+    to_plan: list[TurnBrief] = []
+    for b in briefs:
+        turn = turns_by_seq.get(b.seq_index)
+        stored = None if force or turn is None else usable_plan(turn.visuals_json, turn.text)
+        if stored is None:
+            to_plan.append(b)
+        else:
+            planned[b.seq_index] = [s for s in stored if images or not isinstance(s, ImageScene)]
+
+    total = len(to_plan)
     set_media_state(
         db, debate, step="visuals", current=0, total=total, message="Designing visual scenes…"
     )
-    planned: dict[int, list[Any]] = {}
     cost = 0.0
     with ThreadPoolExecutor(max_workers=max(1, settings.MEDIA_VISUALS_CONCURRENCY)) as pool:
         futures = {
             pool.submit(
-                _plan_turn, paths, b, topic=topic, language=language, model=model, force=force
+                plan_scenes, b, topic=topic, language=language, model=model, budget=budget_of(b)
             ): b
-            for b in briefs
+            for b in to_plan
         }
         for done, future in enumerate(as_completed(futures), start=1):
             brief = futures[future]
@@ -329,6 +422,8 @@ def _plan_visuals(
                 scenes, usd = future.result()
                 planned[brief.seq_index] = scenes
                 cost += usd
+                if brief.seq_index in turns_by_seq:
+                    _store_plan(turns_by_seq[brief.seq_index], brief, scenes)
             except Exception as e:
                 logger.warning("Visual director failed for turn %s: %s", brief.seq_index, e)
             set_media_state(
@@ -339,18 +434,33 @@ def _plan_visuals(
                 total=total,
                 message=f"Designed scenes for {done} of {total} turns",
             )
-    by_seq = {s.seq_index: s for s in segments}
+
     picked = diversify(
         [
-            (b.seq_index, planned[b.seq_index], scene_budget(b.text, b.role))
+            (b.seq_index, planned[b.seq_index], budget_of(b))
             for b in briefs
             if b.seq_index in planned
         ]
     )
+    studio = ImageStudio(paths, mode=options.images, allow_ai=allow_ai_images) if images else None
+    cost += _fill_scenes(
+        db, debate, picked, studio, sketch_model=settings.MEDIA_SKETCH_MODEL or model
+    )
+    for seq, scenes in picked.items():
+        if seq in turns_by_seq:
+            _update_scenes(turns_by_seq[seq], scenes)
+    db.commit()
+
+    by_seq = {s.seq_index: s for s in segments}
+    disputes = disputes_by_key(turns)
     visuals: list[TimelineVisual] = []
     for seq in sorted(picked):
-        visuals.extend(align_scenes(picked[seq], by_seq[seq]))
-    return visuals, round(cost, 6)
+        turn = turns_by_seq.get(seq)
+        for v in align_scenes(picked[seq], by_seq[seq]):
+            v.check = check_of(turn.visuals_json, v.key) if turn else None
+            v.disputes = disputes.get(v.key, [])
+            visuals.append(v)
+    return VisualsResult(visuals, round(cost, 6), studio)
 
 
 def _add_scoreboard(
@@ -378,9 +488,12 @@ def _add_scoreboard(
     return make_room(visuals, board)
 
 
-def _build(db: Session, debate: Debate, options: MediaOptions, force: bool) -> int:
+def _build(
+    db: Session, debate: Debate, options: MediaOptions, force: bool
+) -> tuple[int, ImageStudio | None]:
     """Voice, mix and write the timeline. Returns the characters actually synthesized
-    (cached turns excluded), which is what premium voices are billed on."""
+    (cached turns excluded), which is what premium voices are billed on, and the picture
+    studio (what AI pictures cost)."""
     debate_id = str(debate.id)
     conf: dict[str, Any] = debate.config_json or {}
     participants: list[dict[str, Any]] = conf.get("participants", [])
@@ -518,20 +631,26 @@ def _build(db: Session, debate: Debate, options: MediaOptions, force: bool) -> i
 
     visuals: list[TimelineVisual] = []
     visuals_usd: float | None = None
+    image_studio: ImageStudio | None = None
     if options.visuals:
         try:
-            visuals, visuals_usd = _plan_visuals(
+            result = _plan_visuals(
                 db,
                 debate,
                 paths,
                 segments,
                 speakers_by_id,
+                turns,
                 topic=str(conf.get("topic") or ""),
                 language=language,
+                options=options,
+                allow_ai_images=options.images == "ai" and has_balance(debate),
                 force=force,
             )
+            visuals, visuals_usd, image_studio = result.visuals, result.usd, result.images
         except Exception:
             logger.exception("Visual scenes failed for %s, continuing without them", debate_id)
+            db.rollback()
             visuals = []
 
     set_media_state(db, debate, step="highlights", message="Picking highlights for shorts…")
@@ -570,6 +689,7 @@ def _build(db: Session, debate: Debate, options: MediaOptions, force: bool) -> i
         else None,
         cached_turns=sum(1 for a in ordered if a.cached),
         visuals_usd=visuals_usd,
+        images_usd=round(image_studio.ai_usd, 6) if image_studio else None,
     )
     timeline = Timeline(
         debate_id=debate_id,
@@ -606,7 +726,7 @@ def _build(db: Session, debate: Debate, options: MediaOptions, force: bool) -> i
             "assets": {"timeline": "timeline.json", "full_mp3": "full.mp3", "full_wav": "full.wav"},
         },
     )
-    return char_cost
+    return char_cost, image_studio
 
 
 def build_media_job(debate_id: str) -> None:
@@ -630,7 +750,8 @@ def build_media_job(debate_id: str) -> None:
             started=True,
         )
         try:
-            billed_chars = _build(db, debate, options, force)
+            billed_chars, images = _build(db, debate, options, force)
+            build_ref = str((debate.media_json or {}).get("finished_at") or int(time.time()))
             try:
                 tx = charge_media_sync(
                     db,
@@ -638,10 +759,18 @@ def build_media_job(debate_id: str) -> None:
                     chars=billed_chars,
                     provider=options.provider,
                     own_key=bool(state.get("own_tts_key")),
-                    build_ref=str((debate.media_json or {}).get("finished_at") or int(time.time())),
+                    build_ref=build_ref,
                 )
                 if tx is not None:
                     logger.info("Charged %s credits for voices of %s", -tx.amount_usd, debate_id)
+                if images is not None and images.ai_count:
+                    tx = charge_images_sync(
+                        db, debate, usd=images.ai_usd, count=images.ai_count, build_ref=build_ref
+                    )
+                    if tx is not None:
+                        logger.info(
+                            "Charged %s credits for pictures of %s", -tx.amount_usd, debate_id
+                        )
             except Exception:
                 logger.exception("Failed to charge credits for media of %s", debate_id)
                 db.rollback()

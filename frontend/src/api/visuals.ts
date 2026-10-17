@@ -2,6 +2,8 @@
 // src/video/visuals/. Icons are keys of ICONS in src/video/visuals/icons.ts.
 
 interface SceneBase {
+  /** Stable id within the debate ("{seq}:{hash}"); fact-checks and disputes refer to it. */
+  key?: string;
   anchor: string;
   until: string;
   title: string;
@@ -139,6 +141,34 @@ export interface MapScene extends SceneBase {
   regions: { codes: string[]; label: string; value: number | null; anchor: string }[]; // ISO alpha-3
 }
 
+/** One line of a drawing, in the drawing's coordinates; `t` is an SVG transform. */
+export interface SketchStroke {
+  d: string;
+  t: string;
+  accent: boolean; // speaker colour
+  fill: boolean; // light wash once drawn
+  w: number; // relative width
+}
+
+/** A hand-drawn illustration: the illustrator model's SVG reduced to path data on the server. */
+export interface SketchScene extends SceneBase {
+  type: 'sketch';
+  subject: string;
+  caption: string;
+  drawing: { view: [number, number, number, number]; strokes: SketchStroke[] } | null;
+}
+
+/** A real-world picture: a free photo (Wikimedia Commons) or an AI image, in the media folder. */
+export interface ImageScene extends SceneBase {
+  type: 'image';
+  subject: string;
+  caption: string;
+  src: string; // "visuals/<hash>.webp", relative to the debate media folder
+  kind: 'photo' | 'ai' | null;
+  credit: string;
+  source_url: string;
+}
+
 /** The judge's result, built from the structured verdict (not by the director). */
 export interface ScoreboardScene extends SceneBase {
   type: 'scoreboard';
@@ -167,9 +197,28 @@ export type Scene =
   | RankingScene
   | DefinitionScene
   | MapScene
+  | SketchScene
+  | ImageScene
   | ScoreboardScene;
 
 export type SceneType = Scene['type'];
+
+export type CheckVerdict = 'verified' | 'disputed' | 'unverified';
+
+/** Web fact-check of a scene's figures or quote (backend services/factcheck.py). */
+export interface SceneCheck {
+  verdict: CheckVerdict;
+  note: string;
+  sources: { url: string; title: string }[];
+}
+
+/** A later speaker challenged the scene with `[dispute N: reason]`. */
+export interface SceneDispute {
+  by_id: string;
+  by_name: string;
+  seq_index: number;
+  reason: string;
+}
 
 export interface TimelineVisual {
   id: string;
@@ -179,5 +228,8 @@ export interface TimelineVisual {
   end_ms: number;
   item_ms: number[]; // absolute reveal time per element (in the order of the scene's lists)
   anchored: boolean; // false: the phrase was not found, the timing is estimated
+  key?: string;
+  check?: SceneCheck | null;
+  disputes?: SceneDispute[];
   scene: Scene;
 }

@@ -211,6 +211,9 @@ class Turn(Base):
     model_used: Mapped[str] = mapped_column(String)
     # {prompt_tokens, completion_tokens, total_tokens, cost}
     usage_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    # Visual scenes of the turn (app.services.studio): the director's plan, the speaker's
+    # [visual: …] hints, disputes made in this turn, fact-checks of its scenes.
+    visuals_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, server_default="{}")
 
     retake_count: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

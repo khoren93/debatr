@@ -73,5 +73,5 @@ export interface Timeline {
   highlights: TimelineHighlight[];
   /** Charts / drawn scenes synced with the speech; missing in timelines built before them. */
   visuals?: TimelineVisual[];
-  stats: { chars: number; tts_ms: number; estimated_usd: number | null; cached_turns: number; visuals_usd?: number | null };
+  stats: { chars: number; tts_ms: number; estimated_usd: number | null; cached_turns: number; visuals_usd?: number | null; images_usd?: number | null };
 }

@@ -128,7 +128,13 @@ const CreateDebate = () => {
   const validation = { defaultModelId, modelsLoading };
   const ownKey = openrouterKey.length > 0 || Boolean(user?.openrouter_key_masked);
   const paidLocked = !ownKey && (user?.credits_usd ?? 0) <= 0;
-  const config = buildConfig(state, { defaultModelId, voices: resolvedVoices, provider, openrouterKey, elevenlabsKey });
+  // Locked options (no balance) are sent as off even if the stored wizard state has them on.
+  const effective: WizardState = {
+    ...state,
+    images: state.images === 'ai' && (user?.credits_usd ?? 0) <= 0 ? 'off' : state.images,
+    fact_check: state.fact_check && !paidLocked,
+  };
+  const config = buildConfig(effective, { defaultModelId, voices: resolvedVoices, provider, openrouterKey, elevenlabsKey });
   // Drafts are stored on the server: never send the browser keys along with them.
   const draftConfig = { ...config, user_provider_key: undefined, user_tts_key: undefined };
   const ready = !modelsLoading && config.participants.every((p) => p.model_id.length > 0);
@@ -245,7 +251,7 @@ const CreateDebate = () => {
           showErrors={showErrors}
         />
       )}
-      {state.step === 3 && <StepFormat state={state} patch={patch} accountKeyMasked={user?.openrouter_key_masked ?? null} openrouterKey={openrouterKey} ttsKeyCheck={ttsKeyCheck} />}
+      {state.step === 3 && <StepFormat state={state} patch={patch} accountKeyMasked={user?.openrouter_key_masked ?? null} openrouterKey={openrouterKey} ttsKeyCheck={ttsKeyCheck} aiImagesLocked={(user?.credits_usd ?? 0) <= 0} factCheckLocked={paidLocked} />}
       {state.step === 4 && (
         <StepReview
           state={state}
