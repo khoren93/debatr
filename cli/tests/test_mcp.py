@@ -7,6 +7,7 @@ import httpx
 import pytest
 from conftest import DEBATE_ID, LIVE_EVENTS, SITE, TOKEN, FakeServer, detail, free_estimate
 from mcp import Client
+from mcp_types import CallToolResult, TextContent
 
 from debatr import mcp_server
 from debatr.config import Settings
@@ -21,9 +22,17 @@ def make(server: FakeServer, monkeypatch, token: str | None = TOKEN, cap: float 
     return create_server(clients, cap=cap, website=SITE)
 
 
-def structured(result: Any) -> dict[str, Any]:
+def structured(result: CallToolResult) -> dict[str, Any]:
     assert not result.is_error, result.content
+    assert result.structured_content is not None
     return result.structured_content
+
+
+def error_text(result: CallToolResult) -> str:
+    assert result.is_error
+    first = result.content[0]
+    assert isinstance(first, TextContent)
+    return first.text
 
 
 async def test_tools_are_described(server: FakeServer, monkeypatch):
@@ -41,8 +50,10 @@ async def test_tools_are_described(server: FakeServer, monkeypatch):
         "get_leaderboard",
         "publish_debate",
     }
-    assert tools["get_debate"].annotations.read_only_hint is True
-    assert tools["start_debate"].annotations.read_only_hint is False
+    read_only = tools["get_debate"].annotations
+    writes = tools["start_debate"].annotations
+    assert read_only is not None and read_only.read_only_hint is True
+    assert writes is not None and writes.read_only_hint is False
     schema = tools["start_debate"].input_schema
     assert schema["required"] == ["topic"]
     assert "ctx" not in tools["get_debate"].input_schema["properties"]
@@ -69,22 +80,22 @@ async def test_start_debate_is_private_and_capped(server: FakeServer, monkeypatc
         assert [p["display_name"] for p in body["participants"]] == ["The Host", "Kit", "Nova"]
 
         refused = await client.call_tool("start_debate", {"topic": "Q?", "max_cost_usd": 0.1})
-        assert refused.is_error and "above the limit of $0.10" in refused.content[0].text
+        assert "above the limit of $0.10" in error_text(refused)
 
     server.on("POST /debates/estimate", free_estimate(credits_cost_usd=2.5))
     async with Client(make(server, monkeypatch, cap=1.0)) as client:
         refused = await client.call_tool("start_debate", {"topic": "Q?", "max_cost_usd": 5})
-    assert refused.is_error and "DEBATR_MAX_COST_USD" in refused.content[0].text
+    assert "DEBATR_MAX_COST_USD" in error_text(refused)
     assert len(server.calls("POST /debates")) == 1
 
 
 async def test_get_debate_waits_and_reports_progress(server: FakeServer, monkeypatch):
     server.on(f"GET /debates/{DEBATE_ID}", [detail("running"), detail("completed")])
     server.on(f"GET /debates/{DEBATE_ID}/stream", LIVE_EVENTS)
-    progress: list[tuple[float, float | None, str | None]] = []
+    updates: list[tuple[float, float | None, str | None]] = []
 
-    async def on_progress(done: float, total: float | None, message: str | None) -> None:
-        progress.append((done, total, message))
+    async def on_progress(progress: float, total: float | None, message: str | None) -> None:
+        updates.append((progress, total, message))
 
     async with Client(make(server, monkeypatch)) as client:
         result = await client.call_tool(
@@ -96,8 +107,8 @@ async def test_get_debate_waits_and_reports_progress(server: FakeServer, monkeyp
     assert out["status"] == "completed" and out["verdict"]["winner"] == "Nova"
     assert "### Nova · PRO" in out["transcript"]
     assert "next" not in out
-    assert [p[0] for p in progress] == [1, 2, 3, 4] and progress[-1][1] == 4
-    assert progress[1][2] == "2/4 turns: Nova spoke"
+    assert [u[0] for u in updates] == [1, 2, 3, 4] and updates[-1][1] == 4
+    assert updates[1][2] == "2/4 turns: Nova spoke"
 
 
 async def test_get_debate_still_running(server: FakeServer, monkeypatch):
@@ -136,7 +147,7 @@ async def test_public_debates_need_no_login(server: FakeServer, monkeypatch):
         )
         assert read["url"] == f"{SITE}/d/k3m9xq2p7w"
         locked = await client.call_tool("get_account", {})
-    assert locked.is_error and "debatr login" in locked.content[0].text
+    assert "debatr login" in error_text(locked)
 
 
 async def test_api_errors_reach_the_agent(server: FakeServer, monkeypatch):
@@ -146,7 +157,7 @@ async def test_api_errors_reach_the_agent(server: FakeServer, monkeypatch):
     )
     async with Client(make(server, monkeypatch)) as client:
         result = await client.call_tool("stop_debate", {"debate_id": DEBATE_ID})
-    assert result.is_error and "Debate is already completed" in result.content[0].text
+    assert "Debate is already completed" in error_text(result)
 
 
 async def test_list_models_filters(server: FakeServer, monkeypatch):

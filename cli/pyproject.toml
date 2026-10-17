@@ -72,14 +72,6 @@ ignore = [
 [tool.ruff.lint.isort]
 known-first-party = ["debatr"]
 
-[tool.pyright]
-include = ["src", "tests"]
-venvPath = "."
-venv = ".venv"
-pythonVersion = "3.10"
-typeCheckingMode = "standard"
-reportUnknownMemberType = "none"
-
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"

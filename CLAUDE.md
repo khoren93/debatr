@@ -379,6 +379,9 @@ Stopping: `POST /api/debates/{id}/stop` sets the status, sets `debate:{id}:stop`
 - Brand name and copy live in `src/lib/brand.ts`; speaker colours in `src/lib/format.ts` mirror
   `backend/app/services/media/timeline.py` (PALETTE / MODERATOR_COLOR / JUDGE_COLOR) and
   `cli/src/debatr/render.py`.
+- `cli/pyrightconfig.json` must stay a pyrightconfig.json: pyright prefers the root
+  `pyrightconfig.json` (backend) over any `[tool.pyright]`, so the CLI would silently be checked
+  as the backend (locally green thanks to `backend/.venv`, red in CI).
 - The CLI is a separate package that only uses the public API: when `DebateConfig`, `DebateDetail`
   or SSE events change, update `cli/src/debatr/debate.py` / `render.py` and the fake server in
   `cli/tests/conftest.py`. Its version lives in `cli/src/debatr/__init__.py`; pushing a

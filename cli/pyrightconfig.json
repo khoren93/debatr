@@ -1,0 +1,10 @@
+// Here and not in pyproject.toml: pyright picks the repository root's pyrightconfig.json (the
+// backend's) over any [tool.pyright] section, so the CLI needs a pyrightconfig.json of its own.
+{
+  "include": ["src", "tests"],
+  "venvPath": ".",
+  "venv": ".venv",
+  "pythonVersion": "3.10",
+  "typeCheckingMode": "standard",
+  "reportUnknownMemberType": "none"
+}

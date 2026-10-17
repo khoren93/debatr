@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from collections.abc import Callable, Iterator
 from functools import partial
-from typing import Any
+from typing import Any, cast
 
 import httpx
 import pytest
@@ -163,11 +163,11 @@ class FakeServer:
         key = f"{request.method} {request.url.path.removeprefix('/api')}"
         if key not in self.routes:
             return httpx.Response(404, json={"detail": f"no route {key}"})
-        route = self.routes[key]
+        route: Any = self.routes[key]
         if isinstance(route, list):
             route = route.pop(0) if len(route) > 1 else route[0]
         if callable(route):
-            return route(request)
+            return cast(Handler, route)(request)
         if isinstance(route, httpx.Response):
             return route
         if isinstance(route, bytes):
