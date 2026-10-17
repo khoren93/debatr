@@ -37,6 +37,8 @@ const QUALITIES = [
 
 const qualityLabel = (scale: number) => QUALITIES.find((q) => q.scale === scale)?.label ?? `${Math.round(1080 * scale)}p`;
 
+const STALL_MS = 20_000;
+
 const formatBytes = (n: number) => (n > 1e6 ? `${(n / 1e6).toFixed(1)} MB` : `${Math.round(n / 1e3)} KB`);
 
 const stop = (e: MouseEvent) => e.stopPropagation();
@@ -77,7 +79,10 @@ export const ExportCard = ({ kind, debateId, timeline, mediaBase, highlightIndex
   const [result, setResult] = useState<{ url: string; size: number; ms: number; scale: number; highlight: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // No new frame for a while (a background tab pauses the renderer, or a frame cannot finish).
+  const [stalled, setStalled] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
+  const lastFrameAt = useRef(0);
 
   const isLong = kind === 'long';
   const width = isLong ? LONG_W : SHORT_W;
@@ -100,6 +105,16 @@ export const ExportCard = ({ kind, debateId, timeline, mediaBase, highlightIndex
     };
   }, [width, height, timeline]);
 
+  useEffect(() => {
+    if (!busy) return;
+    const timer = window.setInterval(() => {
+      const now = performance.now();
+      if (!lastFrameAt.current) lastFrameAt.current = now;
+      setStalled(now - lastFrameAt.current > STALL_MS);
+    }, 2000);
+    return () => window.clearInterval(timer);
+  }, [busy]);
+
   // Abort a running render when the card unmounts.
   useEffect(() => {
     return () => {
@@ -112,6 +127,9 @@ export const ExportCard = ({ kind, debateId, timeline, mediaBase, highlightIndex
     setBusy(true);
     setError(null);
     setProgress(null);
+    setStalled(false);
+    lastFrameAt.current = 0; // set by the stall timer's first tick
+    let encoded = -1;
     const ctrl = new AbortController();
     abortRef.current = ctrl;
     try {
@@ -127,7 +145,13 @@ export const ExportCard = ({ kind, debateId, timeline, mediaBase, highlightIndex
         durationInFrames: frames,
         muted: false,
         scale,
-        onProgress: setProgress,
+        onProgress: (p) => {
+          if (p.encodedFrames !== encoded) {
+            encoded = p.encodedFrames;
+            lastFrameAt.current = performance.now();
+          }
+          setProgress(p);
+        },
         signal: ctrl.signal,
       });
       if (result) URL.revokeObjectURL(result.url);
@@ -135,20 +159,25 @@ export const ExportCard = ({ kind, debateId, timeline, mediaBase, highlightIndex
       if (reportRenders) reportRender(debateId, kind).catch(() => undefined);
     } catch (e) {
       const message = (e as Error).message;
-      setError(/abort/i.test(message) ? 'Render cancelled' : message);
+      if (!/abort|cancel/i.test(message)) console.error('MP4 render failed', e);
+      setError(/abort|cancel/i.test(message) ? 'Render cancelled' : message);
     } finally {
       setBusy(false);
       setProgress(null);
+      setStalled(false);
     }
   };
 
   const ready = result !== null && result.scale === scale && (isLong || result.highlight === highlightIndex);
   const unsupported = support?.canRender === false;
-  const pct = progress ? Math.round(progress.progress * 100) : 0;
+  const encodedFrames = progress?.encodedFrames ?? 0;
+  const done = frames > 0 ? Math.min(1, encodedFrames / frames) : 0;
+  // Tenths at the start: a long debate needs dozens of frames per percent.
+  const pct = done < 0.1 ? (done * 100).toFixed(1) : String(Math.round(done * 100));
   const status = !timeline
     ? { label: 'NO AUDIO', color: '#8B90A0' }
     : busy
-      ? { label: `RENDERING ${pct}%`, color: '#FFC46B' }
+      ? { label: progress ? `RENDERING ${pct}%` : 'PREPARING', color: '#FFC46B' }
       : ready
         ? { label: 'READY', color: '#52D889' }
         : unsupported
@@ -202,10 +231,13 @@ export const ExportCard = ({ kind, debateId, timeline, mediaBase, highlightIndex
         (busy ? (
           <div className="grid gap-1.5">
             <div className="h-1.5 overflow-hidden rounded-md bg-surface-3">
-              <div className="h-full bg-[linear-gradient(90deg,#6C9CFF,#D9FF3D)] transition-[width] duration-100" style={{ width: `${pct}%` }} />
+              <div className="h-full bg-[linear-gradient(90deg,#6C9CFF,#D9FF3D)] transition-[width] duration-100" style={{ width: `${done * 100}%` }} />
             </div>
             <div className="flex items-center justify-between gap-2 font-mono text-[11px] text-muted">
-              <span>Rendering… keep this tab open{etaSec ? ` · ~${etaSec}s left` : ''}</span>
+              <span>
+                {progress ? `${encodedFrames.toLocaleString()} / ${frames.toLocaleString()} frames` : 'Loading the audio and pictures…'}
+                {etaSec ? ` · ~${etaSec}s left` : ''}
+              </span>
               <button
                 type="button"
                 onClick={(e) => {
@@ -216,6 +248,9 @@ export const ExportCard = ({ kind, debateId, timeline, mediaBase, highlightIndex
               >
                 Cancel
               </button>
+            </div>
+            <div className={`text-[11px] leading-relaxed ${stalled ? 'text-host' : 'text-dim'}`}>
+              {stalled ? 'No new frames for 20 s. Keep this tab in front — browsers pause background tabs. If it stays stuck, cancel and check the browser console.' : 'Rendered in this tab — keep it open and in front.'}
             </div>
           </div>
         ) : (
