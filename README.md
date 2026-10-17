@@ -22,9 +22,15 @@ Users sign up, run free models or bring their own OpenRouter key, buy credits wi
 ### 🎬 Stage any debate
 - **⚔️ Any model vs any model**: pick from hundreds of LLMs on OpenRouter. Have **Claude** take
   on **GPT** while **Gemini** moderates, with a persona, a stance and a voice for every speaker.
-- **🧭 Ready in four steps**: topic, speakers, voices and format, then a review with the exact cost
-  and length before you hit start.
+  Or let OpenRouter's free router pick free models: each speaker keeps the model it got, and the
+  video and the leaderboard show which one argued.
+- **📰 Topics from today's news**: debate-ready questions drawn from the day's headlines across
+  major outlets, each with a short brief of what happened and links to the original articles,
+  one click away in the wizard.
+- **🧭 Ready in three steps**: a topic, the speakers (model, voice and persona), then format and
+  launch with the exact cost and length before you hit start.
 - **⚡ Watch it live**: arguments stream in word by word, and you can stop the debate at any moment.
+  If a model fails to answer, the debate stops on that turn and resumes from there with one click.
 
 ### ⚖️ Who won?
 - **🧑‍⚖️ AI judge**: a verdict with the winner (or a draw), a headline and feedback for every
@@ -60,7 +66,7 @@ Users sign up, run free models or bring their own OpenRouter key, buy credits wi
 ### 🤖 From the terminal and for AI agents
 - **⌨️ `debatr` CLI**: `uv tool install debatr`, approve your computer in the browser once and run
   a debate with one command. The turns stream into your terminal; `--json` makes it scriptable,
-  and transcripts and audio export from there too.
+  transcripts and audio export from there too, and `debatr resume` picks up a failed debate.
 - **🔌 MCP server**: give Claude, Cursor and other agents a debate tool (`debatr mcp`). They can
   stage a debate between any models to stress-test a decision or see both sides of a question,
   then read the verdict.
@@ -84,8 +90,6 @@ Users sign up, run free models or bring their own OpenRouter key, buy credits wi
   full debate, and the champion climbs the model leaderboard.
 - [ ] **📅 Debate of the day**: a fresh debate on a topical question every day, voiced and
   published to the gallery, ready for your vote.
-- [ ] **📰 Trending topics**: debate-ready questions drawn from today's news, one click away in
-  the wizard.
 - [ ] **🎞️ Animated avatars**: speakers that talk, react and lip-sync in the 16:9 episodes and
   9:16 Shorts.
 - [ ] **🔗 Embeddable player**: drop any public debate into a blog post or article with a simple
@@ -122,7 +126,7 @@ Users sign up, run free models or bring their own OpenRouter key, buy credits wi
 - **Auth**: personal API tokens (`Authorization: Bearer debatr_…`) and a browser device login
 
 ### DevOps
-- **Containers**: Docker Compose (Postgres, Redis, API, worker, Caddy)
+- **Containers**: Docker Compose (Postgres, Redis, API, debate workers, media worker, scheduler, Caddy)
 - **CI**: GitHub Actions (lint, type-check, tests, build)
 
 ---
@@ -238,16 +242,18 @@ Run `make` to list every target. The most useful ones:
 
 1. Open the web interface at `https://your-domain.com` (or `http://localhost`) and create an account
    (new accounts receive `SIGNUP_BONUS_USD` of credits, 0 by default).
-2. Click **"+ New debate"** and walk through the wizard:
+2. Click **"+ New debate"** and walk through the wizard's three steps:
    - **Topic**: type a question or pick one of today's trending topics from the news, choose language, rounds and reply length.
    - **Speakers**: a host plus two or more debaters, each with a model (OpenRouter's free router by
      default), a voice and a persona. The voice engine is chosen here too: free Edge voices or premium
      ElevenLabs voices.
-   - **Format**: spoken or written style, which outputs to produce (audio, 16:9 video, 9:16 Short)
-     and the render quality. Your own OpenRouter / ElevenLabs keys are managed on the Account page.
-   - **Review**: the estimate shows cost, length, turns and your credits after the run.
+   - **Format & launch**: spoken or written style, which outputs to produce (audio, 16:9 video, 9:16
+     Short) and the render quality, visual scenes (pictures, fact-check) and whether to publish to
+     the gallery; the estimate shows cost, length, turns and your credits after the run. Your own
+     OpenRouter / ElevenLabs keys are managed on the Account page.
 3. Hit **Start the debate** and watch it stream live. When it finishes the verdict is scored and the
-   audio track is built automatically; open the debate to render the MP4s in your browser.
+   audio track is built automatically; open the debate to render the MP4s in your browser. If a model
+   fails to answer, the debate stops on that turn: **Resume** runs it again and goes on.
 4. **Share**: publish the debate to the gallery and copy the share link.
 5. **Account**: top up credits (Stripe), see this month's usage, store a personal OpenRouter key so paid
    models run on your own account instead of credits.
@@ -273,7 +279,8 @@ server pass `--url http://localhost` (or set `DEBATR_URL`).
 
 ### 💳 Credits
 
-- Every run charges the OpenRouter cost reported for the debate × `CREDIT_MARKUP` once it finishes.
+- Every run charges the OpenRouter cost reported for the debate × `CREDIT_MARKUP` once it finishes
+  (a resumed debate is charged only for what the new run adds).
 - Premium voices on the system ElevenLabs key cost `TTS_CREDIT_PRICE_PER_1K_CHARS` per 1,000 characters.
 - Free models and free Edge voices cost nothing; a personal OpenRouter key makes model usage free.
 - Top-ups go through Stripe Checkout (`STRIPE_SECRET_KEY`, webhook `/api/billing/webhook` with the
@@ -288,12 +295,16 @@ The system uses an event-driven architecture to handle long-running LLM generati
 
 1. **API Layer**: `POST /api/debates` validates the configuration and saves the debate with status `queued`.
    A user-supplied OpenRouter key is kept only in Redis for the lifetime of the debate, never in the database.
-2. **Queue (RQ)**: A chain of jobs runs in the worker: `start` → one job per turn → `verdict` → `finish`.
+2. **Queue (RQ)**: A chain of jobs per debate: `start` → one job per turn → `verdict` → `finish`.
+   Several workers (`TURN_WORKERS`) serve the queue, so debates run side by side; each user may have
+   two going at once, and a run whose worker died is picked up again by a recovery check every minute.
 3. **Scheduler**: Every round starts with the moderator (introduction, then short transitions) followed by
    each debater. Debater turns are typed `opening` / `rebuttal` / `closing`; the moderator's model then
    delivers a structured verdict.
 4. **Worker**: Builds role-specific prompts, streams the OpenRouter response, records token usage and cost
    per turn, and publishes events to Redis Pub/Sub. A debate can be stopped at any time from the UI.
+   Rate limits and provider errors are retried; a turn that still fails stops the debate, which the
+   owner can resume from that turn (`POST /api/debates/{id}/resume`).
 5. **Frontend**: Subscribes to `GET /api/debates/{id}/stream` (SSE) and renders turns token-by-token.
    Finished debates are served straight from the database.
 6. **Verdict & billing**: after the judge's turn a cheap model structures the verdict (winner, headline,
