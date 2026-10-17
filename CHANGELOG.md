@@ -51,8 +51,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   with an optional spending limit and expiry, shown once and revocable at any time. A token can
   run and manage debates but never change the password, stored keys or payments, or create
   other tokens. Debates started with a token are private unless the request publishes them.
+- **Resume a failed debate**: when a model fails to answer, the debate stops and its owner can
+  resume it (Resume in the error banner, `debatr resume DEBATE`, the `resume_debate` MCP tool,
+  `POST /api/debates/{id}/resume`). The failed turn runs again with the same models, the turns
+  before it stay, and only the turns that are left are checked against the balance and charged.
 
 ### Changed
+
+- **A failed turn stops the debate** instead of letting the others argue against a speaker who
+  said nothing (and the judge score it). An empty answer now counts as a failure too.
+- **Free Router keeps its model**: OpenRouter's free router picks a random free model for every
+  request; a Free Router speaker now keeps the model of its first real answer for the whole
+  debate, so the lineup, the video and the leaderboard show the actual model (remixes still ask
+  the router). If that model is busy, the router answers that one turn.
 
 - **Shorter verdicts**: the judge now gets a word budget that follows the turn length (about 70
   words after "very short" turns up to 260 after "long" ones, a little more with more debaters)
@@ -71,8 +82,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   password and session settings. `/api/billing/usage` now returns per-day buckets and ledger
   rows carry a `category` and a clean `title`.
 
+- **Several debates at once**: debate turns run on several workers (`TURN_WORKERS`, 4 in
+  Docker), so a slow model or a long turn no longer makes everyone else wait. Each user may have
+  two debates and two audio builds going at a time (`MAX_ACTIVE_DEBATES_PER_USER`,
+  `MAX_ACTIVE_MEDIA_PER_USER`); trending topics run on a background queue after any waiting turn.
+- **Rate limits are waited out**: a model that answers "rate limited" or with a server error is
+  asked again (after 3 s and 10 s) before the turn fails, and free models on the shared system
+  key wait for a slot of OpenRouter's per-minute limit instead of failing.
+
 ### Fixed
 
+- **Interrupted runs continue**: a debate or audio build whose worker was killed (deploy, crash)
+  is found within a few minutes and continues from where it stopped; deploys let the running
+  turn finish first. Runs that cannot continue fail with a message (Resume / generate again)
+  instead of staying "running" forever.
+- **Debates no longer hang on a stuck model**: a turn now gets at most `LLM_TURN_TIMEOUT` (300 s)
+  to answer. Before, keep-alive messages and long reasoning kept the connection open until the
+  10-minute job limit killed the whole debate.
 - **720p video export**: the "720p · faster" quality rendered at 1281×721, which the browser's
   H.264 encoder rejects, so the export failed; it now renders at exactly 1280×720.
 

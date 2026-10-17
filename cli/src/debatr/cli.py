@@ -517,6 +517,8 @@ def report(detail: dict[str, Any], url: str, json_out: bool) -> None:
         if panel is not None:
             out.print(panel)
         err.print(render.outcome_line(detail))
+        if detail.get("status") == "error" and detail.get("is_owner"):
+            err.print(f"Run the failed turn again and go on: `debatr resume {detail.get('id')}`")
         err.print(f"[dim]Watch, vote and export the video: {escape(url)}[/dim]")
     if detail.get("status") != "completed":
         raise typer.Exit(1)
@@ -791,7 +793,11 @@ async def _check_cost(
     max_cost: float | None,
 ) -> None:
     """Estimate the run and refuse or confirm it before anything is charged."""
-    est = await client.estimate(config)
+    _confirm_cost(await client.estimate(config), quiet=quiet, yes=yes, max_cost=max_cost)
+
+
+def _confirm_cost(est: dict[str, Any], *, quiet: bool, yes: bool, max_cost: float | None) -> None:
+    """Refuse a run the credits or the token cannot pay, or ask before a paid one."""
     credits = float(est.get("credits_cost_usd") or 0)
     if not quiet:
         err.print(render.estimate_table(est))
@@ -846,6 +852,87 @@ def watch(
             raise typer.Exit(130) from None
         _on_interrupt(s, seen["id"], offer_stop=False)
     report(final, debate_url(s.url, final), json_out)
+
+
+def _own_keys() -> dict[str, str]:
+    """Own provider keys from the environment, sent like `run` sends them."""
+    keys = {
+        "user_provider_key": os.environ.get(ENV_OPENROUTER_KEY) or "",
+        "user_tts_key": os.environ.get(ENV_ELEVENLABS_KEY) or "",
+    }
+    return {k: v for k, v in keys.items() if v}
+
+
+@app.command()
+def resume(
+    ctx: typer.Context,
+    debate: Annotated[str, typer.Argument(help="Debate id or link.", metavar="DEBATE")],
+    yes: Annotated[
+        bool, typer.Option("--yes", "-y", help="Resume paid runs without asking.")
+    ] = False,
+    max_cost: Annotated[
+        float | None,
+        typer.Option(
+            "--max-cost",
+            min=0,
+            help="Don't resume if the estimate is above this (USD).",
+            metavar="USD",
+        ),
+    ] = None,
+    detach: Annotated[
+        bool, typer.Option("--detach", help="Resume it and print the id; don't follow.")
+    ] = False,
+    json_out: Annotated[
+        bool, typer.Option("--json", help="No live output; print the result as JSON.")
+    ] = False,
+) -> None:
+    """Run a debate that stopped with an error again from the turn that failed.
+
+    The turns before it stay and the same models speak; only the turns that are left are
+    charged. A debate that ran on your own OpenRouter key needs it again
+    (DEBATR_OPENROUTER_KEY).
+    """
+    s = signed_in(settings_of(ctx))
+    quiet = json_out or detach
+    started: dict[str, str] = {}
+
+    async def go() -> dict[str, Any] | None:
+        async with DebatrClient(s.url, s.token) as client:
+            debate_id = await owned_id(client, debate)
+            keys = _own_keys()
+            est = await client.resume_estimate(debate_id, keys)
+            _confirm_cost(est, quiet=quiet, yes=yes, max_cost=max_cost)
+            await client.resume_debate(debate_id, keys)
+            started["id"] = debate_id
+            detail = await client.debate(debate_id)
+            url = client.debate_url(detail)
+            from_turn = int(est.get("from_turn") or 0) + 1
+            if detach:
+                if json_out:
+                    print_json({"id": debate_id, "url": url, "status": detail.get("status")})
+                else:
+                    out.print(debate_id)
+                    err.print(
+                        f"[dim]Resumed from turn {from_turn}: {escape(url)} · "
+                        f"`debatr watch {debate_id}` follows it.[/dim]"
+                    )
+                return None
+            if json_out:
+                return await follow(client, debate_id, None)
+            err.print(f"[green]↻[/green] Resumed from turn {from_turn}.")
+            view = render.LiveView(out, detail)
+            out.print(render.lineup(detail, url))
+            return await follow(client, debate_id, view)
+
+    try:
+        final = run_async(go())
+    except KeyboardInterrupt:
+        if "id" not in started:
+            err.print("\nCancelled.")
+            raise typer.Exit(130) from None
+        _on_interrupt(s, started["id"], offer_stop=True)
+    if final is not None:
+        report(final, debate_url(s.url, final), json_out)
 
 
 # --- reading and managing --------------------------------------------------------------------

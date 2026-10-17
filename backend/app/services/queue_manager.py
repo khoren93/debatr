@@ -7,6 +7,8 @@ from app.core.config import settings
 from app.core.redis import get_sync_redis
 
 QUEUE_NAME = "default"  # debate turns
+# Trending topics and recovery checks: served by the turn workers only when no turn waits.
+BACKGROUND_QUEUE_NAME = "background"
 MEDIA_QUEUE_NAME = "media"  # TTS / timeline builds (long-running, separate worker)
 
 _ORCHESTRATOR = "app.services.orchestrator"
@@ -70,7 +72,7 @@ def enqueue_trending_refresh(force: bool = False) -> None:
     """Build a new trending-topics batch if one is due (`force`: now)."""
     _enqueue(
         f"{_TRENDING}.refresh_trending_job",
-        queue_name=QUEUE_NAME,
+        queue_name=BACKGROUND_QUEUE_NAME,
         timeout=900,  # trending.JOB_TIMEOUT
         force=force,
     )

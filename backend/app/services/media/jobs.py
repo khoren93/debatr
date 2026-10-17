@@ -18,7 +18,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.redis import get_sync_redis, tts_key_key
+from app.core.redis import get_sync_redis, media_beat_key, tts_key_key
 from app.core.sync_db import get_sync_session
 from app.models.models import Debate, Turn
 from app.schemas.media import MediaOptions
@@ -34,6 +34,7 @@ from app.schemas.timeline import (
 from app.schemas.visuals import ImageScene, SketchScene, TimelineVisual
 from app.services.credits import charge_images_sync, charge_media_sync, has_balance
 from app.services.free_router import resolved_participants
+from app.services.heartbeat import beating
 from app.services.media import ffmpeg
 from app.services.media.alignment import WordTiming, clamp_words, merge_chunks
 from app.services.media.highlights import (
@@ -731,6 +732,7 @@ def _build(
     return char_cost, image_studio
 
 
+@beating(media_beat_key)
 def build_media_job(debate_id: str) -> None:
     with get_sync_session() as db:
         debate = db.get(Debate, uuid.UUID(debate_id))

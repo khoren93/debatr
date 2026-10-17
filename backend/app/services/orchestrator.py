@@ -11,6 +11,7 @@ turn (`services/resume`).
 
 import asyncio
 import logging
+import math
 import time
 import uuid
 from collections.abc import Callable
@@ -21,12 +22,19 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.redis import get_sync_redis, provider_key_key, stop_flag_key, tts_key_key
+from app.core.redis import (
+    debate_beat_key,
+    get_sync_redis,
+    provider_key_key,
+    stop_flag_key,
+    tts_key_key,
+)
 from app.core.sync_db import get_sync_session
 from app.models.models import Debate, Turn, utcnow
 from app.services import queue_manager
 from app.services.credits import charge_debate_sync, charge_images_sync
 from app.services.events import publish_event
+from app.services.free_quota import is_free_model, wait_for_slot
 from app.services.free_router import (
     is_free_router,
     participant_row,
@@ -34,6 +42,7 @@ from app.services.free_router import (
     routed_model,
     worth_pinning,
 )
+from app.services.heartbeat import beating
 from app.services.markers import extract_markers, has_markers
 from app.services.media.tts.elevenlabs import system_key_status
 from app.services.moderation import apply_check, check_debate, publish_sync, should_auto_publish
@@ -62,6 +71,10 @@ logger = logging.getLogger(__name__)
 
 VERDICT_SPEAKER_NAME = "⚖️ Verdict"
 STOP_CHECK_EVERY_N_CHUNKS = 10
+# Pauses before trying a failed answer again: rate limits, provider 5xx and dropped connections
+# usually pass, and a failed turn stops the whole debate. Only before any text was streamed.
+RETRY_PAUSES = (3.0, 10.0)
+RETRY_STATUSES = {408, 425, 429, 500, 502, 503, 504}
 
 get_session = get_sync_session
 
@@ -76,6 +89,7 @@ class GenerationResult:
     error: str | None = None
     stopped: bool = False
     timed_out: bool = False  # no complete answer within LLM_TURN_TIMEOUT
+    retryable: bool = False  # a passing failure (rate limit, 5xx, connection, empty answer)
     model: str | None = None  # as named by the response (a router names the model it picked)
 
 
@@ -197,7 +211,7 @@ def _stop_requested(debate_id: str) -> bool:
         return False
 
 
-def _fail_debate(db: Session, debate: Debate, message: str) -> None:
+def fail_debate(db: Session, debate: Debate, message: str) -> None:
     logger.error("Debate %s failed: %s", debate.id, message)
     debate.status = "error"
     debate.error_message = message[:2000]
@@ -229,6 +243,10 @@ def _generate(
 ) -> GenerationResult:
     """Stream one LLM response, forwarding deltas to subscribers, until `deadline`
     (`time.monotonic()`; see LLM_TURN_TIMEOUT)."""
+    if api_key is None and is_free_model(model_id) and not wait_for_slot(deadline):
+        return GenerationResult(
+            error="Free models are busy (OpenRouter's per-minute limit); resume in a minute"
+        )
 
     async def run() -> GenerationResult:
         client = OpenRouterClient()
@@ -264,11 +282,13 @@ def _generate(
             result.timed_out = True
         except OpenRouterError as e:
             result.error = str(e)
+            result.retryable = e.status_code is None or e.status_code in RETRY_STATUSES
         except Exception as e:
             logger.exception("Unexpected generation error for debate %s", debate_id)
             result.error = f"Unexpected error: {e}"
         if not result.error and not result.stopped and not result.text.strip():
             result.error = "The model returned an empty answer"
+            result.retryable = True
         return result
 
     return asyncio.run(run())
@@ -279,20 +299,37 @@ def _failure(speaker: str, model_id: str, error: str | None) -> str:
     return f"{speaker} ({model_id}) could not answer: {error or 'no answer'}"
 
 
+def _with_retries(
+    debate_id: str, generate: Callable[[str], GenerationResult], model: str, deadline: float
+) -> GenerationResult:
+    """`generate(model)`, tried again after RETRY_PAUSES while it fails in a passing way."""
+    result = generate(model)
+    for pause in RETRY_PAUSES:
+        if not result.retryable or result.text or result.stopped:
+            break
+        if time.monotonic() + pause > deadline or _stop_requested(debate_id):
+            break
+        logger.warning("%s failed (%s), trying again in %.0f s", model, result.error, pause)
+        time.sleep(pause)
+        result = generate(model)
+    return result
+
+
 def _generate_as(
     debate: Debate,
     index: int,
     speaker: dict[str, Any],
     generate: Callable[[str], GenerationResult],
+    deadline: float = math.inf,
 ) -> tuple[GenerationResult, str]:
     """Generate a participant's turn; returns the result and the model that answered it.
 
-    A Free Router participant speaks with the free model its first answer was routed to
-    (`services/free_router`); when that model fails before writing anything, the router
-    answers the turn instead and the pin stays."""
+    Passing failures are tried again (`_with_retries`). A Free Router participant speaks with
+    the free model its first answer was routed to (`services/free_router`); when that model
+    fails before writing anything, the router answers the turn instead and the pin stays."""
     requested = str(speaker.get("model_id") or settings.DEFAULT_MODEL_ID)
     if not is_free_router(requested):
-        return generate(requested), requested
+        return _with_retries(str(debate.id), generate, requested, deadline), requested
     row = participant_row(debate.participants, index, speaker.get("role"))
     pinned = pinned_model(requested, row)
     if pinned:
@@ -305,7 +342,7 @@ def _generate_as(
             debate.id,
             result.error,
         )
-    result = generate(requested)
+    result = _with_retries(str(debate.id), generate, requested, deadline)
     answered = routed_model(result.model)
     if (
         answered
@@ -482,6 +519,7 @@ def _auto_media(db: Session, debate: Debate) -> None:
 # --- jobs ------------------------------------------------------------------
 
 
+@beating(debate_beat_key)
 def start_debate_job(debate_id: str, from_seq: int = 0) -> None:
     """Start a queued run: a new debate from its first turn, a resumed one from `from_seq`."""
     with get_session() as db:
@@ -500,6 +538,7 @@ def start_debate_job(debate_id: str, from_seq: int = 0) -> None:
         queue_manager.enqueue_turn(debate_id, from_seq)
 
 
+@beating(debate_beat_key)
 def process_turn_job(debate_id: str, seq_index: int) -> None:
     with get_session() as db:
         debate = db.get(Debate, uuid.UUID(debate_id))
@@ -560,6 +599,7 @@ def process_turn_job(debate_id: str, seq_index: int) -> None:
                 lambda model: _generate(
                     debate_id, seq_index, speaker_name, model, messages, api_key, deadline
                 ),
+                deadline,
             )
             visuals: dict[str, Any] = {}
             if has_markers(result.text):
@@ -584,7 +624,7 @@ def process_turn_job(debate_id: str, seq_index: int) -> None:
                 return
             if result.error:
                 # The others would argue against a silent speaker: stop, the owner may resume.
-                _fail_debate(db, debate, _failure(speaker_name, model_id, result.error))
+                fail_debate(db, debate, _failure(speaker_name, model_id, result.error))
                 return
             design_turn(db, debate, saved, api_key=api_key)
             if _stop_requested(debate_id):
@@ -595,9 +635,10 @@ def process_turn_job(debate_id: str, seq_index: int) -> None:
         except Exception as e:
             logger.exception("Turn %s of debate %s crashed", seq_index, debate_id)
             db.rollback()
-            _fail_debate(db, debate, f"Turn {seq_index} failed: {e}")
+            fail_debate(db, debate, f"Turn {seq_index} failed: {e}")
 
 
+@beating(debate_beat_key)
 def conduct_verdict_job(debate_id: str, seq_index: int) -> None:
     with get_session() as db:
         debate = db.get(Debate, uuid.UUID(debate_id))
@@ -639,6 +680,7 @@ def conduct_verdict_job(debate_id: str, seq_index: int) -> None:
                 lambda model: _generate(
                     debate_id, seq_index, VERDICT_SPEAKER_NAME, model, messages, api_key, deadline
                 ),
+                deadline,
             )
             saved = _save_turn(
                 db,
@@ -655,7 +697,7 @@ def conduct_verdict_job(debate_id: str, seq_index: int) -> None:
                 _finalize_stopped(db, debate)
                 return
             if result.error:
-                _fail_debate(db, debate, _failure("The judge", model_id, result.error))
+                fail_debate(db, debate, _failure("The judge", model_id, result.error))
                 return
             try:
                 _store_verdict(db, debate, result.text, api_key)
@@ -667,9 +709,10 @@ def conduct_verdict_job(debate_id: str, seq_index: int) -> None:
         except Exception as e:
             logger.exception("Verdict for debate %s crashed", debate_id)
             db.rollback()
-            _fail_debate(db, debate, f"Verdict failed: {e}")
+            fail_debate(db, debate, f"Verdict failed: {e}")
 
 
+@beating(debate_beat_key)
 def finish_debate_job(debate_id: str) -> None:
     with get_session() as db:
         debate = db.get(Debate, uuid.UUID(debate_id))

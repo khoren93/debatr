@@ -52,6 +52,26 @@ def tts_key_key(debate_id: str) -> str:
     return f"debate:{debate_id}:tts_key"
 
 
+def debate_beat_key(debate_id: str) -> str:
+    """Heartbeat of the job running a debate step (app.services.heartbeat)."""
+    return f"debate:{debate_id}:beat"
+
+
+def media_beat_key(debate_id: str) -> str:
+    """Heartbeat of the job building a debate's audio."""
+    return f"debate:{debate_id}:media_beat"
+
+
+def recovery_key(kind: str, debate_id: str) -> str:
+    """Recovery bookkeeping of one run (app.services.recovery): `seen` / `attempts`."""
+    return f"recovery:{kind}:{debate_id}"
+
+
+def free_models_window_key(minute: int) -> str:
+    """Requests to `:free` models on the system key in one clock minute."""
+    return f"ratelimit:free-models:{minute}"
+
+
 def rate_limit_key(bucket: str, client_id: str) -> str:
     return f"ratelimit:{bucket}:{client_id}"
 

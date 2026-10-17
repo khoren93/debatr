@@ -17,6 +17,7 @@ def events(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, dict[str, Any]]]:
         orchestrator, "publish_event", lambda _id, kind, data: sent.append((kind, data))
     )
     monkeypatch.setattr(orchestrator, "_stop_requested", lambda _id: False)
+    monkeypatch.setattr(orchestrator, "wait_for_slot", lambda _deadline: True)
     return sent
 
 
@@ -85,3 +86,94 @@ def test_an_empty_answer_counts_as_a_failure(monkeypatch: pytest.MonkeyPatch, ev
 def test_failure_message_names_speaker_and_model():
     message = orchestrator._failure("Free Router A", "qwen/qwen3:free", "HTTP 429: rate limited")
     assert message == "Free Router A (qwen/qwen3:free) could not answer: HTTP 429: rate limited"
+
+
+def test_a_busy_free_quota_fails_the_turn_before_any_request(
+    monkeypatch: pytest.MonkeyPatch, events
+):
+    _fake_stream(monkeypatch)
+    monkeypatch.setattr(orchestrator, "wait_for_slot", lambda _deadline: False)
+    result = _run(5)
+    assert result.error and "Free models are busy" in result.error and not result.text
+    assert events == []
+
+
+def test_own_keys_and_paid_models_skip_the_free_quota(monkeypatch: pytest.MonkeyPatch, events):
+    _fake_stream(monkeypatch)
+    asked: list[float] = []
+    monkeypatch.setattr(orchestrator, "wait_for_slot", lambda d: asked.append(d) or True)
+    deadline = time.monotonic() + 5
+    orchestrator._generate("d", 0, "A", "openrouter/free", [], "sk-or-own", deadline)
+    orchestrator._generate("d", 0, "A", "openai/gpt-5", [], None, deadline)
+    assert asked == []
+    orchestrator._generate("d", 0, "A", "qwen/qwen3:free", [], None, deadline)
+    assert asked == [deadline]
+
+
+# --- retries -------------------------------------------------------------------------------
+
+
+class Answers:
+    """Hands out prepared results in order and records the models asked."""
+
+    def __init__(self, *results: orchestrator.GenerationResult):
+        self.results = list(results)
+        self.calls: list[str] = []
+
+    def __call__(self, model: str) -> orchestrator.GenerationResult:
+        self.calls.append(model)
+        return self.results.pop(0)
+
+
+def _busy() -> orchestrator.GenerationResult:
+    return orchestrator.GenerationResult(error="HTTP 429: rate limited", retryable=True)
+
+
+@pytest.fixture
+def no_pauses(monkeypatch: pytest.MonkeyPatch) -> list[float]:
+    slept: list[float] = []
+    monkeypatch.setattr(orchestrator.time, "sleep", slept.append)
+    monkeypatch.setattr(orchestrator, "_stop_requested", lambda _id: False)
+    return slept
+
+
+def _speaker(model: str) -> dict[str, Any]:
+    return {"role": "debater", "model_id": model}
+
+
+def test_passing_failures_are_tried_again(no_pauses):
+    answers = Answers(_busy(), _busy(), orchestrator.GenerationResult(text="Finally.", model="m"))
+    debate = Debate(participants=[])
+    result, used = orchestrator._generate_as(debate, 0, _speaker("openai/gpt-5"), answers)
+    assert result.text == "Finally." and used == "openai/gpt-5"
+    assert answers.calls == ["openai/gpt-5"] * 3
+    assert no_pauses == list(orchestrator.RETRY_PAUSES)
+
+
+def test_lasting_failures_and_partial_answers_are_not_retried(no_pauses):
+    for failed in (
+        orchestrator.GenerationResult(error="HTTP 400: bad model"),  # not retryable
+        orchestrator.GenerationResult(text="Half a", error="died", retryable=True),
+    ):
+        answers = Answers(failed)
+        orchestrator._generate_as(Debate(participants=[]), 0, _speaker("openai/gpt-5"), answers)
+        assert len(answers.calls) == 1
+    assert no_pauses == []
+
+
+def test_retries_stop_at_the_deadline(no_pauses):
+    answers = Answers(_busy(), _busy(), _busy())
+    deadline = time.monotonic() + 5  # room for the 3 s pause, not for the 10 s one
+    result, _ = orchestrator._generate_as(
+        Debate(participants=[]), 0, _speaker("openai/gpt-5"), answers, deadline
+    )
+    assert len(answers.calls) == 2 and result.error
+    assert no_pauses == [orchestrator.RETRY_PAUSES[0]]
+
+
+def test_free_router_retries_the_router_not_the_pin(no_pauses):
+    debate = Debate(participants=[DebateParticipant(role="debater", model_id="qwen/qwen3:free")])
+    answers = Answers(_busy(), _busy(), orchestrator.GenerationResult(text="Ok.", model="z/m:free"))
+    result, used = orchestrator._generate_as(debate, 0, _speaker("openrouter/free"), answers)
+    assert answers.calls == ["qwen/qwen3:free", "openrouter/free", "openrouter/free"]
+    assert result.text == "Ok." and used == "z/m:free"

@@ -13,7 +13,8 @@ a local export may sit in the git-ignored `design/` folder (`Debatr Studio.html`
 backend/            FastAPI API + RQ worker (Python 3.12+, managed with uv)
   app/main.py         FastAPI app, session + CORS middleware, admin panel, /api/health
   app/worker.py       RQ worker entrypoint (`python -m app.worker`)
-  app/scheduler.py    periodic jobs (`python -m app.scheduler`, RQ cron: hourly trending check;
+  app/scheduler.py    periodic jobs (`python -m app.scheduler`, RQ cron on the background queue:
+                      hourly trending check, recovery check every minute;
                       `--refresh-trending` builds a batch now)
   app/core/           config (pydantic-settings), db (async SQLAlchemy), redis, logging,
                       ratelimit, auth (session cookie or Bearer API token; session-only deps),
@@ -32,7 +33,9 @@ backend/            FastAPI API + RQ worker (Python 3.12+, managed with uv)
                       engagement (likes/audience votes), ranking (trending score, model leaderboard),
                       studio (live scenes per turn, disputes, judge evidence), factcheck (web
                       check of on-screen figures), markers ([visual: …] / [dispute N: …]),
-                      trending (RSS news → daily debate topics with source links)
+                      trending (RSS news → daily debate topics with source links),
+                      resume (failed turn → Resume), heartbeat / recovery / fair_share /
+                      free_quota (worker safety, see "Workers and queues")
   app/services/media/ audio pipeline: script (markdown→speech), tts/ (elevenlabs, edge),
                       ffmpeg, highlights (LLM picks shorts), visuals (LLM visual director),
                       sketch (SVG line art → sanitized path data), images (Commons photos / AI
@@ -95,10 +98,10 @@ frontend/           React 19 + Vite 8 + Tailwind 4 + TypeScript
                       Register (/register)
   src/lib/cli.ts      install / login / MCP setup snippets shown on the Account page
 cli/                `debatr` package (PyPI): CLI + MCP server, Python 3.10+, uv, only the public API
-  src/debatr/cli.py   Typer commands (login, run, watch, show, list, stop, delete, publish, audio,
+  src/debatr/cli.py   Typer commands (login, run, watch, resume, show, list, stop, delete, publish, audio,
                       models, gallery, leaderboard, whoami, logout, mcp)
   src/debatr/api.py   async httpx client (ApiError messages, SSE parser), shared with the MCP server
-  src/debatr/mcp_server.py  MCPServer (mcp>=2.3) tools: start/get/estimate/stop debates, models,
+  src/debatr/mcp_server.py  MCPServer (mcp>=2.3) tools: start/get/estimate/stop/resume debates, models,
                       gallery, leaderboard, account; DEBATR_MAX_COST_USD cap
   src/debatr/debate.py  build_config (mirrors DebateConfig), debate refs, digest (--json / agents)
   src/debatr/config.py  server URL + token resolution, saved logins (0600 config.json)
@@ -233,7 +236,8 @@ Stopping: `POST /api/debates/{id}/stop` sets the status, sets `debate:{id}:stop`
 Failed turns: a turn (or verdict) without an answer — provider error, `LLM_TURN_TIMEOUT`, empty
 reply — stops the debate (`status=error`, `error_message` names speaker and model) instead of
 letting the others argue against silence. `POST /api/debates/{id}/resume` (owner, same body as
-`/start`; Resume button in the error banner) drops the failed turn and anything after it
+`/start`; Resume button in the error banner, `debatr resume`, MCP `resume_debate`;
+`POST …/resume/estimate` prices it without starting) drops the failed turn and anything after it
 (`services/resume`: `resume_point`, their cost kept as `totals_json.discarded_cost`), keeps the
 earlier turns and pinned models, re-checks credits for the rest only
 (`estimate_debate(from_turn=…)`) and queues `start_debate_job(from_seq=…)`. A run that used an own
@@ -405,6 +409,29 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   SSE stream with `ctx.report_progress` per turn (clients usually cancel calls after ~60 s, hence
   the default 45). The token is re-read from env/config on every call; ApiError → ToolError.
 
+### Workers and queues
+
+- A worker process runs one job at a time and waits on the model while it streams, so Docker
+  runs `TURN_WORKERS` (4) replicas of `worker`. A turn is one job, so debates interleave turn by
+  turn; ordering inside a debate holds because each job queues the next. Queues in priority
+  order: `default` (debate steps), `background` (trending, recovery: only when no turn waits),
+  `media` (its own worker: TTS/ffmpeg). Workers fork per job in Docker (a hung job is killed
+  without its worker) and get `stop_grace_period: 6m`, so a deploy lets the running turn finish.
+- Fair share (`services/fair_share`): `MAX_ACTIVE_DEBATES_PER_USER` (create, start, resume) and
+  `MAX_ACTIVE_MEDIA_PER_USER` (`POST /media`) answer 429; the user row is locked until commit.
+- Passing provider failures (429, 5xx, dropped connection, empty answer; `RETRY_STATUSES`) are
+  tried again after `RETRY_PAUSES` (3 s, 10 s) within the turn's deadline, only before any text
+  was streamed, since a failed turn stops the debate.
+- `services/free_quota`: OpenRouter allows 20 `:free` requests a minute per account, shared by
+  every system-key Free Router debate; turns wait for a slot (`FREE_MODELS_PER_MINUTE`, fixed
+  window in Redis) instead of failing on 429. Own keys skip it.
+- Recovery (`services/recovery`, scheduler every minute): every debate job and the media build
+  hold a heartbeat (`services/heartbeat`, Redis key refreshed every 20 s, TTL 60 s, by a thread).
+  A queued/running debate or media build with no heartbeat and no job waiting in its queue, on
+  two checks in a row, is queued again from its first missing turn (failed rows dropped) or as a
+  build (cached turns reused), up to `RECOVERY_ATTEMPTS`; runs older than 6 h, or whose own
+  OpenRouter key expired, fail instead (debate → Resume, media → generate again).
+
 ### Trending topics (news → debate topics)
 
 - `services/trending.py`: `refresh_trending_job` reads the RSS feeds in `FEEDS` (BBC, Guardian,
@@ -497,8 +524,9 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   undecryptable (users must re-enter them).
 - Media: `MEDIA_ROOT` is `./media` natively and the `media_data` volume (`/media`) in Docker;
   the worker image target installs ffmpeg, the api target does not. Docker runs `worker`
-  (`--queues default`), `media-worker` (`--queues media`) and `scheduler` (RQ cron, api image);
-  natively one worker takes both queues.
+  (`TURN_WORKERS` replicas, `--queues default,background`), `media-worker` (`--queues media`)
+  and `scheduler` (RQ cron, api image); natively one SimpleWorker takes every queue
+  (`RQ_SIMPLE_WORKER=true` in `.env` is for macOS; compose overrides it to forking workers).
 - ElevenLabs voice lists: `/v1/voices` holds only the account's voices (premade ones are English).
   For other languages `tts/elevenlabs.list_voices` adds native Voice Library voices
   (`/v1/shared-voices?language=`, no surcharged ones) — on paid plans only: free plans get

@@ -5,7 +5,17 @@ import json
 
 import httpx
 import pytest
-from conftest import DEBATE_ID, LIVE_EVENTS, SITE, TOKEN, FakeServer, detail, free_estimate
+from conftest import (
+    DEBATE_ID,
+    FINAL_TURNS,
+    LIVE_EVENTS,
+    SITE,
+    TOKEN,
+    FakeServer,
+    detail,
+    free_estimate,
+    turn,
+)
 from typer.testing import CliRunner
 
 from debatr import cli
@@ -391,3 +401,84 @@ def test_run_reconnects_when_the_stream_drops(app, server, monkeypatch):
     assert len(server.calls(f"GET /debates/{DEBATE_ID}/stream")) == 3
     assert result.output.count("Cats are independent.") == 1
     assert "Winner: Nova" in result.output
+
+
+FAILED_TURNS = [
+    FINAL_TURNS[0],
+    turn(1, "participant_1", "Nova", "", error="HTTP 429: rate limited"),
+]
+
+
+def failed_debate(server: FakeServer, **estimate) -> None:
+    failed = detail(
+        "error",
+        turns=FAILED_TURNS,
+        error_message="Nova (acme/alpha) could not answer: HTTP 429: rate limited",
+        is_owner=True,
+    )
+    server.on(f"POST /debates/{DEBATE_ID}/resume/estimate", free_estimate(from_turn=1, **estimate))
+    server.on(f"POST /debates/{DEBATE_ID}/resume", {"debate_id": DEBATE_ID, "status": "queued"})
+    # resume: after the call, follow: first look, on "connected", after the stream.
+    server.on(
+        f"GET /debates/{DEBATE_ID}",
+        [failed, detail("queued"), detail("running"), detail("running"), detail("completed")],
+    )
+    server.on(f"GET /debates/{DEBATE_ID}/stream", LIVE_EVENTS)
+
+
+def test_a_failed_run_points_to_resume(app, server):
+    failed_debate(server)
+    server.on(
+        f"GET /debates/{DEBATE_ID}",
+        detail(
+            "error",
+            turns=FAILED_TURNS,
+            error_message="Nova (acme/alpha) could not answer: HTTP 429: rate limited",
+            is_owner=True,
+        ),
+    )
+    result = app("watch", DEBATE_ID)
+    assert result.exit_code == 1
+    assert "could not answer: HTTP 429" in result.output
+    assert f"debatr resume {DEBATE_ID}" in result.output
+
+
+def test_resume_follows_the_debate_to_the_end(app, server, monkeypatch):
+    monkeypatch.setenv("DEBATR_OPENROUTER_KEY", "sk-or-own")
+    failed_debate(server)
+    server.on(
+        f"GET /debates/{DEBATE_ID}",
+        [detail("queued"), detail("running"), detail("running"), detail("completed")],
+    )
+    result = app("resume", DEBATE_ID)
+    assert result.exit_code == 0, result.output
+    assert "Resumed from turn 2" in result.output
+    assert "Winner: Nova" in result.output and "Completed" in result.output
+    for route in (
+        f"POST /debates/{DEBATE_ID}/resume/estimate",
+        f"POST /debates/{DEBATE_ID}/resume",
+    ):
+        assert json.loads(server.calls(route)[0].content) == {"user_provider_key": "sk-or-own"}
+
+
+def test_paid_resume_needs_consent_and_respects_max_cost(app, server):
+    failed_debate(server, credits_cost_usd=0.3)
+    result = app("resume", DEBATE_ID)
+    assert result.exit_code == 1 and "pass --yes" in result.output
+    result = app("resume", DEBATE_ID, "--max-cost", "0.1")
+    assert result.exit_code == 1 and "above --max-cost" in result.output
+    assert not server.calls(f"POST /debates/{DEBATE_ID}/resume")
+
+    result = app("resume", DEBATE_ID, "--yes", "--detach")
+    assert result.exit_code == 0 and DEBATE_ID in result.stdout
+    assert len(server.calls(f"POST /debates/{DEBATE_ID}/resume")) == 1
+
+
+def test_resume_explains_why_not(app, server):
+    server.on(
+        f"POST /debates/{DEBATE_ID}/resume/estimate",
+        httpx.Response(409, json={"detail": "Only a debate that failed can be resumed"}),
+    )
+    result = app("resume", DEBATE_ID)
+    assert result.exit_code == 1
+    assert "Error: Only a debate that failed can be resumed" in result.output

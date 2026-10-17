@@ -192,6 +192,12 @@ class EstimateOut(BaseModel):
     sufficient: bool = True
 
 
+class ResumeEstimateOut(EstimateOut):
+    """What resuming a failed debate costs: only the turns from `from_turn` (0-based) on."""
+
+    from_turn: int
+
+
 class PublishRequest(BaseModel):
     category: str | None = None
 

@@ -32,8 +32,19 @@ class Settings(BaseSettings):
 
     # Worker
     TURN_JOB_TIMEOUT: int = 600  # seconds per LLM turn job
-    # Run jobs in-process instead of forking (useful on macOS during development).
+    # Run jobs in-process instead of forking (useful on macOS during development). Docker forks:
+    # a job that hangs is killed without taking its worker down.
     RQ_SIMPLE_WORKER: bool = False
+    # Fair share: debates (queued + running) and audio builds one user may have at a time, so
+    # nobody holds every worker. 0 = no limit.
+    MAX_ACTIVE_DEBATES_PER_USER: int = 2
+    MAX_ACTIVE_MEDIA_PER_USER: int = 2
+    # `:free` model requests a minute on the system key, for all users together: OpenRouter
+    # allows 20 per account (keys do not add up). Turns wait for a slot. 0 = no limit.
+    FREE_MODELS_PER_MINUTE: int = 18
+    # Times a run whose worker died (no heartbeat, no queued job) is queued again before it
+    # fails and waits for Resume (services/recovery, checked every minute by the scheduler).
+    RECOVERY_ATTEMPTS: int = 2
     # User-supplied OpenRouter keys are kept in Redis only for the lifetime of a debate.
     PROVIDER_KEY_TTL: int = 86400
 
@@ -45,8 +56,9 @@ class Settings(BaseSettings):
     # at /api/media/files. Relative paths resolve against the backend working directory.
     MEDIA_ROOT: str = "./media"
     MEDIA_JOB_TIMEOUT: int = 3600  # seconds for one audio build job
-    # Comma-separated RQ queues a worker listens to ("default" = debate turns, "media" = TTS).
-    RQ_QUEUES: str = "default,media"
+    # Comma-separated RQ queues a worker listens to, in priority order ("default" = debate
+    # turns, "background" = trending topics and recovery checks, "media" = TTS).
+    RQ_QUEUES: str = "default,background,media"
     # Optional shared secret (header X-Media-Token) that bypasses the media rate limit.
     MEDIA_API_TOKEN: str | None = None
     ELEVENLABS_API_KEY: str | None = None

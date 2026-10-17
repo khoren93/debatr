@@ -10,6 +10,7 @@ import contextlib
 import logging
 import shutil
 import uuid
+from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any
 
@@ -38,12 +39,14 @@ from app.schemas.schemas import (
     PublishRequest,
     RenderReport,
     RendersOut,
+    ResumeEstimateOut,
     StartDebateRequest,
     StopDebateResponse,
 )
 from app.services import api_tokens
 from app.services.engagement import engagement_out
 from app.services.estimate import Pricing, estimate_debate, pricing_from_models
+from app.services.fair_share import require_debate_slot
 from app.services.media.paths import MediaPaths
 from app.services.media.tts.elevenlabs import system_key_status
 from app.services.moderation import mark_admin_decision, publish_async
@@ -318,6 +321,7 @@ async def create_debate(
             config, user, own_key, tts_key is not None, await _token_budget(db, request)
         )
         _require_sufficient(est)
+        await require_debate_slot(db, user.id)
 
     debate = Debate(
         user_id=user.id,
@@ -377,6 +381,7 @@ async def start_draft(
         config, user, own_key, tts_key is not None, await _token_budget(db, request)
     )
     _require_sufficient(est)
+    await require_debate_slot(db, user.id)
     debate.config_json = {**config.persisted(), "billing": _billing(own_key, est)}
     # Whoever starts the run answers for it: its charges count against this token's limit.
     token = request_api_token(request)
@@ -388,17 +393,20 @@ async def start_draft(
     return DebateResponse(debate_id=debate_id, status="queued", message="Debate queued")
 
 
-@router.post("/{debate_id}/resume", response_model=DebateResponse)
-async def resume_debate(
-    debate_id: str,
-    request: Request,
-    body: StartDebateRequest | None = None,
-    user: User = Depends(require_user),
-    db: AsyncSession = Depends(get_db),
-) -> DebateResponse:
-    """Run a debate that stopped with an error again from the turn that failed: that turn (and
-    anything after it) is dropped, the earlier turns and the participants' models stay."""
-    debate = await load_debate(db, debate_id, full=True)
+@dataclass
+class _ResumePlan:
+    config: DebateConfig
+    from_seq: int
+    provider_key: str | None
+    own_key: bool
+    tts_key: str | None
+    est: EstimateOut
+
+
+async def _resume_plan(
+    db: AsyncSession, debate: Debate, user: User, request: Request, body: StartDebateRequest | None
+) -> _ResumePlan:
+    """Check that a failed debate can be resumed with these keys and price the rest of it."""
     _require_manage(debate, user, request)
     if debate.status != "error":
         raise HTTPException(status_code=409, detail="Only a debate that failed can be resumed")
@@ -424,16 +432,45 @@ async def resume_debate(
         await _token_budget(db, request),
         from_turn=from_seq,
     )
-    _require_sufficient(est)
+    return _ResumePlan(config, from_seq, provider_key, own_key, tts_key, est)
 
-    dropped, cost = discarded(debate.turns, from_seq)
+
+@router.post("/{debate_id}/resume/estimate", response_model=ResumeEstimateOut)
+async def estimate_resume(
+    debate_id: str,
+    request: Request,
+    body: StartDebateRequest | None = None,
+    user: User = Depends(require_user),
+    db: AsyncSession = Depends(get_db),
+) -> ResumeEstimateOut:
+    """What `POST /resume` would run and cost, without starting it (the CLI and MCP ask first)."""
+    plan = await _resume_plan(db, await load_debate(db, debate_id, full=True), user, request, body)
+    return ResumeEstimateOut(**plan.est.model_dump(), from_turn=plan.from_seq)
+
+
+@router.post("/{debate_id}/resume", response_model=DebateResponse)
+async def resume_debate(
+    debate_id: str,
+    request: Request,
+    body: StartDebateRequest | None = None,
+    user: User = Depends(require_user),
+    db: AsyncSession = Depends(get_db),
+) -> DebateResponse:
+    """Run a debate that stopped with an error again from the turn that failed: that turn (and
+    anything after it) is dropped, the earlier turns and the participants' models stay."""
+    debate = await load_debate(db, debate_id, full=True)
+    plan = await _resume_plan(db, debate, user, request, body)
+    _require_sufficient(plan.est)
+    await require_debate_slot(db, debate.user_id or user.id)
+
+    dropped, cost = discarded(debate.turns, plan.from_seq)
     for turn in dropped:
         await db.delete(turn)
     totals = dict(debate.totals_json or {})
     if cost:
         totals["discarded_cost"] = round(float(totals.get("discarded_cost") or 0) + cost, 6)
     debate.totals_json = totals
-    debate.config_json = {**config.persisted(), "billing": _billing(own_key, est)}
+    debate.config_json = {**plan.config.persisted(), "billing": _billing(plan.own_key, plan.est)}
     token = request_api_token(request)
     if token is not None:  # from the browser the run stays on the token that started it
         debate.api_token_id = token.id
@@ -443,9 +480,9 @@ async def resume_debate(
     debate.error_message = None
     debate.ended_at = None
     await db.commit()
-    await _enqueue(db, debate, provider_key, tts_key, from_seq=from_seq)
+    await _enqueue(db, debate, plan.provider_key, plan.tts_key, from_seq=plan.from_seq)
     return DebateResponse(
-        debate_id=debate_id, status="queued", message=f"Resumed from turn {from_seq + 1}"
+        debate_id=debate_id, status="queued", message=f"Resumed from turn {plan.from_seq + 1}"
     )
 
 

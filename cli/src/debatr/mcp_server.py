@@ -54,6 +54,8 @@ the audience's favourites, estimate_debate for the price.
 3. Call get_debate(debate_id, wait_seconds=45) until status is completed, error or stopped, \
 then report the verdict (and quote the transcript where useful). Share the url with the user: \
 the page has the player, audience voting and video export.
+4. A debate stops with status error when a model fails to answer; resume_debate runs that turn \
+again (same models, earlier turns kept) and goes on.
 
 Debates are private unless public=true. Paid models are charged to the user's Debatr credits; \
 this server refuses debates estimated above {cap} (DEBATR_MAX_COST_USD)."""
@@ -411,7 +413,52 @@ def create_server(
         )
         if out["status"] not in TERMINAL_STATUSES:
             out["next"] = f"Still {out['status']}: call get_debate again with wait_seconds."
+        elif out["status"] == "error" and detail.get("is_owner"):
+            out["next"] = (
+                f"A model failed: resume_debate(debate_id='{detail['id']}') runs the failed "
+                "turn again and goes on."
+            )
         return out
+
+    @server.tool(title="Resume a failed debate", annotations=WRITES)
+    async def resume_debate(
+        debate_id: Annotated[str, Field(description="Id of a debate with status error.")],
+        max_cost_usd: Annotated[
+            float | None,
+            Field(ge=0, description="Refuse to resume above this estimate (USD)."),
+        ] = None,
+    ) -> dict[str, Any]:
+        """Run a debate that stopped with an error again from the turn that failed: the turns
+        before it stay and the same models speak. Returns at once; then call get_debate with
+        wait_seconds until it is completed."""
+        limit = cost_cap if max_cost_usd is None else min(max_cost_usd, cost_cap)
+        client = await clients.get()
+        try:
+            debate_ref = await _debate_id(client, debate_id)
+            est = await client.resume_estimate(debate_ref)
+            cost = float(est.get("credits_cost_usd") or 0)
+            if cost > limit:
+                raise ToolError(
+                    f"Resuming is estimated at ${cost:.2f}, above the limit of ${limit:.2f}"
+                    + (": ask the user to raise DEBATR_MAX_COST_USD." if limit == cost_cap else ".")
+                )
+            if not est.get("sufficient", True):
+                raise ToolError(
+                    f"Not enough credits to resume (about ${cost:.2f}): the user can top up on "
+                    "the website."
+                )
+            await client.resume_debate(debate_ref)
+            detail = await client.debate(debate_ref)
+        except ApiError as e:
+            raise _api(e) from e
+        return {
+            "debate_id": detail["id"],
+            "status": detail.get("status"),
+            "url": client.debate_url(detail),
+            "resumed_from_turn": int(est.get("from_turn") or 0) + 1,
+            "estimated_cost_usd": round(cost, 4),
+            "next": f"get_debate(debate_id='{detail['id']}', wait_seconds=45)",
+        }
 
     @server.tool(title="Stop a debate", annotations=IDEMPOTENT)
     async def stop_debate(

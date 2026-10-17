@@ -97,6 +97,7 @@ are asked whether to stop it on the server too.
 | `debatr watch DEBATE` | Follow a running debate live, or replay a finished one. |
 | `debatr show DEBATE [-f text\|markdown\|json] [-o FILE]` | Transcript and verdict; export as Markdown or JSON. |
 | `debatr list [WORDS] [--status S]` | Your debates. |
+| `debatr resume DEBATE [--yes] [--max-cost USD]` | A debate stopped because a model failed: run that turn again and go on. |
 | `debatr stop` / `delete` / `publish` / `unpublish DEBATE` | Manage a debate. |
 | `debatr open DEBATE` | Open it in the browser: player, audience vote, video export. |
 | `debatr audio DEBATE [--build] [-o FILE]` | Download the voiced debate as MP3 (`--build` voices it first). |
@@ -144,6 +145,7 @@ your `debatr login`.
 | `estimate_debate` | Price and length before starting. |
 | `list_models`, `get_leaderboard` | Models to cast, and how audiences rank them. |
 | `list_my_debates`, `search_gallery` | The user's debates; public debates to read. |
+| `resume_debate` | Runs a debate that stopped with an error again from the failed turn (within the cost limit). |
 | `stop_debate`, `publish_debate`, `get_account` | Manage a debate; balance and the token's limit. |
 
 Agents spend your credits only within two limits: the token's own spending limit (set it when

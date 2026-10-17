@@ -45,6 +45,7 @@ async def test_tools_are_described(server: FakeServer, monkeypatch):
         "start_debate",
         "get_debate",
         "stop_debate",
+        "resume_debate",
         "list_my_debates",
         "search_gallery",
         "get_leaderboard",
@@ -202,3 +203,25 @@ async def test_invalid_arguments(server: FakeServer, monkeypatch, bad):
     async with Client(make(server, monkeypatch)) as client:
         result = await client.call_tool("start_debate", bad)
     assert result.is_error
+
+
+async def test_resume_debate_is_capped_and_hinted(server: FakeServer, monkeypatch):
+    failed = detail("error", error_message="Nova (acme/alpha) could not answer", is_owner=True)
+    server.on(f"GET /debates/{DEBATE_ID}", [failed, detail("queued")])
+    server.on(f"POST /debates/{DEBATE_ID}/resume/estimate", free_estimate(from_turn=1))
+    server.on(f"POST /debates/{DEBATE_ID}/resume", {"debate_id": DEBATE_ID, "status": "queued"})
+    async with Client(make(server, monkeypatch, cap=1.0)) as client:
+        seen = structured(
+            await client.call_tool("get_debate", {"debate_id": DEBATE_ID, "wait_seconds": 0})
+        )
+        assert seen["status"] == "error" and "resume_debate" in seen["next"]
+        out = structured(await client.call_tool("resume_debate", {"debate_id": DEBATE_ID}))
+        assert out["status"] == "queued" and out["resumed_from_turn"] == 2
+
+        server.on(
+            f"POST /debates/{DEBATE_ID}/resume/estimate",
+            free_estimate(from_turn=1, credits_cost_usd=3.0),
+        )
+        refused = await client.call_tool("resume_debate", {"debate_id": DEBATE_ID})
+    assert "DEBATR_MAX_COST_USD" in error_text(refused)
+    assert len(server.calls(f"POST /debates/{DEBATE_ID}/resume")) == 1

@@ -240,6 +240,19 @@ class DebatrClient:
     async def stop_debate(self, debate_id: str) -> dict[str, Any]:
         return await self.request("POST", f"/debates/{debate_id}/stop")
 
+    async def resume_estimate(
+        self, debate_id: str, keys: dict[str, str] | None = None
+    ) -> dict[str, Any]:
+        """Price of resuming a failed debate; `from_turn` is where it would go on (0-based)."""
+        path = f"/debates/{debate_id}/resume/estimate"
+        return await self.request("POST", path, json_body=keys or {})
+
+    async def resume_debate(
+        self, debate_id: str, keys: dict[str, str] | None = None
+    ) -> dict[str, Any]:
+        """Run a failed debate again from the turn that failed."""
+        return await self.request("POST", f"/debates/{debate_id}/resume", json_body=keys or {})
+
     async def delete_debate(self, debate_id: str) -> None:
         await self.request("DELETE", f"/debates/{debate_id}")
 
