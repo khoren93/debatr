@@ -7,8 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-10-18
+
 ### Added
 
+- **Topics from today's news**: the wizard's first step lists debate-ready questions drawn from
+  the day's headlines (BBC, The Guardian, NPR, The New York Times, Al Jazeera, DW, Google News,
+  Hacker News, Ars Technica, The Verge, ScienceDaily…), ranked by how hot a story is and how
+  many outlets carry it, with search, categories and a link to the original article. The
+  story's brief goes into every prompt, since the models do not know recent news. A new batch is
+  built once a day, and a strict safety filter keeps tragedies, violence and sexual content out.
 - **Visual scenes in the video**: while a speaker talks, the centre of the frame draws a scene
   that illustrates exactly what is being said — counting numbers, bar, line and pie charts,
   "1 in 4" pictogram grids, ticked-off points, pros vs cons, quotes, struck-through rebuttals,
@@ -56,8 +64,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `debatr resume DEBATE` and the `resume_debate` MCP tool). The failed turn runs again with the
   same models, the turns before it stay, and only the turns that are left are checked against
   the balance and charged.
+- **YouTube publish kit**: the export panel writes a title, a description with chapters and tags,
+  and draws thumbnails for the video.
 
 ### Changed
+
+- **Three-step creation wizard**: the topic (or a story from today's news), the speakers (one row
+  each: model, voice with a preview, persona), then format and launch with the estimate.
+  Speakers are named after their models ("Claude" vs "Gemini", "Free Router A / B") instead of
+  typed names, so prompts and the judge always tell them apart.
+- **Redesigned debate page**: the video plays in a player with its own controls and a seek bar
+  split by turns, a click on a transcript row jumps to that turn, a toolbar holds like, share,
+  remix and export, exports (MP4 rendered in the browser, MP3, the YouTube kit) open in a side
+  panel, and a Details tab shows the lineup and the facts. The separate Audio tab is gone.
+- **Provider keys on the Account page** (`?tab=keys`): the wizard shows whether your OpenRouter
+  and ElevenLabs keys are set and links there.
 
 - **A failed turn stops the debate** instead of letting the others argue against a speaker who
   said nothing (and the judge score it). An empty answer now counts as a failure too.
@@ -68,7 +89,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a model that cannot debate (a safety classifier answering "User Safety: safe") or writes only
   a few words, it is asked again before the turn is saved, so such answers never reach the
   debate.
-
 - **Shorter verdicts**: the judge now gets a word budget that follows the turn length (about 70
   words after "very short" turns up to 260 after "long" ones, a little more with more debaters)
   and a compact format: the winner and what decided it, then one short paragraph per debater.
@@ -85,7 +105,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   full ledger grouped by day with paging and a CSV export (`GET /api/billing/transactions.csv`);
   password and session settings. `/api/billing/usage` now returns per-day buckets and ledger
   rows carry a `category` and a clean `title`.
-
 - **Several debates at once**: debate turns run on several workers (`TURN_WORKERS`, 4 in
   Docker), so a slow model or a long turn no longer makes everyone else wait. Each user may have
   two debates and two audio builds going at a time (`MAX_ACTIVE_DEBATES_PER_USER`,
@@ -93,6 +112,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Rate limits are waited out**: a model that answers "rate limited" or with a server error is
   asked again (after 3 s and 10 s) before the turn fails, and free models on the shared system
   key wait for a slot of OpenRouter's per-minute limit instead of failing.
+- **Dependencies updated** to their latest releases (backend and frontend).
 
 ### Fixed
 
@@ -184,6 +204,7 @@ First public release of **AI Debates**.
 - Admin panel for debates, participants, turns and sessions.
 - Docker Compose setup with FastAPI, PostgreSQL, Redis + RQ and a React + Vite frontend.
 
-[Unreleased]: https://github.com/khoren93/debatr/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/khoren93/debatr/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/khoren93/debatr/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/khoren93/debatr/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/khoren93/debatr/releases/tag/v1.0.0
