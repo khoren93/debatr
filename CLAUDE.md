@@ -189,7 +189,10 @@ docker compose up -d --build                     # full stack on http://localhos
    debate goes on.
    `StreamChunk.model` is the model that answered. `openrouter/free` picks a random free model
    per request, so `services/free_router` pins the `:free` model of a participant's first real
-   answer (≥ 20 words, no guard/safety classifier — the router picks those too) in
+   answer (≥ 20 words, no guard/safety classifier — the router picks those too; a classifier
+   pick is dropped at the stream's first chunk before any text is published, and a too-short
+   router answer is asked again, `ROUTER_TRIES`; a try after streamed text re-sends
+   `turn_started` so viewers restart the turn) in
    `DebateParticipant.model_id` (lineup, gallery filter, leaderboard, video
    via `resolved_participants`); `config_json` keeps the router, so remixes/drafts ask it again
    (`ParticipantOut.router`). A pinned model that fails before writing anything falls back to the
@@ -343,10 +346,15 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   The web renderer serializes each `<svg>` into an image, so strokes animate via SVG attributes
   (`pathLength=1` + dashoffset), colours are attributes (no `currentColor`), text stays in HTML,
   and rough.js shapes use a fixed seed per scene (random seeds jitter between frames). It only
-  takes raster `mask-image`s (single-colour logo SVGs are painted to PNG data URLs in
-  `video/logos.ts`, preloaded before an export), only unsized, centred `radial-gradient`s (one
-  per element: see `components/Background.tsx`) and ignores box-shadow spread (use `outline`).
-  Icon keys in `icons.ts` mirror `ICONS` in `schemas/visuals.py`.
+  takes raster `mask-image`s (all logo SVGs are painted to PNG data URLs in `video/logos.ts`,
+  preloaded before an export: WebKit draws em-sized SVG images zoomed and cropped), only
+  unsized, centred `radial-gradient`s (one per element: see `components/Background.tsx`) and
+  ignores box-shadow spread (use `outline`). Icon keys in `icons.ts` mirror `ICONS` in
+  `schemas/visuals.py`.
+- Safari / WebKit export: WebKit's H.264 encoder holds frames in `latencyMode: 'quality'` (which
+  the renderer hard-codes) and the export froze after frame 1; `video/render.ts` switches the
+  encoder to `realtime` there (`navigator.vendor` is Apple's). Reproduce Safari issues with
+  Playwright's WebKit (see the video QA memory / a temporary render harness page).
 - `sketch`: the director names a concrete subject; `media/sketch.py` asks `MEDIA_SKETCH_MODEL`
   (Gemini 3.5 Flash Lite, ~4 s) for SVG line art and `sanitize_svg` keeps only path/line/circle/
   ellipse/rect/polyline/polygon/g (no text, links, styles, `<use>`; DOCTYPE/ENTITY rejected),

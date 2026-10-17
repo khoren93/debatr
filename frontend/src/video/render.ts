@@ -22,8 +22,32 @@ export const SCALE_720P = 2 / 3;
 export const checkRenderSupport = (width: number, height: number, muted: boolean): Promise<CanRenderMediaOnWebResult> =>
   canRenderMediaOnWeb({ container: 'mp4', videoCodec: 'h264', audioCodec: 'aac', width, height, muted });
 
+/** Safari, and every browser on iOS, runs WebKit (its `navigator.vendor` is Apple's). */
+const isWebKit = () => typeof navigator !== 'undefined' && /apple/i.test(navigator.vendor);
+
+let realtimeEncoder = false;
+
+/**
+ * WebKit's H.264 encoder holds frames back in `latencyMode: 'quality'`, which the renderer
+ * hard-codes, while the renderer waits for encoded frames before it draws more: in Safari the
+ * export froze after the first frame. `realtime` hands each frame out at once (checked in
+ * Playwright's WebKit: 300 frames with audio in 11 s). Installed once, so parallel renders are fine.
+ */
+const switchWebKitEncoderToRealtime = () => {
+  const Native = globalThis.VideoEncoder;
+  if (realtimeEncoder || !Native || !isWebKit()) return;
+  class RealtimeEncoder extends Native {
+    configure(config: VideoEncoderConfig) {
+      super.configure({ ...config, latencyMode: 'realtime' });
+    }
+  }
+  globalThis.VideoEncoder = RealtimeEncoder;
+  realtimeEncoder = true;
+};
+
 /** Encode the composition to an MP4 in the browser (WebCodecs). */
 export const renderMp4 = async <P extends Record<string, unknown>>(job: RenderJob<P>): Promise<{ blob: Blob; ms: number }> => {
+  switchWebKitEncoderToRealtime();
   const t0 = performance.now();
   const { getBlob } = await renderMediaOnWeb({
     composition: { id: job.id, component: job.component, width: job.width, height: job.height, fps: FPS, durationInFrames: job.durationInFrames, defaultProps: job.inputProps },

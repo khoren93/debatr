@@ -888,9 +888,8 @@ def resume(
 ) -> None:
     """Run a debate that stopped with an error again from the turn that failed.
 
-    The turns before it stay and the same models speak; only the turns that are left are
-    charged. A debate that ran on your own OpenRouter key needs it again
-    (DEBATR_OPENROUTER_KEY).
+    The earlier turns stay and the same models speak; only the remaining turns are charged.
+    A debate that ran on your own OpenRouter key needs it again (DEBATR_OPENROUTER_KEY).
     """
     s = signed_in(settings_of(ctx))
     quiet = json_out or detach

@@ -4,16 +4,18 @@ import type { Timeline } from '../api/timeline';
 import { modelIcon } from '../lib/modelIcons';
 import { speakerModelId } from './speakers';
 
-/** Single-colour provider logos are SVGs drawn in `currentColor`. The MP4 web renderer takes only
- *  raster mask images, so they are painted once onto a canvas in the wanted colour (PNG data URL). */
+/** Provider logos are SVGs. The MP4 web renderer takes only raster mask images, and WebKit draws an
+ *  SVG sized in em (LobeHub's `width="1em"`) zoomed and cropped onto its canvas, so every logo is
+ *  painted once onto a canvas as a PNG data URL: single-colour ones in the wanted colour
+ *  (`color`), colour ones as they are (`color = null`). */
 const SIZE = 256;
 export const LOGO_COLOR = '#F2F3F7';
 const ready = new Map<string, string>();
 const pending = new Map<string, Promise<string>>();
 
-const keyOf = (src: string, color: string) => `${src}|${color}`;
+const keyOf = (src: string, color: string | null) => `${src}|${color ?? 'original'}`;
 
-export const tintLogo = (src: string, color: string): Promise<string> => {
+export const paintLogo = (src: string, color: string | null): Promise<string> => {
   const key = keyOf(src, color);
   const done = ready.get(key);
   if (done) return Promise.resolve(done);
@@ -31,9 +33,11 @@ export const tintLogo = (src: string, color: string): Promise<string> => {
           return;
         }
         ctx.drawImage(img, 0, 0, SIZE, SIZE);
-        ctx.globalCompositeOperation = 'source-in';
-        ctx.fillStyle = color;
-        ctx.fillRect(0, 0, SIZE, SIZE);
+        if (color) {
+          ctx.globalCompositeOperation = 'source-in';
+          ctx.fillStyle = color;
+          ctx.fillRect(0, 0, SIZE, SIZE);
+        }
         const url = canvas.toDataURL('image/png');
         ready.set(key, url);
         resolve(url);
@@ -46,8 +50,8 @@ export const tintLogo = (src: string, color: string): Promise<string> => {
   return job;
 };
 
-/** The tinted logo; holds the frame (delayRender) until it is painted. */
-export const useTintedLogo = (src: string | null, color: string): string | null => {
+/** The painted logo; holds the frame (delayRender) until it is ready. */
+export const usePaintedLogo = (src: string | null, color: string | null): string | null => {
   const key = src ? keyOf(src, color) : '';
   // The same component may show another speaker's logo later (the speaking chip).
   const [painted, setPainted] = useState<{ key: string; url: string } | null>(null);
@@ -56,6 +60,8 @@ export const useTintedLogo = (src: string | null, color: string): string | null 
   const has = url !== null;
   useEffect(() => {
     if (!src || has) return;
+    // Held until the painted logo is on screen: this cleanup runs after the re-render that shows
+    // it (`has` flips), so the renderer never captures the empty tile in between.
     const handle = delayRender(`Painting the logo ${src}`);
     let cancelled = false;
     let released = false;
@@ -64,10 +70,10 @@ export const useTintedLogo = (src: string | null, color: string): string | null 
       released = true;
       continueRender(handle);
     };
-    tintLogo(src, color).then(
+    paintLogo(src, color).then(
       (u) => {
-        if (!cancelled) setPainted({ key: keyOf(src, color), url: u });
-        release();
+        if (cancelled) release();
+        else setPainted({ key: keyOf(src, color), url: u });
       },
       release, // the tile stays empty rather than failing the render
     );
@@ -79,12 +85,12 @@ export const useTintedLogo = (src: string | null, color: string): string | null 
   return url;
 };
 
-/** Paint every speaker's single-colour logo before an export starts. */
+/** Paint every speaker's logo before an export starts. */
 export const preloadLogos = async (timeline: Timeline, color = LOGO_COLOR): Promise<void> => {
-  const srcs = new Set<string>();
+  const jobs = new Map<string, Promise<unknown>>();
   for (const s of timeline.speakers) {
     const icon = modelIcon(speakerModelId(s));
-    if (icon?.mono) srcs.add(icon.src);
+    if (icon && !jobs.has(icon.src)) jobs.set(icon.src, paintLogo(icon.src, icon.mono ? color : null).catch(() => undefined));
   }
-  await Promise.all([...srcs].map((src) => tintLogo(src, color).catch(() => undefined)));
+  await Promise.all(jobs.values());
 };

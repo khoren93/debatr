@@ -2,12 +2,13 @@ import { Img } from 'remotion';
 import type { TimelineSpeaker } from '../../api/timeline';
 import { modelAuthor, modelIcon } from '../../lib/modelIcons';
 import { FONT } from '../constants';
-import { LOGO_COLOR, useTintedLogo } from '../logos';
+import { LOGO_COLOR, usePaintedLogo } from '../logos';
 import { speakerModelId } from '../speakers';
 
-/** A single-colour logo, painted in `color` (raster, so the MP4 renderer can draw it). */
-const MonoLogo = ({ src, size, color }: { src: string; size: number; color: string }) => {
-  const url = useTintedLogo(src, color);
+/** A logo painted to a raster (in `color` for single-colour ones), which every browser's MP4
+ *  renderer draws the same. */
+const PaintedLogo = ({ src, size, color }: { src: string; size: number; color: string | null }) => {
+  const url = usePaintedLogo(src, color);
   return url ? <Img src={url} style={{ width: size, height: size, display: 'block' }} /> : <div style={{ width: size, height: size }} />;
 };
 
@@ -18,8 +19,7 @@ export const ModelLogo = ({ modelId, size, color = LOGO_COLOR }: { modelId: stri
     const letter = (modelAuthor(modelId) || modelId || '?').charAt(0).toUpperCase();
     return <div style={{ width: size, height: size, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: FONT, fontWeight: 800, fontSize: size * 0.8, lineHeight: 1, color }}>{letter}</div>;
   }
-  if (icon.mono) return <MonoLogo src={icon.src} size={size} color={color} />;
-  return <Img src={icon.src} style={{ width: size, height: size, display: 'block', objectFit: 'contain' }} />;
+  return <PaintedLogo src={icon.src} size={size} color={icon.mono ? color : null} />;
 };
 
 /** The logo on a rounded tile: tinted in the speaker's colour, framed when `framed`. */

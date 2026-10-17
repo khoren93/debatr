@@ -171,9 +171,92 @@ def test_retries_stop_at_the_deadline(no_pauses):
     assert no_pauses == [orchestrator.RETRY_PAUSES[0]]
 
 
+LONG = "Spaces render the same in every editor, so reviews never fight over alignment. " * 3
+
+
 def test_free_router_retries_the_router_not_the_pin(no_pauses):
     debate = Debate(participants=[DebateParticipant(role="debater", model_id="qwen/qwen3:free")])
-    answers = Answers(_busy(), _busy(), orchestrator.GenerationResult(text="Ok.", model="z/m:free"))
+    answers = Answers(_busy(), _busy(), orchestrator.GenerationResult(text=LONG, model="z/m:free"))
     result, used = orchestrator._generate_as(debate, 0, _speaker("openrouter/free"), answers)
     assert answers.calls == ["qwen/qwen3:free", "openrouter/free", "openrouter/free"]
-    assert result.text == "Ok." and used == "z/m:free"
+    assert result.text == LONG and used == "z/m:free"
+
+
+# --- Free Router picks that cannot debate ----------------------------------------------------
+
+
+def test_a_classifier_pick_is_dropped_before_any_text(monkeypatch: pytest.MonkeyPatch, events):
+    async def stream(
+        self: OpenRouterClient, *args: Any, **kwargs: Any
+    ) -> AsyncIterator[StreamChunk]:
+        yield StreamChunk(
+            delta="User Safety: safe", model="nvidia/nemotron-3.5-content-safety:free"
+        )
+
+    monkeypatch.setattr(OpenRouterClient, "stream_chat_completion", stream)
+    result = _run(5)
+    assert result.rerouted and result.retryable and "cannot debate" in (result.error or "")
+    assert result.text == "" and events == []  # nobody saw "User Safety: safe"
+
+
+def test_a_chosen_classifier_is_not_second_guessed(monkeypatch: pytest.MonkeyPatch, events):
+    async def stream(
+        self: OpenRouterClient, *args: Any, **kwargs: Any
+    ) -> AsyncIterator[StreamChunk]:
+        yield StreamChunk(delta="User Safety: safe", model="meta-llama/llama-guard-4-12b:free")
+
+    monkeypatch.setattr(OpenRouterClient, "stream_chat_completion", stream)
+    deadline = time.monotonic() + 5
+    result = orchestrator._generate(
+        "d", 0, "A", "meta-llama/llama-guard-4-12b:free", [], None, deadline
+    )
+    assert result.text == "User Safety: safe" and not result.error
+
+
+def test_the_router_is_asked_again_at_once_after_a_classifier(no_pauses):
+    debate = Debate(participants=[DebateParticipant(role="debater", model_id="openrouter/free")])
+    dropped = orchestrator.GenerationResult(error="cannot debate", retryable=True, rerouted=True)
+    answers = Answers(dropped, orchestrator.GenerationResult(text=LONG, model="z/m:free"))
+    result, used = orchestrator._generate_as(debate, 0, _speaker("openrouter/free"), answers)
+    assert result.text == LONG and used == "z/m:free"
+    assert no_pauses == []  # not a busy provider: no waiting
+    assert debate.participants[0].model_id == "z/m:free"
+
+
+def test_short_router_answers_are_asked_again(no_pauses):
+    debate = Debate(participants=[DebateParticipant(role="debater", model_id="openrouter/free")])
+    answers = Answers(
+        orchestrator.GenerationResult(text="Hello there!", model="tiny/model:free"),
+        orchestrator.GenerationResult(text=LONG, model="z/m:free"),
+    )
+    result, used = orchestrator._generate_as(debate, 0, _speaker("openrouter/free"), answers)
+    assert len(answers.calls) == 2 and result.text == LONG and used == "z/m:free"
+
+
+def test_the_last_short_answer_stands_when_none_is_better(no_pauses):
+    shorts = [
+        orchestrator.GenerationResult(text="Hi.", model="tiny/model:free")
+    ] * orchestrator.ROUTER_TRIES
+    answers = Answers(*shorts)
+    debate = Debate(participants=[DebateParticipant(role="debater", model_id="openrouter/free")])
+    result, used = orchestrator._generate_as(debate, 0, _speaker("openrouter/free"), answers)
+    assert len(answers.calls) == orchestrator.ROUTER_TRIES and result.text == "Hi."
+    assert used == "tiny/model:free"  # the transcript names the model that wrote it
+    assert debate.participants[0].model_id == "openrouter/free"  # not pinned
+
+
+def test_a_retry_after_streamed_text_restarts_the_turn_for_viewers(events):
+    started = {"seq_index": 3, "speaker_name": "A"}
+    results = iter(
+        [
+            orchestrator.GenerationResult(error="HTTP 429", retryable=True),  # nothing streamed
+            orchestrator.GenerationResult(text="Hello there!"),  # streamed, then dropped
+            orchestrator.GenerationResult(text=LONG),
+        ]
+    )
+    attempt = orchestrator._announcing("d", started, lambda _model: next(results))
+    attempt("m")
+    attempt("m")
+    assert events == []
+    attempt("m")
+    assert events == [("turn_started", started)]

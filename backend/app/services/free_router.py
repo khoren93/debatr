@@ -8,8 +8,9 @@ the gallery filter and the leaderboard read), while `config_json` keeps the rout
 and drafts ask the router again. Only `:free` variants are pinned, so a pin never costs money.
 
 The router also picks models that cannot debate (a content-safety classifier answered a turn
-with "User Safety: safe"), so only a real turn pins: enough words, no classifier in the id.
-Such a turn is still saved with the model that wrote it, and the next turn asks the router again.
+with "User Safety: safe"). The worker drops such a pick as soon as the stream's first chunk names
+it, before any text reaches the viewers, and asks the router again; an answer too short for a
+turn is asked again too (`orchestrator._ask_router`). Only a real turn pins its model.
 """
 
 from collections.abc import Sequence
@@ -59,10 +60,15 @@ def pinned_model(requested: str, row: DebateParticipant | None) -> str | None:
     return routed_model(row.model_id)
 
 
+def is_classifier(model_id: str) -> bool:
+    """A free model that labels text instead of answering it (guard / safety / moderation)."""
+    lowered = model_id.lower()
+    return any(m in lowered for m in NON_CHAT_MARKERS)
+
+
 def worth_pinning(model_id: str, text: str) -> bool:
     """Whether an answer looks like a debate turn, so its model may speak for the participant."""
-    lowered = model_id.lower()
-    return len(text.split()) >= MIN_PIN_WORDS and not any(m in lowered for m in NON_CHAT_MARKERS)
+    return len(text.split()) >= MIN_PIN_WORDS and not is_classifier(model_id)
 
 
 def resolved_participants(

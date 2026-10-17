@@ -36,6 +36,8 @@ from app.services.credits import charge_debate_sync, charge_images_sync
 from app.services.events import publish_event
 from app.services.free_quota import is_free_model, wait_for_slot
 from app.services.free_router import (
+    FREE_ROUTER_ID,
+    is_classifier,
     is_free_router,
     participant_row,
     pinned_model,
@@ -75,6 +77,7 @@ STOP_CHECK_EVERY_N_CHUNKS = 10
 # usually pass, and a failed turn stops the whole debate. Only before any text was streamed.
 RETRY_PAUSES = (3.0, 10.0)
 RETRY_STATUSES = {408, 425, 429, 500, 502, 503, 504}
+ROUTER_TRIES = 3  # Free Router answers too short for a turn are asked again, this many in all
 
 get_session = get_sync_session
 
@@ -90,6 +93,7 @@ class GenerationResult:
     stopped: bool = False
     timed_out: bool = False  # no complete answer within LLM_TURN_TIMEOUT
     retryable: bool = False  # a passing failure (rate limit, 5xx, connection, empty answer)
+    rerouted: bool = False  # the router picked a classifier: dropped before any text, ask again
     model: str | None = None  # as named by the response (a router names the model it picked)
 
 
@@ -260,6 +264,14 @@ def _generate(
                         result.usage = _normalize_usage(chunk.usage)
                     if chunk.model:
                         result.model = chunk.model
+                        if is_free_router(model_id) and is_classifier(chunk.model):
+                            # Labels text instead of arguing ("User Safety: safe"): drop it
+                            # before a word is published, the router picks again.
+                            result.error = (
+                                f"The Free Router picked {chunk.model}, which cannot debate"
+                            )
+                            result.retryable = result.rerouted = True
+                            break
                     if not chunk.delta:
                         continue
                     result.text += chunk.delta
@@ -307,12 +319,48 @@ def _with_retries(
     for pause in RETRY_PAUSES:
         if not result.retryable or result.text or result.stopped:
             break
-        if time.monotonic() + pause > deadline or _stop_requested(debate_id):
+        wait = 0.0 if result.rerouted else pause  # a classifier pick is not a busy provider
+        if time.monotonic() + wait > deadline or _stop_requested(debate_id):
             break
-        logger.warning("%s failed (%s), trying again in %.0f s", model, result.error, pause)
-        time.sleep(pause)
+        logger.warning("%s failed (%s), trying again in %.0f s", model, result.error, wait)
+        if wait:
+            time.sleep(wait)
         result = generate(model)
     return result
+
+
+def _ask_router(
+    debate_id: str, generate: Callable[[str], GenerationResult], deadline: float
+) -> GenerationResult:
+    """A Free Router answer, asked again while it is too short for a turn (a model that only
+    greets, refuses or labels the text); the last one stands if none is better."""
+    result = _with_retries(debate_id, generate, FREE_ROUTER_ID, deadline)
+    for _ in range(ROUTER_TRIES - 1):
+        if result.error or result.stopped or worth_pinning(result.model or "", result.text):
+            break
+        if time.monotonic() + 10 > deadline or _stop_requested(debate_id):
+            break
+        words = len(result.text.split())
+        logger.warning("Free Router's %s wrote %d words, asking again", result.model, words)
+        result = _with_retries(debate_id, generate, FREE_ROUTER_ID, deadline)
+    return result
+
+
+def _announcing(
+    debate_id: str, started: dict[str, Any], run: Callable[[str], GenerationResult]
+) -> Callable[[str], GenerationResult]:
+    """`run` for each try of one turn. A try after one that streamed text announces the turn
+    again, so live viewers drop the discarded text (the page and the CLI restart the turn on
+    `turn_started`)."""
+    last: list[GenerationResult] = []
+
+    def attempt(model: str) -> GenerationResult:
+        if last and last[-1].text:
+            publish_event(debate_id, "turn_started", started)
+        last[:] = [run(model)]
+        return last[0]
+
+    return attempt
 
 
 def _generate_as(
@@ -326,7 +374,8 @@ def _generate_as(
 
     Passing failures are tried again (`_with_retries`). A Free Router participant speaks with
     the free model its first answer was routed to (`services/free_router`); when that model
-    fails before writing anything, the router answers the turn instead and the pin stays."""
+    fails before writing anything, the router answers the turn instead and the pin stays. The
+    router is asked again when it picks a classifier or writes too little (`_ask_router`)."""
     requested = str(speaker.get("model_id") or settings.DEFAULT_MODEL_ID)
     if not is_free_router(requested):
         return _with_retries(str(debate.id), generate, requested, deadline), requested
@@ -342,7 +391,7 @@ def _generate_as(
             debate.id,
             result.error,
         )
-    result = _with_retries(str(debate.id), generate, requested, deadline)
+    result = _ask_router(str(debate.id), generate, deadline)
     answered = routed_model(result.model)
     if (
         answered
@@ -578,17 +627,14 @@ def process_turn_job(debate_id: str, seq_index: int) -> None:
                     conf, speaker, turn, history, visual_claims=claims_prompt(claims)
                 )
 
-            publish_event(
-                debate_id,
-                "turn_started",
-                {
-                    "seq_index": seq_index,
-                    "speaker_name": speaker_name,
-                    "speaker_role": speaker_role_for(turn.turn_type),
-                    "turn_type": turn.turn_type,
-                    "round_id": turn.round_id,
-                },
-            )
+            started = {
+                "seq_index": seq_index,
+                "speaker_name": speaker_name,
+                "speaker_role": speaker_role_for(turn.turn_type),
+                "turn_type": turn.turn_type,
+                "round_id": turn.round_id,
+            }
+            publish_event(debate_id, "turn_started", started)
 
             api_key = _provider_key(debate_id)
             deadline = time.monotonic() + settings.LLM_TURN_TIMEOUT
@@ -596,8 +642,12 @@ def process_turn_job(debate_id: str, seq_index: int) -> None:
                 debate,
                 turn.speaker_index,
                 speaker,
-                lambda model: _generate(
-                    debate_id, seq_index, speaker_name, model, messages, api_key, deadline
+                _announcing(
+                    debate_id,
+                    started,
+                    lambda model: _generate(
+                        debate_id, seq_index, speaker_name, model, messages, api_key, deadline
+                    ),
                 ),
                 deadline,
             )
@@ -659,17 +709,14 @@ def conduct_verdict_job(debate_id: str, seq_index: int) -> None:
             moderator = participants[moderator_index] if moderator_index >= 0 else {}
             api_key = _provider_key(debate_id)
 
-            publish_event(
-                debate_id,
-                "turn_started",
-                {
-                    "seq_index": seq_index,
-                    "speaker_name": VERDICT_SPEAKER_NAME,
-                    "speaker_role": "moderator",
-                    "turn_type": "verdict",
-                    "round_id": "verdict",
-                },
-            )
+            started = {
+                "seq_index": seq_index,
+                "speaker_name": VERDICT_SPEAKER_NAME,
+                "speaker_role": "moderator",
+                "turn_type": "verdict",
+                "round_id": "verdict",
+            }
+            publish_event(debate_id, "turn_started", started)
             evidence = verdict_evidence(_turns(db, debate.id))
             messages = build_verdict_messages(conf, _history(db, debate.id), evidence)
             deadline = time.monotonic() + settings.LLM_TURN_TIMEOUT
@@ -677,8 +724,18 @@ def conduct_verdict_job(debate_id: str, seq_index: int) -> None:
                 debate,
                 moderator_index,
                 moderator,
-                lambda model: _generate(
-                    debate_id, seq_index, VERDICT_SPEAKER_NAME, model, messages, api_key, deadline
+                _announcing(
+                    debate_id,
+                    started,
+                    lambda model: _generate(
+                        debate_id,
+                        seq_index,
+                        VERDICT_SPEAKER_NAME,
+                        model,
+                        messages,
+                        api_key,
+                        deadline,
+                    ),
                 ),
                 deadline,
             )

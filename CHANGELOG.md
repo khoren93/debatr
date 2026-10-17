@@ -64,7 +64,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Free Router keeps its model**: OpenRouter's free router picks a random free model for every
   request; a Free Router speaker now keeps the model of its first real answer for the whole
   debate, so the lineup, the video and the leaderboard show the actual model (remixes still ask
-  the router). If that model is busy, the router answers that one turn.
+  the router). If that model is busy, the router answers that one turn. When the router picks
+  a model that cannot debate (a safety classifier answering "User Safety: safe") or writes only
+  a few words, it is asked again before the turn is saved, so such answers never reach the
+  debate.
 
 - **Shorter verdicts**: the judge now gets a word budget that follows the turn length (about 70
   words after "very short" turns up to 260 after "long" ones, a little more with more debaters)
@@ -93,6 +96,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Video export in Safari**: the MP4 export froze after the first frame in Safari (and every
+  browser on iOS), because WebKit's encoder held the frames back; it now renders like in Chrome.
+  Colour provider logos (NVIDIA, Cohere, Poolside…) were drawn zoomed and cropped in Safari's
+  exports and are now painted correctly everywhere.
 - **Interrupted runs continue**: a debate or audio build whose worker was killed (deploy, crash)
   is found within a few minutes and continues from where it stopped; deploys let the running
   turn finish first. Runs that cannot continue fail with a message (Resume / generate again)
