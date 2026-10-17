@@ -36,6 +36,7 @@
   --color-violet: #a78bfa;
   --color-mint: #34d399;
   --color-like: #ff7a9a;
+  --color-hot: #ff9f5a; /* trending rank badge */
 
   --radius-card: 18px;
   --radius-panel: 20px;
@@ -99,12 +100,6 @@ body {
 input::placeholder,
 textarea::placeholder {
   color: var(--color-dim);
-}
-
-/* Native selects on a dark background */
-select option {
-  background: var(--color-surface);
-  color: var(--color-text);
 }
 
 details > summary {

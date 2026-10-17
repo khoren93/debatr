@@ -1,7 +1,10 @@
-import { Check, ChevronDown, Mic, Play, Search, Square, Wand2, X } from 'lucide-react';
+import { Check, Mic, Search, Wand2, X } from 'lucide-react';
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import type { VoiceInfo } from '../../api/types';
-import { usePickerPopover } from './usePickerPopover';
+import { PickerFace } from './PickerFace';
+import { pickerTriggerClass, usePickerPopover } from './usePickerPopover';
+import { useVoicePreview } from './useVoicePreview';
+import { VoicePreviewButton } from './VoicePreviewButton';
 
 interface VoicePickerProps {
   value: string;
@@ -15,6 +18,8 @@ interface VoicePickerProps {
   showLanguages: boolean;
   /** Debate language: ISO code (as in `VoiceInfo.languages`) and display name. */
   language: { code: string; name: string };
+  /** Speaker colour (icon, open border). */
+  color: string;
   onChange: (voiceId: string) => void;
 }
 
@@ -33,71 +38,8 @@ type Scope = 'native' | 'all';
 const SCOPES: Scope[] = ['native', 'all'];
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
-/** Only one preview plays at a time across all pickers. */
-let currentPreview: HTMLAudioElement | null = null;
-
-/** Plays voice samples; `playing` is the URL being played. */
-const usePreview = () => {
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const [playing, setPlaying] = useState<string | null>(null);
-
-  useEffect(
-    () => () => {
-      audioRef.current?.pause();
-    },
-    [],
-  );
-
-  const stop = () => {
-    audioRef.current?.pause();
-    audioRef.current = null;
-    setPlaying(null);
-  };
-
-  const toggle = (url: string | null) => {
-    if (!url) return;
-    if (playing === url) {
-      stop();
-      return;
-    }
-    currentPreview?.pause();
-    audioRef.current?.pause();
-    const audio = new Audio(url);
-    const ended = () => setPlaying((p) => (p === url ? null : p));
-    audio.onpause = ended;
-    audio.onended = ended;
-    audio.onerror = ended;
-    audioRef.current = audio;
-    currentPreview = audio;
-    audio
-      .play()
-      .then(() => setPlaying(url))
-      .catch(ended);
-  };
-
-  return { playing, toggle };
-};
-
-const PreviewButton = ({ url, playing, onToggle, size = 'md' }: { url: string | null; playing: boolean; onToggle: () => void; size?: 'sm' | 'md' }) => (
-  <button
-    type="button"
-    onClick={(e) => {
-      e.stopPropagation();
-      onToggle();
-    }}
-    disabled={!url}
-    title={url ? (playing ? 'Stop preview' : 'Preview voice') : 'No preview for this voice'}
-    aria-label={playing ? 'Stop preview' : 'Preview voice'}
-    className={`grid shrink-0 place-items-center border transition-colors ${size === 'sm' ? 'size-7 rounded-lg' : 'size-10 rounded-[11px]'} ${
-      url ? 'cursor-pointer border-line-2 bg-surface-2 text-text hover:border-accent' : 'cursor-not-allowed border-line bg-surface-2 text-dim'
-    } ${playing ? 'border-accent text-accent' : ''}`}
-  >
-    {playing ? <Square className={size === 'sm' ? 'size-2.5' : 'size-3.5'} fill="currentColor" /> : <Play className={size === 'sm' ? 'size-2.5' : 'size-3.5'} fill="currentColor" />}
-  </button>
-);
-
 /** Searchable voice list with gender filter, previews and "used by" hints. */
-export const VoicePicker = ({ value, voices, loading, auto, takenBy, showLanguages, language, onChange }: VoicePickerProps) => {
+export const VoicePicker = ({ value, voices, loading, auto, takenBy, showLanguages, language, color, onChange }: VoicePickerProps) => {
   const { open, show: openPopover, close, placement, rootRef, triggerRef } = usePickerPopover(POPOVER_WIDTH, POPOVER_HEIGHT);
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState('all');
@@ -105,7 +47,7 @@ export const VoicePicker = ({ value, voices, loading, auto, takenBy, showLanguag
   const [active, setActive] = useState(value);
   const listRef = useRef<HTMLDivElement>(null);
   const listId = useId();
-  const preview = usePreview();
+  const preview = useVoicePreview();
 
   const selected = voices.find((v) => v.id === value);
   // Edge voices have no samples: no preview buttons at all rather than disabled ones.
@@ -190,13 +132,13 @@ export const VoicePicker = ({ value, voices, loading, auto, takenBy, showLanguag
 
   if (auto) {
     return (
-      <div className="flex min-w-0 flex-1 items-center gap-3 rounded-field border border-dashed border-line-2 px-2.5 py-2 text-left">
-        <span className="grid size-[30px] shrink-0 place-items-center rounded-lg bg-surface-2 text-muted">
-          <Wand2 className="size-3.5" />
+      <div className="flex h-[54px] min-w-0 items-center gap-2.5 rounded-[13px] border border-dashed border-line-2 pr-3 pl-2 text-left">
+        <span className="grid size-9 shrink-0 place-items-center rounded-[10px] bg-surface-2 text-muted">
+          <Wand2 className="size-4" />
         </span>
         <span className="min-w-0">
           <span className="block truncate text-sm font-semibold text-text-3">Picked automatically</span>
-          <span className="mt-0.5 block truncate text-[11px] text-muted">A distinct voice for every speaker</span>
+          <span className="mt-px block truncate text-xs text-muted">A distinct voice for every speaker</span>
         </span>
       </div>
     );
@@ -205,7 +147,7 @@ export const VoicePicker = ({ value, voices, loading, auto, takenBy, showLanguag
   const disabled = loading || voices.length === 0;
 
   return (
-    <div ref={rootRef} className="relative flex min-w-0 flex-1 items-center gap-2">
+    <div ref={rootRef} className="relative min-w-0">
       <button
         ref={triggerRef}
         type="button"
@@ -221,28 +163,17 @@ export const VoicePicker = ({ value, voices, loading, auto, takenBy, showLanguag
         aria-expanded={open}
         aria-controls={open ? listId : undefined}
         aria-label="Voice"
-        className={`flex min-w-0 flex-1 items-center gap-3 rounded-field border bg-ink px-2.5 py-2 text-left transition-colors cursor-pointer disabled:cursor-wait disabled:opacity-60 ${
-          open ? 'border-accent' : 'border-line-2 hover:border-line-3'
-        }`}
+        className={pickerTriggerClass(open)}
+        style={open ? { borderColor: color } : undefined}
       >
-        <span className="grid size-[30px] shrink-0 place-items-center rounded-lg bg-surface-2 text-text-3">
-          <Mic className="size-3.5" />
-        </span>
-        <span className="min-w-0 flex-1">
-          {selected ? (
-            <>
-              <span className="block truncate text-sm font-semibold text-text">{selected.name}</span>
-              <span className="mt-0.5 block truncate text-[11px] text-muted">{selected.description ?? selected.id}</span>
-            </>
-          ) : (
-            <span className="block truncate py-2 text-sm text-muted">{loading ? 'Loading voices…' : voices.length === 0 ? 'Voices unavailable' : value || 'Default voice'}</span>
-          )}
-        </span>
-        <ChevronDown className={`size-4 shrink-0 text-muted transition-transform ${open ? 'rotate-180' : ''}`} />
+        <PickerFace
+          icon={<Mic className="size-4" />}
+          color={color}
+          title={selected?.name ?? (loading ? 'Loading voices…' : voices.length === 0 ? 'Voices unavailable' : value || 'Default voice')}
+          sub={selected ? (selected.description ?? selected.id) : undefined}
+          open={open}
+        />
       </button>
-      {hasPreviews && (
-        <PreviewButton url={selected?.preview_url ?? null} playing={Boolean(selected?.preview_url) && preview.playing === selected?.preview_url} onToggle={() => preview.toggle(selected?.preview_url ?? null)} />
-      )}
 
       {open && (
         <div
@@ -344,7 +275,7 @@ export const VoicePicker = ({ value, voices, loading, auto, takenBy, showLanguag
                   className={`mx-1.5 flex cursor-pointer items-center gap-2.5 rounded-[10px] px-2 py-2 ${active === v.id ? 'bg-surface-3' : ''}`}
                 >
                   {hasPreviews ? (
-                    <PreviewButton url={v.preview_url} playing={Boolean(v.preview_url) && preview.playing === v.preview_url} onToggle={() => preview.toggle(v.preview_url)} size="sm" />
+                    <VoicePreviewButton url={v.preview_url} playing={Boolean(v.preview_url) && preview.playing === v.preview_url} onToggle={() => preview.toggle(v.preview_url)} size="sm" />
                   ) : (
                     <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-surface-3 text-muted">
                       <Mic className="size-3" />

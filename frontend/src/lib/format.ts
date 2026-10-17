@@ -56,6 +56,25 @@ export const formatDuration = (ms: number | null | undefined) => {
     : `${m}:${String(s).padStart(2, '0')}`;
 };
 
+/** "https://www.bbc.co.uk/news/…" -> "bbc.co.uk" (empty for a missing or broken link). */
+export const sourceDomain = (url: string | null | undefined) => {
+  try {
+    return url ? new URL(url).hostname.replace(/^www\./, '') : '';
+  } catch {
+    return '';
+  }
+};
+
+/** Compact age for news: "45m", "3h", "2d" (empty without a date). */
+export const formatAge = (iso: string | null | undefined, now: number = Date.now()) => {
+  if (!iso) return '';
+  const minutes = Math.max(1, Math.round((now - new Date(iso).getTime()) / 60_000));
+  if (!Number.isFinite(minutes)) return '';
+  if (minutes < 60) return `${minutes}m`;
+  if (minutes < 1440) return `${Math.round(minutes / 60)}h`;
+  return `${Math.round(minutes / 1440)}d`;
+};
+
 /** "~4 min" */
 export const formatMinutes = (ms: number) => {
   const min = ms / 60_000;

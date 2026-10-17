@@ -236,9 +236,21 @@ export interface ParticipantConfig {
   persona_custom?: string;
 }
 
+/** The news story behind a trending topic; its brief goes into every prompt (backend NewsContext). */
+export interface NewsContext {
+  brief: string;
+  outlet?: string;
+  title?: string;
+  /** Link to the original article (http/https). */
+  url?: string;
+  published_at?: string | null;
+}
+
 export interface DebateConfig {
   topic: string;
   description?: string;
+  /** Ground the debate in the news story the topic came from (trending topics). */
+  news?: NewsContext | null;
   language: string;
   participants: ParticipantConfig[];
   debate_preset_id?: string;

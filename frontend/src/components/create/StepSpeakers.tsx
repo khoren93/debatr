@@ -1,11 +1,11 @@
-import { ArrowUpRight, Lock, Plus, RefreshCw } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { ArrowUpRight, Dice5, Lock, Plus } from 'lucide-react';
+import { useState, type ReactNode } from 'react';
 import type { BillingConfig, ModelInfo, TTSProviderName } from '../../api/types';
 import { useLeaderboard } from '../../hooks/useLeaderboard';
 import type { VoiceCatalogue } from '../../hooks/useVoices';
 import { accountPath, type AccountTab } from '../account/tabs';
-import { Card, ErrorBox, Hint, Label, Spinner } from '../ui';
-import { SpeakerCard } from './SpeakerCard';
+import { ErrorBox, Hint, Spinner } from '../ui';
+import { ROW_COLUMNS, SpeakerRow } from './SpeakerRow';
 import {
   MAX_DEBATERS,
   MIN_DEBATERS,
@@ -15,6 +15,7 @@ import {
   reindexVoices,
   speakerColorOf,
   speakerId,
+  speakerNamesOf,
   speakerTagOf,
   type Speaker,
   type WizardState,
@@ -43,7 +44,7 @@ interface StepSpeakersProps {
   showErrors: boolean;
 }
 
-/** Compact voice-engine toggle (the description goes to the tooltip to keep the row short). */
+/** Voice engine pill: name + price tag (the description goes to the tooltip). */
 const EngineOption = ({
   active,
   disabled = false,
@@ -65,13 +66,24 @@ const EngineOption = ({
     disabled={disabled}
     aria-pressed={active}
     title={tooltip}
-    className={`inline-flex min-w-0 flex-1 items-center justify-between gap-3 rounded-field border px-3 py-2 text-left text-[13px] font-semibold transition-colors sm:flex-none ${
-      active ? 'border-accent bg-accent/6 text-text' : 'border-line-2 bg-ink text-text-3 hover:border-line-3'
+    className={`inline-flex h-10 items-center gap-2.5 rounded-[11px] border px-3.5 text-[13px] font-semibold transition-colors ${
+      active ? 'border-accent bg-accent/6 text-text' : 'border-white/8 bg-ink text-text hover:border-line-3'
     } ${disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
   >
-    <span className="truncate">{title}</span>
-    <span className="shrink-0 font-mono text-[11px] font-normal text-accent">{tag}</span>
+    {title}
+    <span className="font-mono text-[11px] font-normal text-accent">{tag}</span>
   </button>
+);
+
+/** Section heading of the step: title, optional counter and a hint on the right. */
+const SectionHead = ({ title, count, hint }: { title: string; count?: string; hint: string }) => (
+  <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 px-1">
+    <div className="flex items-baseline gap-2.5">
+      <h2 className="font-display text-xl font-bold tracking-[-0.02em]">{title}</h2>
+      {count && <span className="font-mono text-xs text-muted">{count}</span>}
+    </div>
+    <span className="text-xs text-dim">{hint}</span>
+  </div>
 );
 
 /** Account page in a new tab: the wizard keeps its state and picks up new keys immediately. */
@@ -100,6 +112,9 @@ export const StepSpeakers = ({
   showErrors,
 }: StepSpeakersProps) => {
   const debaters = countDebaters(state.speakers);
+  const names = speakerNamesOf(state.speakers, models, defaultModelId);
+  // Speaker whose system prompt editor is open.
+  const [expanded, setExpanded] = useState<string | null>(null);
   const premiumAvailable = billing.elevenlabs_available || hasTtsKey;
   // Without a catalogue the server assigns the voices, so there is nothing to pick.
   const voicesAuto = Boolean(catalogue.error);
@@ -109,17 +124,12 @@ export const StepSpeakers = ({
   };
   const takenBy = (index: number) =>
     Object.fromEntries(
-      state.speakers.flatMap((s, i) => {
+      state.speakers.flatMap((_, i) => {
         const voice = resolvedVoices[speakerId(i)];
-        return i !== index && voice ? [[voice, s.name.trim() || speakerTagOf(state.speakers, i)]] : [];
+        return i !== index && voice ? [[voice, names[i] || speakerTagOf(state.speakers, i)]] : [];
       }),
     );
   const { data: leaderboard } = useLeaderboard();
-  const rankingFor = (modelId: string) => {
-    const entries = leaderboard?.entries ?? [];
-    const index = entries.findIndex((e) => e.model_id === modelId);
-    return index < 0 ? null : { entry: entries[index], rank: index + 1 };
-  };
   const voiceLanguage = { code: catalogue.language, name: state.language.trim() || 'English' };
   // ElevenLabs lists library voices for the language only on paid plans: say why there are none.
   const noNativeVoices =
@@ -139,7 +149,6 @@ export const StepSpeakers = ({
   const randomizeOne = (index: number) => {
     const others = state.speakers.filter((_, i) => i !== index);
     const { speaker, voiceId } = randomizeSpeaker(state.speakers[index], {
-      takenNames: others.map((s) => s.name),
       takenVoices: others.map((_, i) => resolvedVoices[speakerId(i < index ? i : i + 1)]).filter(Boolean),
       models,
       voices: catalogue.voices,
@@ -156,7 +165,6 @@ export const StepSpeakers = ({
     const takenVoices: string[] = [];
     state.speakers.forEach((original, index) => {
       const { speaker, voiceId } = randomizeSpeaker(original, {
-        takenNames: speakers.map((s) => s.name),
         takenVoices,
         models,
         voices: catalogue.voices,
@@ -180,58 +188,94 @@ export const StepSpeakers = ({
     patch({ speakers: state.speakers.filter((_, i) => i !== index), voices: reindexVoices(state.voices, index) });
   };
 
+  const row = (speaker: Speaker) => {
+    const index = state.speakers.indexOf(speaker);
+    return (
+      <SpeakerRow
+        key={speaker.key}
+        speaker={speaker}
+        name={names[index]}
+        color={speakerColorOf(state.speakers, index)}
+        tag={speakerTagOf(state.speakers, index)}
+        modelId={speaker.model_id || defaultModelId}
+        voiceId={resolvedVoices[speakerId(index)] ?? ''}
+        models={models}
+        modelsLoading={modelsLoading}
+        paidLocked={paidLocked}
+        ranks={ranks}
+        voices={catalogue.voices}
+        voicesLoading={catalogue.loading}
+        voicesAuto={voicesAuto}
+        voicesTakenBy={takenBy(index)}
+        showVoiceLanguages={provider === 'elevenlabs'}
+        voiceLanguage={voiceLanguage}
+        expanded={expanded === speaker.key}
+        removable={speaker.role === 'debater' && debaters > MIN_DEBATERS}
+        showErrors={showErrors}
+        onChange={(changes) => updateSpeaker(index, changes)}
+        onVoice={(voiceId) => setVoice(index, voiceId)}
+        onToggleExpanded={() => setExpanded((key) => (key === speaker.key ? null : speaker.key))}
+        onRandomize={() => randomizeOne(index)}
+        onRemove={() => removeSpeaker(index)}
+      />
+    );
+  };
+  const slotsLeft = MAX_DEBATERS - debaters;
+
   return (
-    <div className="mt-[30px] animate-rise">
-      <div className="flex flex-wrap items-center justify-between gap-2.5">
+    <div className="mt-7 grid gap-[22px] animate-rise">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="text-sm text-muted">Cast the speakers. Each gets a model, a voice and a persona.</div>
         <button
           type="button"
           onClick={randomizeAll}
           disabled={modelsLoading || catalogue.loading}
-          className="inline-flex items-center gap-1.5 text-[13px] text-accent hover:text-accent-hover cursor-pointer disabled:cursor-wait disabled:opacity-60"
+          className="inline-flex items-center gap-2 text-[13px] font-semibold text-accent hover:text-accent-hover cursor-pointer disabled:cursor-wait disabled:opacity-60"
         >
-          <RefreshCw className="size-3.5" /> Randomize everything
+          <Dice5 className="size-4" /> Randomize everything
         </button>
       </div>
 
-      {modelsError && <ErrorBox className="mt-4">Could not load the model list: {modelsError}</ErrorBox>}
-      {paidLocked && (
-        <Hint className="mt-3">
-          Paid models are locked: add credits or your own OpenRouter key in <AccountLink>Account</AccountLink>. Free models work right away.
-        </Hint>
+      {(modelsError || paidLocked) && (
+        <div className="-mt-2 grid gap-2">
+          {modelsError && <ErrorBox>Could not load the model list: {modelsError}</ErrorBox>}
+          {paidLocked && (
+            <Hint className="mt-0">
+              Paid models are locked: add credits or your own OpenRouter key in <AccountLink>Account</AccountLink>. Free models work right away.
+            </Hint>
+          )}
+        </div>
       )}
 
-      <Card padding="sm" className="mt-4">
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2.5">
-          <Label>Voice engine</Label>
-          <div className="flex min-w-0 flex-1 flex-wrap gap-2">
-            <EngineOption active={provider === 'edge'} onClick={() => setProvider('edge')} title="Edge neural" tag="FREE" tooltip="Good quality, word timestamps, instant." />
-            <EngineOption
-              active={provider === 'elevenlabs'}
-              onClick={() => setProvider('elevenlabs')}
-              disabled={!premiumAvailable || premiumLocked}
-              title="Premium neural"
-              tag={
-                hasTtsKey ? (
-                  'YOUR KEY'
-                ) : premiumLocked ? (
-                  <span className="inline-flex items-center gap-1 text-muted">
-                    <Lock className="size-3" /> ${billing.tts_price_per_min.toFixed(2)}/min
-                  </span>
-                ) : (
-                  `$${billing.tts_price_per_min.toFixed(2)}/min`
-                )
-              }
-              tooltip={
-                !premiumAvailable
-                  ? 'Premium voices are not configured on this server — add your own ElevenLabs key in Account'
-                  : premiumLocked
-                    ? 'Top up credits to unlock premium voices, or add your own ElevenLabs key in Account'
-                    : 'ElevenLabs studio voices with emotion tags.'
-              }
-            />
-          </div>
-          <span className="text-xs text-muted">
+      <div className="rounded-card border border-line bg-surface px-3.5 py-3">
+        <div className="flex flex-wrap items-center gap-x-3.5 gap-y-2.5">
+          <span className="pl-1 text-[13px] font-semibold text-text-3">Voice engine</span>
+          <EngineOption active={provider === 'edge'} onClick={() => setProvider('edge')} title="Edge neural" tag="FREE" tooltip="Good quality, word timestamps, instant." />
+          <EngineOption
+            active={provider === 'elevenlabs'}
+            onClick={() => setProvider('elevenlabs')}
+            disabled={!premiumAvailable || premiumLocked}
+            title="Premium neural"
+            tag={
+              hasTtsKey ? (
+                'YOUR KEY'
+              ) : premiumLocked ? (
+                <span className="inline-flex items-center gap-1 text-muted">
+                  <Lock className="size-3" /> ${billing.tts_price_per_min.toFixed(2)}/min
+                </span>
+              ) : (
+                `$${billing.tts_price_per_min.toFixed(2)}/min`
+              )
+            }
+            tooltip={
+              !premiumAvailable
+                ? 'Premium voices are not configured on this server — add your own ElevenLabs key in Account'
+                : premiumLocked
+                  ? 'Top up credits to unlock premium voices, or add your own ElevenLabs key in Account'
+                  : 'ElevenLabs studio voices with emotion tags.'
+            }
+          />
+          <span className="ml-auto text-xs text-muted">
             Own ElevenLabs key? <AccountLink tab="keys">Account</AccountLink>
           </span>
         </div>
@@ -273,49 +317,34 @@ export const StepSpeakers = ({
             </button>
           </Hint>
         )}
-      </Card>
+      </div>
 
-      <div className="mt-4 grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr))]">
-        {state.speakers.map((speaker, index) => (
-          <SpeakerCard
-            key={speaker.key}
-            speaker={speaker}
-            color={speakerColorOf(state.speakers, index)}
-            tag={speakerTagOf(state.speakers, index)}
-            modelId={speaker.model_id || defaultModelId}
-            voiceId={resolvedVoices[speakerId(index)] ?? ''}
-            models={models}
-            modelsLoading={modelsLoading}
-            paidLocked={paidLocked}
-            ranking={speaker.role === 'debater' && leaderboard ? rankingFor(speaker.model_id || defaultModelId) : undefined}
-            ranks={ranks}
-            voices={catalogue.voices}
-            voicesLoading={catalogue.loading}
-            voicesAuto={voicesAuto}
-            voicesTakenBy={takenBy(index)}
-            showVoiceLanguages={provider === 'elevenlabs'}
-            voiceLanguage={voiceLanguage}
-            removable={speaker.role === 'debater' && debaters > MIN_DEBATERS}
-            showErrors={showErrors}
-            onChange={(changes) => updateSpeaker(index, changes)}
-            onVoice={(voiceId) => setVoice(index, voiceId)}
-            onRandomize={() => randomizeOne(index)}
-            onRemove={() => removeSpeaker(index)}
-          />
-        ))}
-        {debaters < MAX_DEBATERS && (
+      <div className="grid gap-2.5">
+        <SectionHead title="Debaters" count={`${debaters} / ${MAX_DEBATERS}`} hint={debaters === 2 ? 'Two debaters argue Pro and Con.' : `${debaters} debaters take turns each round.`} />
+        <div className={`hidden gap-3 px-[15px] font-mono text-[10px] tracking-[0.1em] text-dim min-[1100px]:grid ${ROW_COLUMNS}`} aria-hidden="true">
+          <span>MODEL</span>
+          <span>VOICE</span>
+          <span>PERSONA</span>
+          <span />
+        </div>
+        {state.speakers.filter((s) => s.role === 'debater').map(row)}
+        {slotsLeft > 0 && (
           <button
             type="button"
             onClick={addSpeaker}
-            className="flex min-h-[240px] flex-col items-center justify-center gap-2 rounded-panel border border-dashed border-line-2 text-muted transition-colors hover:border-accent hover:text-text cursor-pointer"
+            className="flex h-[60px] items-center justify-center gap-2.5 rounded-card border border-dashed border-white/14 text-sm font-semibold text-text-3 transition-colors hover:border-accent hover:bg-accent/3 hover:text-text cursor-pointer"
           >
-            <span className="grid size-10 place-items-center rounded-xl bg-surface-2">
-              <Plus className="size-5" />
+            <Plus className="size-4" /> Add debater
+            <span className="font-mono text-[11px] font-normal text-dim">
+              {slotsLeft} {slotsLeft === 1 ? 'slot' : 'slots'} left
             </span>
-            <span className="text-sm font-semibold">Add speaker</span>
-            <span className="text-xs text-dim">Up to {MAX_DEBATERS} debaters</span>
           </button>
         )}
+      </div>
+
+      <div className="grid gap-2.5">
+        <SectionHead title="Host" hint="Moderates the debate and announces the verdict at the end." />
+        {state.speakers.filter((s) => s.role === 'moderator').map(row)}
       </div>
     </div>
   );

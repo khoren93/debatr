@@ -10,7 +10,7 @@ import { ttsKeyUsable, useElevenLabsKeyStatus } from '../../hooks/useElevenLabsK
 import { formatCost } from '../../lib/format';
 import { setLocalKey, useLocalKey } from '../../lib/localKeys';
 import { accountPath } from '../account/tabs';
-import { Button, ConfirmDialog, ErrorBox, Hint, Input, Label, Modal, Select, useToast } from '../ui';
+import { Button, ConfirmDialog, Dropdown, ErrorBox, Hint, Input, Label, Modal, useToast } from '../ui';
 
 const MODEL_LABELS: Record<string, string> = {
   eleven_v3: 'eleven_v3 — most expressive, understands [emotion] tags',
@@ -187,23 +187,33 @@ export const RegenerateAudioDialog = ({ open, onClose, debate, media, onQueued }
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
               <Label>Voice engine</Label>
-              <Select value={provider} onChange={(e) => setProviderChoice(e.target.value as TTSProviderName)} className="mt-1.5">
-                <option value="edge">Edge neural — free</option>
-                <option value="elevenlabs">
-                  Premium neural (ElevenLabs){caps && !caps.elevenlabs ? ' — needs your key' : !ownKeyUsable && noCredits ? ' — needs credits or your key' : ''}
-                </option>
-              </Select>
+              <div className="mt-1.5">
+                <Dropdown<TTSProviderName>
+                  aria-label="Voice engine"
+                  value={provider}
+                  onChange={setProviderChoice}
+                  options={[
+                    { value: 'edge', label: 'Edge neural', hint: 'Free' },
+                    {
+                      value: 'elevenlabs',
+                      label: 'Premium neural (ElevenLabs)',
+                      hint: caps && !caps.elevenlabs ? 'Needs your key' : !ownKeyUsable && noCredits ? 'Needs credits or your key' : 'Studio voices with emotion tags',
+                    },
+                  ]}
+                />
+              </div>
             </div>
             {provider === 'elevenlabs' && (
               <div>
                 <Label>Model</Label>
-                <Select value={modelId} onChange={(e) => setModelChoice(e.target.value)} className="mt-1.5">
-                  {(caps?.elevenlabs_models ?? Object.keys(MODEL_LABELS)).map((m) => (
-                    <option key={m} value={m}>
-                      {MODEL_LABELS[m] ?? m}
-                    </option>
-                  ))}
-                </Select>
+                <div className="mt-1.5">
+                  <Dropdown
+                    aria-label="Model"
+                    value={modelId}
+                    onChange={setModelChoice}
+                    options={(caps?.elevenlabs_models ?? Object.keys(MODEL_LABELS)).map((m) => ({ value: m, label: MODEL_LABELS[m] ?? m }))}
+                  />
+                </div>
               </div>
             )}
           </div>
@@ -257,15 +267,18 @@ export const RegenerateAudioDialog = ({ open, onClose, debate, media, onQueued }
                     <span className="w-28 shrink-0 truncate text-sm font-medium" title={row.name}>
                       {row.name}
                     </span>
-                    <Select value={chosen[row.id] ?? ''} onChange={(e) => setChosen({ ...chosen, [row.id]: e.target.value })} disabled={voices.length === 0} className="min-w-0 flex-1 !py-2 text-[13px]">
-                      {voices.length === 0 && <option value="">loading voices…</option>}
-                      {voices.map((v) => (
-                        <option key={v.id} value={v.id}>
-                          {v.name}
-                          {v.description ? ` — ${v.description}` : ''}
-                        </option>
-                      ))}
-                    </Select>
+                    <div className="min-w-0 flex-1">
+                      <Dropdown
+                        aria-label={`Voice of ${row.name}`}
+                        size="sm"
+                        value={chosen[row.id] ?? ''}
+                        onChange={(voiceId) => setChosen({ ...chosen, [row.id]: voiceId })}
+                        disabled={voices.length === 0}
+                        placeholder={voices.length === 0 ? 'loading voices…' : 'Pick a voice'}
+                        menuWidth={320}
+                        options={voices.map((v) => ({ value: v.id, label: v.name, hint: v.description ?? undefined }))}
+                      />
+                    </div>
                     <button type="button" onClick={() => preview(voice)} disabled={!voice?.preview_url} title="Voice sample" className="grid size-9 shrink-0 place-items-center rounded-[10px] border border-line-2 bg-surface-2 text-text disabled:opacity-40 cursor-pointer">
                       <Play className="size-3 fill-current" />
                     </button>
@@ -283,16 +296,23 @@ export const RegenerateAudioDialog = ({ open, onClose, debate, media, onQueued }
               <input type="checkbox" checked={visuals} onChange={(e) => setVisualsChoice(e.target.checked)} /> visual scenes
             </label>
             {visuals && (
-              <label className="flex items-center gap-2" title="Pictures among the scenes: free photos from Wikimedia Commons, or AI images paid from your balance (about $0.01 each)">
+              <span className="flex items-center gap-2" title="Pictures among the scenes: free photos from Wikimedia Commons, or AI images paid from your balance (about $0.01 each)">
                 pictures
-                <select value={images} onChange={(e) => setImagesChoice(e.target.value as ImageSource)} className="rounded-md border border-line-2 bg-ink px-1.5 py-1 text-xs text-text">
-                  <option value="off">none</option>
-                  <option value="stock">free photos</option>
-                  <option value="ai" disabled={noCredits}>
-                    AI images{noCredits ? ' (needs credits)' : ''}
-                  </option>
-                </select>
-              </label>
+                <span className="w-[120px]">
+                  <Dropdown<ImageSource>
+                    aria-label="Pictures"
+                    size="xs"
+                    value={images}
+                    onChange={setImagesChoice}
+                    menuWidth={180}
+                    options={[
+                      { value: 'off', label: 'none' },
+                      { value: 'stock', label: 'free photos' },
+                      { value: 'ai', label: 'AI images', hint: noCredits ? 'needs credits' : 'about $0.01 each', disabled: noCredits },
+                    ]}
+                  />
+                </span>
+              </span>
             )}
             {ready && (
               <label className="flex items-center gap-2" title="Re-voice every turn and design the scenes again">

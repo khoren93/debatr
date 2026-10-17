@@ -122,3 +122,21 @@ def test_verdict_gets_the_fact_check_evidence():
     user = build_verdict_messages(CONF, HISTORY, evidence)[1]["content"]
     assert evidence in user and "Weigh accuracy" in user
     assert "Weigh accuracy" not in build_verdict_messages(CONF, HISTORY)[1]["content"]
+
+
+def test_news_background_reaches_every_prompt():
+    conf = {
+        **CONF,
+        "news": {"brief": "The city banned pineapple toppings last week.", "outlet": "BBC News"},
+    }
+    turn = SCHEDULE[1]
+    prompts = [
+        build_moderator_messages(conf, conf["participants"][0], SCHEDULE[0], [])[1]["content"],
+        build_debater_messages(conf, conf["participants"][1], turn, HISTORY)[1]["content"],
+        build_verdict_messages(conf, HISTORY)[1]["content"],
+    ]
+    for user in prompts:
+        assert "News background (BBC News): The city banned pineapple toppings" in user
+        assert "Context: A culinary showdown." in user
+    plain = build_debater_messages(CONF, CONF["participants"][1], turn, HISTORY)[1]["content"]
+    assert "News background" not in plain

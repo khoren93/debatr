@@ -6,8 +6,7 @@ import { createDebate, getDebate, startDraft, updateDraft } from '../api/debates
 import { useAuth } from '../auth/AuthContext';
 import { Page } from '../components/layout/AppShell';
 import { Button, ErrorBox, PageLoader, useToast } from '../components/ui';
-import { StepFormat } from '../components/create/StepFormat';
-import { StepReview } from '../components/create/StepReview';
+import { StepLaunch } from '../components/create/StepLaunch';
 import { StepSpeakers } from '../components/create/StepSpeakers';
 import { StepTopic } from '../components/create/StepTopic';
 import { WizardProgress } from '../components/create/WizardProgress';
@@ -17,25 +16,30 @@ import {
   configFromDebate,
   countDebaters,
   initialState,
+  LAST_STEP,
   loadWizardState,
   maxReachableStep,
   pickDefaultModel,
   resolveVoices,
   saveWizardState,
+  speakerNamesOf,
   stateFromConfig,
   stepValid,
   type WizardState,
   type WizardStep,
 } from '../components/create/wizardState';
 import { useBillingConfig } from '../hooks/useBillingConfig';
+import { estimateCost, useEstimate } from '../hooks/useEstimate';
 import { useModels } from '../hooks/useModels';
 import { useVoices } from '../hooks/useVoices';
 import { useLocalKey } from '../lib/localKeys';
 import { ttsKeyUsable, useElevenLabsKeyStatus } from '../hooks/useElevenLabsKeyStatus';
+import { formatCost, formatMinutes } from '../lib/format';
 
 /**
- * Four-step wizard: topic → speakers (models, voice engine, voices) → format → review. `?draft=<id>` edits a saved draft,
- * `?remix=<id>` starts a new debate prefilled from an existing one.
+ * Three-step wizard: topic (trending news or your own, format) → speakers (models, voices,
+ * personas; named after their models) → format & launch (outputs, scenes, estimate, start).
+ * `?draft=<id>` edits a saved draft, `?remix=<id>` starts a new debate prefilled from an existing one.
  */
 const CreateDebate = () => {
   const navigate = useNavigate();
@@ -134,11 +138,19 @@ const CreateDebate = () => {
     images: state.images === 'ai' && (user?.credits_usd ?? 0) <= 0 ? 'off' : state.images,
     fact_check: state.fact_check && !paidLocked,
   };
-  const config = buildConfig(effective, { defaultModelId, voices: resolvedVoices, provider, openrouterKey, elevenlabsKey });
+  const config = buildConfig(effective, { defaultModelId, models, voices: resolvedVoices, provider, openrouterKey, elevenlabsKey });
+  const names = speakerNamesOf(state.speakers, models, defaultModelId);
   // Drafts are stored on the server: never send the browser keys along with them.
   const draftConfig = { ...config, user_provider_key: undefined, user_tts_key: undefined };
   const ready = !modelsLoading && config.participants.every((p) => p.model_id.length > 0);
   const maxStep = maxReachableStep(state, validation);
+  // Step 1 shows a one-line estimate, step 3 the full one; the topic step needs no voices.
+  // Before a topic is chosen the estimate uses a stand-in: the topic barely changes it.
+  const estimate = useEstimate(config.topic ? config : { ...config, topic: 'Topic' }, ready, user?.credits_usd ?? 0);
+  const shownCost = estimate.shown ? estimateCost(estimate.shown) : null;
+  const estimateLine = estimate.shown
+    ? `~${formatMinutes(estimate.shown.duration_ms)} episode · ${shownCost ? `~${formatCost(shownCost)} estimated` : 'free with these models'}`
+    : null;
 
   const goTo = (step: WizardStep) => {
     setShowErrors(false);
@@ -150,7 +162,7 @@ const CreateDebate = () => {
       setShowErrors(true);
       return;
     }
-    goTo(Math.min(4, state.step + 1) as WizardStep);
+    goTo(Math.min(LAST_STEP, state.step + 1) as WizardStep);
   };
   const prev = () => goTo(Math.max(1, state.step - 1) as WizardStep);
 
@@ -231,7 +243,7 @@ const CreateDebate = () => {
 
       <WizardProgress step={state.step} maxStep={maxStep} onSelect={goTo} />
 
-      {state.step === 1 && <StepTopic state={state} patch={patch} showErrors={showErrors} />}
+      {state.step === 1 && <StepTopic state={state} patch={patch} showErrors={showErrors} estimateLine={estimateLine} onContinue={next} />}
       {state.step === 2 && (
         <StepSpeakers
           state={state}
@@ -251,31 +263,36 @@ const CreateDebate = () => {
           showErrors={showErrors}
         />
       )}
-      {state.step === 3 && <StepFormat state={state} patch={patch} accountKeyMasked={user?.openrouter_key_masked ?? null} openrouterKey={openrouterKey} ttsKeyCheck={ttsKeyCheck} aiImagesLocked={(user?.credits_usd ?? 0) <= 0} factCheckLocked={paidLocked} />}
-      {state.step === 4 && (
-        <StepReview
+      {state.step === 3 && (
+        <StepLaunch
           state={state}
           patch={patch}
           config={config}
           ready={ready}
-          models={models}
+          names={names}
           voices={catalogue.voices}
+          estimate={estimate}
           ownKey={ownKey}
-          credits={user?.credits_usd ?? 0}
           paymentsMode={billing.payments_mode}
+          accountKeyMasked={user?.openrouter_key_masked ?? null}
+          openrouterKey={openrouterKey}
+          ttsKeyCheck={ttsKeyCheck}
+          aiImagesLocked={(user?.credits_usd ?? 0) <= 0}
+          factCheckLocked={paidLocked}
           starting={starting}
           startError={startError}
           onStart={start}
+          goTo={goTo}
         />
       )}
 
-      {state.step < 4 && (
+      {state.step === 2 && (
         <div className="mt-[26px] flex items-center justify-between gap-3">
-          <Button variant="secondary" onClick={prev} disabled={state.step === 1} icon={<ArrowLeft className="size-4" />}>
+          <Button variant="secondary" onClick={prev} icon={<ArrowLeft className="size-4" />}>
             Back
           </Button>
-          <Button variant="light" onClick={next} icon={<ArrowRight className="size-4" />}>
-            Continue
+          <Button variant="light" onClick={next}>
+            Continue <ArrowRight className="size-4" />
           </Button>
         </div>
       )}

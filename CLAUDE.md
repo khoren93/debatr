@@ -50,16 +50,21 @@ frontend/           React 19 + Vite 8 + Tailwind 4 + TypeScript
   src/hooks/          useDebateStream (SSE), useDebateMedia (polling), useTrendingTopics,
                       useModels, useBillingConfig, useVoices (wizard voice catalogue),
                       useLeaderboard (cached model ranking), useElevenLabsKeyStatus (checks
-                      the browser's ElevenLabs key)
+                      the browser's ElevenLabs key), useEstimate (debounced wizard estimate)
   src/components/ui/  design-system primitives (Button, Card, Chip, Segmented, Field, Pill,
                       Progress, Modal/ConfirmDialog, Toast, Avatar/SpeakerBadge, Thumb, Logo,
+                      Dropdown — custom select, portalled list; SwitchTrack,
                       ModelIcon — provider logo of a model id via src/lib/modelIcons.ts)
   src/components/layout/AppShell.tsx  sidebar + mobile top bar/bottom tabs, Page, PageTitle
   src/components/cards/    DebateCard (library / gallery / landing)
-  src/components/create/   wizard steps + wizardState.ts (state, persistence, config mapping),
+  src/components/create/   three-step wizard + wizardState.ts (state, persistence, config mapping):
+                           StepTopic (TrendingBrowser = today's news topics with search, categories,
+                           Hot/New + sticky "Your debate" panel), StepSpeakers (SpeakerRow per
+                           speaker: model / voice / persona fields + preview, prompt, dice, remove),
+                           StepLaunch (style, outputs, scenes, keys + summary, estimate, start);
                            ModelPicker (searchable OpenRouter list: logos, prices, rank, Latest
                            filter), VoicePicker (voice list with previews, debate-language / all scope),
-                           PersonaPicker (persona preset dropdown), usePickerPopover
+                           PersonaPicker (persona presets + Custom), PickerFace, usePickerPopover
   src/components/debate/   DebatePlayer (Remotion Player with own controls: SegmentBar = seek bar
                            by turns, PlayerShell/placeholders), LiveCard (live frame: cast, speaker,
                            streamed captions), DebateActions (Like/Share/Remix/Export/… toolbar,
@@ -228,7 +233,7 @@ Stopping: `POST /api/debates/{id}/stop` sets the status, sets `debate:{id}:stop`
   `PRIOR_GAMES` virtual games damp single votes) from audience votes on public completed debates;
   each vote is a win of the chosen model over every other model in the debate, mirror matches are
   ignored. Lists only models that argued in a public debate; `is_free` comes from the OpenRouter
-  catalogue. The wizard's speaker cards show each model's rank and link to `/gallery?model=`.
+  catalogue. The wizard's model fields and model list show each model's rank.
 
 ### Media pipeline (audio on the server, video in the browser)
 
@@ -399,7 +404,10 @@ Stopping: `POST /api/debates/{id}/stop` sets the status, sets `debate:{id}:stop`
   older than the interval minus 30 min slack) and holds `trending:refresh:lock`, so restarts and
   extra triggers never add batches. `GET /api/topics/trending` (public) also enqueues it on a
   stale read (at most every 10 min via `trending:refresh:queued`), so native dev works without
-  the scheduler. The wizard's "Trending today" chips fill `topic` + `description` (= brief).
+  the scheduler. Step 1 of the wizard lists them; picking one sets `topic` and the story
+  (`DebateConfig.news`: brief, outlet, title, url, published_at), sent while "Ground in the …
+  article" is on. `prompt_builder._context_block` puts it into every prompt as "News background"
+  (before the user's angle, `description`).
 
 ### Credits and payments
 
@@ -431,7 +439,8 @@ Stopping: `POST /api/debates/{id}/stop` sets the status, sets `debate:{id}:stop`
   setState in effects — fetch in effects with a `cancelled` flag and set state in the promise
   callbacks; no mutation of props/state, use refs for imperative DOM like seeking `<audio>`;
   no manual `useMemo` that the compiler cannot preserve). API calls go through `src/api/*`,
-  never raw axios. No `alert`/`confirm`: use `useToast` and `ConfirmDialog`. Styling uses the
+  never raw axios. No `alert`/`confirm`: use `useToast` and `ConfirmDialog`; no native `<select>`:
+  use `Dropdown` (the design wants no system popups). Styling uses the
   theme tokens from `src/index.css` (`bg-surface`, `text-muted`, `font-display`, `rounded-panel`…).
 - Brand name and copy live in `src/lib/brand.ts`; speaker colours in `src/lib/format.ts` mirror
   `backend/app/services/media/timeline.py` (PALETTE / MODERATOR_COLOR / JUDGE_COLOR) and
@@ -489,6 +498,11 @@ Stopping: `POST /api/debates/{id}/stop` sets the status, sets `debate:{id}:stop`
 - Old rows may have `turn_type=moderator_comment` and inline `"[Error ...]"` text; both are still
   handled (`scheduler.MODERATOR_TURN_TYPES`, `lib/format.isErrorTurn`). Debates created before
   accounts have `user_id=NULL`: readable via their link, manageable only from the admin panel.
+- Speaker names: the wizard has no name fields. `lib/modelNames.speakerNames` calls the host
+  "The Host" and debaters after their model family ("Claude", "Gemini", "GPT-5.5", "Free
+  Router"); two different models of one family get full titles, the same model twice gets
+  letters ("Free Router A/B") — prompts and the judge's "Winner: <name>" need distinct names.
+  Drafts and remixes re-derive the names from the models.
 - The wizard keeps its in-progress state in `localStorage` (`debatr.wizard.v1`). Browser-only
   keys (`debatr.openrouter_key`, `debatr.elevenlabs_key`) live in `src/lib/localKeys.ts`
   (`useLocalKey`), are managed on the Account page (`ProviderKeys`, `?tab=keys`; the wizard only shows their

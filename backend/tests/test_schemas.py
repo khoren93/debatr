@@ -78,3 +78,15 @@ def test_publish_request_category_validation():
     assert PublishRequest(category="").category is None
     with pytest.raises(ValidationError):
         PublishRequest(category="sports")
+
+
+def test_news_context_is_optional_and_needs_an_http_link():
+    base = {"topic": "T", "participants": [DEB]}
+    assert DebateConfig.model_validate(base).news is None
+    news = {"brief": "What happened.", "outlet": "BBC", "url": "https://bbc.co.uk/x"}
+    config = DebateConfig.model_validate({**base, "news": news})
+    assert config.persisted()["news"]["outlet"] == "BBC"
+    with pytest.raises(ValidationError):
+        DebateConfig.model_validate({**base, "news": {"brief": "x", "url": "javascript:alert(1)"}})
+    with pytest.raises(ValidationError):
+        DebateConfig.model_validate({**base, "news": {"brief": ""}})

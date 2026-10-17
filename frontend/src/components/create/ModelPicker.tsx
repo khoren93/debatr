@@ -1,11 +1,11 @@
-import { Check, ChevronDown, Lock, Search, Sparkles, Trophy, X, Zap } from 'lucide-react';
+import { Check, Lock, Search, Sparkles, Trophy, X, Zap } from 'lucide-react';
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import type { ModelInfo } from '../../api/types';
 import { formatContext } from '../../lib/format';
-import { modelAuthor } from '../../lib/modelIcons';
+import { FREE_ROUTER_ID, perMillion, splitModelName as splitName } from '../../lib/modelNames';
 import { ModelIcon } from '../ui';
-import { usePickerPopover } from './usePickerPopover';
-import { FREE_ROUTER_ID } from './wizardState';
+import { PickerFace } from './PickerFace';
+import { pickerTriggerClass, usePickerPopover } from './usePickerPopover';
 
 interface ModelPickerProps {
   value: string;
@@ -15,6 +15,10 @@ interface ModelPickerProps {
   paidLocked: boolean;
   /** Audience rank per model id (1 = best), from the leaderboard. */
   ranks: Record<string, number>;
+  /** Speaker colour, role chip and on-stage name (named after the model) for the trigger. */
+  color: string;
+  tag: string;
+  speakerName: string;
   onChange: (modelId: string) => void;
 }
 
@@ -26,21 +30,6 @@ const FILTER_LABELS: Record<Filter, string> = { all: 'All', free: 'Free', paid: 
 const NEW_SINCE = Date.now() / 1000 - 45 * 86_400;
 const POPOVER_WIDTH = 580;
 const POPOVER_HEIGHT = 470;
-
-/** "Anthropic: Claude Sonnet 4.5" -> provider "Anthropic", title "Claude Sonnet 4.5". */
-const splitName = (model: Pick<ModelInfo, 'id' | 'name'>) => {
-  const sep = model.name.indexOf(': ');
-  if (sep > 0) return { provider: model.name.slice(0, sep), title: model.name.slice(sep + 2) };
-  const author = modelAuthor(model.id);
-  return { provider: !author || author === 'openrouter' ? 'OpenRouter' : author, title: model.name };
-};
-
-const perMillion = (price: string) => {
-  const n = parseFloat(price) * 1_000_000;
-  if (!Number.isFinite(n) || n < 0) return 'varies';
-  if (n === 0) return '$0';
-  return `$${n >= 10 ? n.toFixed(0) : n.toFixed(2)}`;
-};
 
 /** OpenRouter descriptions are Markdown; show links as plain text. */
 const plainDescription = (text: string) => text.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').replace(/[*_`#]/g, '').trim();
@@ -67,7 +56,7 @@ const PriceBadge = ({ model }: { model: ModelInfo }) =>
   );
 
 /** Searchable OpenRouter model list with provider logos, prices, context and audience rank. */
-export const ModelPicker = ({ value, models, loading, paidLocked, ranks, onChange }: ModelPickerProps) => {
+export const ModelPicker = ({ value, models, loading, paidLocked, ranks, color, tag, speakerName, onChange }: ModelPickerProps) => {
   const { open, show: openPopover, close, placement, rootRef, triggerRef } = usePickerPopover(POPOVER_WIDTH, POPOVER_HEIGHT);
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<Filter>('all');
@@ -176,29 +165,33 @@ export const ModelPicker = ({ value, models, loading, paidLocked, ranks, onChang
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={open ? listId : undefined}
-        aria-label="Model"
-        className={`flex w-full items-center gap-3 rounded-field border bg-ink px-2.5 py-2 text-left transition-colors cursor-pointer disabled:cursor-wait disabled:opacity-60 ${
-          open ? 'border-accent' : 'border-line-2 hover:border-line-3'
-        }`}
+        aria-label={`Model of ${speakerName}`}
+        className={pickerTriggerClass(open)}
+        style={open ? { borderColor: color } : undefined}
       >
-        <ModelIcon modelId={value} size={18} tile />
-        <span className="min-w-0 flex-1">
-          {name && selected ? (
-            <>
-              <span className="block truncate text-sm font-semibold text-text">{name.title}</span>
-              <span className="mt-0.5 flex items-center gap-1.5 truncate text-[11px] text-muted">
-                <span className="truncate">{name.provider}</span>
-                <span className="text-dim">·</span>
-                {selected.is_free ? <span className="font-semibold text-ok">Free</span> : <span className="font-mono">{perMillion(selected.pricing.completion)}/M out</span>}
-                <span className="text-dim">·</span>
-                <span className="font-mono">{formatContext(selected.context_length)} ctx</span>
-              </span>
-            </>
-          ) : (
-            <span className="block truncate py-2 text-sm text-muted">{value || (loading ? 'Loading models…' : 'Select a model')}</span>
-          )}
-        </span>
-        <ChevronDown className={`size-4 shrink-0 text-muted transition-transform ${open ? 'rotate-180' : ''}`} />
+        <PickerFace
+          icon={<ModelIcon modelId={value} size={21} className="text-text" />}
+          color={color}
+          outlined
+          tag={tag}
+          title={speakerName}
+          open={open}
+          sub={
+            name && selected ? (
+              <>
+                {name.title} · {selected.is_free ? 'Free' : `${perMillion(selected.pricing.completion)}/M`} · {formatContext(selected.context_length)} ctx
+                {ranks[selected.id] && (
+                  <span className="text-host" title="Audience ranking">
+                    {' '}
+                    · <Trophy className="inline size-2.5 align-[-1px]" />#{ranks[selected.id]}
+                  </span>
+                )}
+              </>
+            ) : (
+              value || (loading ? 'Loading models…' : 'Select a model')
+            )
+          }
+        />
       </button>
 
       {open && (

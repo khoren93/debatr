@@ -99,6 +99,7 @@ def estimate_debate(
     words_per_turn = length_words(str(conf.get("length_preset") or "medium"))
     factor = TOKENS_PER_WORD.get(language_code(conf.get("language")), DEFAULT_TOKENS_PER_WORD)
     context_text = f"{conf.get('topic') or ''} {conf.get('description') or ''}"
+    context_text += (conf.get("news") or {}).get("brief") or ""
     context_tokens = SYSTEM_PROMPT_TOKENS + len(context_text) / 4 + 12 * len(participants)
 
     moderator = next((p for p in participants if p.get("role") == "moderator"), None)

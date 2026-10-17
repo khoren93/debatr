@@ -7,9 +7,9 @@ interface WizardProgressProps {
   onSelect: (step: WizardStep) => void;
 }
 
-/** Four thin bars with mono numbers: "01 Topic · 02 Speakers · 03 Voice & format · 04 Review". */
+/** Three thin bars with mono numbers: "01 Topic · 02 Speakers · 03 Format & launch". */
 export const WizardProgress = ({ step, maxStep, onSelect }: WizardProgressProps) => (
-  <div className="mt-[22px] grid grid-cols-4 gap-2" role="list" aria-label="Wizard steps">
+  <div className="mt-[22px] grid grid-cols-3 gap-2" role="list" aria-label="Wizard steps">
     {STEP_LABELS.map((label, i) => {
       const n = (i + 1) as WizardStep;
       const reachable = n <= maxStep;

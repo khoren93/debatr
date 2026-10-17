@@ -97,9 +97,31 @@ class MediaPlan(BaseModel):
     images: ImageSource = "off"  # pictures among the scenes
 
 
+class NewsContext(BaseModel):
+    """The news story behind a trending topic (wizard: "Ground in the … article"). The models
+    do not know recent news, so its brief goes into every prompt."""
+
+    brief: str = Field(min_length=1, max_length=2000)
+    outlet: str = Field(default="", max_length=100)
+    title: str = Field(default="", max_length=300)
+    url: str = Field(default="", max_length=1000)
+    # ISO timestamp as sent by the trending API (kept as text: config_json is plain JSON).
+    published_at: str | None = Field(default=None, max_length=40)
+
+    @field_validator("url")
+    @classmethod
+    def _http_url(cls, value: str) -> str:
+        value = value.strip()
+        if value and not value.lower().startswith(("http://", "https://")):
+            raise ValueError("The source link must be an http(s) URL")
+        return value
+
+
 class DebateConfig(BaseModel):
     topic: str = Field(min_length=1, max_length=500)
     description: str | None = Field(default=None, max_length=4000)
+    # The news story the topic came from (trending topics), when the user grounds the debate in it.
+    news: NewsContext | None = None
     language: str = Field(default="English", max_length=50)
     participants: list[ParticipantConfig] = Field(min_length=1, max_length=8)
     debate_preset_id: str | None = "custom"

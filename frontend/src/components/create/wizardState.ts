@@ -5,6 +5,7 @@ import type {
   LengthPreset,
   MediaOutput,
   ModelInfo,
+  NewsContext,
   OutputStyle,
   ParticipantRole,
   TTSProviderName,
@@ -14,11 +15,13 @@ import type {
 import { STYLE_PRESETS, applyStyle, type PersonaStyle } from '../../data/styles';
 import { HOST_COLOR, debaterColor } from '../../lib/format';
 import { getLocalKey, setLocalKey } from '../../lib/localKeys';
+import { FREE_ROUTER_ID, speakerNames } from '../../lib/modelNames';
 
 export const WIZARD_STORAGE_KEY = 'debatr.wizard.v1';
 
-export type WizardStep = 1 | 2 | 3 | 4;
-export const STEP_LABELS: readonly string[] = ['Topic', 'Speakers', 'Format', 'Review'];
+export type WizardStep = 1 | 2 | 3;
+export const STEP_LABELS: readonly string[] = ['Topic', 'Speakers', 'Format & launch'];
+export const LAST_STEP: WizardStep = 3;
 
 export const MIN_ROUNDS = 1;
 export const MAX_ROUNDS = 5;
@@ -26,20 +29,28 @@ export const MIN_DEBATERS = 2;
 export const MAX_DEBATERS = 4;
 export const MIN_TOPIC_LENGTH = 4;
 
+/** Speakers have no name fields: the host is "The Host", debaters are named after their models. */
 export interface Speaker {
   /** Stable React key (survives reordering / removal). */
   key: string;
   role: ParticipantRole;
-  name: string;
   /** Empty string = "use the default free model" (resolved when the catalogue loads). */
   model_id: string;
   prompt: string;
 }
 
+/** A trending topic's news story; `topic_id` (trending topic) only highlights its card. */
+export type NewsPick = NewsContext & { topic_id?: string };
+
 export interface WizardState {
   step: WizardStep;
   topic: string;
+  /** The user's angle for the models (optional). */
   description: string;
+  /** Story behind the picked trending topic, null for an own topic. */
+  news: NewsPick | null;
+  /** Send the story's brief to the models ("Ground in the … article"). */
+  ground: boolean;
   /** English language name ("Russian"), the value the backend expects. */
   language: string;
   num_rounds: number;
@@ -97,6 +108,10 @@ const normalizeLanguage = (value: string, fallback: string) => {
   return LANGUAGES.find((l) => l.value.toLowerCase() === key || l.label.toLowerCase() === key)?.value ?? value.trim();
 };
 
+/** What the rounds consist of (services/scheduler.build_schedule). */
+export const roundsHint = (rounds: number) =>
+  rounds === 1 ? 'one argument each' : `opening · ${rounds > 2 ? `${rounds > 3 ? `${rounds - 2}× ` : ''}rebuttal · ` : ''}closing`;
+
 export const LENGTH_OPTIONS: { value: LengthPreset; label: string; hint: string }[] = [
   { value: 'very_short', label: 'Very short', hint: '~50 words · best for Shorts' },
   { value: 'short', label: 'Short', hint: '~100 words · snappy' },
@@ -108,9 +123,9 @@ const LENGTH_VALUES = LENGTH_OPTIONS.map((o) => o.value);
 export const lengthOption = (value: LengthPreset) => LENGTH_OPTIONS.find((o) => o.value === value) ?? LENGTH_OPTIONS[2];
 
 export const OUTPUT_OPTIONS: { value: MediaOutput; label: string; text: string; icon: { w: number; h: number; color: string } }[] = [
-  { value: 'audio', label: 'Audio', text: 'MP3, mixed track', icon: { w: 22, h: 22, color: '#FFC46B' } },
-  { value: 'video', label: 'YouTube video', text: '16:9 with captions', icon: { w: 24, h: 14, color: '#D9FF3D' } },
-  { value: 'short', label: 'Short', text: '9:16 highlight + hook', icon: { w: 12, h: 22, color: '#6C9CFF' } },
+  { value: 'audio', label: 'Audio', text: 'MP3 · mixed track', icon: { w: 20, h: 20, color: '#FFC46B' } },
+  { value: 'video', label: 'YouTube video', text: '16:9 · captions', icon: { w: 24, h: 14, color: '#D9FF3D' } },
+  { value: 'short', label: 'Short', text: '9:16 · hook + captions', icon: { w: 12, h: 22, color: '#6C9CFF' } },
 ];
 const OUTPUT_VALUES = OUTPUT_OPTIONS.map((o) => o.value);
 
@@ -137,10 +152,11 @@ export const debaterPrompt = (debaterIndex: number) => {
 
 const styleById = (id: string): PersonaStyle => STYLE_PRESETS.find((s) => s.id === id) ?? STYLE_PRESETS[0];
 
+export const HOST_NAME = 'The Host';
+
 export const defaultModerator = (): Speaker => ({
   key: speakerKey(),
   role: 'moderator',
-  name: 'The Host',
   model_id: '',
   prompt: MODERATOR_PROMPT,
 });
@@ -148,7 +164,6 @@ export const defaultModerator = (): Speaker => ({
 export const defaultDebater = (debaterIndex: number): Speaker => ({
   key: speakerKey(),
   role: 'debater',
-  name: `Debater ${debaterIndex + 1}`,
   model_id: '',
   prompt: applyStyle(debaterPrompt(debaterIndex), styleById(debaterIndex === 1 ? 'aggressive' : 'neutral')),
 });
@@ -157,6 +172,8 @@ export const initialState = (): WizardState => ({
   step: 1,
   topic: '',
   description: '',
+  news: null,
+  ground: true,
   language: 'English',
   num_rounds: 2,
   length_preset: 'short',
@@ -193,6 +210,14 @@ export const speakerTagOf = (speakers: Speaker[], index: number) => {
   return `SIDE ${i + 1}`;
 };
 
+/** On-stage name of every speaker (see lib/modelNames.speakerNames). */
+export const speakerNamesOf = (speakers: Speaker[], models: ModelInfo[], defaultModelId: string) =>
+  speakerNames(
+    speakers.map((s) => ({ role: s.role, modelId: s.model_id || defaultModelId })),
+    models,
+    HOST_NAME,
+  );
+
 /** Shift `participant_i` keys down after removing the speaker at `removed`. */
 export const reindexVoices = (voices: Record<string, string>, removed: number) => {
   const out: Record<string, string> = {};
@@ -209,21 +234,18 @@ export const reindexVoices = (voices: Record<string, string>, removed: number) =
   return out;
 };
 
-export const NAME_POOL = ['The Host', 'Nova', 'Atlas', 'Quill', 'Sage', 'Echo', 'Juno', 'Rook', 'Vega', 'Orion', 'Lyra', 'Kai', 'Indigo', 'Marlow'];
 const RANDOM_STYLES = STYLE_PRESETS.filter((s) => s.id !== 'rude');
 
 const pick = <T>(list: readonly T[]): T | undefined => (list.length ? list[Math.floor(Math.random() * list.length)] : undefined);
 
-export const randomName = (taken: string[]) => pick(NAME_POOL.filter((n) => !taken.includes(n))) ?? pick(NAME_POOL) ?? 'Speaker';
-
 export interface RandomizeContext {
-  takenNames: string[];
   takenVoices: string[];
   models: ModelInfo[];
   voices: VoiceInfo[];
 }
 
-/** Random name, free model, persona and (when a catalogue is loaded) voice for one speaker. */
+/** Random free model, persona and (when a catalogue is loaded) voice for one speaker. The host
+ *  keeps its moderator prompt. */
 export const randomizeSpeaker = (speaker: Speaker, ctx: RandomizeContext): { speaker: Speaker; voiceId: string | null } => {
   const free = ctx.models.filter((m) => m.is_free);
   const model = pick(free.length ? free : ctx.models);
@@ -233,18 +255,14 @@ export const randomizeSpeaker = (speaker: Speaker, ctx: RandomizeContext): { spe
   return {
     speaker: {
       ...speaker,
-      name: randomName(ctx.takenNames),
       model_id: model?.id ?? speaker.model_id,
-      prompt: applyStyle(speaker.prompt, style),
+      prompt: speaker.role === 'moderator' ? speaker.prompt : applyStyle(speaker.prompt, style),
     },
     voiceId: voice?.id ?? null,
   };
 };
 
 // --- Models & voices ---------------------------------------------------------
-
-/** OpenRouter's "Free Models Router": routes each request to an available free model. */
-export const FREE_ROUTER_ID = 'openrouter/free';
 
 /** The free router, else the first free "xiaomi/mimo" model, else the first free model. */
 export const pickDefaultModel = (models: ModelInfo[]) => {
@@ -270,6 +288,8 @@ export const resolveVoices = (state: WizardState, catalogue: VoiceInfo[], defaul
 
 export interface BuildOptions {
   defaultModelId: string;
+  /** Catalogue for the speaker names (lib/modelNames). */
+  models: ModelInfo[];
   voices: Record<string, string>;
   provider: TTSProviderName;
   /** Browser-only keys (see lib/localKeys); sent with the request, never persisted. */
@@ -277,35 +297,46 @@ export interface BuildOptions {
   elevenlabsKey?: string;
 }
 
-export const buildConfig = (state: WizardState, opts: BuildOptions): DebateConfig => ({
-  topic: state.topic.trim(),
-  description: state.description.trim() || undefined,
-  language: state.language,
-  num_rounds: state.num_rounds,
-  length_preset: state.length_preset,
-  output_style: state.output_style,
-  debate_preset_id: 'custom',
-  participants: state.speakers.map((s, i) => ({
-    role: s.role,
-    model_id: s.model_id || opts.defaultModelId,
-    display_name: s.name.trim(),
-    persona_custom: s.prompt.trim() || undefined,
-    voice_name: opts.voices[speakerId(i)],
-  })),
-  media_plan: {
-    provider: opts.provider,
-    model_id: 'eleven_v3',
-    voices: opts.voices,
-    outputs: state.outputs,
-    quality: state.quality,
-    visuals: state.visuals,
-    images: state.visuals && state.outputs.includes('audio') ? state.images : 'off',
-  },
-  fact_check: state.visuals && state.fact_check,
-  auto_publish: state.auto_publish,
-  user_provider_key: opts.openrouterKey?.trim() || undefined,
-  user_tts_key: (opts.provider === 'elevenlabs' && state.outputs.includes('audio') && opts.elevenlabsKey?.trim()) || undefined,
-});
+/** The story to send: only with the switch on (`topic_id` is a wizard detail). */
+const newsOf = (state: WizardState): NewsContext | undefined => {
+  if (!state.ground || !state.news?.brief.trim()) return undefined;
+  const { brief, outlet, title, url, published_at } = state.news;
+  return { brief: brief.trim(), outlet, title, url, published_at };
+};
+
+export const buildConfig = (state: WizardState, opts: BuildOptions): DebateConfig => {
+  const names = speakerNamesOf(state.speakers, opts.models, opts.defaultModelId);
+  return {
+    topic: state.topic.trim(),
+    description: state.description.trim() || undefined,
+    news: newsOf(state),
+    language: state.language,
+    num_rounds: state.num_rounds,
+    length_preset: state.length_preset,
+    output_style: state.output_style,
+    debate_preset_id: 'custom',
+    participants: state.speakers.map((s, i) => ({
+      role: s.role,
+      model_id: s.model_id || opts.defaultModelId,
+      display_name: names[i],
+      persona_custom: s.prompt.trim() || undefined,
+      voice_name: opts.voices[speakerId(i)],
+    })),
+    media_plan: {
+      provider: opts.provider,
+      model_id: 'eleven_v3',
+      voices: opts.voices,
+      outputs: state.outputs,
+      quality: state.quality,
+      visuals: state.visuals,
+      images: state.visuals && state.outputs.includes('audio') ? state.images : 'off',
+    },
+    fact_check: state.visuals && state.fact_check,
+    auto_publish: state.auto_publish,
+    user_provider_key: opts.openrouterKey?.trim() || undefined,
+    user_tts_key: (opts.provider === 'elevenlabs' && state.outputs.includes('audio') && opts.elevenlabsKey?.trim()) || undefined,
+  };
+};
 
 const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
 
@@ -322,7 +353,6 @@ export const stateFromConfig = (config: DebateConfig, base: WizardState): Wizard
     speakers.push({
       key: speakerKey(),
       role: entry.p.role,
-      name: entry.p.display_name,
       model_id: entry.p.model_id,
       prompt: entry.p.persona_custom ?? fallbackPrompt,
     });
@@ -337,6 +367,8 @@ export const stateFromConfig = (config: DebateConfig, base: WizardState): Wizard
     step: 1,
     topic: config.topic,
     description: config.description ?? '',
+    news: config.news?.brief ? { ...config.news } : null,
+    ground: Boolean(config.news?.brief),
     language: normalizeLanguage(config.language, base.language),
     num_rounds: clamp(config.num_rounds, MIN_ROUNDS, MAX_ROUNDS),
     length_preset: LENGTH_VALUES.includes(config.length_preset) ? config.length_preset : base.length_preset,
@@ -395,8 +427,7 @@ export const topicValid = (state: WizardState) => state.topic.trim().length >= M
 export const speakerModelOk = (speaker: Speaker, ctx: ValidationContext) =>
   Boolean(speaker.model_id || ctx.defaultModelId) || ctx.modelsLoading;
 
-export const speakersValid = (state: WizardState, ctx: ValidationContext) =>
-  state.speakers.every((s) => s.name.trim().length > 0 && speakerModelOk(s, ctx));
+export const speakersValid = (state: WizardState, ctx: ValidationContext) => state.speakers.every((s) => speakerModelOk(s, ctx));
 
 export const stepValid = (state: WizardState, step: WizardStep, ctx: ValidationContext) => {
   if (step === 1) return topicValid(state);
@@ -408,7 +439,7 @@ export const stepValid = (state: WizardState, step: WizardStep, ctx: ValidationC
 export const maxReachableStep = (state: WizardState, ctx: ValidationContext): WizardStep => {
   if (!topicValid(state)) return 1;
   if (!speakersValid(state, ctx)) return 2;
-  return 4;
+  return 3;
 };
 
 // --- Persistence -------------------------------------------------------------
@@ -423,7 +454,6 @@ const sanitizeSpeakers = (raw: unknown): Speaker[] => {
   const toSpeaker = (s: Record<string, unknown>, role: ParticipantRole): Speaker => ({
     key: str(s.key) || speakerKey(),
     role,
-    name: str(s.name),
     model_id: str(s.model_id),
     prompt: str(s.prompt),
   });
@@ -441,6 +471,19 @@ const sanitizeVoices = (raw: unknown): Record<string, string> => {
   return out;
 };
 
+const sanitizeNews = (raw: unknown): NewsPick | null => {
+  if (!isRecord(raw) || !str(raw.brief).trim()) return null;
+  const url = str(raw.url);
+  return {
+    brief: str(raw.brief),
+    outlet: str(raw.outlet),
+    title: str(raw.title),
+    url: /^https?:\/\//i.test(url) ? url : '',
+    published_at: str(raw.published_at) || null,
+    topic_id: str(raw.topic_id) || undefined,
+  };
+};
+
 const sanitizeOutputs = (raw: unknown, fallback: MediaOutput[]): MediaOutput[] => {
   if (!Array.isArray(raw)) return fallback;
   return OUTPUT_VALUES.filter((o) => raw.includes(o));
@@ -453,9 +496,12 @@ export const sanitizeState = (raw: unknown): WizardState => {
   const step = Number(raw.step);
   const rounds = Number(raw.num_rounds);
   return {
-    step: step >= 1 && step <= 4 ? (Math.floor(step) as WizardStep) : 1,
+    // Older four-step states: "Format" and "Review" are now one step.
+    step: step >= 1 ? (Math.min(LAST_STEP, Math.floor(step)) as WizardStep) : 1,
     topic: str(raw.topic),
     description: str(raw.description),
+    news: sanitizeNews(raw.news),
+    ground: typeof raw.ground === 'boolean' ? raw.ground : base.ground,
     language: normalizeLanguage(str(raw.language), base.language),
     num_rounds: Number.isFinite(rounds) ? clamp(Math.round(rounds), MIN_ROUNDS, MAX_ROUNDS) : base.num_rounds,
     length_preset: oneOf(raw.length_preset, LENGTH_VALUES, base.length_preset),

@@ -57,3 +57,9 @@ export const usePickerPopover = (width: number, height: number) => {
 
   return { open, show, close, placement, rootRef, triggerRef };
 };
+
+/** Trigger button of a speaker-row field (54px, the design's model / voice / persona boxes). */
+export const pickerTriggerClass = (open: boolean) =>
+  `flex h-[54px] w-full min-w-0 items-center gap-2.5 rounded-[13px] border bg-ink pr-3 pl-2 text-left transition-colors cursor-pointer disabled:cursor-wait disabled:opacity-60 ${
+    open ? '' : 'border-white/10 hover:border-white/22'
+  }`;

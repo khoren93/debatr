@@ -68,6 +68,19 @@ def _history_block(history: list[dict[str, Any]]) -> str:
     return "\n\n".join(f"{t['speaker_name']}: {t['text']}" for t in history)
 
 
+def _context_block(conf: dict[str, Any]) -> str:
+    """News background (trending topics: the models do not know recent news) and the user's
+    angle, one line each, for the user message of every turn."""
+    lines = ""
+    news = conf.get("news") or {}
+    if str(news.get("brief") or "").strip():
+        outlet = str(news.get("outlet") or "").strip()
+        lines += f"News background{f' ({outlet})' if outlet else ''}: {news['brief'].strip()}\n"
+    if conf.get("description"):
+        lines += f"Context: {conf['description']}\n"
+    return lines
+
+
 def _participants_block(participants: list[dict[str, Any]]) -> str:
     return "\n".join(f"- {p.get('display_name')} ({p.get('role')})" for p in participants)
 
@@ -147,7 +160,7 @@ def build_debater_messages(
     )
     user = (
         f"Debate topic: {conf.get('topic')}\n"
-        + (f"Context: {conf['description']}\n" if conf.get("description") else "")
+        + _context_block(conf)
         + f"\nParticipants:\n{_participants_block(conf.get('participants', []))}\n"
         f"\nDebate so far:\n{_history_block(history)}\n"
         f"{claims}"
@@ -198,7 +211,7 @@ def build_moderator_messages(
 
     user = (
         f"Debate topic: {conf.get('topic')}\n"
-        + (f"Context: {conf['description']}\n" if conf.get("description") else "")
+        + _context_block(conf)
         + f"\nParticipants:\n{_participants_block(participants)}\n"
         f"\nDebate so far:\n{_history_block(history)}\n"
         f"\nYour task: {task}"
@@ -244,7 +257,7 @@ def build_verdict_messages(
     )
     user = (
         f"Debate topic: {conf.get('topic')}\n"
-        + (f"Context: {conf['description']}\n" if conf.get("description") else "")
+        + _context_block(conf)
         + f"\nFull transcript:\n{_history_block(history)}\n"
         + evidence_block
         + "\nPlease deliver your final verdict now."
