@@ -180,6 +180,10 @@ docker compose up -d --build                     # full stack on http://localhos
 4. `openrouter_client.stream_chat_completion()` streams deltas and returns usage
    (tokens + cost). On HTTP 400 with a system prompt it retries once with the system prompt
    merged into the user message. Mid-stream `{"error": ...}` chunks raise `OpenRouterError`.
+   `LLM_TURN_TIMEOUT` (300 s, wall clock) caps one answer: keep-alive comments and reasoning
+   chunks reset the read timeout, so without it a stuck provider held the turn until
+   `TURN_JOB_TIMEOUT` killed the job and the debate; now the turn is saved as failed and the
+   debate goes on.
    `StreamChunk.model` is the model that answered. `openrouter/free` picks a random free model
    per request, so `services/free_router` pins the `:free` model of a participant's first real
    answer (≥ 20 words, no guard/safety classifier — the router picks those too) in

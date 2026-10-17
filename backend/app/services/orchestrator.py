@@ -9,6 +9,7 @@ checked for the gallery and published when its owner asked for that (`services/m
 
 import asyncio
 import logging
+import time
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -72,6 +73,7 @@ class GenerationResult:
     usage: dict[str, Any] = field(default_factory=dict)
     error: str | None = None
     stopped: bool = False
+    timed_out: bool = False  # no complete answer within LLM_TURN_TIMEOUT
     model: str | None = None  # as named by the response (a router names the model it picked)
 
 
@@ -216,31 +218,43 @@ def _generate(
     model_id: str,
     messages: list[dict[str, Any]],
     api_key: str | None,
+    deadline: float,
 ) -> GenerationResult:
-    """Stream one LLM response, forwarding deltas to subscribers."""
+    """Stream one LLM response, forwarding deltas to subscribers, until `deadline`
+    (`time.monotonic()`; see LLM_TURN_TIMEOUT)."""
 
     async def run() -> GenerationResult:
         client = OpenRouterClient()
         result = GenerationResult()
         chunks = 0
+        stream = client.stream_chat_completion(model_id, messages, api_key=api_key)
         try:
-            async for chunk in client.stream_chat_completion(model_id, messages, api_key=api_key):
-                if chunk.usage:
-                    result.usage = _normalize_usage(chunk.usage)
-                if chunk.model:
-                    result.model = chunk.model
-                if not chunk.delta:
-                    continue
-                result.text += chunk.delta
-                publish_event(
-                    debate_id,
-                    "turn_delta",
-                    {"seq_index": seq_index, "delta": chunk.delta, "speaker_name": speaker_name},
-                )
-                chunks += 1
-                if chunks % STOP_CHECK_EVERY_N_CHUNKS == 0 and _stop_requested(debate_id):
-                    result.stopped = True
-                    break
+            async with asyncio.timeout(max(0.0, deadline - time.monotonic())):
+                async for chunk in stream:
+                    if chunk.usage:
+                        result.usage = _normalize_usage(chunk.usage)
+                    if chunk.model:
+                        result.model = chunk.model
+                    if not chunk.delta:
+                        continue
+                    result.text += chunk.delta
+                    publish_event(
+                        debate_id,
+                        "turn_delta",
+                        {
+                            "seq_index": seq_index,
+                            "delta": chunk.delta,
+                            "speaker_name": speaker_name,
+                        },
+                    )
+                    chunks += 1
+                    if chunks % STOP_CHECK_EVERY_N_CHUNKS == 0 and _stop_requested(debate_id):
+                        result.stopped = True
+                        break
+        except TimeoutError:
+            logger.warning("%s gave no complete answer in time (debate %s)", model_id, debate_id)
+            result.error = f"No complete answer within {settings.LLM_TURN_TIMEOUT:.0f} seconds"
+            result.timed_out = True
         except OpenRouterError as e:
             result.error = str(e)
         except Exception as e:
@@ -269,7 +283,7 @@ def _generate_as(
     pinned = pinned_model(requested, row)
     if pinned:
         result = generate(pinned)
-        if result.text or result.stopped or not result.error:
+        if result.text or result.stopped or result.timed_out or not result.error:
             return result, pinned
         logger.warning(
             "Pinned %s failed for debate %s (%s), asking the router",
@@ -523,12 +537,13 @@ def process_turn_job(debate_id: str, seq_index: int) -> None:
             )
 
             api_key = _provider_key(debate_id)
+            deadline = time.monotonic() + settings.LLM_TURN_TIMEOUT
             result, model_id = _generate_as(
                 debate,
                 turn.speaker_index,
                 speaker,
                 lambda model: _generate(
-                    debate_id, seq_index, speaker_name, model, messages, api_key
+                    debate_id, seq_index, speaker_name, model, messages, api_key, deadline
                 ),
             )
             visuals: dict[str, Any] = {}
@@ -598,12 +613,13 @@ def conduct_verdict_job(debate_id: str, seq_index: int) -> None:
             )
             evidence = verdict_evidence(_turns(db, debate.id))
             messages = build_verdict_messages(conf, _history(db, debate.id), evidence)
+            deadline = time.monotonic() + settings.LLM_TURN_TIMEOUT
             result, model_id = _generate_as(
                 debate,
                 moderator_index,
                 moderator,
                 lambda model: _generate(
-                    debate_id, seq_index, VERDICT_SPEAKER_NAME, model, messages, api_key
+                    debate_id, seq_index, VERDICT_SPEAKER_NAME, model, messages, api_key, deadline
                 ),
             )
             saved = _save_turn(

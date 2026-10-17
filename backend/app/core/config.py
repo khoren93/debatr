@@ -23,7 +23,12 @@ class Settings(BaseSettings):
     DEFAULT_MODEL_ID: str = "openai/gpt-4o-mini"
     MODELS_CACHE_TTL: int = 3600
     LLM_CONNECT_TIMEOUT: float = 15.0
-    LLM_READ_TIMEOUT: float = 120.0
+    LLM_READ_TIMEOUT: float = 120.0  # silence between stream lines
+    # Wall-clock limit of one turn's answer. Keep-alive comments and reasoning chunks reset the
+    # read timeout, so a stuck provider or a model that keeps thinking would otherwise hold the
+    # turn until TURN_JOB_TIMEOUT kills the job (and the debate). Keep it well below that one:
+    # the job also designs the turn's scenes.
+    LLM_TURN_TIMEOUT: float = 300.0
 
     # Worker
     TURN_JOB_TIMEOUT: int = 600  # seconds per LLM turn job
