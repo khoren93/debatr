@@ -137,3 +137,24 @@ def test_the_verdict_stays_short_next_to_short_turns():
     est = estimate_debate(conf, {}, own_key=False, tts_provider=None, tts_price_per_1k=0, markup=1)
     # host 50 + two debaters 2 x 50 + verdict 70: the verdict is under a third of the debate.
     assert est.words == 220
+
+
+def test_resumed_run_pays_only_the_remaining_turns():
+    pricing = {"m/mod": (0.000001, 0.000002), "m/pro": (0.000001, 0.000002)}
+    conf = _conf(media_plan={"visuals": True, "images": "ai", "outputs": ["audio"]})
+    full = _estimate(conf, pricing, image_price=0.01, max_images=10)
+    rest = _estimate(conf, pricing, image_price=0.01, max_images=10, from_turn=4)
+    verdict_only = _estimate(conf, pricing, image_price=0.01, max_images=10, from_turn=6)
+    assert 0 < verdict_only.llm_cost_usd < rest.llm_cost_usd < full.llm_cost_usd
+    assert rest.tokens_in < full.tokens_in
+    # the spoken length and the media build after the run stay whole
+    assert rest.words == full.words and rest.duration_ms == full.duration_ms
+    assert rest.images_cost_usd == full.images_cost_usd > 0
+
+
+def test_resumed_run_fact_checks_only_new_debater_turns():
+    conf = _conf(media_plan={"visuals": True}, fact_check=True)
+    full = _estimate(conf, fact_check_price=0.005)
+    rest = _estimate(conf, fact_check_price=0.005, from_turn=4)  # the two closing turns
+    assert full.factcheck_cost_usd == 4 * 0.005
+    assert rest.factcheck_cost_usd == 2 * 0.005

@@ -23,6 +23,10 @@ export const updateDraft = (id: string, config: DebateConfig) =>
 export const startDraft = (id: string, keys: { user_provider_key?: string; user_tts_key?: string } = {}) =>
   api.post<CreateDebateResponse>(`/debates/${id}/start`, keys).then((r) => r.data);
 
+/** Run a failed debate again from the turn that failed (backend services/resume.py). */
+export const resumeDebate = (id: string, keys: { user_provider_key?: string; user_tts_key?: string } = {}) =>
+  api.post<CreateDebateResponse>(`/debates/${id}/resume`, keys).then((r) => r.data);
+
 export const estimateDebate = (config: DebateConfig) =>
   api.post<Estimate>('/debates/estimate', config).then((r) => r.data);
 

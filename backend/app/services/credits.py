@@ -9,7 +9,7 @@ import uuid
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
@@ -131,28 +131,62 @@ def debate_charge_usd(debate: Debate) -> Decimal:
     return to_usd(cost * markup())
 
 
+def charge_due(total: Decimal, charged: Decimal) -> Decimal:
+    """What is left to charge of `total` after earlier charges: a resumed run is charged again
+    at its end, for what it added."""
+    return max(ZERO, to_usd(total - charged))
+
+
+def run_ref(prefix: str, earlier: int) -> str:
+    """`provider_ref` of the next charge under `prefix` (the first one keeps the bare prefix)."""
+    return prefix if earlier == 0 else f"{prefix}:{earlier + 1}"
+
+
+def _charged_sync(db: Session, debate_id: uuid.UUID, prefix: str) -> tuple[int, Decimal]:
+    """Charges already booked under `prefix`: (count, amount as a positive number)."""
+    count, total = db.execute(
+        select(
+            func.count(CreditTransaction.id),
+            func.coalesce(func.sum(CreditTransaction.amount_usd), 0),
+        ).where(
+            CreditTransaction.debate_id == debate_id,
+            or_(
+                CreditTransaction.provider_ref == prefix,
+                CreditTransaction.provider_ref.like(f"{prefix}:%"),
+            ),
+        )
+    ).one()
+    return int(count), -to_usd(total)
+
+
 def tts_charge_usd(chars: int) -> Decimal:
     price = Decimal(str(settings.TTS_CREDIT_PRICE_PER_1K_CHARS))
     return to_usd(Decimal(max(0, chars)) / Decimal(1000) * price)
 
 
 def charge_debate_sync(db: Session, debate: Debate) -> CreditTransaction | None:
-    """Charge the owner for a finished/stopped/failed debate (idempotent per debate)."""
+    """Charge the owner for a finished/stopped/failed debate: what its usage costs minus what
+    earlier runs of it were charged (so repeating a charge, or a resumed run, is safe)."""
     if debate.user_id is None:
         return None
     amount = debate_charge_usd(debate)
     if amount <= ZERO:
         return None
+    prefix = f"debate:{debate.id}:llm"
+    earlier, charged = _charged_sync(db, debate.id, prefix)
+    due = charge_due(amount, charged)
+    if due <= ZERO:
+        return None
     totals = debate.totals_json or {}
     return apply_transaction_sync(
         db,
         debate.user_id,
-        -amount,
+        -due,
         "debate",
         description=(debate.title or "Debate")[:300],
         debate_id=debate.id,
         provider="system",
-        provider_ref=f"debate:{debate.id}:llm",
+        provider_ref=run_ref(prefix, earlier),
         meta={
             "provider_cost_usd": float(totals.get("cost") or 0),
             "markup": float(markup()),
@@ -193,20 +227,26 @@ def has_balance(debate: Debate) -> bool:
 def charge_images_sync(
     db: Session, debate: Debate, *, usd: float, count: int, build_ref: str
 ) -> CreditTransaction | None:
-    """Charge the AI pictures of a media build (provider cost x markup)."""
+    """Charge the AI pictures of a media build or of the live scenes (`build_ref="live"`, again
+    for the new pictures when a resumed run ends): provider cost x markup."""
     if debate.user_id is None:
         return None
     amount = to_usd(to_usd(usd) * markup())
     if amount <= ZERO:
         return None
+    prefix = f"debate:{debate.id}:images:{build_ref}"
+    earlier, charged = _charged_sync(db, debate.id, prefix)
+    due = charge_due(amount, charged)
+    if due <= ZERO:
+        return None
     return apply_transaction_sync(
         db,
         debate.user_id,
-        -amount,
+        -due,
         "media",
         description=f"AI pictures: {(debate.title or 'Debate')[:250]}",
         debate_id=debate.id,
         provider="system",
-        provider_ref=f"debate:{debate.id}:images:{build_ref}",
+        provider_ref=run_ref(prefix, earlier),
         meta={"images": count, "provider_cost_usd": usd, "markup": float(markup())},
     )

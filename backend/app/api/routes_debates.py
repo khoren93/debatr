@@ -49,6 +49,7 @@ from app.services.media.tts.elevenlabs import system_key_status
 from app.services.moderation import mark_admin_decision, publish_async
 from app.services.openrouter_client import openrouter_client
 from app.services.queue_manager import enqueue_debate_start
+from app.services.resume import discarded, resume_point
 from app.services.views import count_view
 
 logger = logging.getLogger(__name__)
@@ -126,8 +127,10 @@ async def _estimate(
     own_key: bool,
     own_tts_key: bool = False,
     budget: Decimal | None = None,
+    from_turn: int = 0,
 ) -> EstimateOut:
-    """`budget`: what the API token making the request may still spend (None = no limit)."""
+    """`budget`: what the API token making the request may still spend (None = no limit);
+    `from_turn`: a resumed run, which pays only the turns from there on."""
     pricing = pricing_from_models(await openrouter_client.get_models())
     est = estimate_debate(
         config.persisted(),
@@ -141,6 +144,7 @@ async def _estimate(
         fact_check_price=settings.FACT_CHECK_PRICE_USD,
         image_price=settings.MEDIA_IMAGE_PRICE_USD,
         max_images=settings.MEDIA_MAX_IMAGES,
+        from_turn=from_turn,
     )
     out = EstimateOut(
         **est.as_dict(),
@@ -218,9 +222,14 @@ def _apply_config(
 
 
 async def _enqueue(
-    db: AsyncSession, debate: Debate, provider_key: str | None, tts_key: str | None = None
+    db: AsyncSession,
+    debate: Debate,
+    provider_key: str | None,
+    tts_key: str | None = None,
+    from_seq: int = 0,
 ) -> None:
-    """Queue the run. User keys go to Redis with a TTL, never to Postgres."""
+    """Queue the run (a resumed one from turn `from_seq`). User keys go to Redis with a TTL,
+    never to Postgres."""
     debate_id = str(debate.id)
     try:
         redis = get_async_redis()
@@ -230,7 +239,7 @@ async def _enqueue(
             await redis.set(tts_key_key(debate_id), tts_key, ex=settings.PROVIDER_KEY_TTL)
         else:
             await redis.delete(tts_key_key(debate_id))
-        await run_in_threadpool(enqueue_debate_start, debate_id)
+        await run_in_threadpool(enqueue_debate_start, debate_id, from_seq)
     except RedisError:
         logger.exception("Failed to enqueue debate %s", debate_id)
         debate.status = "error"
@@ -377,6 +386,67 @@ async def start_draft(
     await db.commit()
     await _enqueue(db, debate, provider_key, tts_key)
     return DebateResponse(debate_id=debate_id, status="queued", message="Debate queued")
+
+
+@router.post("/{debate_id}/resume", response_model=DebateResponse)
+async def resume_debate(
+    debate_id: str,
+    request: Request,
+    body: StartDebateRequest | None = None,
+    user: User = Depends(require_user),
+    db: AsyncSession = Depends(get_db),
+) -> DebateResponse:
+    """Run a debate that stopped with an error again from the turn that failed: that turn (and
+    anything after it) is dropped, the earlier turns and the participants' models stay."""
+    debate = await load_debate(db, debate_id, full=True)
+    _require_manage(debate, user, request)
+    if debate.status != "error":
+        raise HTTPException(status_code=409, detail="Only a debate that failed can be resumed")
+    if debate.media_status in ("queued", "running"):
+        raise HTTPException(status_code=409, detail="Wait for the audio build to finish")
+    stored = dict(debate.config_json or {})
+    billing = stored.pop("billing", None) or {}
+    config = DebateConfig.model_validate(stored)
+    provider_key, own_key = _resolve_provider_key(user, body.user_provider_key if body else None)
+    if billing.get("own_key") and not own_key:
+        # Its turns so far were not charged; the system key would bill the whole debate.
+        raise HTTPException(
+            status_code=409,
+            detail="This debate ran on your own OpenRouter key: add it again to resume it",
+        )
+    tts_key = _tts_key(config, body.user_tts_key if body else None)
+    from_seq = resume_point(debate.turns)
+    est = await _estimate(
+        config,
+        user,
+        own_key,
+        tts_key is not None,
+        await _token_budget(db, request),
+        from_turn=from_seq,
+    )
+    _require_sufficient(est)
+
+    dropped, cost = discarded(debate.turns, from_seq)
+    for turn in dropped:
+        await db.delete(turn)
+    totals = dict(debate.totals_json or {})
+    if cost:
+        totals["discarded_cost"] = round(float(totals.get("discarded_cost") or 0) + cost, 6)
+    debate.totals_json = totals
+    debate.config_json = {**config.persisted(), "billing": _billing(own_key, est)}
+    token = request_api_token(request)
+    if token is not None:  # from the browser the run stays on the token that started it
+        debate.api_token_id = token.id
+    if debate.media_status != "none":
+        debate.media_status = "none"  # the audio lacks the new turns; the TTS cache stays
+    debate.status = "queued"
+    debate.error_message = None
+    debate.ended_at = None
+    await db.commit()
+    await _enqueue(db, debate, provider_key, tts_key, from_seq=from_seq)
+    return DebateResponse(
+        debate_id=debate_id, status="queued", message=f"Resumed from turn {from_seq + 1}"
+    )
 
 
 @router.get("/{debate_id}", response_model=DebateDetail)

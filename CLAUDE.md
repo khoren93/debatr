@@ -198,7 +198,8 @@ docker compose up -d --build                     # full stack on http://localhos
    finished). After the verdict turn `services/verdict.py` structures it with the cheap
    `MEDIA_HIGHLIGHTS_MODEL` (regex fallback) into `debates.verdict_json`
    (`winner_id`, `headline`, `feedback`). At the terminal state `services/credits.py` charges the
-   owner (`cost × CREDIT_MARKUP`, skipped with an own key; idempotent via `provider_ref`) and
+   owner (`cost × CREDIT_MARKUP`, skipped with an own key; minus what earlier runs of the debate
+   were charged, so repeats and resumed runs are safe: `charge_due`, refs `…:llm`, `…:llm:2`) and
    `_auto_media` queues the audio build when `config_json.media_plan.outputs` contains `audio`.
 
 SSE events: `connected`, `debate_started`, `turn_started`, `turn_delta`, `turn_completed`,
@@ -229,6 +230,14 @@ Access: owners and the admin session manage a debate; public (`is_public`, `slug
   `DebateDetail` goes to the owner/admin only; configs from before auto-publish count as `false`.
 Stopping: `POST /api/debates/{id}/stop` sets the status, sets `debate:{id}:stop` in Redis
 (checked by the worker every few chunks) and publishes `debate_stopped`.
+Failed turns: a turn (or verdict) without an answer — provider error, `LLM_TURN_TIMEOUT`, empty
+reply — stops the debate (`status=error`, `error_message` names speaker and model) instead of
+letting the others argue against silence. `POST /api/debates/{id}/resume` (owner, same body as
+`/start`; Resume button in the error banner) drops the failed turn and anything after it
+(`services/resume`: `resume_point`, their cost kept as `totals_json.discarded_cost`), keeps the
+earlier turns and pinned models, re-checks credits for the rest only
+(`estimate_debate(from_turn=…)`) and queues `start_debate_job(from_seq=…)`. A run that used an own
+OpenRouter key cannot resume on the system key (409); media goes back to `none`.
 
 ### Likes, audience votes and the model ranking
 

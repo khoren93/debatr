@@ -90,10 +90,12 @@ def estimate_debate(
     fact_check_price: float = 0.0,
     image_price: float = 0.0,
     max_images: int = 0,
+    from_turn: int = 0,
 ) -> Estimate:
     """Provider costs and credits of a run. Fact-checks (one per debater turn on average) run
     on the debate's key; AI pictures always on the system key, so they are charged even with an
-    own OpenRouter key."""
+    own OpenRouter key. `from_turn`: a resumed run pays only the turns from that index on (the
+    prompts still carry the earlier turns); the media build comes after the run, so it stays."""
     participants: list[dict[str, Any]] = list(conf.get("participants") or [])
     num_rounds = int(conf.get("num_rounds") or 1)
     words_per_turn = length_words(str(conf.get("length_preset") or "medium"))
@@ -108,9 +110,11 @@ def estimate_debate(
     plan: dict[str, Any] = conf.get("media_plan") or {}
     visuals = bool(plan) and bool(plan.get("visuals", True))
     debater_turns = 0
+    checked_turns = 0  # debater turns still to run (fact-checks)
     planned: list[tuple[str, int]] = []  # (model id, words)
-    for turn in build_schedule(participants, num_rounds):
+    for index, turn in enumerate(build_schedule(participants, num_rounds)):
         debater_turns += 0 if turn.is_moderator else 1
+        checked_turns += 0 if turn.is_moderator or index < from_turn else 1
         speaker = participants[turn.speaker_index]
         words = min(words_per_turn, MODERATOR_MAX_WORDS) if turn.is_moderator else words_per_turn
         planned.append((str(speaker.get("model_id") or default_model), words))
@@ -121,22 +125,24 @@ def estimate_debate(
     tokens_out = 0.0
     cost = 0.0
     total_words = 0
-    for model_id, words in planned:
+    for index, (model_id, words) in enumerate(planned):
         prompt = context_tokens + history_tokens
         completion = words * factor * COMPLETION_OVERHEAD
+        history_tokens += words * factor
+        total_words += words
+        if index < from_turn:
+            continue  # already paid by the earlier run
         prompt_price, completion_price = pricing.get(model_id, (0.0, 0.0))
         cost += prompt * prompt_price + completion * completion_price
         tokens_in += prompt
         tokens_out += completion
-        history_tokens += words * factor
-        total_words += words
 
     duration_ms = int(
         total_words / WORDS_PER_MINUTE * 60_000 + GAP_MS * (len(planned) - 1) + INTRO_OUTRO_MS
     )
     tts_chars = int(total_words * CHARS_PER_WORD)
     tts_cost = tts_chars / 1000 * tts_price_per_1k if tts_provider == "elevenlabs" else 0.0
-    checks = debater_turns if visuals and conf.get("fact_check") else 0
+    checks = checked_turns if visuals and conf.get("fact_check") else 0
     factcheck_cost = checks * fact_check_price
     wants_images = visuals and plan.get("images") == "ai" and "audio" in (plan.get("outputs") or [])
     images_cost = min(max_images, debater_turns) * image_price if wants_images else 0.0

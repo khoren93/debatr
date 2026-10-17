@@ -5,6 +5,8 @@ jobs are synchronous; LLM streaming happens inside a short-lived asyncio loop.
 When a debate reaches a terminal state the owner's credits are charged and, if the
 configuration asks for it, the audio build is queued automatically. A completed debate is
 checked for the gallery and published when its owner asked for that (`services/moderation`).
+A turn without an answer stops the debate (`status=error`); the owner may resume it from that
+turn (`services/resume`).
 """
 
 import asyncio
@@ -124,14 +126,19 @@ def _history(db: Session, debate_id: uuid.UUID) -> list[dict[str, Any]]:
 def _compute_totals(db: Session, debate: Debate) -> dict[str, Any]:
     """Token/cost totals over all turns plus the (cheap) verdict analysis call."""
     turns = db.scalars(select(Turn).where(Turn.debate_id == debate.id)).all()
-    analysis_cost = float((debate.totals_json or {}).get("analysis_cost") or 0.0)
+    previous = debate.totals_json or {}
+    analysis_cost = float(previous.get("analysis_cost") or 0.0)
+    # Turns a resume dropped (services/resume) were paid for as well.
+    discarded_cost = float(previous.get("discarded_cost") or 0.0)
     totals: dict[str, Any] = {
         "tokens_in": 0,
         "tokens_out": 0,
-        "cost": analysis_cost,
+        "cost": analysis_cost + discarded_cost,
         "turns_count": len(turns),
         "analysis_cost": analysis_cost,
     }
+    if discarded_cost:
+        totals["discarded_cost"] = discarded_cost
     for t in turns:
         usage = t.usage_json or {}
         totals["tokens_in"] += int(usage.get("prompt_tokens") or 0)
@@ -260,9 +267,16 @@ def _generate(
         except Exception as e:
             logger.exception("Unexpected generation error for debate %s", debate_id)
             result.error = f"Unexpected error: {e}"
+        if not result.error and not result.stopped and not result.text.strip():
+            result.error = "The model returned an empty answer"
         return result
 
     return asyncio.run(run())
+
+
+def _failure(speaker: str, model_id: str, error: str | None) -> str:
+    """`error_message` of a debate stopped by a failed turn."""
+    return f"{speaker} ({model_id}) could not answer: {error or 'no answer'}"
 
 
 def _generate_as(
@@ -468,7 +482,8 @@ def _auto_media(db: Session, debate: Debate) -> None:
 # --- jobs ------------------------------------------------------------------
 
 
-def start_debate_job(debate_id: str) -> None:
+def start_debate_job(debate_id: str, from_seq: int = 0) -> None:
+    """Start a queued run: a new debate from its first turn, a resumed one from `from_seq`."""
     with get_session() as db:
         debate = db.get(Debate, uuid.UUID(debate_id))
         if not debate:
@@ -479,10 +494,10 @@ def start_debate_job(debate_id: str) -> None:
             return
 
         debate.status = "running"
-        debate.started_at = utcnow()
+        debate.started_at = debate.started_at or utcnow()
         db.commit()
         publish_event(debate_id, "debate_started", {"debate_id": debate_id, "status": "running"})
-        queue_manager.enqueue_turn(debate_id, 0)
+        queue_manager.enqueue_turn(debate_id, from_seq)
 
 
 def process_turn_job(debate_id: str, seq_index: int) -> None:
@@ -567,8 +582,11 @@ def process_turn_job(debate_id: str, seq_index: int) -> None:
             if result.stopped or _stop_requested(debate_id):
                 _finalize_stopped(db, debate)
                 return
-            if not result.error:
-                design_turn(db, debate, saved, api_key=api_key)
+            if result.error:
+                # The others would argue against a silent speaker: stop, the owner may resume.
+                _fail_debate(db, debate, _failure(speaker_name, model_id, result.error))
+                return
+            design_turn(db, debate, saved, api_key=api_key)
             if _stop_requested(debate_id):
                 _finalize_stopped(db, debate)
                 return
@@ -633,13 +651,18 @@ def conduct_verdict_job(debate_id: str, seq_index: int) -> None:
                 model_id=model_id,
                 result=result,
             )
-            if not result.error and result.text.strip():
-                try:
-                    _store_verdict(db, debate, result.text, api_key)
-                except Exception:
-                    logger.exception("Verdict structuring crashed for debate %s", debate_id)
-                    db.rollback()
-                design_turn(db, debate, saved, api_key=api_key)
+            if result.stopped or _stop_requested(debate_id):
+                _finalize_stopped(db, debate)
+                return
+            if result.error:
+                _fail_debate(db, debate, _failure("The judge", model_id, result.error))
+                return
+            try:
+                _store_verdict(db, debate, result.text, api_key)
+            except Exception:
+                logger.exception("Verdict structuring crashed for debate %s", debate_id)
+                db.rollback()
+            design_turn(db, debate, saved, api_key=api_key)
             queue_manager.enqueue_finish(debate_id)
         except Exception as e:
             logger.exception("Verdict for debate %s crashed", debate_id)

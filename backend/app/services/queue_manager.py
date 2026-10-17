@@ -37,8 +37,12 @@ def _enqueue_debate(func_name: str, **kwargs: object) -> None:
     )
 
 
-def enqueue_debate_start(debate_id: str) -> None:
-    _enqueue_debate("start_debate_job", debate_id=debate_id)
+def enqueue_debate_start(debate_id: str, from_seq: int = 0) -> None:
+    """Queue a run; `from_seq` resumes a failed debate from that turn."""
+    if from_seq:
+        _enqueue_debate("start_debate_job", debate_id=debate_id, from_seq=from_seq)
+    else:
+        _enqueue_debate("start_debate_job", debate_id=debate_id)
 
 
 def enqueue_turn(debate_id: str, seq_index: int) -> None:

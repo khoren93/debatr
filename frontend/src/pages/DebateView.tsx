@@ -1,15 +1,15 @@
 import type { PlayerRef } from '@remotion/player';
 import { Fragment, useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Lock, ShieldAlert } from 'lucide-react';
+import { ArrowLeft, Lock, RotateCcw, ShieldAlert } from 'lucide-react';
 import { getErrorMessage, getErrorStatus } from '../api/client';
-import { deleteDebate, getDebate, stopDebate } from '../api/debates';
+import { deleteDebate, getDebate, resumeDebate, stopDebate } from '../api/debates';
 import { getPublicDebate } from '../api/gallery';
 import { absoluteMediaBase, debateFilesBase } from '../api/media';
 import { ACTIVE_STATUSES, type Audience, type DebateDetail, type Turn } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { Page } from '../components/layout/AppShell';
-import { ConfirmDialog, EmptyState, ErrorBox, LinkButton, PageLoader, Pill, Segmented, useToast } from '../components/ui';
+import { Button, ConfirmDialog, EmptyState, ErrorBox, LinkButton, PageLoader, Pill, Segmented, useToast } from '../components/ui';
 import { AudienceVote } from '../components/debate/AudienceVote';
 import { DebateActions } from '../components/debate/DebateActions';
 import { DebatePlayer, PlayerPlaceholder, SegmentBar, type BarSegment } from '../components/debate/DebatePlayer';
@@ -20,9 +20,11 @@ import { RegenerateAudioDialog } from '../components/debate/RegenerateAudioDialo
 import { SpeakerTile } from '../components/debate/SpeakerTile';
 import { Transcript, type StreamingTurn } from '../components/debate/Transcript';
 import { VerdictTab } from '../components/debate/VerdictTab';
-import { isJudgeTurn, pinRoutedModel, speakerLineup, speakerOfTurn, speakerTitle, turnColor, turnTypeLabel, videoChapters, type SpeakerInfo, type VideoFormat } from '../components/debate/helpers';
+import { isJudgeTurn, pinRoutedModel, resumePoint, speakerLineup, speakerOfTurn, speakerTitle, turnColor, turnTypeLabel, videoChapters, type SpeakerInfo, type VideoFormat } from '../components/debate/helpers';
 import { useDebateMedia } from '../hooks/useDebateMedia';
 import { useDebateStream } from '../hooks/useDebateStream';
+import { checkElevenLabsKey } from '../hooks/useElevenLabsKeyStatus';
+import { getLocalKey } from '../lib/localKeys';
 import { STAGE_COLORS, STAGE_LABELS, formatCount, formatDateShort, formatDuration, roundLabel, shortModelName, stageOf } from '../lib/format';
 import { msToFrame } from '../video/utils';
 
@@ -85,6 +87,7 @@ const DebateView = ({ id, slug }: Props) => {
   const [activeSeq, setActiveSeq] = useState<number | null>(null);
   const [railOpen, setRailOpen] = useState(false);
   const [confirm, setConfirm] = useState<'stop' | 'delete' | null>(null);
+  const [resuming, setResuming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [regenOpen, setRegenOpen] = useState(false);
   // Blind voting: the judge's ruling stays covered until the viewer votes or peeks.
@@ -190,6 +193,26 @@ const DebateView = ({ id, slug }: Props) => {
       toast.error(getErrorMessage(err));
     } finally {
       setBusy(false);
+    }
+  };
+
+  /** Browser-only keys go along like on the wizard's start (a rejected ElevenLabs key is not sent). */
+  const resume = async () => {
+    if (!debate) return;
+    setResuming(true);
+    try {
+      const keys: { user_provider_key?: string; user_tts_key?: string } = {};
+      const openrouterKey = getLocalKey('openrouter');
+      if (openrouterKey) keys.user_provider_key = openrouterKey;
+      const ttsKey = debate.media_plan?.provider === 'elevenlabs' ? getLocalKey('elevenlabs') : '';
+      if (ttsKey && (await checkElevenLabsKey(ttsKey)).status !== 'invalid') keys.user_tts_key = ttsKey;
+      await resumeDebate(debate.id, keys);
+      toast.success('Resumed: the failed turn runs again');
+      refetch();
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+    } finally {
+      setResuming(false);
     }
   };
 
@@ -365,8 +388,16 @@ const DebateView = ({ id, slug }: Props) => {
         </header>
 
         {debate.status === 'error' && (
-          <ErrorBox>
-            <b>The debate stopped with an error.</b> {debate.error_message}
+          <ErrorBox className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <div className="min-w-0 flex-1">
+              <b>The debate stopped with an error.</b> {debate.error_message}
+              {isOwner && <div className="mt-1 text-muted">Resume runs turn {resumePoint(debate.turns) + 1} again with the same models and goes on from there. The turns before it stay.</div>}
+            </div>
+            {isOwner && (
+              <Button size="sm" variant="secondary" icon={<RotateCcw className="size-4" />} loading={resuming} disabled={voicing} onClick={() => void resume()}>
+                Resume
+              </Button>
+            )}
           </ErrorBox>
         )}
         {debate.status === 'stopped' && (

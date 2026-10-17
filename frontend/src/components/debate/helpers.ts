@@ -24,6 +24,14 @@ export const pinRoutedModel = (participants: Participant[], turn: Turn): Partici
   return participants.map((p, i) => (i === index ? { ...p, model: used, router: FREE_ROUTER_ID } : p));
 };
 
+/** First turn a resume runs again: the first failed or missing one (backend services/resume.py). */
+export const resumePoint = (turns: Pick<Turn, 'seq_index' | 'error' | 'text'>[]) => {
+  const bySeq = new Map(turns.map((t) => [t.seq_index, t]));
+  let index = 0;
+  for (let turn = bySeq.get(index); turn && !isErrorTurn(turn) && turn.text.trim(); turn = bySeq.get(index)) index += 1;
+  return index;
+};
+
 /** Colour for a turn: by speaker id when present, otherwise by name (older debates). */
 export const turnColor = (turn: Pick<Turn, 'speaker_id' | 'speaker_name' | 'turn_type'>, participants: Participant[]) => {
   if (turn.turn_type === 'verdict' || turn.speaker_id === 'judge') return JUDGE_COLOR;

@@ -69,3 +69,19 @@ def test_timed_out_pinned_model_does_not_fall_back(monkeypatch: pytest.MonkeyPat
     result, used = orchestrator._generate_as(debate, 0, speaker, generate)
     assert calls == ["qwen/qwen3:free"]  # the turn's time is used up
     assert result.timed_out and used == "qwen/qwen3:free"
+
+
+def test_an_empty_answer_counts_as_a_failure(monkeypatch: pytest.MonkeyPatch, events):
+    async def stream(
+        self: OpenRouterClient, *args: Any, **kwargs: Any
+    ) -> AsyncIterator[StreamChunk]:
+        yield StreamChunk(usage={"completion_tokens": 0, "cost": 0}, model="liquid/lfm:free")
+
+    monkeypatch.setattr(OpenRouterClient, "stream_chat_completion", stream)
+    result = _run(5)
+    assert result.error == "The model returned an empty answer"
+
+
+def test_failure_message_names_speaker_and_model():
+    message = orchestrator._failure("Free Router A", "qwen/qwen3:free", "HTTP 429: rate limited")
+    assert message == "Free Router A (qwen/qwen3:free) could not answer: HTTP 429: rate limited"
