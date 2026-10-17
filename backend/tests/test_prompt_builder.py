@@ -4,6 +4,7 @@ from app.services.prompt_builder import (
     build_verdict_messages,
     intensity_description,
     length_words,
+    verdict_words,
 )
 from app.services.scheduler import build_schedule
 
@@ -70,10 +71,25 @@ def test_moderator_transition_summarizes_previous_round():
 def test_verdict_prompt_structure():
     messages = build_verdict_messages(CONF, HISTORY)
     system, user = messages[0]["content"], messages[1]["content"]
-    for section in ("Winner", "Analysis", "Key Arguments", "Logical Fallacies"):
-        assert section in system
+    assert "**Winner: <name>**" in system and "one short paragraph per debater" in system
+    assert "Key Arguments" not in system  # long multi-section verdicts outweighed the debate
+    assert f"about {verdict_words(CONF)} words" in system and "hard limit" in system
     assert "Russian" in system
     assert "Full transcript" in user and "Welcome everyone!" in user
+
+
+def test_verdict_length_follows_the_turn_length():
+    two = [{"role": "moderator"}, {"role": "debater"}, {"role": "debater"}]
+    assert verdict_words({"length_preset": "very_short", "participants": two}) == 70
+    assert verdict_words({"length_preset": "short", "participants": two}) == 110
+    assert verdict_words({"length_preset": "long", "participants": two}) == 260
+    assert verdict_words({"length_preset": "nope", "participants": two}) == 170
+    four = [*two, {"role": "debater"}, {"role": "debater"}]
+    assert verdict_words({"length_preset": "short", "participants": four}) == 160
+    spoken = build_verdict_messages(
+        {"length_preset": "very_short", "participants": two, "output_style": "spoken"}, []
+    )[0]["content"]
+    assert "FIRST" in spoken and "about 70 words" in spoken
 
 
 def test_length_and_intensity_helpers():

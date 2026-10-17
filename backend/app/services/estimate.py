@@ -7,7 +7,7 @@ from dataclasses import asdict, dataclass
 from typing import Any
 
 from app.services.media.languages import language_code
-from app.services.prompt_builder import length_words
+from app.services.prompt_builder import length_words, verdict_words
 from app.services.scheduler import build_schedule
 
 # Rough tokens per word for OpenRouter-style tokenizers, by language code.
@@ -35,7 +35,6 @@ WORDS_PER_MINUTE = 150  # neural voices at a natural pace
 CHARS_PER_WORD = 6.0  # incl. the space; what TTS providers bill for
 SYSTEM_PROMPT_TOKENS = 260
 MODERATOR_MAX_WORDS = 120  # mirrors prompt_builder.build_moderator_messages
-VERDICT_WORDS = 320
 COMPLETION_OVERHEAD = 1.1  # models overshoot the requested length a little
 GAP_MS = 600  # silence between turns on the mixed track
 INTRO_OUTRO_MS = 4000  # title and end cards in the video
@@ -114,7 +113,7 @@ def estimate_debate(
         speaker = participants[turn.speaker_index]
         words = min(words_per_turn, MODERATOR_MAX_WORDS) if turn.is_moderator else words_per_turn
         planned.append((str(speaker.get("model_id") or default_model), words))
-    planned.append((judge_model, VERDICT_WORDS))
+    planned.append((judge_model, verdict_words(conf)))
 
     history_tokens = 0.0
     tokens_in = 0.0

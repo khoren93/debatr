@@ -11,6 +11,16 @@ LENGTH_WORDS: dict[str, int] = {
     "long": 500,
 }
 
+# The judge's verdict follows the turn length: it should round the debate off, not outweigh it
+# (without a budget models wrote 250-480 words even after 50-word turns).
+VERDICT_WORDS: dict[str, int] = {
+    "very_short": 70,
+    "short": 110,
+    "medium": 170,
+    "long": 260,
+}
+VERDICT_WORDS_PER_EXTRA_DEBATER = 25  # one more short paragraph for each debater beyond two
+
 _TURN_INSTRUCTIONS: dict[str, str] = {
     "argument": "Present your full position on the topic with your strongest arguments.",
     "opening": (
@@ -43,6 +53,13 @@ def intensity_description(intensity: int) -> str:
 
 def length_words(length_preset: str) -> int:
     return LENGTH_WORDS.get(length_preset, LENGTH_WORDS["medium"])
+
+
+def verdict_words(conf: dict[str, Any]) -> int:
+    """Word budget of the judge's verdict (also used by the estimate)."""
+    base = VERDICT_WORDS.get(str(conf.get("length_preset") or ""), VERDICT_WORDS["medium"])
+    debaters = sum(1 for p in conf.get("participants") or [] if p.get("role") == "debater")
+    return base + VERDICT_WORDS_PER_EXTRA_DEBATER * max(0, debaters - 2)
 
 
 def _history_block(history: list[dict[str, Any]]) -> str:
@@ -195,27 +212,29 @@ def build_verdict_messages(
     """`evidence`: web fact-checks of the on-screen figures and the debaters' challenges
     (services.studio.verdict_evidence)."""
     language = conf.get("language", "English")
+    words = verdict_words(conf)
     if conf.get("output_style") == "spoken":
         structure = (
-            "You are speaking on camera: name the winner (or declare a draw) in your FIRST sentence, "
-            "then explain in a few short spoken paragraphs how each debater performed, which arguments "
-            "were strongest and where the reasoning was weak. Plain spoken prose only: no Markdown, "
-            "no headers, no lists, no emojis."
+            "You are speaking on camera: name the winner (or declare a draw) in your FIRST "
+            "sentence and say in one sentence what decided it. Then give each debater, by name, one "
+            "or two sentences: their strongest point and their main weakness. Plain spoken prose only: "
+            "no Markdown, no headers, no lists, no emojis."
         )
     else:
         structure = (
-            "Strictly follow this structure (use Markdown headers and bold text):\n"
-            "1. **Winner** — declare the winner (or a draw) based on argument strength, "
-            "logic, and persuasiveness.\n"
-            "2. **Analysis** — briefly evaluate each debater's performance.\n"
-            "3. **Key Arguments** — highlight the strongest points made.\n"
-            "4. **Logical Fallacies** — point out weak reasoning or fallacies, if any."
+            "Use exactly this structure and nothing else:\n"
+            "**Winner: <name>** (or **Draw**), then one sentence on what decided it.\n"
+            "Then one short paragraph per debater, starting with their name in bold: their "
+            "strongest point and their main weakness (name a logical fallacy only if there was one)."
         )
     system = (
         "You are an expert, impartial debate judge.\n"
-        "Analyze the full debate transcript provided by the user and deliver a verdict.\n"
+        "Analyze the full debate transcript provided by the user and deliver a verdict. Decide on "
+        "argument strength, logic and persuasiveness.\n"
         f"{structure}\n"
-        f"\nWrite in {language}. Style: objective, professional, analytical."
+        f"\nLength: about {words} words in total. This is a hard limit: the audience has just "
+        "heard the debate, so judge it, do not retell it.\n"
+        f"Write in {language}. Style: objective, professional, analytical."
     )
     evidence_block = (
         f"\n{evidence}\nWeigh accuracy: figures the fact-check refuted weaken a debater's case, a "

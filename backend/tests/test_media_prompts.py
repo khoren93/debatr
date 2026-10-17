@@ -25,5 +25,5 @@ def test_spoken_style_replaces_markdown_rules() -> None:
 
 def test_spoken_verdict_names_winner_first() -> None:
     system = build_verdict_messages({**CONF, "output_style": "spoken"}, [])[0]["content"]
-    assert "FIRST sentence" in system and "**Winner**" not in system
-    assert "**Winner**" in build_verdict_messages(CONF, [])[0]["content"]
+    assert "FIRST" in system and "**Winner" not in system
+    assert "**Winner: <name>**" in build_verdict_messages(CONF, [])[0]["content"]

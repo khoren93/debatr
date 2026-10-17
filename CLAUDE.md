@@ -151,7 +151,8 @@ docker compose up -d --build                     # full stack on http://localhos
 3. `scheduler.build_schedule()` is the single source of truth for turn order:
    each round = moderator (intro / transition) + every debater; debater turn types are
    `opening` / `rebuttal` / `closing` (or `argument` for single-round debates). The verdict
-   (`turn_type=verdict`, `round_id=verdict`) is appended after the last scheduled turn.
+   (`turn_type=verdict`, `round_id=verdict`) is appended after the last scheduled turn; its word
+   budget follows the length preset (`prompt_builder.verdict_words`, also used by the estimate).
 4. `openrouter_client.stream_chat_completion()` streams deltas and returns usage
    (tokens + cost). On HTTP 400 with a system prompt it retries once with the system prompt
    merged into the user message. Mid-stream `{"error": ...}` chunks raise `OpenRouterError`.

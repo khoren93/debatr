@@ -54,6 +54,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Shorter verdicts**: the judge now gets a word budget that follows the turn length (about 70
+  words after "very short" turns up to 260 after "long" ones, a little more with more debaters)
+  and a compact format: the winner and what decided it, then one short paragraph per debater.
+  Before, a verdict ran to 250–480 words even after 50-word turns and could take half of the
+  episode. Estimates use the same budget.
 - **New video layout**: the host sits on top, debaters in side columns (up to 2 + 2), the
   visual stage in the centre and captions below; the topic is shown big at the start and then
   stays as a small chip in the corner. The Short gets the same stage between the debaters and

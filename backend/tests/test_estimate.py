@@ -121,3 +121,19 @@ def test_fact_check_and_ai_pictures_add_credits():
         max_images=3,
     )
     assert off.factcheck_cost_usd == 0 and off.images_cost_usd == 0
+
+
+def test_the_verdict_stays_short_next_to_short_turns():
+    conf = {
+        "participants": [
+            {"role": "moderator", "model_id": "m"},
+            {"role": "debater", "model_id": "m"},
+            {"role": "debater", "model_id": "m"},
+        ],
+        "num_rounds": 1,
+        "length_preset": "very_short",
+        "language": "English",
+    }
+    est = estimate_debate(conf, {}, own_key=False, tts_provider=None, tts_price_per_1k=0, markup=1)
+    # host 50 + two debaters 2 x 50 + verdict 70: the verdict is under a third of the debate.
+    assert est.words == 220
