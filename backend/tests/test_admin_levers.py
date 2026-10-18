@@ -23,11 +23,11 @@ from app.api import routes_auth, routes_debates, routes_models
 from app.api.admin import routes_audit, routes_settings
 from app.core.config import settings
 from app.core.db import get_db
-from app.models.models import AdminAuditLog, RuntimeSetting, User
+from app.models.models import AdminAuditLog, ApiToken, Debate, RuntimeSetting, User
 from app.schemas.admin import AuditQuery
 from app.schemas.auth import RegisterRequest
-from app.schemas.schemas import DebateConfig
-from app.services import fair_share, free_quota, runtime_settings
+from app.schemas.schemas import DebateConfig, EstimateOut
+from app.services import alert_events, fair_share, free_quota, runtime_settings
 from app.services.admin import audit
 from app.services.admin.sessions import AdminSession
 from app.services.openrouter_client import openrouter_client
@@ -83,6 +83,13 @@ def test_validate_value_names_the_problem() -> None:
             runtime_settings.validate_value(key, value)
     with pytest.raises(ValueError, match="No such setting"):
         runtime_settings.validate_value("admin_role", "admin")
+
+
+def test_muted_alerts_take_known_kinds_in_the_catalogue_order() -> None:
+    muted = runtime_settings.validate_value("muted_alerts", ["topup", "signin", "topup"])
+    assert muted == ["signin", "topup"]
+    with pytest.raises(ValueError, match=r"muted_alerts: .*no such alert"):
+        runtime_settings.validate_value("muted_alerts", ["test"])  # the test always goes out
 
 
 def test_maintenance_notice() -> None:
@@ -147,7 +154,7 @@ async def test_closed_sign_ups(levers: dict) -> None:
 
 
 async def test_the_signup_bonus_comes_from_the_lever(
-    monkeypatch: pytest.MonkeyPatch, levers: dict
+    monkeypatch: pytest.MonkeyPatch, levers: dict, raised_alerts: list
 ) -> None:
     levers["signup_bonus_usd"] = 3
     granted: list[float] = []
@@ -175,6 +182,24 @@ async def test_the_signup_bonus_comes_from_the_lever(
     body = RegisterRequest(email="new@example.com", password="long enough pass")
     await routes_auth.register(body, request, db=DB())  # type: ignore[arg-type]
     assert granted == [3]
+    (alert,) = raised_alerts
+    assert alert.kind == "signup" and alert.title == "New account: new@example.com"
+    assert alert.detail == "New · $3.00 welcome credits"
+
+
+def test_a_starting_debate_is_announced(raised_alerts: list) -> None:
+    config = _config("openai/gpt-4o-mini", "x-ai/grok-4")
+    debate = Debate(id=uuid.uuid4(), title="Tabs or spaces?")
+    user = User(email="ann@example.com")
+    est = EstimateOut.model_construct(credits_cost_usd=0.25)
+    token = ApiToken(name="laptop")
+    routes_debates._announce(debate, config, user, est, False, token, from_draft=True)
+    (alert,) = raised_alerts
+    assert alert.kind == "debate" and alert.path == f"/admin/debates/{debate.id}"
+    assert alert.detail == (
+        "ann@example.com · gpt-4o-mini vs grok-4 · 3 rounds · about $0.25 · "
+        "API token “laptop” · from a draft"
+    )
 
 
 async def test_maintenance_and_turned_off_models(levers: dict) -> None:
@@ -380,6 +405,32 @@ async def test_reset_goes_back_to_the_env(api: tuple[FastAPI, SettingsDB]) -> No
     assert reset.action == "settings.reset"
     assert reset.before_json == {"disabled_models": ["x-ai/grok-4"]}
     assert reset.after_json == {"disabled_models": []}
+
+
+async def test_muting_alerts_is_itself_an_alert(
+    api: tuple[FastAPI, SettingsDB], raised_alerts: list
+) -> None:
+    app, db = api
+    app.dependency_overrides[current_admin] = lambda: _ctx("admin", sudo=True)
+    async with _client(app) as client:
+        listed = (await client.get("/api/admin/settings")).json()
+        assert [e["kind"] for e in listed["alert_events"]] == list(alert_events.KINDS)
+        assert listed["alert_events"][0]["group"] == "security"
+        bad = await client.put(
+            "/api/admin/settings/muted_alerts", json={"value": ["nope"], "reason": "quiet"}
+        )
+        assert bad.status_code == 422
+        done = await client.put(
+            "/api/admin/settings/muted_alerts",
+            json={"value": ["debate", "signin"], "reason": "too many"},
+        )
+        assert done.status_code == 200, done.text
+        await client.post("/api/admin/settings/muted_alerts/reset", json={"reason": "back"})
+    assert db.rows == {}
+    muted, restored = raised_alerts
+    assert muted.kind == "mutes" and muted.severity == "warning"
+    assert muted.detail == "by admin@example.com; muted: Console sign-in, New debate"
+    assert restored.detail.endswith("on again: Console sign-in, New debate")
 
 
 # --- the audit page ---------------------------------------------------------------------------

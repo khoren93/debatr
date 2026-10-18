@@ -46,9 +46,8 @@ export const AlertsCard = () => {
           <p className="mt-2 text-sm leading-relaxed text-muted">
             {data.configured ? (
               <>
-                On. Console sign-ins and lock-outs go out at once; failed sign-in series, flagged debates, failure spikes, runs without a worker, low OpenRouter
-                balance or ElevenLabs characters, top-ups and a full disk are checked every {Math.round(data.check_every_seconds / 60)} minutes. A lasting problem is
-                reported once, again when it gets worse.
+                On. Events marked “at once” go out when they happen, the others are checked every {Math.round(data.check_every_seconds / 60)} minutes; a lasting
+                problem is reported once, again when it gets worse. New accounts and debates are capped at 30 an hour each.
               </>
             ) : (
               <>

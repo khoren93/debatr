@@ -52,7 +52,8 @@ backend/            FastAPI API + RQ worker (Python 3.12+, managed with uv)
                       free_quota (worker safety, see "Workers and queues"), debate_control (stop),
                       usage (provider_usage booking, debate context, ContextThreadPool),
                       activity (user_activity_days, last_seen_at), runtime_settings (levers of
-                      the console, cached per process), alerts (Telegram: rules, antispam, job)
+                      the console, cached per process), alerts (Telegram: rules, antispam, job),
+                      alert_events (the alert kinds the console can mute)
   app/services/admin/ totp (codes, recovery / enrollment codes, QR), sessions (Redis: sessions,
                       sign-in tickets, code failures), passkeys (WebAuthn options / checks),
                       audit (append-only admin_audit_log: writing, the audit page's queries),
@@ -662,22 +663,27 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   400 on estimate / create / start / resume; the Free Router drops such a pick like a
   classifier's, a pinned one gives way to the router, and it is never a fallback),
   `signup_bonus_usd`, `free_models_per_minute`, `max_active_debates_per_user`,
-  `max_active_media_per_user`. Only the fields of `Levers` exist (pydantic limits); without a row
+  `max_active_media_per_user`, `muted_alerts` (see Alerts). Only the fields of `Levers` exist (pydantic limits); without a row
   the env setting applies; a broken row is ignored. `PUT /settings/{key}` / `POST
   /settings/{key}/reset` need sudo and a reason and write the row + audit entry in one
   transaction; processes read through a 5 s cache (`CACHE_SECONDS`), so a change lands within
   seconds everywhere. Tests stub the table with the `levers` fixture (conftest).
 - Alerts (`services/alerts`, optional `ALERT_TELEGRAM_BOT_TOKEN` + `ALERT_TELEGRAM_CHAT_ID`):
-  a console sign-in (with how the second factor was passed) and a locked second factor go out
-  at once from the API (`notify_soon`, a background task); a failed trending batch from its
-  job; `check_alerts_job` (scheduler, every 5 min) gathers facts and `decide` (pure) raises:
+  a console sign-in (with how the second factor was passed), a locked second factor, a new
+  account (`routes_auth.register`) and a debate that starts (create or draft start, not resume:
+  `routes_debates._announce`) go out at once from the API (`notify_soon`, a background task;
+  sign-ups and debates capped at 30 an hour each, `Alert.hourly`); a failed trending batch from
+  its job; `check_alerts_job` (scheduler, every 5 min) gathers facts and `decide` (pure) raises:
   5+ failed console sign-ins in 15 min, newly flagged debates, 3+ failed debates in an hour at
   30 %+ of finished ones, runs without heartbeat or waiting job for 10+ min on two checks in a
   row, OpenRouter < $5 / < $1, ElevenLabs key rejected or < 10 % / < 2 % characters, new top-ups,
   disk ≥ 85 % / 95 %. Antispam: a quiet key per kind and severity (an escalation sends again);
   flagged debates and top-ups are told new by the ids the last check saw (the first check after
-  a Redis reset reports none). Every alert, sent or not, lands in `alerts:recent` (Settings page,
-  "Send a test"). httpx errors print the URL with the bot token, so only their class name is
+  a Redis reset reports none). The Settings page's "Telegram notifications" card mutes kinds
+  (lever `muted_alerts`; catalogue with group / label / hint in `services/alert_events`, sent as
+  `SettingsOut.alert_events`; a new alert kind goes there too): a muted alert is neither sent nor
+  listed, and a change of the list is itself an alert that cannot be muted (`mutes`, like the
+  test). Every other alert, sent or not, lands in `alerts:recent` (Settings page, "Send a test"). httpx errors print the URL with the bot token, so only their class name is
   kept. The alerts run on the scheduler and the background queue: with every worker down,
   nothing reports it.
 - Overview (`GET /api/admin/overview?period=24h|7d|30d|90d|all&refresh=`): one cached answer

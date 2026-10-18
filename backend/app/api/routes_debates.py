@@ -28,7 +28,7 @@ from app.core.db import get_db
 from app.core.ratelimit import enforce_debate_create_limit
 from app.core.redis import get_async_redis, provider_key_key, stop_flag_key, tts_key_key
 from app.core.security import decrypt_secret
-from app.models.models import Debate, DebateParticipant, User
+from app.models.models import ApiToken, Debate, DebateParticipant, User
 from app.schemas.schemas import (
     DebateConfig,
     DebateDetail,
@@ -43,7 +43,7 @@ from app.schemas.schemas import (
     StartDebateRequest,
     StopDebateResponse,
 )
-from app.services import api_tokens, runtime_settings
+from app.services import alerts, api_tokens, runtime_settings
 from app.services.debate_control import ACTIVE_STATUSES
 from app.services.debate_control import stop_debate as stop_debate_run
 from app.services.engagement import engagement_out
@@ -263,6 +263,31 @@ async def _enqueue(
         ) from None
 
 
+def _announce(
+    debate: Debate,
+    config: DebateConfig,
+    user: User,
+    est: EstimateOut,
+    own_key: bool,
+    token: ApiToken | None,
+    *,
+    from_draft: bool = False,
+) -> None:
+    """The "new debate" alert (Telegram, unless muted in the console)."""
+    start = alerts.DebateStart(
+        debate_id=str(debate.id),
+        topic=config.topic.strip(),
+        owner=user.email,
+        models=[p.model_id for p in config.participants if p.role == "debater"],
+        rounds=config.num_rounds,
+        cost_usd=est.credits_cost_usd,
+        own_key=own_key,
+        token=token.name if token is not None else None,
+        from_draft=from_draft,
+    )
+    alerts.notify_soon(alerts.debate_alert(start))
+
+
 # --- routes --------------------------------------------------------------
 
 
@@ -343,9 +368,10 @@ async def create_debate(
     db.add(debate)
     await db.commit()
     debate_id = str(debate.id)
-    if config.draft:
+    if config.draft or est is None:
         return DebateResponse(debate_id=debate_id, status="draft", message="Draft saved")
     await _enqueue(db, debate, provider_key, tts_key)
+    _announce(debate, config, user, est, own_key, token)
     return DebateResponse(debate_id=debate_id, status="queued", message="Debate created and queued")
 
 
@@ -402,6 +428,7 @@ async def start_draft(
     debate.error_message = None
     await db.commit()
     await _enqueue(db, debate, provider_key, tts_key)
+    _announce(debate, config, user, est, own_key, token, from_draft=True)
     return DebateResponse(debate_id=debate_id, status="queued", message="Debate queued")
 
 

@@ -6,7 +6,8 @@
   `runtime_settings` row and the audit entry are written in one transaction, and every process
   sees the change within `runtime_settings.CACHE_SECONDS`.
 - `GET /alerts`, `POST /alerts/test`: whether Telegram is set up, the recent alerts, a test
-  message.
+  message. Which alerts go out is the `muted_alerts` lever (its catalogue comes with
+  `GET /settings`); a change of it is itself an alert that cannot be muted.
 """
 
 from typing import Any
@@ -19,6 +20,7 @@ from app.admin.access import AdminContext, read_only_db, require_admin, require_
 from app.core.db import get_db
 from app.models.models import RuntimeSetting, utcnow
 from app.schemas.admin import (
+    AlertEventOut,
     AlertsOut,
     AlertTestOut,
     CatalogueModel,
@@ -30,6 +32,7 @@ from app.schemas.admin import (
 )
 from app.services import alerts, runtime_settings
 from app.services.admin import audit
+from app.services.alert_events import EVENTS
 from app.services.openrouter_client import openrouter_client
 from app.services.runtime_settings import LEVER_KEYS, Levers
 
@@ -45,6 +48,7 @@ KINDS: dict[str, LeverKind] = {
     "free_models_per_minute": "int",
     "max_active_debates_per_user": "int",
     "max_active_media_per_user": "int",
+    "muted_alerts": "alerts",
 }
 
 
@@ -99,6 +103,10 @@ async def _settings_out(db: AsyncSession) -> SettingsOut:
     return SettingsOut(
         levers=levers_out(rows),
         models=[CatalogueModel(id=k, name=v) for k, v in sorted(catalogue.items())],
+        alert_events=[
+            AlertEventOut(kind=e.kind, group=e.group, label=e.label, hint=e.hint, at_once=e.at_once)
+            for e in EVENTS
+        ],
         cache_seconds=runtime_settings.CACHE_SECONDS,
     )
 
@@ -112,6 +120,12 @@ async def _effective(db: AsyncSession, key: str) -> Any:
     rows = await _rows(db)
     current = runtime_settings.resolve({k: row.value_json for k, row in rows.items()})
     return getattr(current, key)
+
+
+def _tell_mutes(key: str, actor: str, before: Any, after: Any) -> None:
+    """Muting alerts goes to the chat itself (after the commit, so it names what holds)."""
+    if key == "muted_alerts" and before != after:
+        alerts.notify_soon(alerts.mutes_changed_alert(actor, list(before), list(after)))
 
 
 @router.get("/settings", response_model=SettingsOut)
@@ -162,6 +176,7 @@ async def change_setting(
     )
     await db.commit()
     runtime_settings.invalidate()
+    _tell_mutes(key, ctx.user.email, before, value)
     return await _settings_out(db)
 
 
@@ -195,6 +210,7 @@ async def reset_setting(
     )
     await db.commit()
     runtime_settings.invalidate()
+    _tell_mutes(key, ctx.user.email, before, runtime_settings.defaults()[key])
     return await _settings_out(db)
 
 

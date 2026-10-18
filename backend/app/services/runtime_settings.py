@@ -23,6 +23,7 @@ from app.core.config import settings
 from app.core.db import AsyncSessionLocal
 from app.core.sync_db import get_sync_session
 from app.models.models import RuntimeSetting
+from app.services.alert_events import KINDS as ALERT_KINDS
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +51,8 @@ class Levers(BaseModel):
     free_models_per_minute: int = Field(default=18, ge=0, le=20)
     max_active_debates_per_user: int = Field(default=2, ge=0, le=20)
     max_active_media_per_user: int = Field(default=2, ge=0, le=20)
+    # Telegram alerts that are not sent (kinds of services/alert_events; the rest go out).
+    muted_alerts: list[str] = Field(default_factory=list, max_length=len(ALERT_KINDS))
 
     @field_validator("maintenance_message")
     @classmethod
@@ -67,6 +70,14 @@ class Levers(BaseModel):
             if model_id not in cleaned:
                 cleaned.append(model_id)
         return cleaned
+
+    @field_validator("muted_alerts")
+    @classmethod
+    def _alerts(cls, value: list[str]) -> list[str]:
+        unknown = [kind for kind in value if kind not in ALERT_KINDS]
+        if unknown:
+            raise ValueError(f"no such alert: {unknown[0][:40]!r}")
+        return [kind for kind in ALERT_KINDS if kind in value]  # the catalogue's order
 
     def notice(self) -> str:
         """What a refused request says during maintenance."""

@@ -1,17 +1,22 @@
 """Operator alerts in Telegram (optional: ALERT_TELEGRAM_BOT_TOKEN + ALERT_TELEGRAM_CHAT_ID).
 
-Raised at once: a console sign-in and a locked second factor (the API, `notify_soon`), a failed
-trending batch (its job). Found by `check_alerts_job` (the scheduler, every CHECK_SECONDS on the
-background queue): a series of failed console sign-ins, newly flagged debates, a spike of failed
-debates, runs without a worker, a low OpenRouter balance, a rejected ElevenLabs key or its
-characters running out, top-ups and a full disk. The rules are pure (`decide`) over a snapshot
-(`Facts`); the job only gathers it.
+Raised at once: a console sign-in and a locked second factor (the API, `notify_soon`), a new
+account and a debate that starts (the public API), a failed trending batch (its job). Found by
+`check_alerts_job` (the scheduler, every CHECK_SECONDS on the background queue): a series of
+failed console sign-ins, newly flagged debates, a spike of failed debates, runs without a worker,
+a low OpenRouter balance, a rejected ElevenLabs key or its characters running out, top-ups and a
+full disk. The rules are pure (`decide`) over a snapshot (`Facts`); the job only gathers it.
+
+The console's Settings page mutes kinds (lever `muted_alerts`, catalogue in
+services/alert_events): a muted alert is neither sent nor listed. A change of that list always
+goes out, so muting the security alerts cannot pass unnoticed.
 
 Antispam: an alert with `quiet` seconds holds a Redis key that long, so a lasting condition is
-reported once and again only when it escalates (each severity has its own key). New flagged
-debates, top-ups and stuck runs are told apart from the ones already reported by the ids the
-last check saw. Every alert, sent or not (no Telegram configured, Telegram refused), lands in
-RECENT_KEY for the console's Settings page.
+reported once and again only when it escalates (each severity has its own key). Frequent events
+(sign-ups, debates) have an `hourly` cap, so a wave of bots cannot bury the other alerts. New
+flagged debates, top-ups and stuck runs are told apart from the ones already reported by the ids
+the last check saw. Every alert, sent or not (no Telegram configured, Telegram refused), lands
+in RECENT_KEY for the console's Settings page.
 
 Sending never raises, and the bot token never reaches a log: httpx errors print the URL, which
 carries the token, so only their class name is kept. The alerts need the scheduler and a worker
@@ -24,7 +29,7 @@ import json
 import logging
 import shutil
 from collections.abc import Iterable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from html import escape
 from typing import Any, Literal
@@ -39,6 +44,8 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.redis import debate_beat_key, get_async_redis, get_sync_redis, media_beat_key
 from app.models.models import AdminAuditLog, CreditTransaction, Debate, User, utcnow
+from app.services import runtime_settings
+from app.services.alert_events import LABELS, SECURITY
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +83,8 @@ DISK_WARNING = 0.85
 DISK_CRITICAL = 0.95
 BALANCE_KEY = "admin:openrouter_balance"  # shared with the overview (routes_overview)
 BALANCE_SECONDS = 300
+SIGNUPS_PER_HOUR = 30
+DEBATES_PER_HOUR = 30
 
 
 @dataclass(frozen=True)
@@ -86,10 +95,15 @@ class Alert:
     severity: Severity = "warning"
     path: str | None = None  # a console page, e.g. "/admin/moderation"
     quiet: int = 0  # seconds the same alert stays quiet after it went out
+    hourly: int = 0  # at most this many of the kind an hour (0: no cap)
 
     @property
     def quiet_key(self) -> str:
         return f"alert:quiet:{self.kind}:{self.severity}"
+
+    @property
+    def count_key(self) -> str:
+        return f"alert:count:{self.kind}"
 
 
 # --- messages ---------------------------------------------------------------------------------
@@ -189,15 +203,51 @@ def _log_failure(alert: Alert, error: str | None) -> None:
         logger.warning("Alert %s was not sent: %s", alert.kind, error)
 
 
+def _capped(alert: Alert, count: int) -> Alert | None:
+    """The `count`-th alert of the hour as it goes out (the last one says so), None above it."""
+    if count > alert.hourly:
+        return None
+    if count < alert.hourly:
+        return alert
+    note = f"{alert.hourly} in an hour: the next ones stay quiet until the hour is over"
+    return replace(alert, detail=" · ".join(part for part in (alert.detail, note) if part))
+
+
+def _gate_sync(alert: Alert, conn: Redis) -> Alert | None:
+    """The alert to send, or None while the same one is quiet or over its hourly cap."""
+    if alert.quiet and not conn.set(alert.quiet_key, "1", nx=True, ex=alert.quiet):
+        return None
+    if alert.hourly:
+        count = int(conn.incr(alert.count_key))
+        conn.expire(alert.count_key, HOUR, nx=True)  # on every call, so a lost one heals
+        return _capped(alert, count)
+    return alert
+
+
+async def _gate(alert: Alert, conn: AsyncRedis) -> Alert | None:
+    if alert.quiet and not await conn.set(alert.quiet_key, "1", nx=True, ex=alert.quiet):
+        return None
+    if alert.hourly:
+        count = int(await conn.incr(alert.count_key))
+        await conn.expire(alert.count_key, HOUR, nx=True)
+        return _capped(alert, count)
+    return alert
+
+
 def raise_sync(alert: Alert, redis: Redis | None = None) -> bool:
-    """Send `alert` unless the same one is quiet, and record it. True when Telegram took it."""
+    """Send `alert` unless it is muted, quiet or over its cap, and record it. True when
+    Telegram took it."""
+    if alert.kind in runtime_settings.current_sync().muted_alerts:
+        return False
     try:
         conn = redis or get_sync_redis()
-        if alert.quiet and not conn.set(alert.quiet_key, "1", nx=True, ex=alert.quiet):
-            return False
+        gated = _gate_sync(alert, conn)
     except RedisError:
         logger.warning("Alert %s skipped: Redis is unavailable", alert.kind)
         return False
+    if gated is None:
+        return False
+    alert = gated
     error = send_sync(message(alert))
     _log_failure(alert, error)
     with contextlib.suppress(RedisError):
@@ -218,14 +268,15 @@ async def deliver(alert: Alert, redis: AsyncRedis | None = None) -> str | None:
 
 
 async def raise_async(alert: Alert, redis: AsyncRedis | None = None) -> bool:
+    if alert.kind in (await runtime_settings.current()).muted_alerts:
+        return False
     try:
         conn = redis or get_async_redis()
-        if alert.quiet and not await conn.set(alert.quiet_key, "1", nx=True, ex=alert.quiet):
-            return False
+        gated = await _gate(alert, conn)
     except RedisError:
         logger.warning("Alert %s skipped: Redis is unavailable", alert.kind)
         return False
-    return await deliver(alert, conn) is None
+    return gated is not None and await deliver(gated, conn) is None
 
 
 _tasks: set[asyncio.Task[None]] = set()
@@ -306,6 +357,85 @@ def locked_alert(email: str, ip: str | None) -> Alert:
         severity="critical",
         path="/admin/audit?tab=security&ok=false",
         quiet=15 * 60,
+    )
+
+
+def signup_alert(
+    user_id: str, email: str, name: str, ip: str | None, agent: str | None, bonus_usd: float
+) -> Alert:
+    parts = [name, ip or "", agent_label(agent)]
+    if bonus_usd > 0:
+        parts.append(f"{_usd(bonus_usd)} welcome credits")
+    return Alert(
+        kind="signup",
+        title=f"New account: {email}",
+        detail=" · ".join(part for part in parts if part),
+        severity="info",
+        path=f"/admin/users/{user_id}",
+        hourly=SIGNUPS_PER_HOUR,
+    )
+
+
+def model_label(model_id: str) -> str:
+    """ "claude-sonnet-5" from "anthropic/claude-sonnet-5"."""
+    if model_id == "openrouter/free":
+        return "Free Router"
+    return model_id.split("/", 1)[-1]
+
+
+@dataclass(frozen=True)
+class DebateStart:
+    """What the alert of a starting debate tells (routes_debates fills it)."""
+
+    debate_id: str
+    topic: str
+    owner: str  # email
+    models: list[str]  # the debaters' model ids
+    rounds: int
+    cost_usd: float  # the estimate in credits
+    own_key: bool = False
+    token: str | None = None  # the API token's name (CLI, agents)
+    from_draft: bool = False
+
+
+def debate_alert(start: DebateStart) -> Alert:
+    if start.own_key:
+        cost = "own OpenRouter key"
+    elif start.cost_usd > 0:
+        cost = f"about {_usd(start.cost_usd)}"
+    else:
+        cost = "free models"
+    versus = " vs ".join(model_label(model_id) for model_id in start.models)
+    parts = [start.owner, versus, _plural(start.rounds, "round"), cost]
+    if start.token:
+        parts.append(f"API token “{start.token}”")
+    if start.from_draft:
+        parts.append("from a draft")
+    return Alert(
+        kind="debate",
+        title=f"New debate: {start.topic}",
+        detail=" · ".join(part for part in parts if part),
+        severity="info",
+        path=f"/admin/debates/{start.debate_id}",
+        hourly=DEBATES_PER_HOUR,
+    )
+
+
+def mutes_changed_alert(actor: str, before: list[str], after: list[str]) -> Alert:
+    """Never muted itself (the kind is not in the catalogue)."""
+    muted = [kind for kind in after if kind not in before]
+    restored = [kind for kind in before if kind not in after]
+    parts = [f"by {actor}"]
+    if muted:
+        parts.append("muted: " + ", ".join(LABELS.get(kind, kind) for kind in muted))
+    if restored:
+        parts.append("on again: " + ", ".join(LABELS.get(kind, kind) for kind in restored))
+    return Alert(
+        kind="mutes",
+        title="Telegram alerts changed",
+        detail="; ".join(parts),
+        severity="warning" if SECURITY.intersection(muted) else "info",
+        path="/admin/settings",
     )
 
 

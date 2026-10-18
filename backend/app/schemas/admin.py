@@ -1101,7 +1101,7 @@ class SecuritySummary(BaseModel):
 
 # --- levers and alerts --------------------------------------------------------------------------
 
-LeverKind = Literal["bool", "int", "float", "text", "models"]
+LeverKind = Literal["bool", "int", "float", "text", "models", "alerts"]
 
 
 class LeverOut(BaseModel):
@@ -1121,9 +1121,20 @@ class CatalogueModel(BaseModel):
     name: str
 
 
+class AlertEventOut(BaseModel):
+    """An alert kind the console can mute (services/alert_events)."""
+
+    kind: str
+    group: Literal["security", "people", "debates", "system"]
+    label: str
+    hint: str
+    at_once: bool  # sent when it happens; otherwise found by the periodic check
+
+
 class SettingsOut(BaseModel):
     levers: list[LeverOut]
     models: list[CatalogueModel]  # OpenRouter's catalogue, for turning models off
+    alert_events: list[AlertEventOut]  # what `muted_alerts` can hold
     cache_seconds: float  # how soon every process sees a change
 
 

@@ -1,10 +1,12 @@
 import { useState, type ReactNode } from 'react';
 import { Plus, RotateCcw, Search, X } from 'lucide-react';
 import { changeLever, getSettings, resetLever } from '../../api/admin/settings';
-import type { Lever, LeverKey, LeverValue, SettingsOut } from '../../api/admin/types';
+import type { AlertEvent, Lever, LeverKey, LeverValue, SettingsOut } from '../../api/admin/types';
 import { Page, PageTitle } from '../../components/layout/AppShell';
 import { ActionDialog } from '../../components/admin/ActionDialog';
+import { AlertEventsCard } from '../../components/admin/AlertEventsCard';
 import { AlertsCard } from '../../components/admin/AlertsCard';
+import { mutedSummary, mutesSecurity } from '../../components/admin/alertEvents';
 import { formatTime, formatUsd } from '../../components/admin/helpers';
 import { useLoad } from '../../components/admin/useLoad';
 import { Button, Card, ErrorBox, Input, SectionLabel, Spinner, SwitchTrack, Textarea, useToast } from '../../components/ui';
@@ -21,9 +23,11 @@ const COPY: Record<LeverKey, { label: string; hint: string }> = {
   free_models_per_minute: { label: 'Free-model requests a minute', hint: 'System key, all users together; OpenRouter allows 20. Turns wait for a slot. 0: no limit.' },
   max_active_debates_per_user: { label: 'Debates at a time, per user', hint: 'Queued and running; more answer “wait”. 0: no limit.' },
   max_active_media_per_user: { label: 'Audio builds at a time, per user', hint: '0: no limit.' },
+  muted_alerts: { label: 'Telegram notifications', hint: 'Events that are not sent to the chat.' },
 };
 
-const show = (lever: Lever, value: LeverValue): string => {
+const show = (lever: Lever, value: LeverValue, events: AlertEvent[] = []): string => {
+  if (lever.kind === 'alerts') return mutedSummary(Array.isArray(value) ? value : [], events);
   if (lever.kind === 'bool') {
     if (lever.key === 'registration_open') return value ? 'open' : 'closed';
     return value ? 'on' : 'off';
@@ -223,6 +227,10 @@ const AdminSettings = () => {
 
   const number = (lever: Lever) => <NumberField key={String(lever.value)} lever={lever} onSave={(value) => ask(lever, value)} />;
   const pendingTarget = pending ? (pending.reset ? pending.lever.default : (pending.value as LeverValue)) : null;
+  const events = settings?.alert_events ?? [];
+  const mutedLever = byKey('muted_alerts');
+  // Muting a security alert (sign-ins, locks) deserves the red button.
+  const quietsSecurity = pending?.lever.key === 'muted_alerts' && Array.isArray(pendingTarget) && mutesSecurity(pendingTarget, events);
 
   return (
     <Page>
@@ -268,7 +276,18 @@ const AdminSettings = () => {
               </div>
             </Card>
           </div>
-          <AlertsCard />
+          <div className="grid gap-5">
+            {mutedLever && (
+              <AlertEventsCard
+                key={JSON.stringify(mutedLever.value)}
+                lever={mutedLever}
+                events={events}
+                onSave={(value) => ask(mutedLever, value)}
+                onReset={() => askReset(mutedLever)}
+              />
+            )}
+            <AlertsCard />
+          </div>
         </div>
       )}
 
@@ -278,12 +297,13 @@ const AdminSettings = () => {
         body={
           pending && (
             <>
-              From <b className="text-text">{show(pending.lever, pending.lever.value)}</b> to <b className="text-text">{show(pending.lever, pendingTarget as LeverValue)}</b>.
+              From <b className="text-text">{show(pending.lever, pending.lever.value, events)}</b> to{' '}
+              <b className="text-text">{show(pending.lever, pendingTarget as LeverValue, events)}</b>.
             </>
           )
         }
         confirmLabel={pending?.reset ? 'Reset' : 'Apply'}
-        danger={pending?.lever.key === 'maintenance' && pending.value === true}
+        danger={(pending?.lever.key === 'maintenance' && pending.value === true) || quietsSecurity}
         sudo
         autoFocusReason
         onSubmit={submit}

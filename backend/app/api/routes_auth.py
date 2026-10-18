@@ -30,7 +30,8 @@ from app.schemas.auth import (
     UpdateProfileRequest,
     UserOut,
 )
-from app.services import runtime_settings
+from app.services import alerts, runtime_settings
+from app.services.admin import audit
 from app.services.credits import apply_transaction
 from app.services.openrouter_client import openrouter_client
 
@@ -96,6 +97,16 @@ async def register(
     await db.refresh(user)
     login_session(request, user)
     logger.info("New account %s", user.email)
+    alerts.notify_soon(
+        alerts.signup_alert(
+            str(user.id),
+            user.email,
+            user.display_name,
+            audit.client_ip(request),
+            audit.user_agent(request),
+            levers.signup_bonus_usd,
+        )
+    )
     return user_out(user)
 
 

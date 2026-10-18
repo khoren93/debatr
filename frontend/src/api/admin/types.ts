@@ -876,7 +876,7 @@ export interface SecuritySummary {
 
 // --- levers and alerts ---------------------------------------------------------------------------
 
-export type LeverKind = 'bool' | 'int' | 'float' | 'text' | 'models';
+export type LeverKind = 'bool' | 'int' | 'float' | 'text' | 'models' | 'alerts';
 
 export type LeverKey =
   | 'registration_open'
@@ -886,7 +886,8 @@ export type LeverKey =
   | 'signup_bonus_usd'
   | 'free_models_per_minute'
   | 'max_active_debates_per_user'
-  | 'max_active_media_per_user';
+  | 'max_active_media_per_user'
+  | 'muted_alerts';
 
 export type LeverValue = boolean | number | string | string[];
 
@@ -908,9 +909,23 @@ export interface CatalogueModel {
   name: string;
 }
 
+export type AlertGroup = 'security' | 'people' | 'debates' | 'system';
+
+/** An alert kind the console can mute (backend services/alert_events). */
+export interface AlertEvent {
+  kind: string;
+  group: AlertGroup;
+  label: string;
+  hint: string;
+  /** Sent when it happens; otherwise found by the periodic check. */
+  at_once: boolean;
+}
+
 export interface SettingsOut {
   levers: Lever[];
   models: CatalogueModel[];
+  /** What `muted_alerts` can hold. */
+  alert_events: AlertEvent[];
   /** How soon every server process sees a change. */
   cache_seconds: number;
 }
