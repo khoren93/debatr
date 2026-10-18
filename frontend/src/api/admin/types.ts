@@ -370,3 +370,198 @@ export interface CreditChangeOut {
   balance_after: number;
   duplicate: boolean;
 }
+
+// --- debates and moderation (routes_debates.py) ------------------------------------------------
+
+export type DebateSort = 'created' | 'likes' | 'views' | 'cost' | 'charged' | 'turns';
+
+export interface DebateFilters {
+  q?: string;
+  status?: string;
+  active?: boolean;
+  failed?: boolean;
+  moderation?: string;
+  media?: string;
+  public?: boolean;
+  own_key?: boolean;
+  via_token?: boolean;
+  model?: string;
+  user_id?: string;
+  created_from?: string;
+  created_to?: string;
+}
+
+export interface DebateOwner {
+  id: string;
+  email: string;
+  display_name: string;
+}
+
+export interface AdminDebateRow {
+  id: string;
+  title: string;
+  owner: DebateOwner | null;
+  status: string;
+  models: string[];
+  created_at: string;
+  started_at: string | null;
+  ended_at: string | null;
+  duration_ms: number | null;
+  turns: number;
+  /** Provider cost on the system keys; null without the money permission. */
+  cost: number | null;
+  charged: number | null;
+  own_key: boolean;
+  via_token: boolean;
+  is_public: boolean;
+  url: string | null;
+  moderation_status: string;
+  media_status: string;
+  views: number;
+  likes: number;
+  votes: number;
+  error: string | null;
+}
+
+export interface AdminDebateList {
+  total: number;
+  limit: number;
+  offset: number;
+  rows: AdminDebateRow[];
+}
+
+export interface AdminTurn {
+  seq_index: number;
+  round_id: string;
+  turn_type: string;
+  speaker_name: string;
+  model_used: string;
+  text: string;
+  error: string | null;
+  created_at: string | null;
+  tokens_in: number;
+  tokens_out: number;
+  cost: number;
+  duration_ms: number | null;
+  ttft_ms: number | null;
+  error_kind: string | null;
+  visuals_status: string;
+  scenes: number;
+  checks: Record<string, number>;
+  disputes: number;
+}
+
+export interface UsageByPurpose {
+  purpose: string;
+  key_owner: string;
+  calls: number;
+  failures: number;
+  cost: number;
+}
+
+export interface RecoveryState {
+  debate_beat: boolean;
+  media_beat: boolean;
+  debate_attempts: number;
+  media_attempts: number;
+  stop_flag: boolean;
+  provider_key: boolean;
+  tts_key: boolean;
+}
+
+export interface AdminDebateCard {
+  debate: AdminDebateRow;
+  topic: string;
+  config: Record<string, unknown>;
+  totals: Record<string, unknown>;
+  turns: AdminTurn[];
+  verdict: Record<string, unknown>;
+  moderation: Record<string, unknown>;
+  wants_public: boolean;
+  media: Record<string, unknown> & { status: string };
+  recovery: RecoveryState;
+  usage: UsageByPurpose[] | null;
+  ledger: AdminLedgerRow[] | null;
+  refundable: number | null;
+  /** The turn a resume starts from (0-based), when the debate can be resumed. */
+  resume_from: number | null;
+  audit: AuditEntry[];
+}
+
+export interface ModerationItem {
+  id: string;
+  title: string;
+  owner: DebateOwner | null;
+  models: string[];
+  created_at: string;
+  ended_at: string | null;
+  reason: string | null;
+  source: string | null;
+  checked_at: string | null;
+  publish_requested: boolean;
+}
+
+export interface ModerationDecision {
+  debate_id: string | null;
+  title: string | null;
+  action: string;
+  actor_email: string | null;
+  reason: string | null;
+  created_at: string;
+}
+
+export interface ModerationQueue {
+  flagged: ModerationItem[];
+  recent: ModerationDecision[];
+}
+
+export interface ActionOut {
+  status: string;
+  message: string;
+}
+
+export interface RefundOut {
+  transaction_id: string;
+  amount: number;
+  balance_after: number;
+  duplicate: boolean;
+}
+
+// --- trending (routes_trending.py) ------------------------------------------------------------
+
+export interface TrendingBatchRow {
+  id: string;
+  created_at: string;
+  model: string;
+  topic_count: number;
+  hidden: number;
+  cost_usd: number;
+  current: boolean;
+  feeds_ok: number | null;
+  feeds_total: number | null;
+  headlines_fresh: number | null;
+  headlines_blocked: number | null;
+  headlines_sent: number | null;
+  topics_asked: number | null;
+  dropped: number;
+}
+
+export interface TrendingTopicRow {
+  id: string;
+  rank: number;
+  label: string;
+  question: string;
+  brief: string;
+  category: string;
+  heat: number;
+  outlets: number;
+  sources: { title?: string; url?: string; outlet?: string; published_at?: string }[];
+  is_hidden: boolean;
+}
+
+export interface TrendingBatchCard {
+  batch: TrendingBatchRow;
+  topics: TrendingTopicRow[];
+  dropped: { question?: string; reason?: string }[];
+  blocked: { title?: string; term?: string }[];
+}

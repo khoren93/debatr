@@ -12,6 +12,12 @@ from app.services.events import publish_event
 logger = logging.getLogger(__name__)
 
 
+def free_build(debate: Debate) -> bool:
+    """A build an admin queued from the console: the owner pays nothing for it (voices and AI
+    pictures on the system keys; the cost stays in provider_usage)."""
+    return bool((debate.media_json or {}).get("free"))
+
+
 def set_media_state(
     db: Session,
     debate: Debate,

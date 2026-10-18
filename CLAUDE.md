@@ -27,8 +27,9 @@ backend/            FastAPI API + RQ worker (Python 3.12+, managed with uv)
                       security (bcrypt, Fernet, API token format/hash), ids
   app/api/admin/      admin console API (`/api/admin/*`): routes_auth (sign-in, 2FA, sessions,
                       sudo), routes_overview (tiles, series, money, attention, tops), routes_users
-                      (list, CSV, card, ledger, debates, account changes); later phases add
-                      debates, system, … (PROGRESS stage A)
+                      (list, CSV, card, ledger, debates, account changes), routes_debates (list,
+                      card, moderation queue, debate changes), routes_trending (batches, hide /
+                      show, build now); later phases add system, finance, … (PROGRESS stage A)
   app/api/            routers: auth, tokens (API tokens + `debatr login` device flow), billing
                       (Stripe), debates, gallery (+ leaderboard), reactions (likes/votes), models,
                       presets, topics (trending), stream (SSE), media; serializers.py builds the
@@ -51,7 +52,8 @@ backend/            FastAPI API + RQ worker (Python 3.12+, managed with uv)
   app/services/admin/ totp (codes, recovery / enrollment codes, QR), sessions (Redis: sessions,
                       sign-in tickets, code failures), audit (append-only admin_audit_log),
                       stats (overview queries + pure periods / buckets / attention rules),
-                      users (list query with SQL totals, pure card statistics, CSV, deletion)
+                      users (list query with SQL totals, pure card statistics, CSV, deletion),
+                      debates (debate list / card / moderation queue / trending batches)
   app/services/media/ audio pipeline: script (markdown→speech), tts/ (elevenlabs, edge),
                       ffmpeg, highlights (LLM picks shorts), visuals (LLM visual director),
                       sketch (SVG line art → sanitized path data), images (Commons photos / AI
@@ -118,10 +120,13 @@ frontend/           React 19 + Vite 8 + Tailwind 4 + TypeScript
                       Device (/device?code=…, approves `debatr login`), Login (/login),
                       Register (/register); admin/ = the admin console (/admin/*, lazy AdminApp
                       outside AppShell and AuthProvider: AdminLogin, AdminOverview, AdminUsers
-                      (filters in the URL), AdminUser (/admin/users/:id), AdminSecurity;
-                      components/admin: AdminShell, SudoDialog, ActionDialog (reason + sudo
-                      retry), DataTable + Pager, RecoveryCodes, StatTile, AttentionList; users/ =
-                      the account card's actions and sections; components/admin/charts:
+                      (filters in the URL), AdminUser (/admin/users/:id), AdminDebates,
+                      AdminDebate (/admin/debates/:id), AdminModeration (keyboard queue),
+                      AdminTrending, AdminSecurity; components/admin: AdminShell, SudoDialog,
+                      ActionDialog (reason + sudo retry, ⌘↵), DataTable + Pager, FilterBar +
+                      filters.ts (URL filters), RecoveryCodes, StatTile, AttentionList; users/ =
+                      the account card's actions and sections; debates/ = the debate card's
+                      actions, transcript and panels; components/admin/charts:
                       LineChart, StackedColumns, ChartCard (legend + table view), palette.ts =
                       validated chart colours)
   src/lib/cli.ts      install / login / MCP setup snippets shown on the Account page
@@ -640,6 +645,25 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   and their `MEDIA_ROOT` folders go too, counters of debates it liked are rebuilt). Accounts with
   a console role and the admin's own are never disabled, deleted or given passwords here (409:
   `app.manage` on the server).
+- Debates (`/api/admin/debates*`, read `debates.read`; money columns, provider calls, ledger and
+  refunds `money`): the list filters by status (`active` = queued or running), moderation,
+  audio, gallery, own key, API token, debater model, owner, period, and searches title / id /
+  slug; turns, system-key cost (`provider_usage`) and net charge come from SQL subqueries. The
+  card: transcript with per-turn usage, timing, scenes and fact-checks, verdict and moderation,
+  audio state, Redis state (heartbeats, recovery attempts, stop flag, keys waiting), provider
+  calls by purpose, ledger rows, the stored config (key-like fields scrubbed) and its audit
+  entries; opening someone's private debate is audited once an hour per admin (`debate.viewed`).
+  Changes (reason required, audited): stop, resume (`debates`; system key only, the owner is
+  charged for the rest as usual, shared `resume.reset_for_resume`), rebuild audio (free for the
+  owner: `media_json.free` skips the build's charges), recount, delete (sudo); approve / reject
+  (`moderation`; reason in `moderation_json.admin_reason`, approve publishes only when the
+  owner wants the gallery), publish (only what the owner asked for) / unpublish; refund
+  (`money`: up to the net charge, `provider_ref = admin:refund:<debate>:<idempotency_key>`, sudo
+  above `ADMIN_SUDO_USD`). `GET /moderation` = flagged debates oldest first + recent decisions;
+  the page is keyboard-driven (j/k, a, r, o). Moderators get `debates.read` + `moderation` only.
+- Trending (`/api/admin/trending*`): batches with feed / headline / dropped counts and cost, a
+  batch's topics, dropped topics and blocked headlines; hide / show a topic (`moderation`);
+  build now (`system`).
 
 ## Conventions
 

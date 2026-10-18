@@ -54,7 +54,7 @@ from app.services.media.tts.elevenlabs import system_key_status
 from app.services.moderation import publish_async
 from app.services.openrouter_client import openrouter_client
 from app.services.queue_manager import enqueue_debate_start
-from app.services.resume import discarded, resume_point
+from app.services.resume import reset_for_resume, resume_point
 from app.services.views import count_view
 
 logger = logging.getLogger(__name__)
@@ -463,22 +463,11 @@ async def resume_debate(
     _require_sufficient(plan.est)
     await require_debate_slot(db, debate.user_id or user.id)
 
-    dropped, cost = discarded(debate.turns, plan.from_seq)
-    for turn in dropped:
-        await db.delete(turn)
-    totals = dict(debate.totals_json or {})
-    if cost:
-        totals["discarded_cost"] = round(float(totals.get("discarded_cost") or 0) + cost, 6)
-    debate.totals_json = totals
+    await reset_for_resume(db, debate, plan.from_seq)
     debate.config_json = {**plan.config.persisted(), "billing": _billing(plan.own_key, plan.est)}
     token = request_api_token(request)
     if token is not None:  # from the browser the run stays on the token that started it
         debate.api_token_id = token.id
-    if debate.media_status != "none":
-        debate.media_status = "none"  # the audio lacks the new turns; the TTS cache stays
-    debate.status = "queued"
-    debate.error_message = None
-    debate.ended_at = None
     await db.commit()
     await _enqueue(db, debate, plan.provider_key, plan.tts_key, from_seq=plan.from_seq)
     return DebateResponse(

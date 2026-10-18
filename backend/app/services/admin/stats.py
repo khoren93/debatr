@@ -169,7 +169,7 @@ def attention_items(s: Signals) -> list[dict[str, Any]]:
                 "critical",
                 "Runs without a worker",
                 f"{' and '.join(parts)} queued or running with no heartbeat for 5+ minutes",
-                f"{db}/debate/list?search=running",
+                "/admin/debates?status=active",
             )
         )
     if s.openrouter_balance is not None and s.openrouter_balance < OPENROUTER_LOW_USD:
@@ -224,7 +224,7 @@ def attention_items(s: Signals) -> list[dict[str, Any]]:
                 f"{_plural(s.flagged, 'debate')} {'waits' if s.flagged == 1 else 'wait'} "
                 "for moderation",
                 "flagged by the AI check; approve or reject",
-                f"{db}/debate/list?moderation_status=flagged",
+                "/admin/moderation",
             )
         )
     if s.failed_24h:
@@ -234,7 +234,7 @@ def attention_items(s: Signals) -> list[dict[str, Any]]:
                 "warning",
                 f"{_plural(s.failed_24h, 'debate')} failed in 24 h",
                 "a turn got no answer; owners can resume",
-                f"{db}/debate/list?search=error",
+                "/admin/debates?status=error",
             )
         )
     if s.media_failed_24h:
@@ -244,7 +244,7 @@ def attention_items(s: Signals) -> list[dict[str, Any]]:
                 "warning",
                 f"{_plural(s.media_failed_24h, 'audio build')} failed in 24 h",
                 "",
-                f"{db}/debate/list",
+                "/admin/debates?media=error",
             )
         )
     if s.negative_balances:
@@ -281,7 +281,7 @@ def attention_items(s: Signals) -> list[dict[str, Any]]:
                     "warning",
                     "Trending topics are stale",
                     age,
-                    f"{db}/trending-batch/list",
+                    "/admin/trending",
                 )
             )
     if s.recovery_codes_left is not None and s.recovery_codes_left <= 3:

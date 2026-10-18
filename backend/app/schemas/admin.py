@@ -484,3 +484,222 @@ class DeleteUserRequest(ReasonRequest):
 
 class DeleteUserOut(BaseModel):
     debates: int
+
+
+# --- debates and moderation -------------------------------------------------------------------
+
+DebateSort = Literal["created", "likes", "views", "cost", "charged", "turns"]
+DebateStatusName = Literal["draft", "queued", "running", "completed", "error", "stopped"]
+
+
+class DebateFilters(BaseModel):
+    q: str = Field(default="", max_length=200)  # title contains, an exact id or slug
+    status: DebateStatusName | None = None
+    active: bool | None = None  # queued or running
+    failed: bool | None = None  # ended with an error
+    moderation: Literal["none", "approved", "flagged", "rejected"] | None = None
+    media: Literal["none", "queued", "running", "ready", "error"] | None = None
+    public: bool | None = None
+    own_key: bool | None = None  # ran on the owner's OpenRouter key
+    via_token: bool | None = None  # started with an API token
+    model: str | None = Field(default=None, max_length=160)  # a debater's model id
+    user_id: uuid.UUID | None = None
+    created_from: date | None = None  # UTC days, both inclusive
+    created_to: date | None = None
+
+
+class DebateListQuery(DebateFilters):
+    sort: DebateSort = "created"
+    order: Literal["asc", "desc"] = "desc"
+    limit: int = Field(default=50, ge=1, le=200)
+    offset: int = Field(default=0, ge=0)
+
+
+class DebateOwner(BaseModel):
+    id: str
+    email: str
+    display_name: str
+
+
+class AdminDebateRow(BaseModel):
+    id: str
+    title: str
+    owner: DebateOwner | None  # None: a debate from before accounts
+    status: str
+    models: list[str]  # debaters
+    created_at: datetime
+    started_at: datetime | None
+    ended_at: datetime | None
+    duration_ms: int | None  # start to end of the run
+    turns: int
+    cost: float | None  # provider cost on the system keys (`money` permission)
+    charged: float | None  # net credits of its ledger rows (`money` permission)
+    own_key: bool
+    via_token: bool
+    is_public: bool
+    url: str | None
+    moderation_status: str
+    media_status: str
+    views: int
+    likes: int
+    votes: int
+    error: str | None
+
+
+class AdminDebateList(BaseModel):
+    total: int
+    limit: int
+    offset: int
+    rows: list[AdminDebateRow]
+
+
+class AdminTurn(BaseModel):
+    seq_index: int
+    round_id: str
+    turn_type: str
+    speaker_name: str
+    model_used: str
+    text: str
+    error: str | None
+    created_at: datetime | None
+    tokens_in: int
+    tokens_out: int
+    cost: float
+    duration_ms: int | None
+    ttft_ms: int | None
+    error_kind: str | None
+    visuals_status: str
+    scenes: int
+    checks: dict[str, int]  # fact-check verdict -> scenes
+    disputes: int
+
+
+class UsageByPurpose(BaseModel):
+    purpose: str
+    key_owner: str
+    calls: int
+    failures: int
+    cost: float
+
+
+class RecoveryState(BaseModel):
+    """What Redis knows about the debate's runs right now."""
+
+    debate_beat: bool  # a worker is on a debate step
+    media_beat: bool  # a worker is building the audio
+    debate_attempts: int  # recovery re-queued the run this many times
+    media_attempts: int
+    stop_flag: bool
+    provider_key: bool  # an own OpenRouter key waits for the run
+    tts_key: bool  # an own ElevenLabs key waits for the build
+
+
+class AdminDebateCard(BaseModel):
+    debate: AdminDebateRow
+    topic: str
+    config: dict[str, Any]  # as stored (keys never are), `billing` included
+    totals: dict[str, Any]
+    turns: list[AdminTurn]
+    verdict: dict[str, Any]
+    moderation: dict[str, Any]
+    wants_public: bool  # the owner asked for the gallery
+    media: dict[str, Any]  # media_json: options, progress, stats, error, renders, free
+    recovery: RecoveryState
+    usage: list[UsageByPurpose] | None  # provider calls by purpose (`money`)
+    ledger: list[AdminLedgerRow] | None  # `money`
+    refundable: float | None  # net charged, what a refund may still give back (`money`)
+    resume_from: int | None  # the turn a resume starts from, when it can be resumed
+    audit: list[AuditEntryOut]
+
+
+class ModerationItem(BaseModel):
+    id: str
+    title: str
+    owner: DebateOwner | None
+    models: list[str]
+    created_at: datetime
+    ended_at: datetime | None
+    reason: str | None
+    source: str | None  # llm | fallback (the check gave no answer)
+    checked_at: str | None
+    publish_requested: bool  # the owner wants it public
+
+
+class ModerationDecision(BaseModel):
+    debate_id: str | None
+    title: str | None  # None when the debate is gone
+    action: str  # moderation.approved | moderation.rejected
+    actor_email: str | None
+    reason: str | None
+    created_at: datetime
+
+
+class ModerationQueue(BaseModel):
+    flagged: list[ModerationItem]
+    recent: list[ModerationDecision]
+
+
+class RefundRequest(ReasonRequest):
+    amount: Decimal | None = None  # None: everything still refundable
+    idempotency_key: uuid.UUID
+
+
+class RefundOut(BaseModel):
+    transaction_id: str
+    amount: float
+    balance_after: float
+    duplicate: bool
+
+
+class MediaRebuildRequest(ReasonRequest):
+    force: bool = False  # voice every turn again instead of reusing cached ones
+
+
+class ActionOut(BaseModel):
+    status: str
+    message: str
+
+
+# --- trending topics --------------------------------------------------------------------------
+
+
+class TrendingBatchRow(BaseModel):
+    id: str
+    created_at: datetime
+    model: str
+    topic_count: int
+    hidden: int
+    cost_usd: float
+    current: bool  # the newest batch: what the wizard shows
+    feeds_ok: int | None
+    feeds_total: int | None
+    headlines_fresh: int | None
+    headlines_blocked: int | None
+    headlines_sent: int | None
+    topics_asked: int | None
+    dropped: int
+
+
+class TrendingBatchPage(BaseModel):
+    total: int
+    rows: list[TrendingBatchRow]
+
+
+class TrendingTopicOut(BaseModel):
+    id: str
+    rank: int
+    label: str
+    question: str
+    brief: str
+    category: str
+    heat: int
+    outlets: int
+    sources: list[dict[str, Any]]
+    is_hidden: bool
+
+
+class TrendingBatchCard(BaseModel):
+    batch: TrendingBatchRow
+    topics: list[TrendingTopicOut]
+    dropped: list[dict[str, Any]]  # topics the model or the review dropped, with the reason
+    blocked: list[dict[str, Any]]  # headlines the blocklist removed

@@ -51,7 +51,7 @@ from app.services.media.llm import complete, extract_json
 from app.services.media.paths import MediaPaths
 from app.services.media.script import clean_markdown, even_words, split_for_tts, strip_audio_tags
 from app.services.media.sketch import illustrate
-from app.services.media.state import set_media_state
+from app.services.media.state import free_build, set_media_state
 from app.services.media.timeline import build_speakers
 from app.services.media.tts import SpeakerRef, SynthRequest, TTSProvider, get_provider
 from app.services.media.tts.elevenlabs import TAG_MODELS, estimate_usd
@@ -688,7 +688,8 @@ def _build(
                 topic=str(conf.get("topic") or ""),
                 language=language,
                 options=options,
-                allow_ai_images=options.images == "ai" and has_balance(debate),
+                allow_ai_images=options.images == "ai"
+                and (free_build(debate) or has_balance(debate)),
                 force=force,
             )
             visuals, visuals_usd, image_studio = result.visuals, result.usd, result.images
@@ -773,6 +774,35 @@ def _build(
     return char_cost, image_studio
 
 
+def _charge_build(
+    db: Session,
+    debate: Debate,
+    state: dict[str, Any],
+    options: MediaOptions,
+    billed_chars: int,
+    images: ImageStudio | None,
+    build_ref: str,
+) -> None:
+    """Charge the owner for premium voices and AI pictures of a finished build."""
+    debate_id = str(debate.id)
+    tx = charge_media_sync(
+        db,
+        debate,
+        chars=billed_chars,
+        provider=options.provider,
+        own_key=bool(state.get("own_tts_key")),
+        build_ref=build_ref,
+    )
+    if tx is not None:
+        logger.info("Charged %s credits for voices of %s", -tx.amount_usd, debate_id)
+    if images is not None and images.ai_count:
+        tx = charge_images_sync(
+            db, debate, usd=images.ai_usd, count=images.ai_count, build_ref=build_ref
+        )
+        if tx is not None:
+            logger.info("Charged %s credits for pictures of %s", -tx.amount_usd, debate_id)
+
+
 @beating(media_beat_key)
 @attributed
 def build_media_job(debate_id: str) -> None:
@@ -799,24 +829,11 @@ def build_media_job(debate_id: str) -> None:
             billed_chars, images = _build(db, debate, options, force)
             build_ref = str((debate.media_json or {}).get("finished_at") or int(time.time()))
             try:
-                tx = charge_media_sync(
-                    db,
-                    debate,
-                    chars=billed_chars,
-                    provider=options.provider,
-                    own_key=bool(state.get("own_tts_key")),
-                    build_ref=build_ref,
-                )
-                if tx is not None:
-                    logger.info("Charged %s credits for voices of %s", -tx.amount_usd, debate_id)
-                if images is not None and images.ai_count:
-                    tx = charge_images_sync(
-                        db, debate, usd=images.ai_usd, count=images.ai_count, build_ref=build_ref
-                    )
-                    if tx is not None:
-                        logger.info(
-                            "Charged %s credits for pictures of %s", -tx.amount_usd, debate_id
-                        )
+                if state.get("free"):
+                    # Queued by an admin from the console: the owner pays nothing.
+                    logger.info("Free media build of %s: nothing charged", debate_id)
+                else:
+                    _charge_build(db, debate, state, options, billed_chars, images, build_ref)
             except Exception:
                 logger.exception("Failed to charge credits for media of %s", debate_id)
                 db.rollback()

@@ -316,6 +316,7 @@ async def generate_debate_media(
             "force": body.force,
             "own_tts_key": own_tts_key,
             "auto": False,
+            "free": False,
             "step": "queued",
             "current": 0,
             "total": 0,

@@ -600,6 +600,7 @@ def _auto_media(db: Session, debate: Debate) -> None:
             "force": False,
             "own_tts_key": own_tts_key,
             "auto": True,
+            "free": False,
             "step": "queued",
             "current": 0,
             "total": 0,

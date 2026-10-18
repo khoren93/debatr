@@ -1,5 +1,5 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { Database, Gauge, LogOut, ShieldCheck, Users } from 'lucide-react';
+import { Database, Flag, Gauge, LogOut, MessagesSquare, Newspaper, ShieldCheck, Users } from 'lucide-react';
 import { useAdminAuth } from '../../auth/AdminAuthContext';
 import { Logo } from '../ui';
 import { formatTime } from './helpers';
@@ -8,6 +8,9 @@ import { formatTime } from './helpers';
 const NAV = [
   { to: '/admin', label: 'Overview', icon: Gauge, end: true, permission: 'console' },
   { to: '/admin/users', label: 'Users', icon: Users, end: false, permission: 'users' },
+  { to: '/admin/debates', label: 'Debates', icon: MessagesSquare, end: false, permission: 'debates.read' },
+  { to: '/admin/moderation', label: 'Moderation', icon: Flag, end: false, permission: 'moderation' },
+  { to: '/admin/trending', label: 'Trending', icon: Newspaper, end: false, permission: 'moderation' },
   { to: '/admin/security', label: 'Security', icon: ShieldCheck, end: false, permission: 'console' },
 ];
 

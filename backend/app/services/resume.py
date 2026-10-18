@@ -10,7 +10,9 @@ that turn with fresh keys; the estimate and the charge cover only what the new r
 
 from collections.abc import Sequence
 
-from app.models.models import Turn
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.models import Debate, Turn
 
 
 def answered(turn: Turn) -> bool:
@@ -35,3 +37,20 @@ def discarded(turns: Sequence[Turn], from_seq: int) -> tuple[list[Turn], float]:
     dropped = [t for t in turns if t.seq_index >= from_seq]
     cost = sum(float((t.usage_json or {}).get("cost") or 0.0) for t in dropped)
     return dropped, round(cost, 6)
+
+
+async def reset_for_resume(db: AsyncSession, debate: Debate, from_seq: int) -> None:
+    """Drop the failed turn and everything after it (their cost joins `discarded_cost`) and put
+    the debate back in the queue state; the caller sets the config, commits and enqueues."""
+    dropped, cost = discarded(debate.turns, from_seq)
+    for turn in dropped:
+        await db.delete(turn)
+    totals = dict(debate.totals_json or {})
+    if cost:
+        totals["discarded_cost"] = round(float(totals.get("discarded_cost") or 0) + cost, 6)
+    debate.totals_json = totals
+    if debate.media_status != "none":
+        debate.media_status = "none"  # the audio lacks the new turns; the TTS cache stays
+    debate.status = "queued"
+    debate.error_message = None
+    debate.ended_at = None

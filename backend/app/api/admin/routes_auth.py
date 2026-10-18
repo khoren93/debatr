@@ -76,7 +76,16 @@ from app.services.admin.totp import (
 
 router = APIRouter()
 
-PERMISSION_NAMES = ("console", "debates.read", "moderation", "users", "money", "system", "database")
+PERMISSION_NAMES = (
+    "console",
+    "debates.read",
+    "debates",
+    "moderation",
+    "users",
+    "money",
+    "system",
+    "database",
+)
 WRONG_LOGIN = "Wrong email or password"
 SIGN_IN_AGAIN = "Sign in again"
 _dummy_hash: str | None = None

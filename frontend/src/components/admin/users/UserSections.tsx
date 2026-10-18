@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
+import { Link } from 'react-router-dom';
 import { TriangleAlert } from 'lucide-react';
 import type { AdminLedgerRow, AdminUserCard, AdminUserDebate, AuditEntry, Page, UserApiToken, UserPeriodStats } from '../../../api/admin/types';
 import { getUserDebates, getUserLedger, revokeUserTokens } from '../../../api/admin/users';
@@ -238,44 +239,50 @@ const usePaged = <T,>(fetchPage: (userId: string, offset: number, limit: number)
   return { offset, setOffset, page: result?.page ?? null, loading: result?.key !== key, error };
 };
 
+const LEDGER_COLUMNS: Column<AdminLedgerRow>[] = [
+  { key: 'when', header: 'When', className: 'whitespace-nowrap text-text-3', cell: (t) => formatTime(t.created_at) },
+  { key: 'type', header: 'Type', className: 'whitespace-nowrap text-text-3', cell: (t) => CATEGORY_LABELS[t.category] ?? t.kind },
+  {
+    key: 'title',
+    header: 'Description',
+    cell: (t) => (
+      <span className="flex min-w-0 max-w-[340px] flex-col">
+        <span className="truncate text-text-2" title={t.title}>
+          {t.title}
+        </span>
+        {(t.reason || t.provider_ref) && (
+          <span className="truncate text-[11px] text-muted" title={t.provider_ref ?? undefined}>
+            {t.reason ? `reason: ${t.reason}` : t.provider_ref}
+          </span>
+        )}
+      </span>
+    ),
+  },
+  {
+    key: 'amount',
+    header: 'Amount',
+    align: 'right',
+    cell: (t) => <span className={`font-mono ${t.amount_usd > 0 ? 'text-ok' : 'text-text'}`}>{formatSigned(t.amount_usd)}</span>,
+  },
+  { key: 'balance', header: 'Balance', align: 'right', className: 'font-mono text-text-3', cell: (t) => formatUsd(t.balance_after_usd) },
+];
+
+/** Ledger rows with their reason or reference under the title. */
+export const LedgerTable = ({ rows, loading = false }: { rows: AdminLedgerRow[]; loading?: boolean }) => (
+  <DataTable caption="Ledger" columns={LEDGER_COLUMNS} rows={rows} rowKey={(t) => t.id} loading={loading} empty="No ledger rows." />
+);
+
 const LEDGER_PAGE = 50;
 
 export const LedgerPanel = ({ userId, version }: { userId: string; version: number }) => {
   const { offset, setOffset, page, loading, error } = usePaged(getUserLedger, userId, version, LEDGER_PAGE);
-  const columns: Column<AdminLedgerRow>[] = [
-    { key: 'when', header: 'When', className: 'whitespace-nowrap text-text-3', cell: (t) => formatTime(t.created_at) },
-    { key: 'type', header: 'Type', className: 'whitespace-nowrap text-text-3', cell: (t) => CATEGORY_LABELS[t.category] ?? t.kind },
-    {
-      key: 'title',
-      header: 'Description',
-      cell: (t) => (
-        <span className="flex min-w-0 max-w-[340px] flex-col">
-          <span className="truncate text-text-2" title={t.title}>
-            {t.title}
-          </span>
-          {(t.reason || t.provider_ref) && (
-            <span className="truncate text-[11px] text-muted" title={t.provider_ref ?? undefined}>
-              {t.reason ? `reason: ${t.reason}` : t.provider_ref}
-            </span>
-          )}
-        </span>
-      ),
-    },
-    {
-      key: 'amount',
-      header: 'Amount',
-      align: 'right',
-      cell: (t) => <span className={`font-mono ${t.amount_usd > 0 ? 'text-ok' : 'text-text'}`}>{formatSigned(t.amount_usd)}</span>,
-    },
-    { key: 'balance', header: 'Balance', align: 'right', className: 'font-mono text-text-3', cell: (t) => formatUsd(t.balance_after_usd) },
-  ];
   return (
     <Panel title="Ledger" aside={page ? `${page.total} ${page.total === 1 ? 'row' : 'rows'}` : undefined}>
       {error && <ErrorBox className="m-4">{error}</ErrorBox>}
       {!page && !error && <Spinner className="m-4 size-5" />}
       {page && (
         <>
-          <DataTable caption="Ledger" columns={columns} rows={page.rows} rowKey={(t) => t.id} loading={loading} empty="No ledger rows." />
+          <LedgerTable rows={page.rows} loading={loading} />
           <Pager offset={offset} limit={LEDGER_PAGE} total={page.total} disabled={loading} onChange={setOffset} />
         </>
       )}
@@ -285,8 +292,6 @@ export const LedgerPanel = ({ userId, version }: { userId: string; version: numb
 
 const DEBATE_PAGE = 20;
 
-const debateLink = (d: AdminUserDebate) => d.url ?? `/api/admin/db/debate/details/${d.id}`;
-
 export const DebatesPanel = ({ userId, version }: { userId: string; version: number }) => {
   const { offset, setOffset, page, loading, error } = usePaged(getUserDebates, userId, version, DEBATE_PAGE);
   const columns: Column<AdminUserDebate>[] = [
@@ -295,9 +300,9 @@ export const DebatesPanel = ({ userId, version }: { userId: string; version: num
       header: 'Debate',
       cell: (d) => (
         <span className="flex min-w-0 max-w-[360px] flex-col">
-          <a href={debateLink(d)} {...(d.url ? { target: '_blank', rel: 'noreferrer' } : {})} className="truncate font-semibold text-text-2 hover:text-text hover:underline" title={d.title}>
+          <span className="truncate font-semibold text-text-2" title={d.title}>
             {d.title}
-          </a>
+          </span>
           <span className="truncate text-[11px] text-muted" title={d.error ?? undefined}>
             {[d.is_public ? 'public' : 'private', d.moderation_status !== 'none' && d.moderation_status, d.own_key && 'own key', d.via_token && 'API token', d.media_status !== 'none' && `audio ${d.media_status}`]
               .filter(Boolean)
@@ -329,12 +334,21 @@ export const DebatesPanel = ({ userId, version }: { userId: string; version: num
     { key: 'reach', header: 'Likes · votes · views', align: 'right', className: 'whitespace-nowrap text-text-3', cell: (d) => `${d.likes} · ${d.votes} · ${d.views}` },
   ];
   return (
-    <Panel title="Debates" aside={page ? `${page.total} in all, drafts included` : undefined}>
+    <Panel
+      title="Debates"
+      aside={
+        page && (
+          <Link to={`/admin/debates?user_id=${userId}`} className="hover:text-text">
+            {page.total} in all, drafts included · open in Debates
+          </Link>
+        )
+      }
+    >
       {error && <ErrorBox className="m-4">{error}</ErrorBox>}
       {!page && !error && <Spinner className="m-4 size-5" />}
       {page && (
         <>
-          <DataTable caption="Debates" columns={columns} rows={page.rows} rowKey={(d) => d.id} loading={loading} empty="No debates." />
+          <DataTable caption="Debates" columns={columns} rows={page.rows} rowKey={(d) => d.id} rowHref={(d) => `/admin/debates/${d.id}`} loading={loading} empty="No debates." />
           <Pager offset={offset} limit={DEBATE_PAGE} total={page.total} disabled={loading} onChange={setOffset} />
         </>
       )}
@@ -349,8 +363,8 @@ const describe = (entry: AuditEntry) =>
     .map(([k, v]) => `${k.replace(/_/g, ' ')} ${String(v)}`)
     .join(' · ');
 
-export const AuditPanel = ({ userId, entries }: { userId: string; entries: AuditEntry[] }) => (
-  <Panel title="Audit log" aside="last 50: about the account, and by it as an admin">
+export const AuditPanel = ({ targetId, entries, aside }: { targetId: string; entries: AuditEntry[]; aside: string }) => (
+  <Panel title="Audit log" aside={aside}>
     {entries.length === 0 ? (
       <p className="px-4 py-4 text-sm text-muted">Nothing recorded.</p>
     ) : (
@@ -360,7 +374,7 @@ export const AuditPanel = ({ userId, entries }: { userId: string; entries: Audit
             <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
               <span className={`font-mono font-semibold ${e.ok ? 'text-text-2' : 'text-con'}`}>{e.action}</span>
               {!e.ok && <span className="text-con">failed</span>}
-              {e.target_id !== userId && e.target_type && <span className="text-muted">on {e.target_type}</span>}
+              {e.target_id !== targetId && e.target_type && <span className="text-muted">on {e.target_type}</span>}
               <span className="ml-auto whitespace-nowrap text-muted">{formatTime(e.created_at)}</span>
             </div>
             <div className="text-muted">

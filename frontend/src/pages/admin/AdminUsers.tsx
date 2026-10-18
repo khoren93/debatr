@@ -1,27 +1,23 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Download, KeyRound, Search, Terminal, X } from 'lucide-react';
+import { Download, KeyRound, Terminal } from 'lucide-react';
 import { needsSudo } from '../../api/admin/client';
 import type { AdminUserList, AdminUserRow, UserSort } from '../../api/admin/types';
 import { exportUsers, listUsers, type UserListQuery } from '../../api/admin/users';
 import { getErrorMessage } from '../../api/client';
 import { Page, PageTitle } from '../../components/layout/AppShell';
 import { DataTable, Pager, type Column } from '../../components/admin/DataTable';
+import { FilterBar } from '../../components/admin/FilterBar';
+import { flag, nextOrder, pageOf, pick, pickKey, utcDaysBack, withChanges, type FilterSpec } from '../../components/admin/filters';
 import { SudoDialog } from '../../components/admin/SudoDialog';
 import { UserBadges } from '../../components/admin/users/UserBadges';
 import { formatUsd } from '../../components/admin/helpers';
 import { downloadBlob } from '../../components/debate/helpers';
-import { Button, Card, Dropdown, ErrorBox, Input, Spinner, useToast } from '../../components/ui';
+import { Button, Card, ErrorBox, Spinner, useToast } from '../../components/ui';
 import { formatAgo, formatDateShort } from '../../lib/format';
 
 const PAGE = 50;
 const SORTS: UserSort[] = ['created', 'last_seen', 'balance', 'topped_up', 'spent', 'debates', 'likes', 'email'];
-
-interface FilterSpec {
-  key: string;
-  label: string;
-  options: { value: string; label: string }[];
-}
 
 // URL parameter → choices; '' is "any". `signed` becomes `created_from` (N days back).
 const FILTERS: FilterSpec[] = [
@@ -35,21 +31,11 @@ const FILTERS: FilterSpec[] = [
   { key: 'staff', label: 'Role', options: [{ value: '', label: 'Any role' }, { value: 'true', label: 'Console staff' }, { value: 'false', label: 'Not staff' }] },
 ];
 
-const pick = (params: URLSearchParams, spec: FilterSpec): string => {
-  const value = params.get(spec.key) ?? '';
-  return spec.options.some((o) => o.value === value) ? value : '';
-};
-
-const flag = (value: string) => (value === 'true' ? true : value === 'false' ? false : undefined);
-
-/** "YYYY-MM-DD" of the UTC day `days - 1` days before today (today counts as one). */
-const utcDaysBack = (days: number) => new Date(Date.now() - (days - 1) * 86_400_000).toISOString().slice(0, 10);
-
 /** The API query of the page's URL (unknown values are dropped, not sent). */
 const toQuery = (params: URLSearchParams): UserListQuery => {
-  const get = (key: string) => pick(params, FILTERS.find((f) => f.key === key) as FilterSpec);
+  const get = (key: string) => pickKey(params, FILTERS, key);
   const sort = SORTS.find((s) => s === params.get('sort')) ?? 'created';
-  const page = Math.max(0, Number.parseInt(params.get('page') ?? '0', 10) || 0);
+  const page = pageOf(params);
   const signed = get('signed');
   return {
     q: params.get('q')?.trim() || undefined,
@@ -148,10 +134,8 @@ const AdminUsers = () => {
   const query = toQuery(params);
   const [result, setResult] = useState<{ key: string; data: AdminUserList } | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [text, setText] = useState(params.get('q') ?? '');
   const [exporting, setExporting] = useState(false);
   const [askCode, setAskCode] = useState(false);
-  const typing = useRef<number | undefined>(undefined);
 
   useEffect(() => {
     let cancelled = false;
@@ -170,29 +154,8 @@ const AdminUsers = () => {
     };
   }, [key]);
 
-  /** Change URL parameters ('' removes one); every change but paging starts at page one. */
-  const update = (changes: Record<string, string>) => {
-    const next = new URLSearchParams(params);
-    for (const [name, value] of Object.entries(changes)) {
-      if (value) next.set(name, value);
-      else next.delete(name);
-    }
-    if (!('page' in changes)) next.delete('page');
-    setParams(next, { replace: true });
-  };
-
-  const search = (value: string) => {
-    setText(value);
-    window.clearTimeout(typing.current);
-    typing.current = window.setTimeout(() => update({ q: value.trim() }), 300);
-  };
-
-  const sortBy = (sort: string) => {
-    const same = query.sort === sort;
-    // A new column starts with the most useful order: names A–Z, numbers and dates high first.
-    const order = same ? (query.order === 'desc' ? 'asc' : 'desc') : sort === 'email' ? 'asc' : 'desc';
-    update({ sort, order });
-  };
+  const update = (changes: Record<string, string>) => setParams(withChanges(params, changes), { replace: true });
+  const sortBy = (sort: string) => update({ sort, order: nextOrder(query, sort, ['email']) });
 
   const download = async () => {
     setExporting(true);
@@ -223,38 +186,15 @@ const AdminUsers = () => {
         }
       />
 
-      <div className="mt-6 grid gap-3">
-        <div className="relative max-w-md">
-          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted" />
-          <Input
-            value={text}
-            onChange={(e) => search(e.target.value)}
-            placeholder="Email, name or account id"
-            aria-label="Search accounts"
-            className="pl-9"
-            type="search"
-          />
-        </div>
-        <div className="grid grid-cols-2 items-center gap-2 sm:flex sm:flex-wrap">
-          {FILTERS.map((f) => (
-            <div key={f.key} className="min-w-0 sm:w-[190px]">
-              <Dropdown size="sm" aria-label={f.label} value={pick(params, f)} options={f.options} onChange={(value) => update({ [f.key]: value })} />
-            </div>
-          ))}
-          {filtered && (
-            <Button
-              variant="ghost"
-              size="sm"
-              icon={<X className="size-3.5" />}
-              onClick={() => {
-                setText('');
-                setParams(new URLSearchParams(), { replace: true });
-              }}
-            >
-              Reset
-            </Button>
-          )}
-        </div>
+      <div className="mt-6">
+        <FilterBar
+          params={params}
+          filters={FILTERS}
+          searchLabel="Search accounts"
+          searchPlaceholder="Email, name or account id"
+          onChange={update}
+          onReset={() => setParams(new URLSearchParams(), { replace: true })}
+        />
       </div>
 
       {error && <ErrorBox className="mt-4">{error}</ErrorBox>}

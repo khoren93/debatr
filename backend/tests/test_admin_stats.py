@@ -110,8 +110,8 @@ def test_attention_thresholds(signals: Signals, expected: list[tuple[str, str]])
 def test_items_link_somewhere_useful() -> None:
     items = stats.attention_items(Signals(flagged=1, failed_24h=1))
     assert {i["key"]: i["href"] for i in items} == {
-        "moderation": "/api/admin/db/debate/list?moderation_status=flagged",
-        "failed": "/api/admin/db/debate/list?search=error",
+        "moderation": "/admin/moderation",
+        "failed": "/admin/debates?status=error",
     }
 
 

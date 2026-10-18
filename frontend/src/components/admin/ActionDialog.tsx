@@ -18,6 +18,8 @@ interface ActionDialogProps {
   sudo?: boolean;
   /** Extra validity of the action's own fields. */
   ready?: boolean;
+  /** Focus the reason at once (dialogs without fields of their own). */
+  autoFocusReason?: boolean;
   /** Runs the change; throws to keep the dialog open with the error. */
   onSubmit: (reason: string) => Promise<void>;
   onClose: () => void;
@@ -28,7 +30,7 @@ interface ActionDialogProps {
  * When the server answers that a fresh code is needed, the code is asked for and the same
  * change is sent again.
  */
-export const ActionDialog = ({ open, title, body, children, confirmLabel, danger = false, sudo = false, ready = true, onSubmit, onClose }: ActionDialogProps) => {
+export const ActionDialog = ({ open, title, body, children, confirmLabel, danger = false, sudo = false, ready = true, autoFocusReason = false, onSubmit, onClose }: ActionDialogProps) => {
   const reasonId = useId();
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
@@ -78,8 +80,16 @@ export const ActionDialog = ({ open, title, body, children, confirmLabel, danger
               id={reasonId}
               className="mt-1.5 min-h-[72px]"
               maxLength={500}
+              autoFocus={autoFocusReason}
               value={reason}
               onChange={(e) => setReason(e.target.value)}
+              onKeyDown={(e) => {
+                // ⌘/Ctrl + Enter sends it (the moderation queue is run from the keyboard).
+                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && valid && !busy) {
+                  e.preventDefault();
+                  void run();
+                }
+              }}
               placeholder="Why — kept in the audit log, not shown to the user"
             />
             {sudo && (
