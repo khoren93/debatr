@@ -44,6 +44,8 @@ services:
     build:
       context: ./backend
       target: api
+      args:
+        GIT_SHA: ${GIT_SHA:-unknown}
     restart: always
     command: >
       sh -c "alembic upgrade head &&
@@ -72,6 +74,8 @@ services:
     build:
       context: ./backend
       target: worker
+      args:
+        GIT_SHA: ${GIT_SHA:-unknown}
     restart: always
     command: python -m app.worker --queues default,background
     deploy:
@@ -98,6 +102,8 @@ services:
     build:
       context: ./backend
       target: worker
+      args:
+        GIT_SHA: ${GIT_SHA:-unknown}
     restart: always
     command: python -m app.worker --queues media
     # Builds take minutes: one cut by a deploy is queued again and reuses its voiced turns.
@@ -120,6 +126,8 @@ services:
     build:
       context: ./backend
       target: api
+      args:
+        GIT_SHA: ${GIT_SHA:-unknown}
     restart: always
     command: python -m app.scheduler
     env_file:

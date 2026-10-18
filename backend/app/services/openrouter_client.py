@@ -315,6 +315,37 @@ class OpenRouterClient:
         used = float(data.get("total_usage", 0) or 0)
         return round(total - used, 6), None
 
+    async def account(self) -> dict[str, Any]:
+        """The system key's account for the admin console: credits bought and used (`/credits`)
+        and the key's own limit and tier (`/key`). Missing parts carry an `error`."""
+        out: dict[str, Any] = {}
+        if not settings.OPENROUTER_API_KEY:
+            return {"error": "No API key configured"}
+        try:
+            async with self._client(read_timeout=15.0) as client:
+                credits = await client.get(f"{self.base_url}/credits", headers=self._headers(None))
+                key = await client.get(f"{self.base_url}/key", headers=self._headers(None))
+        except httpx.HTTPError as e:
+            logger.warning("Failed to fetch the OpenRouter account: %s", e)
+            return {"error": "Could not reach OpenRouter"}
+        if credits.status_code == 200:
+            data = credits.json().get("data", {})
+            out["total_credits"] = float(data.get("total_credits") or 0)
+            out["total_usage"] = float(data.get("total_usage") or 0)
+        else:
+            out["error"] = parse_error_body(credits.content, credits.status_code).message
+        if key.status_code == 200:
+            data = key.json().get("data", {})
+            out["key"] = {
+                "label": data.get("label"),
+                "limit": data.get("limit"),
+                "limit_remaining": data.get("limit_remaining"),
+                "usage": data.get("usage"),
+                "usage_daily": data.get("usage_daily"),
+                "is_free_tier": data.get("is_free_tier"),
+            }
+        return out
+
     async def get_models(self) -> list[dict[str, Any]]:
         """Fetch the model catalogue, cached for MODELS_CACHE_TTL seconds."""
         now = time.time()

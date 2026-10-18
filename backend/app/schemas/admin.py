@@ -703,3 +703,191 @@ class TrendingBatchCard(BaseModel):
     topics: list[TrendingTopicOut]
     dropped: list[dict[str, Any]]  # topics the model or the review dropped, with the reason
     blocked: list[dict[str, Any]]  # headlines the blocklist removed
+
+
+# --- system -----------------------------------------------------------------------------------
+
+
+class JobSummary(BaseModel):
+    id: str
+    queue: str
+    func: str  # the job function's short name
+    debate_id: str | None
+    status: str | None
+    enqueued_at: datetime | None
+    started_at: datetime | None
+    ended_at: datetime | None
+    error: str | None  # the end of the traceback
+
+
+class QueueStats(BaseModel):
+    name: str
+    waiting: int
+    started: int
+    failed: int
+    scheduled: int
+    deferred: int
+    finished: int
+
+
+class WorkerInfo(BaseModel):
+    name: str
+    hostname: str | None
+    pid: int | None
+    queues: list[str]
+    state: str
+    current_job: JobSummary | None
+    last_heartbeat: datetime | None
+    birth: datetime | None
+    successful: int
+    failed: int
+    working_seconds: float
+
+
+class SchedulerInfo(BaseModel):
+    name: str
+    hostname: str | None
+    pid: int | None
+    started_at: datetime | None
+    last_heartbeat: datetime | None
+
+
+class CronJobInfo(BaseModel):
+    name: str
+    interval_seconds: int | None
+    last_enqueued_at: datetime | None
+    recent: list[JobSummary]  # the last runs RQ still remembers, newest first
+
+
+class QueuesOut(BaseModel):
+    queues: list[QueueStats]
+    workers: list[WorkerInfo]
+    schedulers: list[SchedulerInfo]
+    cron_jobs: list[CronJobInfo]
+    failed_jobs: list[JobSummary]
+
+
+class RunInfo(BaseModel):
+    debate_id: str
+    title: str
+    owner_email: str | None
+    kind: Literal["debate", "media"]
+    status: str
+    step: str
+    age_seconds: float  # since it started (or was queued)
+    heartbeat: bool  # a worker is on it
+    waiting: bool  # its next job waits in the queue
+    attempts: int  # recovery re-queued it this many times
+    stuck: bool  # no worker, no job, for minutes: the watchdog takes it on its next checks
+
+
+class RunsOut(BaseModel):
+    runs: list[RunInfo]
+
+
+class FairShareUser(BaseModel):
+    user_id: str
+    email: str | None
+    kind: Literal["debate", "media"]
+    active: int | None  # runs going now
+    refusals: int  # 429s in the last day
+    last_refused_at: datetime | None
+
+
+class LimitsOut(BaseModel):
+    free_per_minute: int  # FREE_MODELS_PER_MINUTE (0 = no waiting)
+    free_used_this_minute: int
+    free_requests_24h: int  # `:free` calls on the system key (provider_usage)
+    free_rate_limited_24h: int
+    free_daily_cap: int  # OpenRouter: 1000 a day after $10 of credits were bought, else 50
+    max_debates_per_user: int
+    max_media_per_user: int
+    debate_create_rate_limit: int
+    login_rate_limit: int
+    at_limit_now: list[FairShareUser]
+    refused_24h: list[FairShareUser]
+
+
+class ProvidersOut(BaseModel):
+    checked_at: datetime
+    openrouter: dict[str, Any]  # balance, total credits / usage, key limit and tier, error
+    elevenlabs: dict[str, Any]  # configured, ok, reason, tier, used, limit, resets_at
+    payments: dict[str, Any]  # mode, currency, top-up amounts, bonus, markup, TTS price
+
+
+class TableSize(BaseModel):
+    name: str
+    bytes: int
+    rows: int
+
+
+class DatabaseHealth(BaseModel):
+    ok: bool
+    latency_ms: float | None
+    bytes: int | None
+    connections: int | None
+    tables: list[TableSize]
+    error: str | None = None
+
+
+class RedisHealth(BaseModel):
+    ok: bool
+    latency_ms: float | None
+    version: str | None
+    uptime_seconds: int | None
+    used_memory: int | None
+    peak_memory: int | None
+    max_memory: int | None
+    keys: int | None
+    error: str | None = None
+
+
+class MediaDir(BaseModel):
+    name: str
+    bytes: int
+    files: int
+    title: str | None  # the debate's, when it exists
+
+
+class MediaHealth(BaseModel):
+    root: str
+    disk_total: int | None
+    disk_used: int | None
+    disk_free: int | None
+    bytes: int
+    dirs: int
+    heaviest: list[MediaDir]
+    orphans: list[MediaDir]  # folders of debates that no longer exist (older than an hour)
+    orphan_bytes: int
+    scanned_at: datetime
+
+
+class ConfigFlag(BaseModel):
+    name: str
+    value: str
+
+
+class HealthOut(BaseModel):
+    version: str
+    environment: str
+    alembic_current: str | None
+    alembic_head: str | None
+    database: DatabaseHealth
+    redis: RedisHealth
+    media: MediaHealth
+    backup: dict[str, Any] | None  # what scripts/backup-db.sh recorded last
+    config: list[ConfigFlag]
+
+
+class RecoverRequest(ReasonRequest):
+    kind: Literal["debate", "media"] = "debate"
+
+
+class OrphansDeleteRequest(ReasonRequest):
+    names: list[str] = Field(min_length=1, max_length=500)
+
+
+class OrphansDeleteOut(BaseModel):
+    deleted: int
+    bytes: int
+    skipped: list[str]  # no longer orphans (or gone)

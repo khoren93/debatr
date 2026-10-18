@@ -13,13 +13,12 @@ waits for Resume; an audio build fails and can be generated again.
 """
 
 import logging
+import uuid
 from collections.abc import Callable, Sequence
 from datetime import datetime, timedelta
 from typing import Any, Literal
 
 from redis import Redis
-from rq import Queue
-from rq.job import Job
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -90,13 +89,6 @@ def _parse_time(value: Any) -> datetime | None:
 
 
 # --- Redis -------------------------------------------------------------------------------------
-
-
-def waiting_debates(redis: Redis, queue_name: str) -> set[str]:
-    """Debates with a job waiting in `queue_name`."""
-    ids = Queue(queue_name, connection=redis).get_job_ids()
-    jobs = Job.fetch_many(ids, connection=redis) if ids else []
-    return {str(job.kwargs["debate_id"]) for job in jobs if job and job.kwargs.get("debate_id")}
 
 
 def _orphan_confirmed(redis: Redis, kind: str, debate_id: str, busy: bool) -> bool:
@@ -210,10 +202,36 @@ def recover_runs_job() -> None:
     redis = get_sync_redis()
     if not redis.set(LOCK_KEY, "1", ex=LOCK_TTL, nx=True):
         return  # another check is running
-    turns_waiting = waiting_debates(redis, queue_manager.QUEUE_NAME)
-    media_waiting = waiting_debates(redis, queue_manager.MEDIA_QUEUE_NAME)
+    turns_waiting = queue_manager.waiting_debates(redis, queue_manager.QUEUE_NAME)
+    media_waiting = queue_manager.waiting_debates(redis, queue_manager.MEDIA_QUEUE_NAME)
     with get_sync_session() as db:
         running = db.scalars(select(Debate).where(Debate.status.in_(ACTIVE))).all()
         _sweep(db, redis, "debate", running, turns_waiting, debate_beat_key, _recover_debate)
         building = db.scalars(select(Debate).where(Debate.media_status.in_(ACTIVE))).all()
         _sweep(db, redis, "media", building, media_waiting, media_beat_key, _recover_media)
+
+
+def recover_now(debate_id: str, kind: str) -> str:
+    """For the admin console: queue a run whose worker is gone again at once, without waiting
+    for the second check in a row. Raises LookupError for an unknown debate and ValueError when
+    the run is not queued / running, still has a worker or a job waiting. Returns what happened
+    (the run's status after it)."""
+    redis = get_sync_redis()
+    is_debate = kind == "debate"
+    queue = queue_manager.QUEUE_NAME if is_debate else queue_manager.MEDIA_QUEUE_NAME
+    beat_key = debate_beat_key if is_debate else media_beat_key
+    with get_sync_session() as db:
+        debate = db.get(Debate, uuid.UUID(debate_id))
+        if debate is None:
+            raise LookupError(debate_id)
+        status = debate.status if is_debate else debate.media_status
+        if status not in ACTIVE:
+            raise ValueError(f"It is {status}, not queued or running")
+        if alive(beat_key(debate_id)):
+            raise ValueError("A worker is on it right now")
+        if debate_id in queue_manager.waiting_debates(redis, queue):
+            raise ValueError("Its job is waiting in the queue")
+        redis.delete(recovery_key(f"seen:{kind}", debate_id))
+        (_recover_debate if is_debate else _recover_media)(db, redis, debate)
+        db.refresh(debate)
+        return debate.status if is_debate else debate.media_status

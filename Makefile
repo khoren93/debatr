@@ -90,13 +90,13 @@ build: ## Production frontend build
 # --- Local Docker stack ---------------------------------------------------------------
 
 up: ## Build and start the full stack on http://localhost
-	$(COMPOSE) up -d --build
+	GIT_SHA=$$(git rev-parse --short HEAD) $(COMPOSE) up -d --build
 
 down: ## Stop the full stack
 	$(COMPOSE) down
 
 restart: ## Rebuild and restart one service or all: make restart s=worker
-	$(COMPOSE) up -d --build $(s)
+	GIT_SHA=$$(git rev-parse --short HEAD) $(COMPOSE) up -d --build $(s)
 
 logs: ## Follow logs: make logs s=api
 	$(COMPOSE) logs -f --tail=200 $(s)

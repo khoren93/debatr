@@ -10,6 +10,8 @@ TERMINAL_DEBATE_STATUSES = frozenset({"completed", "error", "stopped"})
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "AI Debates"
+    # The commit the image was built from (Docker build-arg GIT_SHA, set by deploy.sh).
+    APP_VERSION: str = "dev"
     ENVIRONMENT: Literal["development", "production"] = "development"
     LOG_LEVEL: str = "INFO"
 

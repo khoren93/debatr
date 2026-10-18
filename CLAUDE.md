@@ -29,7 +29,8 @@ backend/            FastAPI API + RQ worker (Python 3.12+, managed with uv)
                       sudo), routes_overview (tiles, series, money, attention, tops), routes_users
                       (list, CSV, card, ledger, debates, account changes), routes_debates (list,
                       card, moderation queue, debate changes), routes_trending (batches, hide /
-                      show, build now); later phases add system, finance, … (PROGRESS stage A)
+                      show, build now), routes_system (queues, workers, scheduler, runs, limits,
+                      providers, health); later phases add finance, … (PROGRESS stage A)
   app/api/            routers: auth, tokens (API tokens + `debatr login` device flow), billing
                       (Stripe), debates, gallery (+ leaderboard), reactions (likes/votes), models,
                       presets, topics (trending), stream (SSE), media; serializers.py builds the
@@ -53,7 +54,8 @@ backend/            FastAPI API + RQ worker (Python 3.12+, managed with uv)
                       sign-in tickets, code failures), audit (append-only admin_audit_log),
                       stats (overview queries + pure periods / buckets / attention rules),
                       users (list query with SQL totals, pure card statistics, CSV, deletion),
-                      debates (debate list / card / moderation queue / trending batches)
+                      debates (debate list / card / moderation queue / trending batches),
+                      system (RQ / cron snapshot, runs in flight, limits, health, media scan)
   app/services/media/ audio pipeline: script (markdown→speech), tts/ (elevenlabs, edge),
                       ffmpeg, highlights (LLM picks shorts), visuals (LLM visual director),
                       sketch (SVG line art → sanitized path data), images (Commons photos / AI
@@ -122,11 +124,13 @@ frontend/           React 19 + Vite 8 + Tailwind 4 + TypeScript
                       outside AppShell and AuthProvider: AdminLogin, AdminOverview, AdminUsers
                       (filters in the URL), AdminUser (/admin/users/:id), AdminDebates,
                       AdminDebate (/admin/debates/:id), AdminModeration (keyboard queue),
-                      AdminTrending, AdminSecurity; components/admin: AdminShell, SudoDialog,
+                      AdminTrending, AdminSystem (#runs #queues #limits #providers #health),
+                      AdminSecurity; components/admin: AdminShell, SudoDialog,
                       ActionDialog (reason + sudo retry, ⌘↵), DataTable + Pager, FilterBar +
                       filters.ts (URL filters), RecoveryCodes, StatTile, AttentionList; users/ =
                       the account card's actions and sections; debates/ = the debate card's
-                      actions, transcript and panels; components/admin/charts:
+                      actions, transcript and panels; system/ = the System page's sections
+                      (useLoad.ts: load + poll); components/admin/charts:
                       LineChart, StackedColumns, ChartCard (legend + table view), palette.ts =
                       validated chart colours)
   src/lib/cli.ts      install / login / MCP setup snippets shown on the Account page
@@ -664,6 +668,20 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
 - Trending (`/api/admin/trending*`): batches with feed / headline / dropped counts and cost, a
   batch's topics, dropped topics and blocked headlines; hide / show a topic (`moderation`);
   build now (`system`).
+- System (`/api/admin/system/*`, permission `system`; the page polls runs and queues every 15 s):
+  RQ queues and registries, workers (`Worker.all`), the cron scheduler and its jobs (RQ 2.x keeps
+  heartbeats and history in Redis: `rq:cron_jobs`, `rq:cron_job:<name>:jobs`), failed jobs with
+  the end of the traceback (requeue / delete); runs in flight with heartbeat, waiting job and
+  recovery attempts, and "recover now" (`recovery.recover_now`: refuses a run that has a worker
+  or a job waiting; imported lazily, it pulls in the orchestrator); limits (free-model slots this
+  minute, `:free` calls in 24 h against OpenRouter's daily cap, accounts at the fair-share limit
+  now and refused in 24 h: `fair_share.note_refusal` keeps a Redis sorted set); providers
+  (OpenRouter `/credits` + `/key`, cached 5 min; ElevenLabs key, plan and characters; payment
+  settings); health (Postgres size, connections and largest tables, Redis memory, disk and
+  MEDIA_ROOT folders with the heaviest ones and orphans, cached 5 min; `APP_VERSION` = the git
+  commit passed as the `GIT_SHA` build-arg by deploy.sh / `make up`; alembic current vs head;
+  settings with secrets as set / not set; the last backup). Deleting orphan folders (debates
+  gone, untouched for an hour) needs sudo and re-checks every name on the server.
 
 ## Conventions
 

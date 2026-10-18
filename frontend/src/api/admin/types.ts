@@ -565,3 +565,145 @@ export interface TrendingBatchCard {
   dropped: { question?: string; reason?: string }[];
   blocked: { title?: string; term?: string }[];
 }
+
+// --- system (routes_system.py) ----------------------------------------------------------------
+
+export interface JobSummary {
+  id: string;
+  queue: string;
+  func: string;
+  debate_id: string | null;
+  status: string | null;
+  enqueued_at: string | null;
+  started_at: string | null;
+  ended_at: string | null;
+  /** The end of the traceback. */
+  error: string | null;
+}
+
+export interface QueueStats {
+  name: string;
+  waiting: number;
+  started: number;
+  failed: number;
+  scheduled: number;
+  deferred: number;
+  finished: number;
+}
+
+export interface WorkerInfo {
+  name: string;
+  hostname: string | null;
+  pid: number | null;
+  queues: string[];
+  state: string;
+  current_job: JobSummary | null;
+  last_heartbeat: string | null;
+  birth: string | null;
+  successful: number;
+  failed: number;
+  working_seconds: number;
+}
+
+export interface SchedulerInfo {
+  name: string;
+  hostname: string | null;
+  pid: number | null;
+  started_at: string | null;
+  last_heartbeat: string | null;
+}
+
+export interface CronJobInfo {
+  name: string;
+  interval_seconds: number | null;
+  last_enqueued_at: string | null;
+  recent: JobSummary[];
+}
+
+export interface QueuesOut {
+  queues: QueueStats[];
+  workers: WorkerInfo[];
+  schedulers: SchedulerInfo[];
+  cron_jobs: CronJobInfo[];
+  failed_jobs: JobSummary[];
+}
+
+export interface RunInfo {
+  debate_id: string;
+  title: string;
+  owner_email: string | null;
+  kind: 'debate' | 'media';
+  status: string;
+  step: string;
+  age_seconds: number;
+  heartbeat: boolean;
+  waiting: boolean;
+  attempts: number;
+  stuck: boolean;
+}
+
+export interface FairShareUser {
+  user_id: string;
+  email: string | null;
+  kind: 'debate' | 'media';
+  active: number | null;
+  refusals: number;
+  last_refused_at: string | null;
+}
+
+export interface LimitsOut {
+  free_per_minute: number;
+  free_used_this_minute: number;
+  free_requests_24h: number;
+  free_rate_limited_24h: number;
+  free_daily_cap: number;
+  max_debates_per_user: number;
+  max_media_per_user: number;
+  debate_create_rate_limit: number;
+  login_rate_limit: number;
+  at_limit_now: FairShareUser[];
+  refused_24h: FairShareUser[];
+}
+
+export interface ProvidersOut {
+  checked_at: string;
+  openrouter: {
+    balance?: number;
+    total_credits?: number;
+    total_usage?: number;
+    error?: string;
+    key?: { label?: string | null; limit?: number | null; limit_remaining?: number | null; usage?: number | null; usage_daily?: number | null; is_free_tier?: boolean | null };
+  };
+  elevenlabs: { configured: boolean; ok?: boolean; reason?: string | null; tier?: string; used?: number; limit?: number; resets_at?: number | null };
+  payments: { mode: string; currency: string; topup_amounts: number[]; signup_bonus_usd: number; credit_markup: number; tts_price_per_1k_chars: number };
+}
+
+export interface MediaDir {
+  name: string;
+  bytes: number;
+  files: number;
+  title: string | null;
+}
+
+export interface HealthOut {
+  version: string;
+  environment: string;
+  alembic_current: string | null;
+  alembic_head: string | null;
+  database: { ok: boolean; latency_ms: number | null; bytes: number | null; connections: number | null; tables: { name: string; bytes: number; rows: number }[]; error?: string | null };
+  redis: { ok: boolean; latency_ms: number | null; version: string | null; uptime_seconds: number | null; used_memory: number | null; peak_memory: number | null; max_memory: number | null; keys: number | null; error?: string | null };
+  media: {
+    root: string;
+    disk_total: number | null;
+    disk_used: number | null;
+    disk_free: number | null;
+    bytes: number;
+    dirs: number;
+    heaviest: MediaDir[];
+    orphans: MediaDir[];
+    orphan_bytes: number;
+    scanned_at: string;
+  };
+  backup: { at?: string; file?: string; bytes?: number; remote?: string } | null;
+  config: { name: string; value: string }[];
+}

@@ -32,6 +32,9 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 FROM runtime AS api
 COPY --from=deps /opt/venv /opt/venv
 COPY --chown=app:app . .
+# The commit this image was built from (deploy.sh passes it), shown on the console's System page.
+ARG GIT_SHA=unknown
+ENV APP_VERSION=$GIT_SHA
 USER app
 EXPOSE 8000
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
@@ -46,5 +49,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     && apt-get install -y --no-install-recommends ffmpeg
 COPY --from=deps /opt/venv /opt/venv
 COPY --chown=app:app . .
+ARG GIT_SHA=unknown
+ENV APP_VERSION=$GIT_SHA
 USER app
 CMD ["python", "-m", "app.worker"]

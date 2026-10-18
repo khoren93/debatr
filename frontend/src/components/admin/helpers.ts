@@ -62,3 +62,34 @@ export const formatPercent = (value: number | null): string =>
 
 export const formatSeconds = (ms: number | null): string =>
   ms === null ? '—' : ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} s`;
+
+/** "1.4 GB", "820 KB", "12 B". */
+export const formatBytes = (bytes: number | null | undefined): string => {
+  if (bytes === null || bytes === undefined) return '—';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let value = bytes;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit += 1;
+  }
+  return `${value >= 100 || unit === 0 ? Math.round(value) : value.toFixed(1)} ${units[unit]}`;
+};
+
+/** "45 s", "12 min", "3 h 5 min", "2 d" for a span of seconds. */
+export const formatSpan = (seconds: number | null | undefined): string => {
+  if (seconds === null || seconds === undefined || !Number.isFinite(seconds)) return '—';
+  const s = Math.max(0, Math.round(seconds));
+  if (s < 90) return `${s} s`;
+  if (s < 3600) return `${Math.round(s / 60)} min`;
+  if (s < 86_400) {
+    const h = Math.floor(s / 3600);
+    const m = Math.round((s % 3600) / 60);
+    return m ? `${h} h ${m} min` : `${h} h`;
+  }
+  return `${Math.round(s / 86_400)} d`;
+};
+
+/** Seconds since an ISO time (null when there is none). */
+export const secondsSince = (iso: string | null | undefined, now: number = Date.now()): number | null =>
+  iso ? Math.max(0, (now - new Date(iso).getTime()) / 1000) : null;

@@ -7,6 +7,7 @@ from app.api.admin import (
     routes_auth,
     routes_debates,
     routes_overview,
+    routes_system,
     routes_trending,
     routes_users,
 )
@@ -17,3 +18,4 @@ router.include_router(routes_overview.router, tags=["admin"])
 router.include_router(routes_users.router, tags=["admin"])
 router.include_router(routes_debates.router, tags=["admin"])
 router.include_router(routes_trending.router, tags=["admin"])
+router.include_router(routes_system.router, tags=["admin"])

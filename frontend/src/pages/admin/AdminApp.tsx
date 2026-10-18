@@ -9,6 +9,7 @@ import AdminLogin from './AdminLogin';
 import AdminModeration from './AdminModeration';
 import AdminOverview from './AdminOverview';
 import AdminSecurity from './AdminSecurity';
+import AdminSystem from './AdminSystem';
 import AdminTrending from './AdminTrending';
 import AdminUser from './AdminUser';
 import AdminUsers from './AdminUsers';
@@ -44,6 +45,7 @@ const AdminApp = () => (
         <Route path="debates/:id" element={<AdminDebate />} />
         <Route path="moderation" element={<AdminModeration />} />
         <Route path="trending" element={<AdminTrending />} />
+        <Route path="system" element={<AdminSystem />} />
         <Route path="security" element={<AdminSecurity />} />
         <Route path="*" element={<AdminNotFound />} />
       </Route>

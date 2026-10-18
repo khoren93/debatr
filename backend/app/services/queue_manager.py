@@ -1,7 +1,9 @@
 """RQ job enqueueing. Job functions are referenced by dotted path so the API
 never imports the worker-only orchestrator / media modules."""
 
+from redis import Redis
 from rq import Queue
+from rq.job import Job
 
 from app.core.config import settings
 from app.core.redis import get_sync_redis
@@ -18,6 +20,13 @@ _TRENDING = "app.services.trending"
 
 def get_queue(name: str = QUEUE_NAME) -> Queue:
     return Queue(name, connection=get_sync_redis())
+
+
+def waiting_debates(redis: Redis, queue_name: str) -> set[str]:
+    """Debates with a job waiting in `queue_name`."""
+    ids = Queue(queue_name, connection=redis).get_job_ids()
+    jobs = Job.fetch_many(ids, connection=redis) if ids else []
+    return {str(job.kwargs["debate_id"]) for job in jobs if job and job.kwargs.get("debate_id")}
 
 
 def _enqueue(func_path: str, *, queue_name: str, timeout: int, **kwargs: object) -> None:

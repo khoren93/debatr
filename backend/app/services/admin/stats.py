@@ -169,7 +169,7 @@ def attention_items(s: Signals) -> list[dict[str, Any]]:
                 "critical",
                 "Runs without a worker",
                 f"{' and '.join(parts)} queued or running with no heartbeat for 5+ minutes",
-                "/admin/debates?status=active",
+                "/admin/system#runs",
             )
         )
     if s.openrouter_balance is not None and s.openrouter_balance < OPENROUTER_LOW_USD:
@@ -215,7 +215,9 @@ def attention_items(s: Signals) -> list[dict[str, Any]]:
             if s.backup_age_hours is None
             else f"last one {s.backup_age_hours:.0f} h ago"
         )
-        items.append(_item("backup", "critical", "No recent database backup", when))
+        items.append(
+            _item("backup", "critical", "No recent database backup", when, "/admin/system#health")
+        )
     if s.flagged:
         items.append(
             _item(
