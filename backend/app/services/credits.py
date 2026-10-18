@@ -9,7 +9,7 @@ import uuid
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import Select, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
@@ -24,6 +24,18 @@ ZERO = Decimal("0")
 
 def to_usd(value: Any) -> Decimal:
     return Decimal(str(value or 0)).quantize(PLACES, rounding=ROUND_HALF_UP)
+
+
+def _locked_user(user_id: uuid.UUID) -> Select[User]:
+    """The user row, locked until commit, with the balance read again from that row:
+    without `populate_existing` a User already loaded in the session keeps its old balance, and
+    a charge or top-up committed meanwhile would be overwritten."""
+    return (
+        select(User)
+        .where(User.id == user_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
 
 
 def _row(
@@ -70,7 +82,7 @@ def apply_transaction_sync(
         )
         if existing is not None:
             return None
-    user = db.execute(select(User).where(User.id == user_id).with_for_update()).scalar_one_or_none()
+    user = db.execute(_locked_user(user_id)).scalar_one_or_none()
     if user is None:
         return None
     user.credits_usd = to_usd(user.credits_usd) + amount
@@ -99,7 +111,7 @@ async def apply_transaction(
         )
         if existing is not None:
             return None
-    result = await db.execute(select(User).where(User.id == user_id).with_for_update())
+    result = await db.execute(_locked_user(user_id))
     user = result.scalar_one_or_none()
     if user is None:
         return None

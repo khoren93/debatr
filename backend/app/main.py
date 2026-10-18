@@ -37,6 +37,7 @@ from app.api import (
     routes_tokens,
     routes_topics,
 )
+from app.core.auth import session_cookie_options
 from app.core.config import settings
 from app.core.db import engine
 from app.core.logging import setup_logging
@@ -81,14 +82,8 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Signed session cookie: user login (uid) and admin panel login (token).
-app.add_middleware(
-    SessionMiddleware,
-    secret_key=settings.SECRET_KEY,
-    https_only=settings.is_production,
-    same_site="lax",
-    max_age=settings.SESSION_MAX_AGE,
-)
+# Signed session cookie: user login (uid) and admin panel login (token, admin_until).
+app.add_middleware(SessionMiddleware, secret_key=settings.SECRET_KEY, **session_cookie_options())
 
 app.add_middleware(
     CORSMiddleware,

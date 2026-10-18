@@ -4,10 +4,12 @@ COMPOSE      := docker compose
 DEV_COMPOSE  := docker compose -f docker-compose.dev.yml
 PROD_COMPOSE := docker compose -f docker-compose.yml -f docker-compose.prod.yml
 s            ?=
+f            ?=
 
 .DEFAULT_GOAL := help
 .PHONY: help install dev-up dev-down api worker media-worker scheduler trending web migrate migration \
-	lint format typecheck test check build cli screenshots up down restart logs ps deploy prod-logs prod-ps
+	lint format typecheck test check build cli screenshots up down restart logs ps deploy prod-logs prod-ps \
+	backup backup-check
 
 help: ## Show this list
 	@grep -E '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | \
@@ -112,3 +114,9 @@ prod-logs: ## Follow production logs: make prod-logs s=worker
 
 prod-ps: ## Production container status
 	$(PROD_COMPOSE) ps
+
+backup: ## Dump Postgres into ./backups and prune old dumps (scripts/backup-db.sh; cron on the server)
+	./scripts/backup-db.sh
+
+backup-check: ## Restore the newest dump into a scratch database and compare row counts: make backup-check f=FILE
+	./scripts/backup-db.sh --check $(f)

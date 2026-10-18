@@ -224,6 +224,7 @@ Run `make` to list every target. The most useful ones:
 | `make check` | Lint, type check, tests and frontend build |
 | `make screenshots` | Shoot the README images from the local stack (`scripts/screenshots`) |
 | `make deploy` | On the server: pull `main` and rebuild the production stack (`deploy.sh`) |
+| `make backup` / `make backup-check` | Dump Postgres into `./backups` / restore the newest dump into a scratch database and compare it |
 | `make prod-logs s=worker` / `make prod-ps` | On the server: production logs / container status |
 
 ---
@@ -252,11 +253,19 @@ Run `make` to list every target. The most useful ones:
    ```
    `deploy.sh` pulls the latest code, rebuilds the containers (migrations run on start) and
    prunes old images. In production set `ENVIRONMENT=production` and replace every placeholder
-   secret in `.env` (`SECRET_KEY`, `ADMIN_PASSWORD`, `POSTGRES_PASSWORD`).
+   secret in `.env` (`SECRET_KEY`, `POSTGRES_PASSWORD`, a non-default `ADMIN_USER` and a long
+   random `ADMIN_PASSWORD`, e.g. `openssl rand -base64 32`).
 6. **Update later**: SSH into the server and run it again from the project dir (pushes do not
    deploy automatically):
    ```bash
    make deploy    # same as ./deploy.sh
+   ```
+7. **Back up the database**: nothing in the stack does it for you. Add a nightly cron job in the
+   project dir and check a dump now and then (`make backup-check` restores it into a scratch
+   database). For an off-site copy set `BACKUP_RCLONE_REMOTE` to an encrypted rclone remote:
+   ```bash
+   crontab -e
+   # 15 3 * * * cd /path/to/debatr && mkdir -p backups && ./scripts/backup-db.sh >> backups/backup.log 2>&1
    ```
 
 ---
@@ -309,6 +318,8 @@ server pass `--url http://localhost` (or set `DEBATR_URL`).
 - Top-ups go through Stripe Checkout (`STRIPE_SECRET_KEY`, webhook `/api/billing/webhook` with the
   `checkout.session.completed` event and `STRIPE_WEBHOOK_SECRET`). Every movement is recorded in the
   `credit_transactions` ledger and visible on the Account page and in the admin panel.
+- Manual credits (gifts, refunds, corrections) are ledger rows too, from the server:
+  `docker compose exec api python -m app.manage credits user@example.com 5 --reason "…"`.
 
 ---
 

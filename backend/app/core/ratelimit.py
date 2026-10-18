@@ -12,6 +12,8 @@ logger = logging.getLogger(__name__)
 
 WINDOW_SECONDS = 3600
 DEVICE_CODE_LOOKUPS_PER_HOUR = 60
+ADMIN_LOGIN_ATTEMPTS = 5
+ADMIN_LOGIN_WINDOW_SECONDS = 15 * 60
 
 
 def _client_id(request: Request) -> str:
@@ -41,7 +43,7 @@ async def enforce_limit(
         retry_after = max(int(ttl), 1) if isinstance(ttl, int) else window_seconds
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=f"Too many {what}. Try again in {retry_after // 60 + 1} minutes.",
+            detail=f"Too many {what}. Try again in {-(-retry_after // 60)} minutes.",
             headers={"Retry-After": str(retry_after)},
         )
 
@@ -64,6 +66,18 @@ async def enforce_login_limit(request: Request) -> None:
         bucket="login",
         limit=settings.LOGIN_RATE_LIMIT,
         window_seconds=WINDOW_SECONDS,
+        what="sign-in attempts",
+    )
+
+
+async def enforce_admin_login_limit(request: Request) -> None:
+    """Cap sign-in attempts to the admin panel per IP: one guessed password opens everything,
+    so this limit is fixed and much lower than LOGIN_RATE_LIMIT."""
+    await enforce_limit(
+        request,
+        bucket="admin_login",
+        limit=ADMIN_LOGIN_ATTEMPTS,
+        window_seconds=ADMIN_LOGIN_WINDOW_SECONDS,
         what="sign-in attempts",
     )
 

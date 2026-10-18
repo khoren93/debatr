@@ -18,6 +18,9 @@ env/
 # Docker
 docker-compose.override.yml
 
+# Database dumps (scripts/backup-db.sh)
+/backups/
+
 # Generated audio/timeline files (backend MEDIA_ROOT)
 /backend/media/
 /media/

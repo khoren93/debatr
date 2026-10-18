@@ -28,6 +28,13 @@ from app.services.trending import TOPIC_CATEGORIES
 
 
 class UserAdmin(ModelView, model=User):
+    """Accounts. The details page and the form are allowlists, so a new column (a secret one
+    included) never shows up there by itself. The balance changes only through the ledger
+    (`python -m app.manage credits`); the email is the login, which the form would not validate
+    (lowercase, unique), so it is not editable here. Deleting is off: the
+    debates of a deleted owner would become ownerless rows that anyone with the link may read
+    (`serializers.can_view`); disable the account instead."""
+
     column_list = [
         User.id,
         User.email,
@@ -40,16 +47,19 @@ class UserAdmin(ModelView, model=User):
     column_searchable_list = [User.email, User.display_name]
     column_sortable_list = [User.created_at, User.credits_usd, User.last_login_at]
     column_default_sort = (User.created_at, True)
-    column_details_exclude_list = [User.password_hash, User.openrouter_key_enc]
-    form_excluded_columns = [
-        User.password_hash,
-        User.openrouter_key_enc,
-        User.debates,
-        User.transactions,
-        User.api_tokens,
+    column_details_list = [
+        User.id,
+        User.email,
+        User.display_name,
+        User.credits_usd,
+        User.openrouter_key_last4,
+        User.is_active,
+        User.created_at,
+        User.last_login_at,
     ]
+    form_columns = [User.display_name, User.is_active]
     can_create = False
-    can_delete = True
+    can_delete = False
     name = "User"
     name_plural = "Users"
     icon = "fa-solid fa-user"
@@ -134,6 +144,9 @@ class DebateAdmin(ModelView, model=Debate):
         Debate.votes_count,
     ]
     column_default_sort = (Debate.created_at, True)
+    # Status, publishing, moderation, owner and totals follow their own rules (Stop, the
+    # moderation actions, the ledger), so the form edits only the labels.
+    form_columns = [Debate.title, Debate.category]
     can_delete = True
     name = "Debate"
     name_plural = "Debates"
@@ -216,6 +229,7 @@ class ParticipantAdmin(ModelView, model=DebateParticipant):
         DebateParticipant.persona_name,
         DebateParticipant.model_id,
     ]
+    can_edit = False  # the lineup feeds the leaderboard
     can_delete = False
     name = "Participant"
     name_plural = "Participants"
@@ -233,6 +247,7 @@ class TurnAdmin(ModelView, model=Turn):
         Turn.created_at,
     ]
     column_sortable_list = [Turn.created_at, Turn.seq_index]
+    can_edit = False  # what a model said is never rewritten
     can_delete = False
     name = "Turn"
     name_plural = "Turns"
@@ -241,6 +256,7 @@ class TurnAdmin(ModelView, model=Turn):
 
 class SessionAdmin(ModelView, model=Session):
     column_list = [Session.id, Session.created_at, Session.last_seen_at]
+    can_edit = False
     can_delete = False
     name = "Legacy session"
     name_plural = "Legacy sessions"

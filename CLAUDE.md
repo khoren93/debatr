@@ -13,6 +13,8 @@ a local export may sit in the git-ignored `design/` folder (`Debatr Studio.html`
 backend/            FastAPI API + RQ worker (Python 3.12+, managed with uv)
   app/main.py         FastAPI app, session + CORS middleware, admin panel, /api/health
   app/worker.py       RQ worker entrypoint (`python -m app.worker`)
+  app/manage.py       operator commands on the server (`python -m app.manage credits …`: balance
+                      changes through the ledger), not part of the public CLI
   app/scheduler.py    periodic jobs (`python -m app.scheduler`, RQ cron on the background queue:
                       hourly trending check, recovery check every minute;
                       `--refresh-trending` builds a batch now)
@@ -109,6 +111,9 @@ cli/                `debatr` package (PyPI): CLI + MCP server, Python 3.10+, uv,
   src/debatr/config.py  server URL + token resolution, saved logins (0600 config.json)
   src/debatr/markers.py, styling.py, render.py  live terminal output (markers hidden, inline Markdown)
   tests/              pytest on a fake server (httpx.MockTransport) and the SDK's in-process client
+scripts/backup-db.sh  `make backup` / `make backup-check`: Postgres dumps (pg_dump -Fc, 0600,
+                    pruned after BACKUP_KEEP_DAYS, optional rclone upload) and a restore check
+                    into a scratch database; the last good backup is noted in Redis `backup:last`
 scripts/screenshots/  `make screenshots`: README images (numbered phone screens, a 16:9 frame, the
                     hero = three phones, also the social preview: JPEG under 1 MB) shot from the
                     local stack with playwright-core and the installed Chrome; views / likes /
@@ -166,13 +171,24 @@ Infrastructure:
 docker compose -f docker-compose.dev.yml up -d   # Postgres :5432 + Redis :6379 for native dev
 docker compose up -d --build                     # full stack on http://localhost (migrations auto-run)
 ./deploy.sh                                      # production (adds docker-compose.prod.yml)
+make backup                                      # dump Postgres into ./backups (cron on the server)
+make backup-check                                # restore the newest dump into a scratch DB, compare counts
+docker compose exec api python -m app.manage credits user@example.com 5 --reason "…"  # ledger adjustment
 ```
 
 ## Architecture and data flow
 
 0. Accounts: `POST /api/auth/register|login` set `request.session["uid"]` in the signed session
-   cookie (the admin panel uses the same cookie under `token`). `get_current_user` /
-   `require_user` in `app/core/auth.py`. New accounts get `SIGNUP_BONUS_USD` credits.
+   cookie (`SameSite=Strict`: `core/auth.session_cookie_options`, also passed to sqladmin's own
+   SessionMiddleware so it never re-issues the cookie with its defaults; the SPA reads the
+   session with same-site requests, so links from other sites still arrive signed in).
+   `get_current_user` / `require_user` in `app/core/auth.py`. New accounts get
+   `SIGNUP_BONUS_USD` credits. The sqladmin panel (`ADMIN_USER` / `ADMIN_PASSWORD`, until the new
+   admin console replaces it) uses the same cookie under `token` + `admin_until` (12 h,
+   `is_admin_session`); its sign-in allows 5 attempts per IP per 15 min
+   (`enforce_admin_login_limit`) and logs each attempt with the IP. Its forms are allowlists
+   (`form_columns`, `column_details_list`): it cannot edit balances, turns or the lineup, nor
+   delete users (their debates would turn into ownerless rows readable by link).
 1. `POST /api/debates` (signed-in users only) validates `DebateConfig` (`topic` ≤
    `TOPIC_MAX_LENGTH` = 150: it is drawn on the video; configs saved before the limit hold up to
    500 and are re-read with `DebateConfig.stored`; the wizard, CLI and trending topics keep to
@@ -501,6 +517,10 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
 - `users.credits_usd` is the balance; `credit_transactions` is the append-only ledger. Every
   change goes through `services/credits.apply_transaction(_sync)`; `provider_ref` makes charges
   and Stripe sessions idempotent. The balance may go slightly negative (actual cost > estimate).
+  The user row is locked with `populate_existing` (`_locked_user`): a User already loaded in the
+  session (the API's sessions never expire objects) would otherwise keep its old balance and
+  overwrite a charge committed meanwhile. Manual credits: `python -m app.manage credits` (kind
+  adjustment | bonus | refund, provider `admin`, internal reason in `meta_json.reason`).
 - `POST /api/billing/checkout` creates a Stripe Checkout session (`stripe.StripeClient`,
   `v1.checkout.sessions`); `POST /api/billing/webhook` (`checkout.session.completed` / `async_payment_succeeded`) and
   `GET /api/billing/confirm?session_id=` (called by the Account page after redirect) credit it.
@@ -562,6 +582,11 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   top of accounts/credits; set 0 to disable.
 - Stripe: without `STRIPE_SECRET_KEY` the checkout endpoint returns 503 and the Account page
   disables top-ups; the Stripe webhook must reach `/api/billing/webhook` (Caddy proxies `/api*`).
+- Backups: nothing in the stack backs up Postgres by itself; run `scripts/backup-db.sh` from cron
+  on the server and keep a copy off the VPS in an encrypted place (rclone `crypt` remote via
+  `BACKUP_RCLONE_REMOTE`): a dump holds emails, password hashes and the ledger. Restore for real
+  with `docker compose exec -T db sh -c 'pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --clean
+  --if-exists --no-owner' < backups/<file>.dump` after stopping api/worker/scheduler.
 - Changing `SECRET_KEY` invalidates every login cookie and makes stored OpenRouter keys
   undecryptable (users must re-enter them).
 - Media: `MEDIA_ROOT` is `./media` natively and the `media_data` volume (`/media`) in Docker;

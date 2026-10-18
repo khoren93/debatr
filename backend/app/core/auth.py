@@ -7,21 +7,49 @@ its owner, except for account management (password, tokens, stored keys, payment
 the browser session (`require_session_user`).
 """
 
+import time
 import uuid
 from datetime import timedelta
+from typing import Literal, TypedDict
 
 from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.db import get_db
 from app.core.security import hash_api_token, looks_like_api_token
 from app.models.models import ApiToken, User, utcnow
 
 SESSION_USER_KEY = "uid"
 ADMIN_SESSION_KEY = "token"
+# Unix time the admin panel login ends. It shares the cookie with the user login, which lasts
+# SESSION_MAX_AGE, so it carries a shorter deadline of its own.
+ADMIN_UNTIL_KEY = "admin_until"
+ADMIN_SESSION_SECONDS = 12 * 60 * 60
 # `api_tokens.last_used_at` is refreshed at most this often (not on every request).
 TOKEN_TOUCH_INTERVAL = timedelta(minutes=1)
+
+
+class SessionCookieOptions(TypedDict):
+    same_site: Literal["lax", "strict", "none"]
+    https_only: bool
+    max_age: int
+
+
+def session_cookie_options() -> SessionCookieOptions:
+    """Options of the signed session cookie, for the API and the admin panel alike: sqladmin
+    adds a SessionMiddleware of its own, which would re-issue the cookie with its defaults.
+
+    SameSite=Strict: the cookie never rides along a request started on another site, so a link
+    or form elsewhere cannot act as the signed-in user (sqladmin's actions are plain GET links).
+    The SPA reads the session with same-site requests, so a visitor who follows a link to the
+    site is still signed in."""
+    return {
+        "same_site": "strict",
+        "https_only": settings.is_production,
+        "max_age": settings.SESSION_MAX_AGE,
+    }
 
 
 def login_session(request: Request, user: User) -> None:
@@ -32,8 +60,26 @@ def logout_session(request: Request) -> None:
     request.session.pop(SESSION_USER_KEY, None)
 
 
-def is_admin_session(request: Request) -> bool:
-    return request.session.get(ADMIN_SESSION_KEY) == "authenticated"
+def admin_login_session(request: Request, *, now: float | None = None) -> None:
+    started = time.time() if now is None else now
+    request.session[ADMIN_SESSION_KEY] = "authenticated"
+    request.session[ADMIN_UNTIL_KEY] = int(started + ADMIN_SESSION_SECONDS)
+
+
+def admin_logout_session(request: Request) -> None:
+    """End the admin panel login only: the user login in the same cookie stays."""
+    request.session.pop(ADMIN_SESSION_KEY, None)
+    request.session.pop(ADMIN_UNTIL_KEY, None)
+
+
+def is_admin_session(request: Request, *, now: float | None = None) -> bool:
+    """A live admin panel login. Logins from before the deadline existed have none and count as
+    ended."""
+    if request.session.get(ADMIN_SESSION_KEY) != "authenticated":
+        return False
+    until = request.session.get(ADMIN_UNTIL_KEY)
+    moment = time.time() if now is None else now
+    return isinstance(until, int) and until > moment
 
 
 def bearer_token(request: Request) -> str | None:
