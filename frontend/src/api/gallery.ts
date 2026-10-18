@@ -6,6 +6,8 @@ export interface GalleryQuery {
   q?: string;
   /** Only debates this model argued in. */
   model?: string;
+  /** Only debates voiced by ElevenLabs. */
+  premium_voices?: boolean;
   sort?: GallerySort;
   /** Publication window for `sort=top`. */
   period?: GalleryPeriod;

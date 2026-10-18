@@ -439,6 +439,8 @@ export interface GalleryItem {
   votes: number;
   duration_ms: number | null;
   has_media: boolean;
+  /** The audio was voiced by ElevenLabs. */
+  premium_voices: boolean;
   verdict: Verdict | null;
   participants: Participant[];
   published_at: string | null;
@@ -455,6 +457,8 @@ export interface LeaderboardEntry {
   name: string;
   is_free: boolean;
   rating: number;
+  /** False until the model met another one in a debate that got audience votes (the rating is then just the 1000 baseline). */
+  rated: boolean;
   /** Public debates the model argued in. */
   debates: number;
   /** Audience votes received. */

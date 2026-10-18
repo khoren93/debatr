@@ -1,5 +1,7 @@
 import pytest
 
+from app.api.serializers import has_premium_voices
+from app.models.models import Debate
 from app.services.ranking import (
     RATING_BASE,
     DebateRecord,
@@ -19,6 +21,28 @@ def test_trending_clamps_negative_age() -> None:
     assert trending_score(0, 0, 0, age_hours=-5) == trending_score(0, 0, 0, age_hours=0)
 
 
+def test_premium_voices_count_like_two_likes() -> None:
+    assert trending_score(0, 0, 9, 12, premium_voices=True) == pytest.approx(
+        trending_score(2, 0, 9, 12)
+    )
+    # A new debate with free voices overtakes an unliked premium one only after ~5 hours.
+    assert trending_score(0, 0, 0, 5, premium_voices=True) > trending_score(0, 0, 0, 0)
+    assert trending_score(0, 0, 0, 6, premium_voices=True) < trending_score(0, 0, 0, 0)
+    # Likes still decide: a liked debate with free voices beats an unliked premium one.
+    assert trending_score(3, 0, 20, 12) > trending_score(0, 0, 20, 12, premium_voices=True)
+
+
+def test_premium_voices_need_ready_elevenlabs_audio() -> None:
+    def debate(status: str, provider: str | None) -> Debate:
+        options = {"provider": provider} if provider else {}
+        return Debate(media_status=status, media_json={"options": options} if options else {})
+
+    assert has_premium_voices(debate("ready", "elevenlabs"))
+    assert not has_premium_voices(debate("ready", "edge"))
+    assert not has_premium_voices(debate("running", "elevenlabs"))  # rebuilt, not ready yet
+    assert not has_premium_voices(debate("none", None))
+
+
 def _rec(models: dict[str, str], votes: dict[str, int] | None = None, judge: str | None = None):
     return DebateRecord(models=models, votes=votes or {}, judge_winner=judge)
 
@@ -28,6 +52,19 @@ def test_models_without_votes_sit_at_base_rating() -> None:
     assert {s.model_id for s in board} == {"a", "b"}
     assert all(s.rating == pytest.approx(RATING_BASE) for s in board)
     assert all(s.debates == 1 and s.votes == 0 and s.vote_share is None for s in board)
+    assert not any(s.rated for s in board)
+
+
+def test_unrated_models_come_after_rated_ones() -> None:
+    records = [
+        _rec({"participant_1": "a", "participant_2": "b"}, {"participant_1": 2}),
+        _rec({"participant_1": "c", "participant_2": "d"}, judge="participant_1"),
+    ]
+    board = build_leaderboard(records)
+    assert [s.model_id for s in board][:2] == ["a", "b"]  # b lost, yet it is rated
+    assert board[1].rating < RATING_BASE and board[1].rated
+    assert {s.model_id for s in board[2:]} == {"c", "d"}
+    assert not any(s.rated for s in board[2:])
 
 
 def test_votes_rank_models_and_count_wins() -> None:
@@ -71,6 +108,7 @@ def test_mirror_match_counts_debate_but_not_contest() -> None:
     (only,) = board
     assert only.debates == 1 and only.votes == 4
     assert only.audience_contests == 0 and only.rating == pytest.approx(RATING_BASE)
+    assert not only.rated
 
 
 def test_more_votes_beat_a_lucky_streak() -> None:

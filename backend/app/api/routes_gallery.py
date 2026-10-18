@@ -4,7 +4,7 @@ from datetime import timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from sqlalchemy import ColumnElement, and_, func, select
+from sqlalchemy import ColumnElement, and_, case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import load_only, selectinload
 
@@ -23,6 +23,7 @@ from app.schemas.schemas import (
 )
 from app.services import ranking
 from app.services.engagement import engagement_out
+from app.services.free_router import is_free_router
 from app.services.openrouter_client import openrouter_client
 from app.services.views import count_view
 
@@ -39,6 +40,14 @@ def _published_at() -> ColumnElement[Any]:
     return func.coalesce(Debate.published_at, Debate.created_at)
 
 
+def premium_voices_sql() -> ColumnElement[bool]:
+    """SQL twin of `serializers.has_premium_voices`."""
+    return and_(
+        Debate.media_status == "ready",
+        Debate.media_json[("options", "provider")].as_string() == "elevenlabs",
+    )
+
+
 def trending_sql() -> ColumnElement[Any]:
     """SQL twin of `ranking.trending_score`."""
     age_hours = func.extract("epoch", func.now() - _published_at()) / 3600.0
@@ -47,6 +56,7 @@ def trending_sql() -> ColumnElement[Any]:
         + Debate.votes_count * ranking.VOTE_WEIGHT
         + func.ln(Debate.views + 1)
         + 1
+        + case((premium_voices_sql(), ranking.PREMIUM_VOICES_BONUS), else_=0.0)
     )
     return engagement / func.power(
         func.greatest(age_hours, 0) + ranking.TRENDING_OFFSET_HOURS, ranking.TRENDING_GRAVITY
@@ -62,6 +72,7 @@ async def list_gallery(
     category: str | None = Query(None, max_length=40),
     q: str | None = Query(None, max_length=200),
     model: str | None = Query(None, max_length=200, description="Debates this model argued in"),
+    premium_voices: bool = Query(False, description="Only debates voiced by ElevenLabs"),
     sort: GallerySort = Query("new"),
     period: GalleryPeriod = Query("all", description="Publication window for sort=top"),
     limit: int = Query(24, ge=1, le=100),
@@ -82,6 +93,8 @@ async def list_gallery(
                 )
             )
         )
+    if premium_voices:
+        conditions.append(premium_voices_sql())
     if sort == "top" and period in PERIODS:
         conditions.append(_published_at() >= utcnow() - PERIODS[period])
 
@@ -140,9 +153,11 @@ async def leaderboard(db: AsyncSession = Depends(get_db)) -> LeaderboardOut:
     for debate_id, participant_id, count in vote_rows.all():
         votes.setdefault(debate_id, {})[participant_id] = int(count)
 
+    # Debates from before the Free Router pinned its models keep the router itself: a random
+    # free model per turn is no contender, so it is left out (its opponents get no contest).
     records = [
         ranking.DebateRecord(
-            models=debater_models(d),
+            models={p: m for p, m in debater_models(d).items() if not is_free_router(m)},
             votes=votes.get(d.id, {}),
             judge_winner=(d.verdict_json or {}).get("winner_id"),
             claims=(d.totals_json or {}).get("claims") or {},
@@ -159,6 +174,7 @@ async def leaderboard(db: AsyncSession = Depends(get_db)) -> LeaderboardOut:
                 name=str(info.get("name") or s.model_id),
                 is_free=bool(info.get("is_free", s.model_id.endswith(":free"))),
                 rating=round(s.rating),
+                rated=s.rated,
                 debates=s.debates,
                 votes=s.votes,
                 vote_share=s.vote_share,

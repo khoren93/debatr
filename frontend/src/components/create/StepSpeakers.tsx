@@ -138,7 +138,8 @@ export const StepSpeakers = ({
     !!catalogue.language &&
     catalogue.language !== 'en' &&
     !catalogue.voices.some((v) => v.languages.includes(catalogue.language));
-  const ranks = Object.fromEntries((leaderboard?.entries ?? []).map((e, i) => [e.model_id, i + 1]));
+  // Only models the audience has rated get a place: the rest all sit at the 1000 baseline.
+  const ranks = Object.fromEntries((leaderboard?.entries ?? []).filter((e) => e.rated).map((e, i) => [e.model_id, i + 1]));
 
   const updateSpeaker = (index: number, changes: Partial<Speaker>) =>
     patch({ speakers: state.speakers.map((s, i) => (i === index ? { ...s, ...changes } : s)) });

@@ -15,6 +15,9 @@ LIKE_WEIGHT = 3.0
 VOTE_WEIGHT = 1.0
 TRENDING_OFFSET_HOURS = 2.0
 TRENDING_GRAVITY = 1.5
+# Premium (ElevenLabs) voices count like two likes: without likes such a debate stays above
+# fresh runs with free voices for ~5 hours longer, while a debate people liked still wins.
+PREMIUM_VOICES_BONUS = 2 * LIKE_WEIGHT
 
 # Leaderboard rating: Bradley-Terry strengths shown on an Elo-like scale.
 RATING_BASE = 1000.0
@@ -27,8 +30,12 @@ _ITERATIONS = 200
 _TOLERANCE = 1e-9
 
 
-def trending_score(likes: int, votes: int, views: int, age_hours: float) -> float:
+def trending_score(
+    likes: int, votes: int, views: int, age_hours: float, premium_voices: bool = False
+) -> float:
     engagement = likes * LIKE_WEIGHT + votes * VOTE_WEIGHT + math.log(views + 1) + 1
+    if premium_voices:
+        engagement += PREMIUM_VOICES_BONUS
     return engagement / math.pow(max(age_hours, 0.0) + TRENDING_OFFSET_HOURS, TRENDING_GRAVITY)
 
 
@@ -62,6 +69,12 @@ class ModelStanding:
     @property
     def vote_share(self) -> float | None:
         return self.votes / self.votes_in_debates if self.votes_in_debates else None
+
+    @property
+    def rated(self) -> bool:
+        """The audience has judged it: it met another model in a debate that got votes. An
+        unrated model sits exactly at RATING_BASE, which says nothing about it."""
+        return self.audience_contests > 0
 
 
 def _per_model(record: DebateRecord, values: dict[str, int]) -> dict[str, int]:
@@ -101,7 +114,8 @@ def _bradley_terry(wins: dict[tuple[str, str], float], models: Iterable[str]) ->
 
 
 def build_leaderboard(records: Iterable[DebateRecord]) -> list[ModelStanding]:
-    """Standings of every model that argued in at least one of the given debates, best first."""
+    """Standings of every model that argued in at least one of the given debates: rated models
+    best first, then the ones no vote has touched yet."""
     standings: dict[str, ModelStanding] = {}
     pairwise: dict[tuple[str, str], float] = defaultdict(float)
 
@@ -150,5 +164,5 @@ def build_leaderboard(records: Iterable[DebateRecord]) -> list[ModelStanding]:
         s.rating = RATING_BASE + RATING_SCALE * math.log10(strength[model])
     return sorted(
         standings.values(),
-        key=lambda s: (-round(s.rating, 6), -s.votes, -s.debates, s.model_id),
+        key=lambda s: (not s.rated, -round(s.rating, 6), -s.votes, -s.debates, s.model_id),
     )

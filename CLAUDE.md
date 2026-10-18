@@ -263,13 +263,20 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
 - Blind voting is a frontend rule: for a viewer who could vote, the judge's verdict (Verdict tab,
   verdict turn in the transcript) and the split stay hidden until they vote or click reveal;
   gallery/landing cards show likes instead of the winner.
-- `GET /api/gallery?sort=new|trending|top&period=week|month|year|all&model=<id>`; trending is
-  `services/ranking.trending_score` mirrored in SQL by `routes_gallery.trending_sql`.
+- `GET /api/gallery?sort=new|trending|top&period=week|month|year|all&model=<id>&premium_voices=true`;
+  trending is `services/ranking.trending_score` mirrored in SQL by `routes_gallery.trending_sql`.
+  Anyone may publish (free models and Edge voices too); quality is a ranking signal, not a gate:
+  ready ElevenLabs audio (`serializers.has_premium_voices` / `premium_voices_sql`) counts like two
+  likes (`PREMIUM_VOICES_BONUS`), cards mark it (`GalleryItem.premium_voices`), the gallery has a
+  "Premium voices" filter (`?voices=premium`) and the landing's trending row puts such debates first.
 - `GET /api/gallery/leaderboard`: Bradley–Terry ratings (Elo-like scale, 1000 = average,
   `PRIOR_GAMES` virtual games damp single votes) from audience votes on public completed debates;
   each vote is a win of the chosen model over every other model in the debate, mirror matches are
   ignored. Lists only models that argued in a public debate; `is_free` comes from the OpenRouter
-  catalogue. The wizard's model fields and model list show each model's rank.
+  catalogue. `rated=false` until a model met another one in a debate with votes (its 1000 is just
+  the prior): such models come last without a place or rating (page, wizard ranks, CLI, MCP).
+  The judge never feeds the rating. Unpinned `openrouter/free` participants (debates from before
+  pinning) are left out. The wizard's model fields and model list show each rated model's rank.
 
 ### Media pipeline (audio on the server, video in the browser)
 

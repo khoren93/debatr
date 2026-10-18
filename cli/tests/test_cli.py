@@ -319,13 +319,29 @@ def test_list_models_gallery_leaderboard(app, server):
         "GET /gallery/leaderboard",
         {
             "entries": [
-                {"model_id": "acme/new", "rating": 1042, "debates": 3, "votes": 9, "is_free": False}
+                {
+                    "model_id": "acme/new",
+                    "rating": 1042,
+                    "debates": 3,
+                    "votes": 9,
+                    "is_free": False,
+                },
+                {
+                    "model_id": "acme/quiet",
+                    "rating": 1000,
+                    "rated": False,
+                    "debates": 1,
+                    "votes": 0,
+                    "is_free": True,
+                },
             ],
             "total_votes": 9,
-            "total_debates": 3,
+            "total_debates": 4,
         },
     )
-    assert "1042" in app("leaderboard", token=None).output
+    board = app("leaderboard", token=None).output
+    assert "1042" in board  # no `rated` field (older servers) counts as rated
+    assert "no votes" in board and "1000" not in board
 
 
 def test_delete_needs_yes_without_a_terminal(app, server):

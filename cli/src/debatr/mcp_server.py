@@ -543,7 +543,8 @@ def create_server(
         limit: Annotated[int, Field(ge=1, le=100)] = 20,
     ) -> dict[str, Any]:
         """Models ranked by audience votes on public debates (Elo-like rating, 1000 =
-        average), with judge wins and the accuracy of their fact-checked figures."""
+        average; rating is null for models whose debates got no votes yet), with judge wins
+        and the accuracy of their fact-checked figures."""
         client = await clients.get(auth=False)
         try:
             body = await client.leaderboard()
@@ -556,7 +557,7 @@ def create_server(
                 {
                     "rank": i,
                     "model": e.get("model_id"),
-                    "rating": e.get("rating"),
+                    "rating": e.get("rating") if e.get("rated", True) else None,
                     "free": e.get("is_free"),
                     "debates": e.get("debates"),
                     "audience_votes": e.get("votes"),

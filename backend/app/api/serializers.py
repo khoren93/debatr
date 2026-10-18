@@ -115,6 +115,13 @@ def duration_ms(debate: Debate) -> int | None:
     return int(value) if value else None
 
 
+def has_premium_voices(debate: Debate) -> bool:
+    """The ready audio was voiced by ElevenLabs (system or own key). `routes_gallery.
+    premium_voices_sql` is its SQL twin."""
+    options = (debate.media_json or {}).get("options") or {}
+    return debate.media_status == "ready" and options.get("provider") == "elevenlabs"
+
+
 def outputs(debate: Debate) -> list[str]:
     """Deliverables that exist for this debate. Video and shorts are rendered in the browser
     from the timeline, so they become available as soon as the audio build is ready."""
@@ -271,6 +278,7 @@ def gallery_item_out(debate: Debate) -> GalleryItem:
         votes=debate.votes_count or 0,
         duration_ms=duration_ms(debate),
         has_media=debate.media_status == "ready",
+        premium_voices=has_premium_voices(debate),
         verdict=verdict_out(debate),
         participants=participants_out(debate),
         published_at=debate.published_at,

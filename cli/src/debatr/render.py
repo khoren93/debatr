@@ -430,10 +430,12 @@ def leaderboard_table(entries: list[dict[str, Any]]) -> Table:
     for i, e in enumerate(entries, 1):
         checked = int(e.get("claims_checked") or 0)
         accuracy = f"{int(e.get('claims_verified') or 0) * 100 // checked}%" if checked else "-"
+        # Servers before `rated` sent only rated-looking numbers: treat them as rated.
+        rated = e.get("rated", True)
         table.add_row(
-            str(i),
+            str(i) if rated else "-",
             str(e.get("model_id")),
-            str(e.get("rating")),
+            str(e.get("rating")) if rated else "no votes",
             str(e.get("debates")),
             str(e.get("votes")),
             f"{e.get('judge_wins', 0)}/{e.get('judge_contests', 0)}",

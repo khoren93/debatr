@@ -72,15 +72,22 @@ const HeroPlayer = () => (
   </div>
 );
 
+/** Debates in the "Trending in the gallery" row. */
+const FEATURED = 3;
+
 const Landing = () => {
   const { user } = useAuth();
   const [featured, setFeatured] = useState<GalleryItem[]>([]);
 
   useEffect(() => {
     let cancelled = false;
-    listGallery({ limit: 3, sort: 'trending' })
-      .then((res) => {
-        if (!cancelled) setFeatured(res.items);
+    // The landing is the first impression: debates with premium voices come first, the
+    // general trending list only fills the free places.
+    Promise.all([listGallery({ limit: FEATURED, sort: 'trending', premium_voices: true }), listGallery({ limit: FEATURED, sort: 'trending' })])
+      .then(([premium, all]) => {
+        if (cancelled) return;
+        const ids = new Set(premium.items.map((item) => item.id));
+        setFeatured([...premium.items, ...all.items.filter((item) => !ids.has(item.id))].slice(0, FEATURED));
       })
       .catch(() => {
         // The "Trending in the gallery" section is optional: it stays hidden when the gallery is unavailable.
@@ -160,7 +167,7 @@ const Landing = () => {
                 to={`/d/${item.slug}`}
                 title={item.topic || item.title || 'Untitled debate'}
                 topLeft={<VersusLine participants={item.participants} />}
-                topRight={<DurationChip ms={item.duration_ms} />}
+                topRight={<DurationChip ms={item.duration_ms} premium={item.premium_voices} />}
                 footerLeft={<span>{formatCount(item.views)} views</span>}
                 footerRight={
                   <span className="inline-flex items-center gap-1">

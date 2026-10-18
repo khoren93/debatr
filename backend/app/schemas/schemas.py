@@ -430,6 +430,7 @@ class GalleryItem(BaseModel):
     votes: int = 0
     duration_ms: int | None = None
     has_media: bool = False
+    premium_voices: bool = False  # the audio was voiced by ElevenLabs
     verdict: VerdictOut | None = None
     participants: list[ParticipantOut] = Field(default_factory=list)
     published_at: datetime | None = None
@@ -447,6 +448,9 @@ class LeaderboardEntry(BaseModel):
     name: str
     is_free: bool
     rating: int
+    # False until the model met another one in a debate that got audience votes: its rating is
+    # then just the 1000 baseline.
+    rated: bool = False
     debates: int  # public debates the model argued in
     votes: int  # audience votes received
     vote_share: float | None = None  # votes / all votes cast in its debates

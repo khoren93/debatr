@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Heart, Play, Trophy, X } from 'lucide-react';
+import { AudioLines, Heart, Play, Trophy, X } from 'lucide-react';
 import { getErrorMessage } from '../api/client';
 import { listGallery } from '../api/gallery';
 import { GALLERY_CATEGORIES, type GalleryCategory, type GalleryItem, type GalleryPeriod, type GallerySort } from '../api/types';
@@ -33,12 +33,13 @@ const PERIOD_OPTIONS: { value: GalleryPeriod; label: string }[] = [
 
 const oneOf = <T extends string>(value: string | null, options: { value: T }[], fallback: T): T => options.find((o) => o.value === value)?.value ?? fallback;
 
-/** Public gallery. Sort, period and the model filter live in the URL (`?sort=top&period=week&model=…`). */
+/** Public gallery. Sort, period and the model / voice filters live in the URL (`?sort=top&period=week&model=…&voices=premium`). */
 const Gallery = () => {
   const [params, setParams] = useSearchParams();
   const sort = oneOf(params.get('sort'), SORT_OPTIONS, 'trending');
   const period = oneOf(params.get('period'), PERIOD_OPTIONS, 'all');
   const model = params.get('model')?.trim() || null;
+  const premium = params.get('voices') === 'premium';
   const [category, setCategory] = useState<CategoryFilter>('all');
   const [attempt, setAttempt] = useState(0);
   const [result, setResult] = useState<{ key: string; items: GalleryItem[] } | null>(null);
@@ -56,7 +57,7 @@ const Gallery = () => {
     );
 
   // One key per (filters, retry) so responses for a stale request are ignored.
-  const key = `${category}|${sort}|${period}|${model ?? ''}#${attempt}`;
+  const key = `${category}|${sort}|${period}|${model ?? ''}|${premium}#${attempt}`;
 
   useEffect(() => {
     let cancelled = false;
@@ -65,6 +66,7 @@ const Gallery = () => {
       sort,
       period: sort === 'top' ? period : undefined,
       model: model ?? undefined,
+      premium_voices: premium || undefined,
     })
       .then((res) => {
         if (!cancelled) setResult({ key, items: res.items });
@@ -75,7 +77,7 @@ const Gallery = () => {
     return () => {
       cancelled = true;
     };
-  }, [category, sort, period, model, key]);
+  }, [category, sort, period, model, premium, key]);
 
   const items = result?.key === key ? result.items : null;
   const error = failure?.key === key ? failure.message : null;
@@ -96,6 +98,21 @@ const Gallery = () => {
     }
     if (shown === null) return <PageLoader label="Loading the gallery…" />;
     if (shown.length === 0) {
+      if (premium) {
+        return (
+          <EmptyState
+            className="mt-6"
+            icon={<AudioLines className="size-5" />}
+            title="No debates with premium voices here yet"
+            text="Pick premium voices when you create a debate (or regenerate its audio) to be the first."
+            action={
+              <Button variant="secondary" onClick={() => setParam('voices', null)}>
+                Show all voices
+              </Button>
+            }
+          />
+        );
+      }
       if (model) {
         return (
           <EmptyState
@@ -159,7 +176,7 @@ const Gallery = () => {
               to={`/d/${item.slug}`}
               title={item.topic || item.title || 'Untitled debate'}
               topLeft={<VersusLine participants={item.participants} />}
-              topRight={<DurationChip ms={item.duration_ms} />}
+              topRight={<DurationChip ms={item.duration_ms} premium={item.premium_voices} />}
               footerLeft={
                 <>
                   <Avatar seed={author} size={20} />
@@ -197,6 +214,9 @@ const Gallery = () => {
       <div className="mt-5 flex flex-wrap items-center gap-2.5">
         <Segmented options={SORT_OPTIONS} value={sort} onChange={(v) => setParam('sort', v === 'trending' ? null : v)} size="sm" />
         {sort === 'top' && <Segmented options={PERIOD_OPTIONS} value={period} onChange={(v) => setParam('period', v === 'all' ? null : v)} size="sm" />}
+        <Chip size="sm" active={premium} onClick={() => setParam('voices', premium ? null : 'premium')} title="Only debates voiced with premium (ElevenLabs) voices">
+          <AudioLines className="size-3.5" /> Premium voices
+        </Chip>
         {model && (
           <button
             type="button"

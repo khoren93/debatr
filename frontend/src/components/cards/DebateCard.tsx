@@ -1,5 +1,6 @@
 import type { CSSProperties, ReactNode } from 'react';
 import { Link } from 'react-router-dom';
+import { AudioLines } from 'lucide-react';
 import type { Participant, Verdict } from '../../api/types';
 import { formatDuration, gradientFor } from '../../lib/format';
 import { ModelIcon, Thumb } from '../ui';
@@ -45,9 +46,12 @@ export const DebateCard = ({ id, to, title, topLeft, topRight, footerLeft, foote
   </Link>
 );
 
-/** "4:13" chip for the thumbnail corner ("—" when the debate has no audio yet). */
-export const DurationChip = ({ ms }: { ms: number | null | undefined }) => (
-  <span className="inline-block rounded-md bg-black/45 px-2 py-[3px] font-mono text-[10px] text-text">{formatDuration(ms)}</span>
+/** "4:13" chip for the thumbnail corner ("—" when the debate has no audio yet); `premium` adds the premium-voices mark. */
+export const DurationChip = ({ ms, premium = false }: { ms: number | null | undefined; premium?: boolean }) => (
+  <span className="inline-flex items-center gap-1 rounded-md bg-black/45 px-2 py-[3px] font-mono text-[10px] text-text" title={premium ? 'Premium voices' : undefined}>
+    {premium && <AudioLines className="size-3 text-accent" aria-label="Premium voices" />}
+    {formatDuration(ms)}
+  </span>
 );
 
 /** "Claude vs GPT-4o" mono line built from the first two debaters, with their model logos. */
