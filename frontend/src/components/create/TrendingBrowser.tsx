@@ -139,29 +139,19 @@ export const TrendingBrowser = ({ isPicked, onPick, onUnpick, onUseQuery }: Tren
 
   return (
     <div className="grid min-w-0 content-start gap-4">
-      <div className="flex flex-wrap items-end justify-between gap-3.5">
-        <div className="min-w-0">
-          {data?.updated_at && (
-            <div className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.08em] text-accent">
-              <span className="size-1.5 rounded-full bg-accent animate-pulse-dot" aria-hidden="true" />
-              {updatedLabel(data.updated_at)}
-            </div>
-          )}
-          <h2 className="mt-2 font-display text-[clamp(22px,2.4vw,28px)] font-bold tracking-[-0.025em]">Trending topics</h2>
-          <p className="mt-1 text-[13px] text-muted">Debate-ready questions from today's news — each linked to its source.</p>
-        </div>
-        <button
-          type="button"
-          onClick={surprise}
-          disabled={topics.length === 0}
-          className="inline-flex h-10 items-center gap-2 rounded-[11px] border border-line-2 bg-surface px-3.5 text-[13px] font-semibold transition-colors hover:bg-surface-2 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          <Dice5 className="size-4" /> Surprise me
-        </button>
+      <div className="min-w-0">
+        {data?.updated_at && (
+          <div className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.08em] text-accent">
+            <span className="size-1.5 rounded-full bg-accent animate-pulse-dot" aria-hidden="true" />
+            {updatedLabel(data.updated_at)}
+          </div>
+        )}
+        <h2 className="mt-2 font-display text-[clamp(22px,2.4vw,28px)] font-bold tracking-[-0.025em]">Trending topics</h2>
+        <p className="mt-1 text-[13px] text-muted">Debate-ready questions from today's news — each linked to its source.</p>
       </div>
 
-      <div>
-        <label className="flex h-11 min-w-0 items-center gap-2.5 rounded-field border border-line bg-surface px-3.5 text-muted focus-within:border-accent">
+      <div className="flex gap-2">
+        <label className="flex h-11 min-w-0 flex-1 items-center gap-2.5 rounded-field border border-line bg-surface px-3.5 text-muted focus-within:border-accent">
           <Search className="size-4 shrink-0" />
           <input
             value={query}
@@ -179,6 +169,17 @@ export const TrendingBrowser = ({ isPicked, onPick, onUnpick, onUseQuery }: Tren
             </button>
           )}
         </label>
+        <button
+          type="button"
+          onClick={surprise}
+          disabled={topics.length === 0}
+          title="Surprise me"
+          aria-label="Surprise me"
+          className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-field border border-line-2 bg-surface px-3 text-[13px] font-semibold transition-colors hover:bg-surface-2 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 sm:px-3.5"
+        >
+          <Dice5 className="size-[18px]" />
+          <span className="hidden sm:inline">Surprise me</span>
+        </button>
       </div>
 
       {categories.length > 1 && (

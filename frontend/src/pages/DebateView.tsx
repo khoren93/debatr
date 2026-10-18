@@ -345,12 +345,12 @@ const DebateView = ({ id, slug }: Props) => {
   const overviewStrip = (
     <>
       {overview.length > 0 ? <SegmentBar segments={overview} onPick={scrollToTurn} ariaLabel="Turns" /> : <div className="h-4" />}
-      <div className="flex items-center justify-between gap-3 text-xs text-muted">
+      <div className="flex flex-col items-start gap-1 text-xs text-muted sm:flex-row sm:items-center sm:justify-between sm:gap-3">
         <span className="font-mono">
           {debate.turns.length} {debate.turns.length === 1 ? 'turn' : 'turns'}
           {isActive && streaming ? ` · ${speakerTitle({ ...streaming, speaker_id: undefined })} is speaking` : ''}
         </span>
-        <span className="truncate text-right">{isActive ? 'Audio and video are produced when the debate ends' : 'Click a turn to read it'}</span>
+        <span className="max-w-full truncate sm:text-right">{isActive ? 'Audio and video are produced when the debate ends' : 'Click a turn to read it'}</span>
       </div>
     </>
   );
@@ -363,7 +363,7 @@ const DebateView = ({ id, slug }: Props) => {
         </Link>
 
         <header className="min-w-0">
-          <h1 className="max-w-[20ch] font-display text-[clamp(28px,3.4vw,46px)] font-extrabold leading-[1.02] tracking-[-0.035em] text-balance">{topic}</h1>
+          <h1 className="font-display text-[clamp(28px,3.4vw,46px)] font-extrabold leading-[1.02] tracking-[-0.035em] text-balance">{topic}</h1>
           <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2.5">
             {debaters.length > 0 && <DebaterChips debaters={debaters} />}
             <div className="flex flex-wrap items-center gap-x-3.5 gap-y-1.5 font-mono text-xs text-muted">
@@ -418,9 +418,7 @@ const DebateView = ({ id, slug }: Props) => {
                 value={format}
                 onChange={changeFormat}
               />
-            ) : (
-              <span />
-            )}
+            ) : null}
             <DebateActions
               debate={debate}
               timeline={timeline}

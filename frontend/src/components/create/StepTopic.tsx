@@ -172,18 +172,24 @@ export const StepTopic = ({ state, patch, showErrors, estimateLine, onContinue }
         </aside>
       </div>
 
+      {/* Room for the bar below, so the end of the page can scroll out from under it. */}
+      <div className="h-16 md:hidden" aria-hidden="true" />
+
       {/* Phones: the panel sits below the topic list, so keep the way forward in reach. Outside
-          the animated step: a running transform animation would pin "fixed" to the step. */}
-      <div className="fixed inset-x-3 bottom-[calc(76px+env(safe-area-inset-bottom))] z-25 flex items-center gap-3 rounded-[16px] border border-line-2 bg-surface-2/95 py-2.5 pr-2.5 pl-4 shadow-[0_20px_40px_-16px_rgba(0,0,0,0.8)] backdrop-blur-[14px] md:hidden">
-        <div className="min-w-0 flex-1 truncate text-[13px] font-semibold">{valid ? state.topic.trim() : 'Pick a topic to continue'}</div>
-        <button
-          type="button"
-          onClick={onContinue}
-          aria-disabled={!valid}
-          className={`flex h-10 shrink-0 items-center rounded-[11px] px-4 text-sm font-bold cursor-pointer ${valid ? 'bg-accent text-ink' : 'cursor-not-allowed bg-surface-3 text-dim'}`}
-        >
-          Continue →
-        </button>
+          the animated step: a running transform animation would pin "fixed" to the step. The
+          backdrop runs down behind the tab bar, so no card shows between the bar and the tabs. */}
+      <div className="pointer-events-none fixed inset-x-0 bottom-0 z-25 bg-linear-to-t from-ink from-80% to-transparent px-3 pt-5 pb-[calc(76px+env(safe-area-inset-bottom))] md:hidden">
+        <div className="pointer-events-auto flex items-center gap-3 rounded-[16px] border border-line-2 bg-surface-2 py-2.5 pr-2.5 pl-4 shadow-[0_20px_40px_-16px_rgba(0,0,0,0.8)]">
+          <div className="min-w-0 flex-1 truncate text-[13px] font-semibold">{valid ? state.topic.trim() : 'Pick a topic to continue'}</div>
+          <button
+            type="button"
+            onClick={onContinue}
+            aria-disabled={!valid}
+            className={`flex h-10 shrink-0 items-center rounded-[11px] px-4 text-sm font-bold cursor-pointer ${valid ? 'bg-accent text-ink' : 'cursor-not-allowed bg-surface-3 text-dim'}`}
+          >
+            Continue →
+          </button>
+        </div>
       </div>
     </>
   );

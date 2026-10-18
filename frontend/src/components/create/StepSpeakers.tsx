@@ -65,7 +65,7 @@ const EngineOption = ({
     disabled={disabled}
     aria-pressed={active}
     title={tooltip}
-    className={`inline-flex h-10 items-center gap-2.5 rounded-[11px] border px-3.5 text-[13px] font-semibold transition-colors ${
+    className={`flex flex-col items-start gap-0.5 rounded-[11px] border px-3.5 py-2 text-[13px] font-semibold transition-colors sm:inline-flex sm:h-10 sm:flex-row sm:items-center sm:gap-2.5 sm:py-0 ${
       active ? 'border-accent bg-accent/6 text-text' : 'border-white/8 bg-ink text-text hover:border-line-3'
     } ${disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
   >
@@ -204,36 +204,41 @@ export const StepSpeakers = ({
       )}
 
       <div className="rounded-card border border-line bg-surface px-3.5 py-3">
-        <div className="flex flex-wrap items-center gap-x-3.5 gap-y-2.5">
-          <span className="pl-1 text-[13px] font-semibold text-text-3">Voice engine</span>
-          <EngineOption active={provider === 'edge'} onClick={() => setProvider('edge')} title="Edge neural" tag="FREE" tooltip="Good quality, word timestamps, instant." />
-          <EngineOption
-            active={provider === 'elevenlabs'}
-            onClick={() => setProvider('elevenlabs')}
-            disabled={!premiumAvailable || premiumLocked}
-            title="Premium neural"
-            tag={
-              hasTtsKey ? (
-                'YOUR KEY'
-              ) : premiumLocked ? (
-                <span className="inline-flex items-center gap-1 text-muted">
-                  <Lock className="size-3" /> ${billing.tts_price_per_min.toFixed(2)}/min
-                </span>
-              ) : (
-                `$${billing.tts_price_per_min.toFixed(2)}/min`
-              )
-            }
-            tooltip={
-              !premiumAvailable
-                ? 'Premium voices are not configured on this server — add your own ElevenLabs key in Account'
-                : premiumLocked
-                  ? 'Top up credits to unlock premium voices, or add your own ElevenLabs key in Account'
-                  : 'ElevenLabs studio voices with emotion tags.'
-            }
-          />
-          <span className="ml-auto text-xs text-muted">
-            Own ElevenLabs key? <AccountLink tab="keys">Account</AccountLink>
-          </span>
+        {/* Phones: label and key link on top, the two engines side by side below. */}
+        <div className="grid gap-2.5 sm:flex sm:flex-wrap sm:items-center sm:gap-x-3.5">
+          <div className="flex items-center justify-between gap-3 px-1 sm:contents">
+            <span className="text-[13px] font-semibold text-text-3 sm:pl-1">Voice engine</span>
+            <span className="text-xs text-muted sm:order-last sm:ml-auto">
+              Own ElevenLabs key? <AccountLink tab="keys">Account</AccountLink>
+            </span>
+          </div>
+          <div className="grid grid-cols-2 gap-2 sm:contents">
+            <EngineOption active={provider === 'edge'} onClick={() => setProvider('edge')} title="Edge neural" tag="FREE" tooltip="Good quality, word timestamps, instant." />
+            <EngineOption
+              active={provider === 'elevenlabs'}
+              onClick={() => setProvider('elevenlabs')}
+              disabled={!premiumAvailable || premiumLocked}
+              title="Premium neural"
+              tag={
+                hasTtsKey ? (
+                  'YOUR KEY'
+                ) : premiumLocked ? (
+                  <span className="inline-flex items-center gap-1 text-muted">
+                    <Lock className="size-3" /> ${billing.tts_price_per_min.toFixed(2)}/min
+                  </span>
+                ) : (
+                  `$${billing.tts_price_per_min.toFixed(2)}/min`
+                )
+              }
+              tooltip={
+                !premiumAvailable
+                  ? 'Premium voices are not configured on this server — add your own ElevenLabs key in Account'
+                  : premiumLocked
+                    ? 'Top up credits to unlock premium voices, or add your own ElevenLabs key in Account'
+                    : 'ElevenLabs studio voices with emotion tags.'
+              }
+            />
+          </div>
         </div>
         {ttsKeyError && (
           <Hint tone="danger">

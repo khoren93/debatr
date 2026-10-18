@@ -120,26 +120,31 @@ export const SpeakerRow = ({
         color={color}
         onChange={onVoice}
       />
-      <PersonaPicker
-        value={style}
-        color={color}
-        onChange={(s) => onChange({ prompt: applyStyle(speaker.prompt, s) })}
-        onCustom={() => {
-          onChange({ prompt: clearStyle(speaker.prompt) });
-          if (!expanded) onToggleExpanded();
-        }}
-      />
-      <div className="flex items-center gap-1.5 min-[1100px]:justify-end">
-        {/* Edge voices have no samples: no button rather than a dead one. */}
-        {sample && <VoicePreviewButton url={sample} playing={preview.playing === sample} onToggle={() => preview.toggle(sample)} color={color} />}
-        <RowAction title="Edit system prompt" onClick={onToggleExpanded} active={expanded} color={color}>
-          <PenLine className="size-4" />
-        </RowAction>
-        {removable && (
-          <RowAction title="Remove" onClick={onRemove}>
-            <Trash2 className="size-4" />
+      {/* Narrow rows: the actions sit next to the persona instead of on a line of their own. */}
+      <div className="flex items-center gap-1.5 min-[1100px]:contents">
+        <div className="min-w-0 flex-1">
+          <PersonaPicker
+            value={style}
+            color={color}
+            onChange={(s) => onChange({ prompt: applyStyle(speaker.prompt, s) })}
+            onCustom={() => {
+              onChange({ prompt: clearStyle(speaker.prompt) });
+              if (!expanded) onToggleExpanded();
+            }}
+          />
+        </div>
+        <div className="flex items-center gap-1.5 min-[1100px]:justify-end">
+          {/* Edge voices have no samples: no button rather than a dead one. */}
+          {sample && <VoicePreviewButton url={sample} playing={preview.playing === sample} onToggle={() => preview.toggle(sample)} color={color} />}
+          <RowAction title="Edit system prompt" onClick={onToggleExpanded} active={expanded} color={color}>
+            <PenLine className="size-4" />
           </RowAction>
-        )}
+          {removable && (
+            <RowAction title="Remove" onClick={onRemove}>
+              <Trash2 className="size-4" />
+            </RowAction>
+          )}
+        </div>
       </div>
       {expanded && (
         <div className="col-span-full grid gap-1.5 pt-1">

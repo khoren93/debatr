@@ -14,11 +14,11 @@
  * finished debate through intercepted requests. The browser is the installed Google Chrome
  * (SCREENSHOT_CHANNEL=chromium uses Playwright's own build instead).
  *
- * ONLY=live,verdict shoots a subset (also launch, gallery, leaderboard, which are not on the
- * README), ONLY=hero only recomposes the hero; OUT=<dir> writes somewhere else than
+ * Screens are numbered in the order a debate is made and watched (01_topics … 09_leaderboard).
+ * ONLY=live,verdict shoots a subset (names without the number), ONLY=hero only recomposes the hero; OUT=<dir> writes somewhere else than
  * scripts/screenshots/out/ (git-ignored: the images are uploaded to GitHub, not committed).
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { type Browser, type BrowserContext, chromium, type Page } from 'playwright-core';
@@ -63,9 +63,10 @@ interface Timeline {
   highlights: { start_ms: number; end_ms: number }[];
 }
 
-/** Shot only when named in ONLY: not on the README. */
-const EXTRAS = ['launch', 'gallery', 'leaderboard'];
-const wanted = (name: string) => ONLY.includes(name) || (ONLY.length === 0 && !EXTRAS.includes(name));
+/** The phone screens in the order a debate is made and watched: `screens/01_topics.webp` … */
+const SCREENS = ['topics', 'speakers', 'format', 'live', 'scenes', 'verdict', 'short', 'gallery', 'leaderboard'];
+const screenFile = (name: string) => join(screens, `${String(SCREENS.indexOf(name) + 1).padStart(2, '0')}_${name}.webp`);
+const wanted = (name: string) => ONLY.length === 0 || ONLY.includes(name);
 const fail = (message: string): never => {
   console.error(`! ${message}`);
   process.exit(1);
@@ -146,7 +147,7 @@ class Shooter {
   async shoot(page: Page, name: string): Promise<void> {
     await settle(page);
     const png = await page.screenshot({ type: 'png' });
-    save(join(screens, `${name}.webp`), await encode(this.encoder, png, 'image/webp', 0.9));
+    save(screenFile(name), await encode(this.encoder, png, 'image/webp', 0.9));
   }
 }
 
@@ -222,7 +223,7 @@ async function captureWizard(context: BrowserContext, shooter: Shooter, debate: 
     await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
     await shooter.shoot(page, 'topics');
   }
-  if (wanted('speakers') || wanted('launch')) {
+  if (wanted('speakers') || wanted('format')) {
     // A remix of the shown debate fills the wizard with its lineup.
     await page.goto(`${BASE}/create?remix=${debate.id}`);
     await page.waitForURL(`${BASE}/create`);
@@ -231,7 +232,7 @@ async function captureWizard(context: BrowserContext, shooter: Shooter, debate: 
     if (wanted('speakers')) await shooter.shoot(page, 'speakers');
     await page.getByRole('button', { name: /^Continue/ }).last().click();
     await page.waitForTimeout(1500);
-    if (wanted('launch')) await shooter.shoot(page, 'launch');
+    if (wanted('format')) await shooter.shoot(page, 'format');
     await page.evaluate((key) => localStorage.removeItem(key), WIZARD_KEY);
   }
   await page.close();
@@ -299,6 +300,11 @@ async function captureDebate(context: BrowserContext, shooter: Shooter, debate: 
       await page.locator(`#turn-${turn.seq_index}`).evaluate((el) => {
         const bottom = el.getBoundingClientRect().bottom + window.scrollY;
         window.scrollTo({ top: bottom - window.innerHeight + 96, behavior: 'instant' });
+        // Phones show the scenes as a strip: swipe to the first one with a fact-check or dispute badge.
+        const badge = [...el.querySelectorAll('span')].find((s) => /^(Fact-checked|disputed by)/i.test(s.textContent?.trim() ?? ''));
+        const card = badge?.closest<HTMLElement>('.snap-start');
+        const strip = card?.parentElement;
+        if (card && strip) strip.scrollTo({ left: card.offsetLeft - strip.offsetLeft, behavior: 'instant' });
       });
       await shooter.shoot(page, 'scenes');
     }
@@ -366,7 +372,7 @@ const inline = (path: string) => `data:image/webp;base64,${readFileSync(path).to
 /** The README hero (1280×640): the pitch on the left, the video and two phones on the right. */
 function heroHtml(): string {
   const phone = (name: string, style: string) =>
-    `<img class="phone" src="${inline(join(screens, `${name}.webp`))}" alt="" style="${style}">`;
+    `<img class="phone" src="${inline(screenFile(name))}" alt="" style="${style}">`;
   const pill = (color: string, label: string) => `<span class="pill"><i style="background:${color}"></i>${label}</span>`;
   return `<!doctype html><html><head><meta charset="utf-8">
   <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=DM+Sans:opsz,wght@9..40,400..700&family=JetBrains+Mono:wght@400;500&display=block" rel="stylesheet">
@@ -416,13 +422,14 @@ async function captureHero(browser: Browser, encoder: Page): Promise<void> {
 
 // --- Main --------------------------------------------------------------------------------
 
+// A full run starts from an empty folder, so no stale screens stay behind.
+if (ONLY.length === 0) rmSync(screens, { recursive: true, force: true });
 mkdirSync(screens, { recursive: true });
 const channel = process.env.SCREENSHOT_CHANNEL ?? 'chrome';
 const browser = await chromium.launch(channel === 'chromium' ? {} : { channel });
 try {
   const encoder = await browser.newPage();
-  const shots = ['topics', 'speakers', 'launch', 'live', 'scenes', 'verdict', 'short', 'gallery', 'leaderboard', 'frame'];
-  if (shots.some(wanted)) {
+  if ([...SCREENS, 'frame'].some(wanted)) {
     const context = await browser.newContext({
       viewport: PHONE,
       deviceScaleFactor: 2,

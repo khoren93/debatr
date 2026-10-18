@@ -11,4 +11,6 @@ export const FONT = "'DM Sans', Inter, -apple-system, 'Segoe UI', Roboto, Helvet
 export const DISPLAY_FONT = "'Bricolage Grotesque', 'DM Sans', Inter, -apple-system, 'Segoe UI', Roboto, sans-serif";
 export const MONO_FONT = "'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace";
 export const ACCENT = '#D9FF3D';
-export const BRAND = 'DEBATR';
+
+/** Height of the video's top bar: the speaking chip's (3u logo + padding + border); brand and round match it. */
+export const barHeight = (u: number) => 4.2 * u + 4;

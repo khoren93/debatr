@@ -6,7 +6,7 @@ import { Captions } from './components/Captions';
 import { BrandMark, EndCard, IntroCard, RoundChip, VerdictCard } from './components/Chrome';
 import { SpeakerCard, SpeakingChip } from './components/SpeakerCard';
 import { debaterTag } from './speakers';
-import { INTRO_MS, LONG_W } from './constants';
+import { INTRO_MS, LONG_W, barHeight } from './constants';
 import { frameToMs, msToFrame, segmentAt, speakingAt } from './utils';
 import { SceneStage } from './visuals/SceneStage';
 
@@ -18,7 +18,7 @@ export interface DebateProps {
 
 const VERDICT_LEAD_MS = 2200;
 const HOST_COLOR = '#FFC46B';
-// Studio layout (unit = 1% of the width, as in the mockup): round · speaker · brand on top,
+// Studio layout (unit = 1% of the width, as in the mockup): brand · speaker · round on top,
 // debaters in side columns, the visual stage in the middle, captions at the bottom.
 const U = LONG_W / 100;
 const STAGE = { x: 380, y: 160, w: 1160, h: 690 };
@@ -62,12 +62,12 @@ export const DebateLong = ({ timeline, mediaBase }: DebateProps) => {
 
       {!inIntro && !inOutro && (
         <div style={{ position: 'absolute', inset: 0, opacity: showVerdict ? 0.05 : 1 }}>
-          <div style={{ position: 'absolute', top: 2.2 * U, left: 2.4 * U, right: 2.4 * U, height: 3.8 * U, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div>{current && <RoundChip roundId={current.round_id} u={U} />}</div>
+          <div style={{ position: 'absolute', top: 2.2 * U, left: 2.4 * U, right: 2.4 * U, height: barHeight(U), display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <BrandMark u={U} />
+            <div>{current && <RoundChip roundId={current.round_id} u={U} />}</div>
           </div>
           {speaker && (
-            <div style={{ position: 'absolute', top: 2.2 * U, left: 0, right: 0, height: 3.8 * U, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ position: 'absolute', top: 2.2 * U, left: 0, right: 0, height: barHeight(U), display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <SpeakingChip speaker={speaker} seg={seg} offsetMs={INTRO_MS} u={U} />
             </div>
           )}

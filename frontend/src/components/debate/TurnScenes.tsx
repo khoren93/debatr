@@ -55,20 +55,20 @@ const SceneCard = ({ visual, cast, mediaBase, checking, onOpen }: CardProps) => 
   const check = visual.check;
   const chips = Boolean(check) || checking || disputes.length > 0;
   return (
-    <div className="min-w-0">
+    <div className="w-[78%] min-w-0 shrink-0 snap-start sm:w-auto">
       <button ref={ref} type="button" onClick={onOpen} className="block w-full overflow-hidden rounded-[12px] border border-line-2 bg-ink text-left transition-colors hover:border-line-3 cursor-pointer" style={{ aspectRatio: `${POSTER_W} / ${POSTER_H}` }} aria-label={`${TYPE_LABELS[visual.scene.type] ?? 'Scene'} — open`}>
         {inView && <Thumbnail component={ScenePoster} compositionWidth={POSTER_W} compositionHeight={POSTER_H} durationInFrames={frames} frameToDisplay={frames - 1} fps={FPS} inputProps={{ visual: still, cast, mediaBase }} style={{ width: '100%', height: '100%' }} />}
       </button>
       {chips && (
         <div className="mt-1.5 flex flex-wrap gap-1">
-          {check && <span className={`rounded-md border px-1.5 py-0.5 font-mono text-[10px] font-semibold ${CHECK_STYLES[check.verdict].className}`}>{CHECK_STYLES[check.verdict].label}</span>}
+          {check && <span className={`whitespace-nowrap rounded-md border px-1.5 py-0.5 font-mono text-[10px] font-semibold ${CHECK_STYLES[check.verdict].className}`}>{CHECK_STYLES[check.verdict].label}</span>}
           {!check && checking && (
             <span className="inline-flex items-center gap-1 rounded-md border border-line-3 px-1.5 py-0.5 font-mono text-[10px] text-muted">
               <Spinner className="size-2.5" /> fact-checking
             </span>
           )}
           {disputes.length > 0 && (
-            <span className="inline-flex items-center gap-1 rounded-md border border-host/40 bg-host/15 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-host">
+            <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-md border border-host/40 bg-host/15 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-host">
               <Swords className="size-2.5" /> disputed by {[...new Set(disputes.map((d) => d.by_name))].join(', ')}
             </span>
           )}
@@ -158,7 +158,8 @@ export const TurnScenes = ({ seq, speakerId, visuals, timelineVisuals, disputes,
   const opened = withDisputes.find((v) => v.id === open) ?? null;
   return (
     <>
-      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+      {/* Phones: a strip of large cards to swipe through, running to the screen edge; wider screens: a grid. */}
+      <div className="mt-3 -mr-8 flex snap-x snap-mandatory gap-2 overflow-x-auto pr-8 pb-1 sm:mr-0 sm:grid sm:grid-cols-3 sm:overflow-visible sm:pr-0 sm:pb-0">
         {withDisputes.map((v) => (
           <SceneCard key={v.id} visual={v} cast={cast} mediaBase={mediaBase} checking={checking && pending.has(v.key ?? '')} onOpen={() => setOpen(v.id)} />
         ))}

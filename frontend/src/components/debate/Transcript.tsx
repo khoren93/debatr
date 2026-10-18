@@ -99,8 +99,13 @@ const Row = ({ turn, participants, lineup, time, markdown, streaming = false, ac
             {streaming && body && <span className="ml-1 inline-block h-4 w-2 animate-pulse-dot bg-accent align-middle" />}
           </p>
         )}
-        {!error && board && <div data-no-seek>{board}</div>}
       </div>
+      {/* Phones: the scenes take the full row width instead of the column next to the avatar. */}
+      {!error && board && (
+        <div data-no-seek className="col-span-full -mt-3 min-w-0 sm:col-start-2">
+          {board}
+        </div>
+      )}
     </div>
   );
 };

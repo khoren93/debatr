@@ -107,6 +107,11 @@ cli/                `debatr` package (PyPI): CLI + MCP server, Python 3.10+, uv,
   src/debatr/config.py  server URL + token resolution, saved logins (0600 config.json)
   src/debatr/markers.py, styling.py, render.py  live terminal output (markers hidden, inline Markdown)
   tests/              pytest on a fake server (httpx.MockTransport) and the SDK's in-process client
+scripts/screenshots/  `make screenshots`: README images (numbered phone screens, a 16:9 frame, the
+                    hero and a social preview) shot from the local stack with playwright-core and
+                    the installed Chrome; the "live" screen replays a finished debate through
+                    intercepted requests. Account/debate in its git-ignored .env; output in out/
+                    (git-ignored: the images are uploaded to GitHub, not committed)
 design/             local Claude Design export (`Debatr Studio.html`), git-ignored
 docker-compose.yml  full stack; docker-compose.dev.yml = only Postgres + Redis for native dev
 ```
@@ -337,11 +342,14 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   follows the order of the scene's lists; `UNORDERED_ITEMS` (ranking, scale, map) search every
   element on its own, since a countdown or the two pans are not said in list order.
 - Rendering (`src/video/visuals/`): the frame follows the mockup's player (unit = 1% of the
-  width): round chip top-left, the speaking chip (logo, name, model, level bars) top-centre,
-  "DEBATR" top-right, debater cards with the provider logo (`components/ModelLogo.tsx`; no
-  mascots or avatars), captions on a dark plate (current word in the accent). `SceneStage`
-  sits in the centre of both compositions (16:9: cards in side columns 1+1 / 2+1 / 2+2; 9:16:
-  stage, card row, captions) and shows the round + topic when no scene is up. Logos come from
+  width): the brand (`BrandLockup`: the favicon mark + wordmark) top-left, the speaking chip
+  (logo, name, model, level bars) top-centre, the round chip top-right, all three as tall as
+  the chip (`constants.barHeight`); debater cards with the provider logo
+  (`components/ModelLogo.tsx`; no mascots or avatars), captions on a dark plate (current word in
+  the accent). `SceneStage` sits in the centre of both compositions (16:9: cards in side columns
+  1+1 / 2+1 / 2+2; 9:16: debaters 1–2 as a row of `SpeakerRowCard`s, the stage, debaters 3–4,
+  captions; with two debaters the stage takes the second row's place) and shows the round +
+  topic when no scene is up. Intro, hook and end cards carry the same brand lockup. Logos come from
   `TimelineSpeaker.model_id` (older timelines: the short name, `modelIcons` BY_NAME).
   The web renderer serializes each `<svg>` into an image, so strokes animate via SVG attributes
   (`pathLength=1` + dashoffset), colours are attributes (no `currentColor`), text stays in HTML,

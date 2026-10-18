@@ -8,7 +8,7 @@ import { useToast } from '../ui';
 import { debateMarkdown, downloadText, timelineSrt, transcriptText } from './helpers';
 import { LikeButton } from './LikeButton';
 import { SharePopover } from './SharePopover';
-import { TOOL_BUTTON } from './toolButton';
+import { ICON_ON_PHONES, TOOL_BUTTON } from './toolButton';
 
 interface Props {
   debate: DebateDetail;
@@ -92,18 +92,18 @@ export const DebateActions = ({ debate, timeline, isActive, completed, voicing, 
         </button>
       )}
       {canShare && (
-        <button type="button" onClick={() => toggle('share')} aria-expanded={open === 'share'} aria-haspopup="dialog" className={TOOL_BUTTON}>
-          <Share className="size-4" /> Share
+        <button type="button" onClick={() => toggle('share')} aria-expanded={open === 'share'} aria-haspopup="dialog" aria-label="Share" title="Share" className={`${TOOL_BUTTON} ${ICON_ON_PHONES}`}>
+          <Share className="size-4" /> <span className="max-sm:hidden">Share</span>
         </button>
       )}
       {completed && (owner || debate.is_public) && (
-        <Link to={`/create?remix=${debate.id}`} className={TOOL_BUTTON}>
-          <Repeat2 className="size-4" /> Remix
+        <Link to={`/create?remix=${debate.id}`} aria-label="Remix" title="Remix: a new debate with this setup" className={`${TOOL_BUTTON} ${ICON_ON_PHONES}`}>
+          <Repeat2 className="size-4" /> <span className="max-sm:hidden">Remix</span>
         </Link>
       )}
       {canExport && (
-        <button type="button" onClick={onToggleRail} aria-expanded={railOpen} title="Show or hide the export panel" className={`${TOOL_BUTTON} ${railOpen ? '!border-accent/50 !bg-accent/8 text-accent' : ''}`}>
-          <PanelRight className="size-4" /> Export
+        <button type="button" onClick={onToggleRail} aria-expanded={railOpen} aria-label="Export" title="Show or hide the export panel" className={`${TOOL_BUTTON} ${ICON_ON_PHONES} ${railOpen ? '!border-accent/50 !bg-accent/8 text-accent' : ''}`}>
+          <PanelRight className="size-4" /> <span className="max-sm:hidden">Export</span>
         </button>
       )}
       <button type="button" onClick={() => toggle('menu')} aria-expanded={open === 'menu'} aria-haspopup="menu" aria-label="More" title="More" className={`${TOOL_BUTTON} !w-10 !px-0`}>

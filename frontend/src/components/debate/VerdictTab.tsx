@@ -2,8 +2,9 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { Turn, Verdict } from '../../api/types';
 import { JUDGE_COLOR, shortModelName } from '../../lib/format';
-import { Button, EmptyState, SpeakerBadge } from '../ui';
+import { Button, EmptyState } from '../ui';
 import type { SpeakerInfo } from './helpers';
+import { SpeakerTile } from './SpeakerTile';
 
 interface Props {
   verdict: Verdict | null;
@@ -45,7 +46,7 @@ export const VerdictTab = ({ verdict, verdictTurn, lineup, isActive, markdown, h
         <div className="font-mono text-[11px] uppercase tracking-[0.12em] text-accent">Judge{judgeModel ? ` · ${shortModelName(judgeModel)}` : ''}</div>
         <div className="mt-3 flex flex-wrap items-center gap-3.5">
           {winner ? (
-            <SpeakerBadge name={winner.name} color={winner.color} size={46} />
+            <SpeakerTile model={winner.model} color={winner.color} size={46} background={`${winner.color}1f`} />
           ) : (
             <span className="grid size-[46px] shrink-0 place-items-center rounded-[13px] font-display text-lg font-extrabold text-ink" style={{ background: JUDGE_COLOR }} aria-hidden="true">
               =
