@@ -39,18 +39,19 @@ from app.services.admin.sessions import (
     issue_enrollment_code_sync,
     revoke_all_sync,
 )
-from app.services.credits import apply_transaction_sync, to_usd
+from app.services.credits import (
+    MANUAL_DESCRIPTIONS,
+    MANUAL_KINDS,
+    MAX_MANUAL_USD,
+    apply_transaction_sync,
+    check_manual_change,
+    to_usd,
+)
 
 logger = logging.getLogger(__name__)
 
-CREDIT_KINDS = ("adjustment", "bonus", "refund")
-DEFAULT_DESCRIPTIONS = {
-    "adjustment": "Balance adjustment",
-    "bonus": "Bonus credits",
-    "refund": "Refund",
-}
-# One command never moves more than this, so a slip ("500" for "5.00") stays small.
-MAX_CREDIT_USD = Decimal("1000")
+CREDIT_KINDS = MANUAL_KINDS
+DEFAULT_DESCRIPTIONS = MANUAL_DESCRIPTIONS
 
 
 def parse_amount(raw: str) -> Decimal:
@@ -64,16 +65,13 @@ def parse_amount(raw: str) -> Decimal:
     amount = to_usd(amount)
     if amount == 0:
         raise ValueError("The amount must not be zero")
-    if abs(amount) > MAX_CREDIT_USD:
-        raise ValueError(f"At most {MAX_CREDIT_USD} USD per command")
+    if abs(amount) > MAX_MANUAL_USD:
+        raise ValueError(f"At most {MAX_MANUAL_USD} USD per command")
     return amount
 
 
 def check_kind(kind: str, amount: Decimal) -> None:
-    if kind not in CREDIT_KINDS:
-        raise ValueError(f"Unknown kind {kind!r}")
-    if kind != "adjustment" and amount < 0:
-        raise ValueError(f"A {kind} adds credits: use a positive amount, or --kind adjustment")
+    check_manual_change(amount, kind)
 
 
 def change_credits(

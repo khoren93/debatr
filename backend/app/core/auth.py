@@ -22,11 +22,20 @@ from app.models.models import ApiToken, User, utcnow
 from app.services.activity import note_activity
 
 SESSION_USER_KEY = "uid"
+# The account's `session_epoch` at sign-in: bumping it (password change, "sign out everywhere"
+# in the admin console, a temporary password) ends every older cookie, which a signed cookie
+# could not do on its own.
+SESSION_EPOCH_KEY = "epoch"
+SESSION_COOKIE = "session"
+# Over https the cookie takes the `__Host-` prefix (Secure, Path=/, no Domain): the other apps on
+# sibling subdomains can then neither read it nor plant a cookie of their own in its place.
+SECURE_SESSION_COOKIE = "__Host-session"
 # `api_tokens.last_used_at` is refreshed at most this often (not on every request).
 TOKEN_TOUCH_INTERVAL = timedelta(minutes=1)
 
 
 class SessionCookieOptions(TypedDict):
+    session_cookie: str
     same_site: Literal["lax", "strict", "none"]
     https_only: bool
     max_age: int
@@ -40,6 +49,7 @@ def session_cookie_options() -> SessionCookieOptions:
     or form elsewhere cannot act as the signed-in user. The SPA reads the session with same-site
     requests, so a visitor who follows a link to the site is still signed in."""
     return {
+        "session_cookie": SECURE_SESSION_COOKIE if settings.is_production else SESSION_COOKIE,
         "same_site": "strict",
         "https_only": settings.is_production,
         "max_age": settings.SESSION_MAX_AGE,
@@ -48,10 +58,23 @@ def session_cookie_options() -> SessionCookieOptions:
 
 def login_session(request: Request, user: User) -> None:
     request.session[SESSION_USER_KEY] = str(user.id)
+    request.session[SESSION_EPOCH_KEY] = user.session_epoch or 0
 
 
 def logout_session(request: Request) -> None:
     request.session.pop(SESSION_USER_KEY, None)
+    request.session.pop(SESSION_EPOCH_KEY, None)
+
+
+def session_epoch_matches(session: dict[str, object], user: User) -> bool:
+    """The cookie was issued after the account's last "end every session" (cookies from before
+    epochs existed count as epoch 0)."""
+    raw = session.get(SESSION_EPOCH_KEY, 0)
+    try:
+        epoch = int(raw) if isinstance(raw, int | str) else -1
+    except ValueError:
+        return False
+    return epoch == (user.session_epoch or 0)
 
 
 def bearer_token(request: Request) -> str | None:
@@ -123,7 +146,7 @@ async def get_current_user(request: Request, db: AsyncSession = Depends(get_db))
         logout_session(request)
         return None
     user = await db.get(User, user_id)
-    if user is None or not user.is_active:
+    if user is None or not user.is_active or not session_epoch_matches(request.session, user):
         logout_session(request)
         return None
     await note_activity(user)

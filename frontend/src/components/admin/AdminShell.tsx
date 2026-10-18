@@ -1,5 +1,5 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { Database, Gauge, LogOut, ShieldCheck } from 'lucide-react';
+import { Database, Gauge, LogOut, ShieldCheck, Users } from 'lucide-react';
 import { useAdminAuth } from '../../auth/AdminAuthContext';
 import { Logo } from '../ui';
 import { formatTime } from './helpers';
@@ -7,6 +7,7 @@ import { formatTime } from './helpers';
 // Sections arrive phase by phase (PROGRESS stage A); each item names the permission it needs.
 const NAV = [
   { to: '/admin', label: 'Overview', icon: Gauge, end: true, permission: 'console' },
+  { to: '/admin/users', label: 'Users', icon: Users, end: false, permission: 'users' },
   { to: '/admin/security', label: 'Security', icon: ShieldCheck, end: false, permission: 'console' },
 ];
 

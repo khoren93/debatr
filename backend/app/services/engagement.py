@@ -160,11 +160,12 @@ async def retract_vote(db: AsyncSession, debate: Debate, user: User) -> None:
     await db.commit()
 
 
-async def recount(db: AsyncSession, debate_id: uuid.UUID) -> None:
+async def recount(db: AsyncSession, debate_id: uuid.UUID, *, commit: bool = True) -> None:
     """Rebuild both counters from the rows (after rows were removed outside the API)."""
     likes = select(func.count()).where(DebateLike.debate_id == debate_id).scalar_subquery()
     votes = select(func.count()).where(DebateVote.debate_id == debate_id).scalar_subquery()
     await db.execute(
         update(Debate).where(Debate.id == debate_id).values(likes_count=likes, votes_count=votes)
     )
-    await db.commit()
+    if commit:
+        await db.commit()

@@ -21,6 +21,16 @@ logger = logging.getLogger(__name__)
 PLACES = Decimal("0.000001")
 ZERO = Decimal("0")
 
+# Manual changes by an operator (`python -m app.manage credits`, the admin console).
+MANUAL_KINDS = ("adjustment", "bonus", "refund")
+MANUAL_DESCRIPTIONS = {
+    "adjustment": "Balance adjustment",
+    "bonus": "Bonus credits",
+    "refund": "Refund",
+}
+# One manual change never moves more than this, so a slip ("500" for "5.00") stays small.
+MAX_MANUAL_USD = Decimal("1000")
+
 
 def to_usd(value: Any) -> Decimal:
     return Decimal(str(value or 0)).quantize(PLACES, rounding=ROUND_HALF_UP)
@@ -36,6 +46,13 @@ def _locked_user(user_id: uuid.UUID) -> Select[User]:
         .with_for_update()
         .execution_options(populate_existing=True)
     )
+
+
+async def lock_balance(db: AsyncSession, user_id: uuid.UUID) -> Decimal | None:
+    """The user's balance with the row locked until commit (None when the account is gone), for
+    callers that record the balance before a change in the same transaction."""
+    user = (await db.execute(_locked_user(user_id))).scalar_one_or_none()
+    return to_usd(user.credits_usd) if user is not None else None
 
 
 def _row(
@@ -120,6 +137,19 @@ async def apply_transaction(
     db.add(tx)
     await db.commit()
     return tx
+
+
+def check_manual_change(amount: Decimal, kind: str) -> None:
+    """A manual change is one of MANUAL_KINDS, not zero and at most MAX_MANUAL_USD; bonuses and
+    refunds only add (taking credits is an adjustment)."""
+    if kind not in MANUAL_KINDS:
+        raise ValueError(f"Unknown kind {kind!r}")
+    if not amount.is_finite() or to_usd(amount) == 0:
+        raise ValueError("The amount must not be zero")
+    if abs(to_usd(amount)) > MAX_MANUAL_USD:
+        raise ValueError(f"At most {MAX_MANUAL_USD} USD at a time")
+    if kind != "adjustment" and amount < 0:
+        raise ValueError(f"A {kind} adds credits: use a positive amount, or an adjustment")
 
 
 # --- pricing helpers ---------------------------------------------------------

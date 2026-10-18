@@ -357,9 +357,9 @@ const AdminOverview = () => {
                     head={['Account', 'Spent']}
                     empty="Nobody was charged in this period."
                     rows={data.top_spenders.map((row) => [
-                      <span key="u" className="block max-w-72 truncate" title={row.email}>
+                      <Link key="u" to={`/admin/users/${row.user_id}`} className="block max-w-72 truncate hover:text-text" title={row.email}>
                         {row.display_name} <span className="text-muted">{row.email}</span>
-                      </span>,
+                      </Link>,
                       formatUsd(row.spent),
                     ])}
                   />
@@ -388,7 +388,7 @@ const AdminOverview = () => {
           </Section>
 
           <p className="mt-8 text-xs text-muted">
-            Users, debates and system pages arrive next. Your session and recovery codes: <Link to="/admin/security" className="text-accent hover:text-accent-hover">Security</Link>.
+            Debates and system pages arrive next. Your session and recovery codes: <Link to="/admin/security" className="text-accent hover:text-accent-hover">Security</Link>.
           </p>
         </div>
       )}

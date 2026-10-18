@@ -137,15 +137,18 @@ async def update_profile(
 @router.post("/me/password", response_model=OkResponse)
 async def change_password(
     body: ChangePasswordRequest,
+    request: Request,
     user: User = Depends(require_session_user),
     db: AsyncSession = Depends(get_db),
 ) -> OkResponse:
     if not verify_password(body.current_password, user.password_hash):
         raise HTTPException(status_code=400, detail="Current password is wrong")
     user.password_hash = hash_password(body.new_password)
-    # Ends the admin console sessions of this account (app.admin.access compares the epoch).
+    # Ends every other session of this account: site cookies (core.auth compares the epoch) and
+    # admin console sessions (app.admin.access); this browser stays signed in.
     user.session_epoch += 1
     await db.commit()
+    login_session(request, user)
     return OkResponse()
 
 

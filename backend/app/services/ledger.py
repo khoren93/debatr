@@ -117,7 +117,8 @@ def build_usage(
     return out
 
 
-def _text_cell(value: str) -> str:
+def text_cell(value: str) -> str:
+    """A CSV cell a spreadsheet will not run as a formula."""
     return "'" + value if value.startswith(_FORMULA_START) else value
 
 
@@ -138,7 +139,7 @@ def ledger_csv(txs: Iterable[CreditTransaction]) -> str:
                 if tx.created_at
                 else "",
                 CATEGORY_LABELS.get(category(tx), tx.kind),
-                _text_cell(title(tx)),
+                text_cell(title(tx)),
                 str(tx.debate_id) if tx.debate_id else "",
                 f"{float(tx.amount_usd):.6f}",
                 f"{float(tx.balance_after_usd):.6f}",

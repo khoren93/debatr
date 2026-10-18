@@ -87,7 +87,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Signed session cookie: user login (uid) and admin panel login (token, admin_until).
+# Signed session cookie of the site: the user's id and session epoch (app.core.auth).
 app.add_middleware(SessionMiddleware, secret_key=settings.SECRET_KEY, **session_cookie_options())
 
 app.add_middleware(

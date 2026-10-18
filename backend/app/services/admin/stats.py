@@ -254,7 +254,7 @@ def attention_items(s: Signals) -> list[dict[str, Any]]:
                 "warning",
                 f"{_plural(s.negative_balances, 'account')} below zero",
                 f"{_money(s.negative_total)} in total (runs cost more than estimated)",
-                f"{db}/user/list",
+                "/admin/users?balance=negative",
             )
         )
     if s.login_failures_24h:
@@ -331,7 +331,7 @@ def _between(column: Any, start: datetime | None, end: datetime) -> ColumnElemen
     return and_(column >= start, column < end) if start is not None else column < end
 
 
-def _category() -> ColumnElement[str]:
+def ledger_category() -> ColumnElement[str]:
     """`services/ledger.category` in SQL."""
     return case(
         (CreditTransaction.kind == "debate", "models"),
@@ -500,7 +500,7 @@ def _usd(value: Any) -> float:
 
 
 async def money(db: AsyncSession, window: Window) -> dict[str, Any]:
-    category = _category().label("category")
+    category = ledger_category().label("category")
 
     async def ledger(start: datetime | None, end: datetime) -> dict[str, float]:
         rows = await db.execute(

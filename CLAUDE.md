@@ -26,8 +26,9 @@ backend/            FastAPI API + RQ worker (Python 3.12+, managed with uv)
                       ratelimit, auth (session cookie or Bearer API token; session-only deps),
                       security (bcrypt, Fernet, API token format/hash), ids
   app/api/admin/      admin console API (`/api/admin/*`): routes_auth (sign-in, 2FA, sessions,
-                      sudo), routes_overview (tiles, series, money, attention, tops); later phases
-                      add users, debates, … (PROGRESS stage A)
+                      sudo), routes_overview (tiles, series, money, attention, tops), routes_users
+                      (list, CSV, card, ledger, debates, account changes); later phases add
+                      debates, system, … (PROGRESS stage A)
   app/api/            routers: auth, tokens (API tokens + `debatr login` device flow), billing
                       (Stripe), debates, gallery (+ leaderboard), reactions (likes/votes), models,
                       presets, topics (trending), stream (SSE), media; serializers.py builds the
@@ -49,7 +50,8 @@ backend/            FastAPI API + RQ worker (Python 3.12+, managed with uv)
                       activity (user_activity_days, last_seen_at)
   app/services/admin/ totp (codes, recovery / enrollment codes, QR), sessions (Redis: sessions,
                       sign-in tickets, code failures), audit (append-only admin_audit_log),
-                      stats (overview queries + pure periods / buckets / attention rules)
+                      stats (overview queries + pure periods / buckets / attention rules),
+                      users (list query with SQL totals, pure card statistics, CSV, deletion)
   app/services/media/ audio pipeline: script (markdown→speech), tts/ (elevenlabs, edge),
                       ffmpeg, highlights (LLM picks shorts), visuals (LLM visual director),
                       sketch (SVG line art → sanitized path data), images (Commons photos / AI
@@ -115,10 +117,13 @@ frontend/           React 19 + Vite 8 + Tailwind 4 + TypeScript
                       DebateView (/debate/:id and public /d/:slug), Account (/account?tab=…),
                       Device (/device?code=…, approves `debatr login`), Login (/login),
                       Register (/register); admin/ = the admin console (/admin/*, lazy AdminApp
-                      outside AppShell and AuthProvider: AdminLogin, AdminOverview, AdminSecurity;
-                      components/admin: AdminShell, SudoDialog, RecoveryCodes, StatTile,
-                      AttentionList; components/admin/charts: LineChart, StackedColumns,
-                      ChartCard (legend + table view), palette.ts = validated chart colours)
+                      outside AppShell and AuthProvider: AdminLogin, AdminOverview, AdminUsers
+                      (filters in the URL), AdminUser (/admin/users/:id), AdminSecurity;
+                      components/admin: AdminShell, SudoDialog, ActionDialog (reason + sudo
+                      retry), DataTable + Pager, RecoveryCodes, StatTile, AttentionList; users/ =
+                      the account card's actions and sections; components/admin/charts:
+                      LineChart, StackedColumns, ChartCard (legend + table view), palette.ts =
+                      validated chart colours)
   src/lib/cli.ts      install / login / MCP setup snippets shown on the Account page
 cli/                `debatr` package (PyPI): CLI + MCP server, Python 3.10+, uv, only the public API
   src/debatr/cli.py   Typer commands (login, run, watch, resume, show, list, stop, delete, publish, audio,
@@ -198,10 +203,15 @@ docker compose exec api python -m app.manage credits user@example.com 5 --reason
 
 ## Architecture and data flow
 
-0. Accounts: `POST /api/auth/register|login` set `request.session["uid"]` in the signed session
-   cookie (`SameSite=Strict`: `core/auth.session_cookie_options`, also passed to sqladmin's own
-   SessionMiddleware so it never re-issues the cookie with its defaults; the SPA reads the
-   session with same-site requests, so links from other sites still arrive signed in).
+0. Accounts: `POST /api/auth/register|login` set `request.session["uid"]` and `["epoch"]` in the
+   signed session cookie (`SameSite=Strict`, `__Host-session` in production so sibling
+   subdomains can neither read nor plant it, `session` over plain-http dev:
+   `core/auth.session_cookie_options`, also passed to sqladmin's own SessionMiddleware so it
+   never re-issues the cookie with its defaults; the SPA reads the session with same-site
+   requests, so links from other sites still arrive signed in). `get_current_user` drops a
+   cookie whose epoch is not `users.session_epoch`: a password change (this browser is signed in
+   again), "sign out everywhere", a temporary password or disabling in the console end every
+   other cookie at once.
    `get_current_user` / `require_user` in `app/core/auth.py`. New accounts get
    `SIGNUP_BONUS_USD` credits. Admins sign in to the admin console separately (see "Admin
    console"); the public API grants them nothing.
@@ -613,6 +623,23 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   balances, failed console sign-ins, stale trending and the admin's last recovery codes.
   Charts follow the dataviz rules: one axis, legend for 2+ series, crosshair / per-column
   tooltips, keyboard arrows, a table view per chart, colours validated against the card surface.
+- Users (`/api/admin/users*`, permission `users`; ledger and credits also `money`): the list
+  (`UserListQuery`: search by email / name with `%` `_` escaped or an exact id, filters, sort,
+  `limit` ≤ 200) computes ledger / debate / token totals per account in SQL so they filter and
+  sort across pages; `POST /users/export` is the same list as CSV (sudo, audited, formula cells
+  escaped). The card (`GET /users/{id}`): profile, 30-day and all-time stats (pure
+  `users.period_stats`: runs without drafts, free vs paid models, spend by category, cost on
+  system keys from `provider_usage`), spend per UTC day, favourite models, API tokens, likes and
+  votes given by owner (many to one owner = boosting), the account's audit entries; ledger and
+  debates page on their own. Changes are POSTs with a required `reason`, audited in the same
+  transaction: credits (adjustment / bonus / refund through `apply_transaction`, `provider_ref =
+  admin:<idempotency_key>` from the dialog so a retry never moves money twice, sudo above
+  `ADMIN_SUDO_USD`, at most $1000), disable (bumps the epoch; optionally stops runs, revokes
+  tokens, unpublishes) / enable, revoke one or all tokens, remove the stored OpenRouter key, sign
+  out everywhere, temporary password (sudo, shown once) and delete (sudo + typed email: debates
+  and their `MEDIA_ROOT` folders go too, counters of debates it liked are rebuilt). Accounts with
+  a console role and the admin's own are never disabled, deleted or given passwords here (409:
+  `app.manage` on the server).
 
 ## Conventions
 

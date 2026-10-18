@@ -1,4 +1,4 @@
-"""Stopping a debate, for its owner (POST /api/debates/{id}/stop) and the admin panel."""
+"""Stopping a debate, for its owner (POST /api/debates/{id}/stop) and the admin console."""
 
 import logging
 
@@ -14,13 +14,14 @@ logger = logging.getLogger(__name__)
 ACTIVE_STATUSES = ("queued", "running")
 
 
-async def stop_debate(db: AsyncSession, debate: Debate) -> None:
-    """Mark a queued or running debate stopped; the worker checks the Redis flag every few
-    chunks, so the current turn ends early."""
-    debate_id = str(debate.id)
+def mark_stopped(debate: Debate) -> None:
     debate.status = "stopped"
     debate.ended_at = utcnow()
-    await db.commit()
+
+
+async def signal_stopped(debate_id: str) -> None:
+    """After the commit: the worker checks the Redis flag every few chunks, so the current turn
+    ends early, and viewers hear about it."""
     try:
         await get_async_redis().set(stop_flag_key(debate_id), "1", ex=3600)
     except RedisError:
@@ -28,3 +29,10 @@ async def stop_debate(db: AsyncSession, debate: Debate) -> None:
     await publish_event_async(
         debate_id, "debate_stopped", {"debate_id": debate_id, "status": "stopped"}
     )
+
+
+async def stop_debate(db: AsyncSession, debate: Debate) -> None:
+    """Mark a queued or running debate stopped and tell the worker."""
+    mark_stopped(debate)
+    await db.commit()
+    await signal_stopped(str(debate.id))

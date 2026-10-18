@@ -18,3 +18,10 @@ export const SURFACE = '#12141b';
 export const GRID = 'rgba(255,255,255,0.07)';
 export const BASELINE = 'rgba(255,255,255,0.18)';
 export const AXIS_TEXT = '#8b90a0';
+
+/**
+ * Spend categories, stacked models → voices → pictures: the reference categorical order's first
+ * three slots (blue, orange, aqua), validated against the card surface with every pair in play
+ * (worst CVD ΔE 9.4, normal vision 20.9).
+ */
+export const SPEND_COLORS = { models: '#3987e5', voices: '#d95926', pictures: '#199e70' } as const;

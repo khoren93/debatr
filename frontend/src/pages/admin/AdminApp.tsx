@@ -6,6 +6,8 @@ import { LinkButton } from '../../components/ui';
 import AdminLogin from './AdminLogin';
 import AdminOverview from './AdminOverview';
 import AdminSecurity from './AdminSecurity';
+import AdminUser from './AdminUser';
+import AdminUsers from './AdminUsers';
 
 const AdminNotFound = () => (
   <Page className="text-center">
@@ -32,6 +34,8 @@ const AdminApp = () => (
         }
       >
         <Route index element={<AdminOverview />} />
+        <Route path="users" element={<AdminUsers />} />
+        <Route path="users/:id" element={<AdminUser />} />
         <Route path="security" element={<AdminSecurity />} />
         <Route path="*" element={<AdminNotFound />} />
       </Route>
