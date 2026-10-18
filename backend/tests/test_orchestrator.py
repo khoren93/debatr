@@ -199,6 +199,20 @@ def test_a_classifier_pick_is_dropped_before_any_text(monkeypatch: pytest.Monkey
     assert result.text == "" and events == []  # nobody saw "User Safety: safe"
 
 
+def test_a_turned_off_pick_is_dropped_too(monkeypatch: pytest.MonkeyPatch, events, levers):
+    levers["disabled_models"] = ["broken/model:free"]
+
+    async def stream(
+        self: OpenRouterClient, *args: Any, **kwargs: Any
+    ) -> AsyncIterator[StreamChunk]:
+        yield StreamChunk(delta="Hello", model="broken/model:free")
+
+    monkeypatch.setattr(OpenRouterClient, "stream_chat_completion", stream)
+    result = _run(5)
+    assert result.rerouted and result.error_kind == "classifier"
+    assert "is turned off" in (result.error or "") and events == []
+
+
 def test_a_chosen_classifier_is_not_second_guessed(monkeypatch: pytest.MonkeyPatch, events):
     async def stream(
         self: OpenRouterClient, *args: Any, **kwargs: Any

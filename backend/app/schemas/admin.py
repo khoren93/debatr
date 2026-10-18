@@ -5,6 +5,7 @@ TOTP secret after enrollment or a token hash (tests/test_admin_console.py checks
 Mirrored by frontend/src/api/admin/types.ts.
 """
 
+import json
 import uuid
 from datetime import date, datetime
 from decimal import Decimal
@@ -70,6 +71,7 @@ class AdminMeOut(BaseModel):
     version: str  # the commit the server runs (APP_VERSION)
     # False when ADMIN_SKIP_2FA (development) lets the console in with the password alone.
     two_factor: bool = True
+    passkeys: int = 0  # registered passkeys (sudo can take one instead of a code)
 
 
 class AdminLoginOut(BaseModel):
@@ -77,6 +79,7 @@ class AdminLoginOut(BaseModel):
     # ("done" with ADMIN_SKIP_2FA: signed in, `me` is set).
     next: Literal["totp", "enroll", "done"]
     me: AdminMeOut | None = None
+    passkey: bool = False  # with "totp": a passkey may answer instead of the code
 
 
 class AdminSignedInOut(BaseModel):
@@ -101,6 +104,50 @@ class RecoveryCodesOut(BaseModel):
 
 class SudoOut(BaseModel):
     sudo_until: datetime
+
+
+# --- passkeys ---------------------------------------------------------------------------------
+
+MAX_CREDENTIAL_JSON = 20_000
+
+
+def _small_credential(value: dict[str, Any]) -> dict[str, Any]:
+    if len(json.dumps(value, default=str)) > MAX_CREDENTIAL_JSON:
+        raise ValueError("credential too large")
+    return value
+
+
+class PasskeyAnswer(BaseModel):
+    """The browser's PublicKeyCredential as JSON (base64url fields)."""
+
+    credential: dict[str, Any]
+
+    _credential = field_validator("credential")(_small_credential)
+
+
+class PasskeyAddRequest(PasskeyAnswer):
+    name: str = Field(min_length=1, max_length=64)
+
+    @field_validator("name")
+    @classmethod
+    def _name(cls, value: str) -> str:
+        name = " ".join(value.split())
+        if not name:
+            raise ValueError("Name the passkey")
+        return name
+
+
+class PasskeyOptionsOut(BaseModel):
+    options: dict[str, Any]  # for navigator.credentials.create / get (parse*FromJSON)
+
+
+class AdminPasskeyOut(BaseModel):
+    id: str
+    name: str
+    created_at: datetime
+    last_used_at: datetime | None
+    backed_up: bool  # synced passkey (iCloud Keychain, Google Password Manager…)
+    transports: list[str]
 
 
 # --- overview ---------------------------------------------------------------------------------
@@ -354,6 +401,7 @@ class UserReactions(BaseModel):
 class AuditEntryOut(BaseModel):
     id: str
     created_at: datetime
+    actor_user_id: str | None = None
     actor_email: str | None
     action: str
     target_type: str | None
@@ -362,6 +410,7 @@ class AuditEntryOut(BaseModel):
     before: dict[str, Any] | None
     after: dict[str, Any] | None
     ip: str | None
+    user_agent: str | None = None
     ok: bool
 
 
@@ -973,6 +1022,7 @@ class ModelRow(BaseModel):
     name: str
     is_free: bool
     in_catalogue: bool  # still offered by OpenRouter
+    disabled: bool = False  # turned off on the Settings page
     debates: int  # finished debates it argued in
     tries: int  # turn and verdict calls, retries included
     failure_rate: float | None
@@ -997,3 +1047,108 @@ class ModelRow(BaseModel):
 class ModelsOut(BaseModel):
     period: ModelsPeriod
     rows: list[ModelRow]
+
+
+# --- audit log ----------------------------------------------------------------------------------
+
+AuditTab = Literal["all", "security"]
+
+
+class AuditQuery(BaseModel):
+    """Filters of the audit page (query parameters)."""
+
+    tab: AuditTab = "all"  # security: sign-ins, second factor, sessions, roles
+    q: str = Field(default="", max_length=200)  # action, actor, target id, IP or reason contains
+    actor: str = Field(default="", max_length=320)  # exact actor email
+    action: str = Field(default="", max_length=64)  # exact, or a prefix ending in "." ("auth.")
+    target_type: str = Field(default="", max_length=32)
+    target_id: str = Field(default="", max_length=64)
+    ok: bool | None = None
+    created_from: date | None = None  # UTC days, both inclusive
+    created_to: date | None = None
+    limit: int = Field(default=50, ge=1, le=200)
+    offset: int = Field(default=0, ge=0)
+
+
+class AuditPage(BaseModel):
+    total: int
+    limit: int
+    offset: int
+    rows: list[AuditEntryOut]
+
+
+class FacetCount(BaseModel):
+    value: str
+    count: int
+
+
+class AuditFacets(BaseModel):
+    actions: list[FacetCount]
+    actors: list[FacetCount]
+    target_types: list[FacetCount]
+
+
+class SecuritySummary(BaseModel):
+    """The last 7 days of console security events."""
+
+    sign_ins: int
+    failures: int  # wrong passwords and codes
+    locks: int
+    recovery_codes_used: int
+    addresses: int  # distinct IPs that tried
+    last_failure: AuditEntryOut | None
+
+
+# --- levers and alerts --------------------------------------------------------------------------
+
+LeverKind = Literal["bool", "int", "float", "text", "models"]
+
+
+class LeverOut(BaseModel):
+    key: str
+    kind: LeverKind
+    value: Any
+    default: Any  # the env setting (what a reset goes back to)
+    overridden: bool
+    minimum: float | None = None
+    maximum: float | None = None
+    updated_at: datetime | None = None
+    updated_by: str | None = None
+
+
+class CatalogueModel(BaseModel):
+    id: str
+    name: str
+
+
+class SettingsOut(BaseModel):
+    levers: list[LeverOut]
+    models: list[CatalogueModel]  # OpenRouter's catalogue, for turning models off
+    cache_seconds: float  # how soon every process sees a change
+
+
+class LeverChangeRequest(BaseModel):
+    value: Any
+    reason: str = Field(min_length=3, max_length=500)
+
+
+class AlertEntryOut(BaseModel):
+    at: datetime
+    kind: str
+    severity: Literal["critical", "warning", "info"]
+    title: str
+    detail: str = ""
+    path: str | None = None
+    sent: bool
+    error: str | None = None
+
+
+class AlertsOut(BaseModel):
+    configured: bool  # ALERT_TELEGRAM_BOT_TOKEN and ALERT_TELEGRAM_CHAT_ID set
+    check_every_seconds: int
+    recent: list[AlertEntryOut]
+
+
+class AlertTestOut(BaseModel):
+    sent: bool
+    error: str | None = None

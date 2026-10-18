@@ -2,7 +2,8 @@
 
 A few workers serve everyone, so one user starting ten debates (or audio builds) would make
 everybody else wait. The API refuses a run beyond MAX_ACTIVE_DEBATES_PER_USER /
-MAX_ACTIVE_MEDIA_PER_USER with a 429 that says what to do. The user's row is locked until the
+MAX_ACTIVE_MEDIA_PER_USER (levers of the admin console, app.services.runtime_settings) with a 429
+that says what to do. The user's row is locked until the
 caller commits, so two requests at once cannot both take the last slot. Refusals of the last day
 are kept in Redis (REFUSALS_KEY) for the admin console's System page.
 """
@@ -17,9 +18,9 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import InstrumentedAttribute
 
-from app.core.config import settings
 from app.core.redis import get_async_redis
 from app.models.models import Debate, User
+from app.services import runtime_settings
 
 ACTIVE = ("queued", "running")
 # Sorted set of refusals: member "<kind>:<user id>:<nonce>", score = unix time; one day kept.
@@ -47,7 +48,7 @@ async def _active(db: AsyncSession, user_id: uuid.UUID, column: InstrumentedAttr
 
 
 async def require_debate_slot(db: AsyncSession, user_id: uuid.UUID) -> None:
-    limit = settings.MAX_ACTIVE_DEBATES_PER_USER
+    limit = (await runtime_settings.current()).max_active_debates_per_user
     if limit <= 0:
         return
     active = await _active(db, user_id, Debate.status)
@@ -61,7 +62,7 @@ async def require_debate_slot(db: AsyncSession, user_id: uuid.UUID) -> None:
 
 
 async def require_media_slot(db: AsyncSession, user_id: uuid.UUID) -> None:
-    limit = settings.MAX_ACTIVE_MEDIA_PER_USER
+    limit = (await runtime_settings.current()).max_active_media_per_user
     if limit <= 0:
         return
     active = await _active(db, user_id, Debate.media_status)

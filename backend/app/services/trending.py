@@ -44,6 +44,7 @@ from app.core.redis import get_sync_redis, trending_lock_key
 from app.core.sync_db import get_sync_session
 from app.models.models import TrendingBatch, TrendingTopic, utcnow
 from app.schemas.schemas import TOPIC_MAX_LENGTH
+from app.services import alerts
 from app.services.media import llm
 from app.services.openrouter_client import OpenRouterError
 
@@ -682,5 +683,6 @@ def refresh_trending_job(force: bool = False) -> None:
         )
     except (TrendingError, OpenRouterError) as exc:
         logger.warning("Trending refresh failed, keeping the previous batch: %s", exc)
+        alerts.raise_sync(alerts.trending_failed_alert(str(exc)), redis)
     finally:
         redis.delete(trending_lock_key())

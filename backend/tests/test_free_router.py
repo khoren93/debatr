@@ -152,6 +152,15 @@ def test_failed_pinned_model_falls_back_to_the_router_and_keeps_the_pin():
     assert debate.participants[0].model_id == "upstage/solar-pro-3:free"
 
 
+def test_a_turned_off_pin_hands_the_turn_to_the_router(levers: dict) -> None:
+    levers["disabled_models"] = ["upstage/solar-pro-3:free"]
+    debate = _debate([_row("moderator", "upstage/solar-pro-3:free")])
+    models = FakeModels({FREE_ROUTER_ID: _ok("qwen/qwen3:free")})
+    result, used = _generate_as(debate, 0, _host(), models)
+    assert models.calls == [FREE_ROUTER_ID] and used == "qwen/qwen3:free" and not result.error
+    assert debate.participants[0].model_id == "upstage/solar-pro-3:free"  # the pin stays
+
+
 def test_partial_text_is_not_retried():
     debate = _debate([_row("moderator", "upstage/solar-pro-3:free")])
     broken = GenerationResult(text="Half a sen", error="provider died")

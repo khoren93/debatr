@@ -2,13 +2,15 @@
 
 1. `POST /login`: email + password (5 attempts per 15 min per IP and per email; one answer for a
    wrong password, a disabled account and an account without a role) → a ticket cookie.
-2. `POST /totp` with the authenticator code (or a recovery code) → the session cookie.
+2. `POST /totp` with the authenticator code (or a recovery code) → the session cookie, or a
+   passkey instead (routes_passkeys) when the admin has one.
    First time instead: `POST /enroll/start` with the enrollment code from
    `python -m app.manage admin grant` (shows the new secret as a QR code), then
    `POST /enroll/confirm` with a code from the app → the session and ten recovery codes.
 Wrong codes count per ticket (5 → password again) and per account (5 in 15 min → locked).
 With ADMIN_SKIP_2FA (development only) `POST /login` signs in at once (`next="done"`).
-Every outcome lands in the audit log.
+Every outcome lands in the audit log; a sign-in and a lock also go out as alerts
+(services/alerts, when Telegram is set up).
 """
 
 import hashlib
@@ -19,7 +21,7 @@ from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from redis.asyncio import Redis as AsyncRedis
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.admin.access import (
@@ -48,7 +50,7 @@ from app.core.security import (
     hash_password,
     verify_password,
 )
-from app.models.models import User, utcnow
+from app.models.models import AdminPasskey, User, utcnow
 from app.schemas.admin import (
     AdminCodeRequest,
     AdminLoginOut,
@@ -65,6 +67,7 @@ from app.schemas.admin import (
     SudoOut,
 )
 from app.schemas.auth import OkResponse
+from app.services import alerts
 from app.services.admin import audit, sessions
 from app.services.admin.sessions import AdminSession, SignInTicket
 from app.services.admin.totp import (
@@ -86,7 +89,7 @@ PERMISSION_NAMES = (
     "users",
     "money",
     "system",
-    "database",
+    "audit",
 )
 WRONG_LOGIN = "Wrong email or password"
 SIGN_IN_AGAIN = "Sign in again"
@@ -97,7 +100,9 @@ def _time(value: float) -> datetime:
     return datetime.fromtimestamp(value, UTC)
 
 
-def me_out(user: User, session: AdminSession, session_hash: str) -> AdminMeOut:
+def me_out(
+    user: User, session: AdminSession, session_hash: str, *, passkeys: int = 0
+) -> AdminMeOut:
     role = user.admin_role or ""
     return AdminMeOut(
         user=AdminUserOut(
@@ -115,7 +120,15 @@ def me_out(user: User, session: AdminSession, session_hash: str) -> AdminMeOut:
         permissions=[name for name in PERMISSION_NAMES if can(role, name)],
         version=settings.APP_VERSION,
         two_factor=not settings.admin_skip_2fa,
+        passkeys=passkeys,
     )
+
+
+async def passkey_count(db: AsyncSession, user: User) -> int:
+    count = await db.scalar(
+        select(func.count()).select_from(AdminPasskey).where(AdminPasskey.user_id == user.id)
+    )
+    return int(count or 0)
 
 
 def _password_matches(user: User | None, password: str) -> bool:
@@ -174,7 +187,9 @@ async def login(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=WRONG_LOGIN)
 
     if settings.admin_skip_2fa:
-        signed_in = await _sign_in(request, response, db, get_async_redis(), user, skipped=True)
+        signed_in = await sign_in(
+            request, response, db, get_async_redis(), user, method="the password alone"
+        )
         return AdminLoginOut(next="done", me=signed_in.me)
     ticket = SignInTicket(
         user_id=str(user.id),
@@ -185,10 +200,12 @@ async def login(
     token = await sessions.create_ticket(get_async_redis(), ticket)
     set_cookie(response, request, ticket_cookie_name(request), token, sessions.TICKET_SECONDS)
     enrolled = user.totp_enabled_at is not None and bool(user.totp_secret_enc)
-    return AdminLoginOut(next="totp" if enrolled else "enroll")
+    if not enrolled:
+        return AdminLoginOut(next="enroll")
+    return AdminLoginOut(next="totp", passkey=await passkey_count(db, user) > 0)
 
 
-async def _ticket(request: Request, db: AsyncSession) -> tuple[str, SignInTicket, User]:
+async def ticket_of(request: Request, db: AsyncSession) -> tuple[str, SignInTicket, User]:
     raw = request.cookies.get(ticket_cookie_name(request))
     if not raw:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=SIGN_IN_AGAIN)
@@ -208,7 +225,7 @@ async def _ticket(request: Request, db: AsyncSession) -> tuple[str, SignInTicket
     return hashed, ticket, user
 
 
-async def _check_lock(redis: AsyncRedis, user: User) -> None:
+async def check_lock(redis: AsyncRedis, user: User) -> None:
     if await sessions.code_failures(redis, str(user.id)) >= sessions.MAX_CODE_FAILURES:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
@@ -216,15 +233,19 @@ async def _check_lock(redis: AsyncRedis, user: User) -> None:
         )
 
 
-async def _code_failed(
+async def code_failed(
     request: Request,
     db: AsyncSession,
     redis: AsyncRedis,
     user: User,
     action: str,
     ticket: tuple[str, SignInTicket] | None = None,
+    *,
+    reason: str | None = None,
+    wrong: str = "Wrong code",
 ) -> HTTPException:
-    """Count a wrong code and build the error to raise (400: a 401 would read as signed out)."""
+    """Count a wrong code (or passkey answer) and build the error to raise (400: a 401 would
+    read as signed out). `reason` goes to the audit log, `wrong` to the admin."""
     count = await sessions.add_code_failure(redis, str(user.id))
     if ticket is not None:
         hashed, state = ticket
@@ -235,17 +256,23 @@ async def _code_failed(
             await sessions.save_ticket(redis, hashed, state)
     locked = count >= sessions.MAX_CODE_FAILURES
     await audit.record(
-        db, "auth.locked" if locked else action, request=request, actor=user, ok=False
+        db,
+        "auth.locked" if locked else action,
+        request=request,
+        actor=user,
+        reason=reason,
+        ok=False,
     )
     if locked:
+        alerts.notify_soon(alerts.locked_alert(user.email, audit.client_ip(request)))
         return HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="Too many wrong codes. Try again in 15 minutes.",
         )
-    return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Wrong code")
+    return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=wrong)
 
 
-def _secret_of(user: User) -> str:
+def secret_of(user: User) -> str:
     secret = decrypt_totp_secret(user.totp_secret_enc or "")
     if secret is None:
         raise HTTPException(
@@ -256,15 +283,16 @@ def _secret_of(user: User) -> str:
     return secret
 
 
-async def _sign_in(
+async def sign_in(
     request: Request,
     response: Response,
     db: AsyncSession,
     redis: AsyncRedis,
     user: User,
     *,
-    skipped: bool = False,
+    method: str,
 ) -> AdminSignedInOut:
+    """Open the session. `method`: how the second factor was passed (audit and alert)."""
     token, hashed, session = await sessions.create_session(
         redis,
         user_id=str(user.id),
@@ -275,9 +303,17 @@ async def _sign_in(
     )
     set_cookie(response, request, session_cookie_name(request), token, sessions.ABSOLUTE_SECONDS)
     clear_cookie(response, request, ticket_cookie_name(request))
-    after = {"second_factor": "skipped (ADMIN_SKIP_2FA)"} if skipped else None
-    await audit.record(db, "auth.signed_in", request=request, actor=user, after=after)
-    return AdminSignedInOut(me=me_out(user, session, hashed))
+    await audit.record(
+        db, "auth.signed_in", request=request, actor=user, after={"second_factor": method}
+    )
+    alerts.notify_soon(
+        alerts.sign_in_alert(
+            user.email, method, audit.client_ip(request), audit.user_agent(request)
+        )
+    )
+    return AdminSignedInOut(
+        me=me_out(user, session, hashed, passkeys=await passkey_count(db, user))
+    )
 
 
 @router.post("/totp", response_model=AdminSignedInOut)
@@ -287,16 +323,16 @@ async def verify_code(
     response: Response,
     db: AsyncSession = Depends(get_db),
 ) -> AdminSignedInOut:
-    hashed, ticket, user = await _ticket(request, db)
+    hashed, ticket, user = await ticket_of(request, db)
     if user.totp_enabled_at is None or not user.totp_secret_enc:
         raise HTTPException(status_code=409, detail="Set up the authenticator first")
     redis = get_async_redis()
-    await _check_lock(redis, user)
+    await check_lock(redis, user)
     uid = str(user.id)
     if body.recovery_code.strip():
         remaining = use_recovery_code(list(user.recovery_codes_json or []), body.recovery_code)
         if remaining is None:
-            raise await _code_failed(
+            raise await code_failed(
                 request, db, redis, user, "auth.recovery_code_failed", (hashed, ticket)
             )
         user.recovery_codes_json = remaining
@@ -308,29 +344,30 @@ async def verify_code(
             after={"left": len(remaining)},
         )
     else:
-        secret = _secret_of(user)
+        secret = secret_of(user)
         step = matching_step(
             secret, body.code, now=time.time(), after_step=await sessions.last_step(redis, uid)
         )
         if step is None:
-            raise await _code_failed(request, db, redis, user, "auth.totp_failed", (hashed, ticket))
+            raise await code_failed(request, db, redis, user, "auth.totp_failed", (hashed, ticket))
         await sessions.remember_step(redis, uid, step)
     await sessions.clear_code_failures(redis, uid)
     await sessions.delete_ticket(redis, hashed)
-    return await _sign_in(request, response, db, redis, user)
+    method = "a recovery code" if body.recovery_code.strip() else "an authenticator code"
+    return await sign_in(request, response, db, redis, user, method=method)
 
 
 @router.post("/enroll/start", response_model=EnrollStartOut)
 async def enroll_start(
     body: EnrollStartRequest, request: Request, db: AsyncSession = Depends(get_db)
 ) -> EnrollStartOut:
-    hashed, ticket, user = await _ticket(request, db)
+    hashed, ticket, user = await ticket_of(request, db)
     if user.totp_enabled_at is not None:
         raise HTTPException(status_code=409, detail="The authenticator is already set up")
     redis = get_async_redis()
-    await _check_lock(redis, user)
+    await check_lock(redis, user)
     if not await sessions.enrollment_code_matches(redis, str(user.id), body.enrollment_code):
-        raise await _code_failed(
+        raise await code_failed(
             request, db, redis, user, "auth.enroll_code_failed", (hashed, ticket)
         )
     secret = new_secret()
@@ -347,17 +384,17 @@ async def enroll_confirm(
     response: Response,
     db: AsyncSession = Depends(get_db),
 ) -> AdminSignedInOut:
-    hashed, ticket, user = await _ticket(request, db)
+    hashed, ticket, user = await ticket_of(request, db)
     if user.totp_enabled_at is not None:
         raise HTTPException(status_code=409, detail="The authenticator is already set up")
     if not ticket.pending_secret_enc:
         raise HTTPException(status_code=409, detail="Start the setup again")
     redis = get_async_redis()
-    await _check_lock(redis, user)
+    await check_lock(redis, user)
     secret = decrypt_totp_secret(ticket.pending_secret_enc)
     step = matching_step(secret, body.code, now=time.time(), after_step=None) if secret else None
     if secret is None or step is None:
-        raise await _code_failed(request, db, redis, user, "auth.enroll_failed", (hashed, ticket))
+        raise await code_failed(request, db, redis, user, "auth.enroll_failed", (hashed, ticket))
 
     plain, hashes = new_recovery_codes()
     user.totp_secret_enc = encrypt_totp_secret(secret)
@@ -369,14 +406,18 @@ async def enroll_confirm(
     await sessions.remember_step(redis, uid, step)
     await sessions.clear_code_failures(redis, uid)
     await sessions.delete_ticket(redis, hashed)
-    out = await _sign_in(request, response, db, redis, user)
+    out = await sign_in(request, response, db, redis, user, method="a new authenticator")
     out.recovery_codes = plain
     return out
 
 
 @router.get("/me", response_model=AdminMeOut)
-async def me(ctx: AdminContext = Depends(current_admin)) -> AdminMeOut:
-    return me_out(ctx.user, ctx.session, ctx.session_hash)
+async def me(
+    ctx: AdminContext = Depends(current_admin), db: AsyncSession = Depends(get_db)
+) -> AdminMeOut:
+    return me_out(
+        ctx.user, ctx.session, ctx.session_hash, passkeys=await passkey_count(db, ctx.user)
+    )
 
 
 @router.post("/logout", response_model=OkResponse)
@@ -463,16 +504,16 @@ async def confirm_sudo(
     """A fresh authenticator code unlocks the dangerous actions for a few minutes."""
     redis = get_async_redis()
     user = ctx.user
-    await _check_lock(redis, user)
+    await check_lock(redis, user)
     uid = str(user.id)
     step = matching_step(
-        _secret_of(user),
+        secret_of(user),
         body.code,
         now=time.time(),
         after_step=await sessions.last_step(redis, uid),
     )
     if step is None:
-        raise await _code_failed(request, db, redis, user, "auth.sudo_failed")
+        raise await code_failed(request, db, redis, user, "auth.sudo_failed")
     await sessions.remember_step(redis, uid, step)
     await sessions.clear_code_failures(redis, uid)
     now = time.time()

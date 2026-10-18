@@ -1,9 +1,6 @@
 /** Helpers of the admin console pages (a .ts file for react-refresh). */
 
-/**
- * Where to go after signing in: a console page or sqladmin (`/api/admin/db/`, a full page
- * load), never another origin or path.
- */
+/** Where to go after signing in: a console page, never another origin or path. */
 export const safeAdminNext = (raw: string | null): string => {
   if (!raw) return '/admin';
   let value: string;
@@ -14,7 +11,7 @@ export const safeAdminNext = (raw: string | null): string => {
   }
   if (value.startsWith('//') || value.startsWith('/\\')) return '/admin';
   if (value === '/admin/login' || value.startsWith('/admin/login?')) return '/admin';
-  if (value === '/admin' || value.startsWith('/admin/') || value.startsWith('/api/admin/db/')) return value;
+  if (value === '/admin' || value.startsWith('/admin/')) return value;
   return '/admin';
 };
 

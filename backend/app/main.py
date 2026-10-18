@@ -5,27 +5,11 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from sqladmin import Admin
 from sqlalchemy import text
 from starlette.concurrency import run_in_threadpool
 from starlette.middleware.sessions import SessionMiddleware
 
-from app.admin.auth import SqladminAudit, authentication_backend
 from app.admin.gate import AdminGate
-from app.admin.views import (
-    ApiTokenAdmin,
-    AuditLogAdmin,
-    CreditTransactionAdmin,
-    DebateAdmin,
-    LikeAdmin,
-    ParticipantAdmin,
-    SessionAdmin,
-    TrendingBatchAdmin,
-    TrendingTopicAdmin,
-    TurnAdmin,
-    UserAdmin,
-    VoteAdmin,
-)
 from app.api import admin as admin_api
 from app.api import (
     routes_auth,
@@ -36,6 +20,7 @@ from app.api import (
     routes_models,
     routes_presets,
     routes_reactions,
+    routes_status,
     routes_stream,
     routes_tokens,
     routes_topics,
@@ -107,29 +92,9 @@ app.add_middleware(
 # so no other origin ever gets a CORS answer from /api/admin.
 app.add_middleware(AdminGate)
 
-# Raw tables (sqladmin) inside the admin console, behind its session (app.admin.auth).
-admin = Admin(
-    app,
-    engine,
-    authentication_backend=authentication_backend,
-    base_url="/api/admin/db",
-    audit_backend=SqladminAudit(),
-)
-admin.add_view(UserAdmin)
-admin.add_view(ApiTokenAdmin)
-admin.add_view(CreditTransactionAdmin)
-admin.add_view(DebateAdmin)
-admin.add_view(LikeAdmin)
-admin.add_view(VoteAdmin)
-admin.add_view(ParticipantAdmin)
-admin.add_view(TurnAdmin)
-admin.add_view(TrendingBatchAdmin)
-admin.add_view(TrendingTopicAdmin)
-admin.add_view(SessionAdmin)
-admin.add_view(AuditLogAdmin)
-
 # Routers
 app.include_router(admin_api.router, prefix="/api/admin")
+app.include_router(routes_status.router, prefix="/api", tags=["meta"])
 app.include_router(routes_auth.router, prefix="/api/auth", tags=["auth"])
 app.include_router(routes_tokens.router, prefix="/api/auth", tags=["api tokens"])
 app.include_router(routes_billing.router, prefix="/api/billing", tags=["billing"])

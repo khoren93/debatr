@@ -3,15 +3,16 @@
 OpenRouter allows 20 requests a minute to `:free` models per account, whatever the key, so all
 Free Router and `:free` debates that run on the system key share it. Instead of a burst of 429s
 (each of which would stop a debate), a turn waits for a slot in the current clock minute
-(`FREE_MODELS_PER_MINUTE`, a fixed window in Redis). Own keys have their own account's limit.
+(`FREE_MODELS_PER_MINUTE`, a lever of the admin console; a fixed window in Redis). Own keys have
+their own account's limit.
 """
 
 import logging
 import random
 import time
 
-from app.core.config import settings
 from app.core.redis import free_models_window_key, get_sync_redis
+from app.services import runtime_settings
 from app.services.free_router import FREE_SUFFIX, is_free_router
 
 logger = logging.getLogger(__name__)
@@ -24,7 +25,7 @@ def is_free_model(model_id: str) -> bool:
 def wait_for_slot(deadline: float) -> bool:
     """Take a free-model request slot, waiting for the next minute when this one is full.
     False when no slot comes before `deadline` (`time.monotonic()`)."""
-    limit = settings.FREE_MODELS_PER_MINUTE
+    limit = runtime_settings.current_sync().free_models_per_minute
     if limit <= 0:
         return True
     redis = get_sync_redis()

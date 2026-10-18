@@ -10,7 +10,7 @@ import uuid
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 import httpx
 import pytest
@@ -126,7 +126,7 @@ class StubJob:
     id = "job-1"
     origin = "default"
     func_name = "app.services.orchestrator.process_turn_job"
-    kwargs = {"debate_id": "d-1", "seq_index": 3}
+    kwargs: ClassVar[dict[str, Any]] = {"debate_id": "d-1", "seq_index": 3}
     enqueued_at = datetime(2026, 10, 18, 11, 0)
     started_at = None
     ended_at = datetime(2026, 10, 18, 11, 1, tzinfo=UTC)
@@ -245,6 +245,8 @@ def api(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> tuple[FastAPI, FakeD
         return {}  # no debate exists
 
     monkeypatch.setattr(settings, "MEDIA_ROOT", str(tmp_path))
+    # media_root_path is cached on first use (importing app.main does that).
+    monkeypatch.delitem(settings.__dict__, "media_root_path", raising=False)
     monkeypatch.setattr(system, "existing_debates", existing)
     monkeypatch.setattr(routes_system, "get_async_redis", lambda: FakeRedis())
     app = FastAPI()

@@ -134,13 +134,13 @@ const AdminUser = () => {
 
           <div className="mt-4 grid items-start gap-4 xl:grid-cols-[2fr_1fr]">
             <TokensPanel userId={card.profile.id} tokens={card.tokens} onChanged={reload} />
-            <ReactionsPanel reactions={card.reactions} />
+            <ReactionsPanel userId={card.profile.id} reactions={card.reactions} onChanged={reload} />
           </div>
 
           <div className="mt-4 grid gap-4">
             <DebatesPanel userId={card.profile.id} version={version} />
             {canMoney && <LedgerPanel userId={card.profile.id} version={version} />}
-            <AuditPanel targetId={card.profile.id} entries={card.audit} aside="last 50: about the account, and by it as an admin" />
+            <AuditPanel targetId={card.profile.id} targetType="user" entries={card.audit} aside="last 50: about the account, and by it as an admin" />
           </div>
         </div>
       )}

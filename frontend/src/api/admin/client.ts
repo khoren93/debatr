@@ -23,8 +23,9 @@ export const setSignedOutHandler = (handler: (() => void) | null) => {
 };
 
 const SAFE_METHODS = new Set(['get', 'head', 'options']);
-// Sign-in steps answer 401 for an expired ticket, which is not an ended session.
-const SIGN_IN_STEPS = ['/auth/login', '/auth/totp', '/auth/enroll/'];
+// Sign-in steps answer 401 for an expired ticket, which is not an ended session (a trailing
+// slash: every path below it).
+const SIGN_IN_STEPS = ['/auth/login', '/auth/totp', '/auth/enroll/', '/auth/passkey/options', '/auth/passkey'];
 
 adminApi.interceptors.request.use((config) => {
   if (csrfToken && !SAFE_METHODS.has((config.method ?? 'get').toLowerCase())) {
@@ -38,7 +39,7 @@ adminApi.interceptors.response.use(
   (error) => {
     // A 401 from anything but the sign-in steps means the session ended (idle, revoked, …).
     const url = isAxiosError(error) ? (error.config?.url ?? '') : '';
-    const signingIn = SIGN_IN_STEPS.some((step) => url.startsWith(step));
+    const signingIn = SIGN_IN_STEPS.some((step) => (step.endsWith('/') ? url.startsWith(step) : url === step));
     if (isAxiosError(error) && error.response?.status === 401 && !signingIn) {
       csrfToken = null;
       onSignedOut?.();

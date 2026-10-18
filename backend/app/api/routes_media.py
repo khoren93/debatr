@@ -43,6 +43,7 @@ from app.schemas.media import (
     VoiceOut,
     VoicesResponse,
 )
+from app.services import runtime_settings
 from app.services.credits import tts_charge_usd
 from app.services.fair_share import require_media_slot
 from app.services.media.ffmpeg import ffmpeg_available
@@ -255,6 +256,7 @@ async def generate_debate_media(
         raise HTTPException(status_code=409, detail="A media build is already in progress")
     if body.provider not in PROVIDER_NAMES:
         raise HTTPException(status_code=400, detail="Unknown provider")
+    runtime_settings.require_runs_open(await runtime_settings.current())
     if debate.user_id is not None:
         await require_media_slot(db, debate.user_id)
     own_tts_key = bool(body.user_tts_key)

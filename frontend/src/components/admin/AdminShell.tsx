@@ -1,10 +1,10 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { Activity, Bot, Database, Flag, Gauge, LogOut, MessagesSquare, Newspaper, ShieldCheck, Users, Wallet } from 'lucide-react';
+import { Activity, Bot, Flag, Gauge, LogOut, MessagesSquare, Newspaper, ScrollText, ShieldCheck, SlidersHorizontal, Users, Wallet } from 'lucide-react';
 import { useAdminAuth } from '../../auth/AdminAuthContext';
 import { Logo } from '../ui';
 import { formatTime } from './helpers';
 
-// Sections arrive phase by phase (PROGRESS stage A); each item names the permission it needs.
+// Each item names the permission it needs.
 const NAV = [
   { to: '/admin', label: 'Overview', icon: Gauge, end: true, permission: 'console' },
   { to: '/admin/users', label: 'Users', icon: Users, end: false, permission: 'users' },
@@ -14,6 +14,8 @@ const NAV = [
   { to: '/admin/finance', label: 'Finance', icon: Wallet, end: false, permission: 'money' },
   { to: '/admin/models', label: 'Models', icon: Bot, end: false, permission: 'debates.read' },
   { to: '/admin/system', label: 'System', icon: Activity, end: false, permission: 'system' },
+  { to: '/admin/settings', label: 'Settings', icon: SlidersHorizontal, end: false, permission: 'system' },
+  { to: '/admin/audit', label: 'Audit log', icon: ScrollText, end: false, permission: 'audit' },
   { to: '/admin/security', label: 'Security', icon: ShieldCheck, end: false, permission: 'console' },
 ];
 
@@ -32,7 +34,6 @@ export const AdminShell = () => {
   const navigate = useNavigate();
   if (!me) return null;
   const items = NAV.filter((item) => me.permissions.includes(item.permission));
-  const database = me.permissions.includes('database');
 
   const leave = async () => {
     await signOut();
@@ -53,13 +54,6 @@ export const AdminShell = () => {
               {label}
             </NavLink>
           ))}
-          {database && (
-            // sqladmin is a server-rendered page, so a full page load.
-            <a href="/api/admin/db/" className={navClass({ isActive: false })}>
-              <Database className="size-[18px]" strokeWidth={1.8} />
-              Database
-            </a>
-          )}
         </nav>
         <div className="mt-auto rounded-[14px] border border-line bg-surface p-3.5">
           <div className="truncate text-sm font-semibold">{me.user.display_name}</div>
@@ -93,11 +87,6 @@ export const AdminShell = () => {
                 {label}
               </NavLink>
             ))}
-            {database && (
-              <a href="/api/admin/db/" className="shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold text-muted">
-                Database
-              </a>
-            )}
           </nav>
         </header>
         <div className="mx-auto flex w-full max-w-[1920px] flex-1 flex-col">

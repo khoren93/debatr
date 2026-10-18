@@ -7,8 +7,9 @@ import { useAuth } from '../auth/AuthContext';
 import { AuthLayout } from '../components/account/AuthLayout';
 import { FormField, PasswordField } from '../components/account/FormField';
 import { money, safeNext, withNext } from '../components/account/helpers';
-import { Button, ErrorBox, useToast } from '../components/ui';
+import { Button, ErrorBox, LinkButton, useToast } from '../components/ui';
 import { useBillingConfig } from '../hooks/useBillingConfig';
+import { useSiteStatus } from '../hooks/useSiteStatus';
 import { APP_NAME } from '../lib/brand';
 
 const DEFAULT_NEXT = '/library';
@@ -22,6 +23,7 @@ const ALL_TOUCHED: Record<Field, boolean> = { email: true, password: true, confi
 const Register = () => {
   const { user, loading, setUser } = useAuth();
   const { config } = useBillingConfig();
+  const site = useSiteStatus();
   const toast = useToast();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -42,6 +44,15 @@ const Register = () => {
   const valid = !emailError && !passwordError && !confirmError;
 
   if (!loading && user) return <Navigate to={next ?? DEFAULT_NEXT} replace />;
+  if (!site.registration_open) {
+    return (
+      <AuthLayout kicker="Get started" title="Sign-ups are closed for now" subtitle="New accounts are paused for a while. Accounts that exist can still sign in.">
+        <LinkButton to={withNext('/login', next)} size="lg" className="w-full" icon={<ArrowRight className="size-4" />}>
+          Sign in
+        </LinkButton>
+      </AuthLayout>
+    );
+  }
 
   const touch = (field: Field) => setTouched((t) => (t[field] ? t : { ...t, [field]: true }));
 

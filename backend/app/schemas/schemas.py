@@ -522,3 +522,11 @@ class TrendingTopicsOut(BaseModel):
     updated_at: datetime | None  # when the batch was built; None before the first one
     topics: list[TrendingTopicOut]
     categories: list[TrendingCategory]  # every category in display order, with its topic count
+
+
+class SiteStatusOut(BaseModel):
+    """`GET /api/status`: levers of the admin console the site reacts to."""
+
+    registration_open: bool
+    maintenance: bool  # new debates and audio builds are paused
+    maintenance_message: str | None = None

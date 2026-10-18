@@ -15,6 +15,7 @@ models the Free Router pinned.
 import csv
 import io
 from collections import Counter, defaultdict
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
@@ -472,8 +473,11 @@ def model_rows(
     catalogue: dict[str, dict[str, Any]],
     *,
     with_money: bool,
+    turned_off: Iterable[str] = (),
 ) -> list[dict[str, Any]]:
-    """One row per model that answered a turn or argued in a finished debate."""
+    """One row per model that answered a turn or argued in a finished debate (`turned_off`: the
+    models the Settings page took out of the wizard)."""
+    off = set(turned_off)
     standings = {
         s.model_id: s
         for s in ranking.build_leaderboard(
@@ -497,6 +501,7 @@ def model_rows(
                 "name": str(info.get("name") or model),
                 "is_free": bool(info.get("is_free", model.endswith(":free"))),
                 "in_catalogue": bool(info),
+                "disabled": model in off,
                 "debates": s.debates if s else 0,
                 "tries": tries,
                 "failure_rate": round((tries - ok) / tries, 4) if tries else None,

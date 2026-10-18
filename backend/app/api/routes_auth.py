@@ -10,7 +10,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import get_current_user, login_session, logout_session, require_session_user
-from app.core.config import settings
 from app.core.db import get_db
 from app.core.ratelimit import enforce_login_limit
 from app.core.security import (
@@ -31,6 +30,7 @@ from app.schemas.auth import (
     UpdateProfileRequest,
     UserOut,
 )
+from app.services import runtime_settings
 from app.services.credits import apply_transaction
 from app.services.openrouter_client import openrouter_client
 
@@ -64,6 +64,12 @@ def _default_name(email: str) -> str:
 async def register(
     body: RegisterRequest, request: Request, db: AsyncSession = Depends(get_db)
 ) -> UserOut:
+    levers = await runtime_settings.current()
+    if not levers.registration_open:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Sign-ups are closed for now. Accounts that exist can still sign in.",
+        )
     exists = await db.scalar(select(User.id).where(User.email == body.email))
     if exists is not None:
         raise HTTPException(status_code=409, detail="An account with this email already exists")
@@ -76,11 +82,11 @@ async def register(
     )
     db.add(user)
     await db.flush()
-    if settings.SIGNUP_BONUS_USD > 0:
+    if levers.signup_bonus_usd > 0:
         await apply_transaction(
             db,
             user.id,
-            settings.SIGNUP_BONUS_USD,
+            levers.signup_bonus_usd,
             "bonus",
             description="Welcome credits",
             provider="system",

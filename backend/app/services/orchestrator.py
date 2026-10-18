@@ -31,7 +31,7 @@ from app.core.redis import (
 )
 from app.core.sync_db import get_sync_session
 from app.models.models import Debate, Turn, utcnow
-from app.services import queue_manager
+from app.services import queue_manager, runtime_settings
 from app.services import usage as usage_log
 from app.services.credits import charge_debate_sync, charge_images_sync
 from app.services.events import publish_event
@@ -263,6 +263,10 @@ def _generate(
             error="Free models are busy (OpenRouter's per-minute limit); resume in a minute",
             error_kind="free_quota",
         )
+    # Models the admin console turned off: the router's pick of one is dropped like a classifier.
+    turned_off = (
+        set(runtime_settings.current_sync().disabled_models) if is_free_router(model_id) else set()
+    )
 
     async def run() -> GenerationResult:
         client = OpenRouterClient()
@@ -277,12 +281,13 @@ def _generate(
                         result.usage = _normalize_usage(chunk.usage)
                     if chunk.model:
                         result.model = chunk.model
-                        if is_free_router(model_id) and is_classifier(chunk.model):
-                            # Labels text instead of arguing ("User Safety: safe"): drop it
-                            # before a word is published, the router picks again.
-                            result.error = (
-                                f"The Free Router picked {chunk.model}, which cannot debate"
-                            )
+                        if is_free_router(model_id) and (
+                            is_classifier(chunk.model) or chunk.model in turned_off
+                        ):
+                            # Labels text instead of arguing ("User Safety: safe"), or is turned
+                            # off: drop it before a word is published, the router picks again.
+                            why = "is turned off" if chunk.model in turned_off else "cannot debate"
+                            result.error = f"The Free Router picked {chunk.model}, which {why}"
                             result.retryable = result.rerouted = True
                             result.error_kind = "classifier"
                             break
@@ -467,7 +472,8 @@ def _generate_as(
         return _with_retries(str(debate.id), generate, requested, deadline), requested
     row = participant_row(debate.participants, index, speaker.get("role"))
     pinned = pinned_model(requested, row)
-    if pinned:
+    # A pinned model the admin console turned off: the router answers, the pin stays.
+    if pinned and pinned not in runtime_settings.current_sync().disabled_models:
         result = generate(pinned)
         if result.text or result.stopped or result.timed_out or not result.error:
             return result, pinned

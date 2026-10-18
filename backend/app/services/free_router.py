@@ -120,8 +120,10 @@ def pick_fallbacks(
 
 
 def fallback_models(exclude: Iterable[str] = ()) -> list[str]:
-    """Free models that answered debate turns well in the last FALLBACK_DAYS (never raises)."""
+    """Free models that answered debate turns well in the last FALLBACK_DAYS, without the ones
+    the admin console turned off (never raises)."""
     from app.core.sync_db import get_sync_session  # worker side only
+    from app.services import runtime_settings
 
     try:
         with get_sync_session() as db:
@@ -138,6 +140,7 @@ def fallback_models(exclude: Iterable[str] = ()) -> list[str]:
                 )
                 .group_by(ProviderUsage.model)
             ).all()
+        turned_off = runtime_settings.current_sync().disabled_models
     except Exception:  # a broken lookup must not stop the turn any more than it already is
         return []
-    return pick_fallbacks(((str(m), int(a), int(t)) for m, a, t in rows), exclude)
+    return pick_fallbacks(((str(m), int(a), int(t)) for m, a, t in rows), [*exclude, *turned_off])

@@ -159,7 +159,6 @@ def _item(
 def attention_items(s: Signals) -> list[dict[str, Any]]:
     """What an admin should look at now, most severe first."""
     items: list[dict[str, Any]] = []
-    db = "/api/admin/db"
     if s.stuck_debates or s.stuck_media:
         parts = [_plural(s.stuck_debates, "debate")] if s.stuck_debates else []
         parts += [_plural(s.stuck_media, "audio build")] if s.stuck_media else []
@@ -266,7 +265,7 @@ def attention_items(s: Signals) -> list[dict[str, Any]]:
                 "warning" if s.login_failures_24h >= 3 else "info",
                 f"{_plural(s.login_failures_24h, 'failed console sign-in')} in 24 h",
                 "wrong passwords or codes",
-                f"{db}/admin-audit-log/list?ok=false",
+                "/admin/audit?tab=security&ok=false",
             )
         )
     if s.trending_every_hours > 0:

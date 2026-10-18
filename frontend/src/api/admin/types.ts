@@ -29,12 +29,31 @@ export interface AdminMe {
   version: string;
   /** False when ADMIN_SKIP_2FA (development) lets the console in with the password alone. */
   two_factor: boolean;
+  /** Registered passkeys (sudo can take one instead of a code). */
+  passkeys: number;
 }
 
 export interface AdminLoginOut {
   /** "done" with ADMIN_SKIP_2FA: already signed in, `me` is set. */
   next: 'totp' | 'enroll' | 'done';
   me?: AdminMe | null;
+  /** With "totp": a passkey may answer instead of the code. */
+  passkey: boolean;
+}
+
+export interface AdminPasskey {
+  id: string;
+  name: string;
+  created_at: string;
+  last_used_at: string | null;
+  /** Synced passkey (iCloud Keychain, Google Password Manager…). */
+  backed_up: boolean;
+  transports: string[];
+}
+
+/** WebAuthn options as JSON (base64url fields), for navigator.credentials. */
+export interface PasskeyOptions {
+  options: Record<string, unknown>;
 }
 
 export interface EnrollStartOut {
@@ -300,6 +319,7 @@ export interface ReactionOwner {
 export interface AuditEntry {
   id: string;
   created_at: string;
+  actor_user_id?: string | null;
   actor_email: string | null;
   action: string;
   target_type: string | null;
@@ -308,6 +328,7 @@ export interface AuditEntry {
   before: Record<string, unknown> | null;
   after: Record<string, unknown> | null;
   ip: string | null;
+  user_agent?: string | null;
   ok: boolean;
 }
 
@@ -783,6 +804,8 @@ export interface ModelRow {
   name: string;
   is_free: boolean;
   in_catalogue: boolean;
+  /** Turned off on the Settings page (hidden from the wizard). */
+  disabled?: boolean;
   debates: number;
   tries: number;
   failure_rate: number | null;
@@ -802,4 +825,112 @@ export interface ModelRow {
   claims_verified: number;
   claims_disputed: number;
   router_pins: number;
+}
+
+// --- audit log (backend/app/schemas/admin.py AuditQuery …) ------------------------------------
+
+export type AuditTab = 'all' | 'security';
+
+export interface AuditQuery {
+  tab?: AuditTab;
+  q?: string;
+  actor?: string;
+  /** Exact, or a prefix ending in "." ("auth."). */
+  action?: string;
+  target_type?: string;
+  target_id?: string;
+  ok?: boolean;
+  created_from?: string;
+  created_to?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface AuditPage {
+  total: number;
+  limit: number;
+  offset: number;
+  rows: AuditEntry[];
+}
+
+export interface FacetCount {
+  value: string;
+  count: number;
+}
+
+export interface AuditFacets {
+  actions: FacetCount[];
+  actors: FacetCount[];
+  target_types: FacetCount[];
+}
+
+/** The last 7 days of console security events. */
+export interface SecuritySummary {
+  sign_ins: number;
+  failures: number;
+  locks: number;
+  recovery_codes_used: number;
+  addresses: number;
+  last_failure: AuditEntry | null;
+}
+
+// --- levers and alerts ---------------------------------------------------------------------------
+
+export type LeverKind = 'bool' | 'int' | 'float' | 'text' | 'models';
+
+export type LeverKey =
+  | 'registration_open'
+  | 'maintenance'
+  | 'maintenance_message'
+  | 'disabled_models'
+  | 'signup_bonus_usd'
+  | 'free_models_per_minute'
+  | 'max_active_debates_per_user'
+  | 'max_active_media_per_user';
+
+export type LeverValue = boolean | number | string | string[];
+
+export interface Lever {
+  key: LeverKey;
+  kind: LeverKind;
+  value: LeverValue;
+  /** The env setting (what a reset goes back to). */
+  default: LeverValue;
+  overridden: boolean;
+  minimum: number | null;
+  maximum: number | null;
+  updated_at: string | null;
+  updated_by: string | null;
+}
+
+export interface CatalogueModel {
+  id: string;
+  name: string;
+}
+
+export interface SettingsOut {
+  levers: Lever[];
+  models: CatalogueModel[];
+  /** How soon every server process sees a change. */
+  cache_seconds: number;
+}
+
+export type AlertSeverity = 'critical' | 'warning' | 'info';
+
+export interface AlertEntry {
+  at: string;
+  kind: string;
+  severity: AlertSeverity;
+  title: string;
+  detail: string;
+  path: string | null;
+  sent: boolean;
+  error: string | null;
+}
+
+export interface AlertsOut {
+  /** ALERT_TELEGRAM_BOT_TOKEN and ALERT_TELEGRAM_CHAT_ID are set. */
+  configured: boolean;
+  check_every_seconds: number;
+  recent: AlertEntry[];
 }

@@ -333,9 +333,11 @@ def test_is_due() -> None:
 
 def test_scheduler_registers_the_hourly_trending_check() -> None:
     cron = build_scheduler(None)  # type: ignore[arg-type]  # registering needs no Redis
-    trending, recovery = cron.get_jobs()
+    trending, recovery, alerts = cron.get_jobs()
     assert trending.func_name == "app.services.trending.refresh_trending_job"
     assert trending.interval == TRENDING_TICK_SECONDS
     assert trending.queue_name == "background"  # turns never wait behind it
     assert recovery.func_name == "app.services.recovery.recover_runs_job"
     assert recovery.interval == 60 and recovery.queue_name == "background"
+    assert alerts.func_name == "app.services.alerts.check_alerts_job"
+    assert alerts.interval == 300 and alerts.queue_name == "background"

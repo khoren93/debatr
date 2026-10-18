@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { TriangleAlert } from 'lucide-react';
 import type { AdminLedgerRow, AdminUserCard, AdminUserDebate, AuditEntry, Page, UserApiToken, UserPeriodStats } from '../../../api/admin/types';
-import { getUserDebates, getUserLedger, revokeUserTokens } from '../../../api/admin/users';
+import { getUserDebates, getUserLedger, removeUserReactions, revokeUserTokens } from '../../../api/admin/users';
 import { getErrorMessage } from '../../../api/client';
 import { formatAgo, formatCount, formatDateShort, formatSigned, formatTokens, shortModelName, STATUS_COLORS, STATUS_LABELS } from '../../../lib/format';
 import type { DebateStatus } from '../../../api/types';
@@ -116,11 +116,26 @@ export const FavoriteModels = ({ models }: { models: AdminUserCard['favorite_mod
   );
 };
 
-/** Likes and votes the account gave; most of them going to one owner looks like boosting. */
-export const ReactionsPanel = ({ reactions }: { reactions: AdminUserCard['reactions'] }) => {
+/** Likes and votes the account gave; most of them going to one owner looks like boosting, and
+ * they can all be removed (the debates' counters are rebuilt). */
+export const ReactionsPanel = ({ userId, reactions, onChanged }: { userId: string; reactions: AdminUserCard['reactions']; onChanged: () => void }) => {
+  const toast = useToast();
+  const [removing, setRemoving] = useState(false);
   const given = reactions.likes_given + reactions.votes_given;
   return (
-    <Panel title="Likes and votes given" aside={`${reactions.likes_given} likes · ${reactions.votes_given} votes`}>
+    <Panel
+      title="Likes and votes given"
+      aside={
+        <span className="flex items-center gap-3">
+          {`${reactions.likes_given} likes · ${reactions.votes_given} votes`}
+          {given > 0 && (
+            <button type="button" onClick={() => setRemoving(true)} className="cursor-pointer font-semibold text-con hover:underline">
+              Remove all
+            </button>
+          )}
+        </span>
+      }
+    >
       {reactions.owners.length === 0 ? (
         <p className="px-4 py-4 text-sm text-muted">None yet.</p>
       ) : (
@@ -146,6 +161,19 @@ export const ReactionsPanel = ({ reactions }: { reactions: AdminUserCard['reacti
           })}
         </ul>
       )}
+      <ActionDialog
+        open={removing}
+        title="Remove every like and vote it gave?"
+        body={`${reactions.likes_given} likes and ${reactions.votes_given} audience votes go, and the counters of those debates are rebuilt (the model ranking follows). For boosting; it cannot be undone.`}
+        confirmLabel="Remove"
+        danger
+        onClose={() => setRemoving(false)}
+        onSubmit={async (reason) => {
+          const removed = await removeUserReactions(userId, reason);
+          toast.success(`${removed} likes and votes removed`);
+          onChanged();
+        }}
+      />
     </Panel>
   );
 };
@@ -363,8 +391,18 @@ const describe = (entry: AuditEntry) =>
     .map(([k, v]) => `${k.replace(/_/g, ' ')} ${String(v)}`)
     .join(' · ');
 
-export const AuditPanel = ({ targetId, entries, aside }: { targetId: string; entries: AuditEntry[]; aside: string }) => (
-  <Panel title="Audit log" aside={aside}>
+export const AuditPanel = ({ targetId, targetType, entries, aside }: { targetId: string; targetType: string; entries: AuditEntry[]; aside: string }) => (
+  <Panel
+    title="Audit log"
+    aside={
+      <span className="flex items-center gap-3">
+        {aside}
+        <Link to={`/admin/audit?target_type=${targetType}&target_id=${targetId}`} className="font-semibold hover:text-text">
+          Open in the audit log
+        </Link>
+      </span>
+    }
+  >
     {entries.length === 0 ? (
       <p className="px-4 py-4 text-sm text-muted">Nothing recorded.</p>
     ) : (

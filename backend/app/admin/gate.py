@@ -8,8 +8,7 @@ For `/api/admin*` it answers before the app does:
   the same *site* as the console, so a script on any of them could otherwise drive it;
 - 403 for unsafe methods without an Origin of the console itself.
 On ADMIN_HOST the rest of the API is 404 (the console needs nothing else), and every console
-response gets no-store / noindex / no-framing headers. sqladmin's own login page sends the
-browser to the console's sign-in page.
+response gets no-store / noindex / no-framing headers.
 """
 
 from collections.abc import Iterable
@@ -17,13 +16,12 @@ from ipaddress import ip_address
 from urllib.parse import urlsplit
 
 from starlette.datastructures import Headers, MutableHeaders
-from starlette.responses import JSONResponse, RedirectResponse, Response
+from starlette.responses import JSONResponse, Response
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from app.core.config import settings
 
 ADMIN_PREFIX = "/api/admin"
-SQLADMIN_PREFIX = "/api/admin/db"
 SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 ALLOWED_FETCH_SITES = frozenset({"same-origin", "none"})
 OPEN_ON_ADMIN_HOST = frozenset({"/api/health"})
@@ -141,10 +139,6 @@ class AdminGate:
         if refusal is not None:
             status_code, message = refusal
             response = JSONResponse({"detail": message}, status_code=status_code)
-            await _with_headers(SECURITY_HEADERS.items(), response)(scope, receive, send)
-            return
-        if path == f"{SQLADMIN_PREFIX}/login":
-            response = RedirectResponse("/admin/login?next=/api/admin/db/", status_code=302)
             await _with_headers(SECURITY_HEADERS.items(), response)(scope, receive, send)
             return
 

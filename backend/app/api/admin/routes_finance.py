@@ -20,6 +20,7 @@ from app.core.config import settings
 from app.core.db import get_db
 from app.models.models import ProviderUsage, utcnow
 from app.schemas.admin import FinanceOut, FinancePeriod, ModelsOut, ModelsPeriod
+from app.services import runtime_settings
 from app.services.admin import audit, finance
 from app.services.ledger import slug
 from app.services.openrouter_client import openrouter_client
@@ -136,5 +137,11 @@ async def models_page(
     usage = await finance.usage_by_model(db, since)
     debates = await finance.debate_facts(db, since)
     catalogue = {m["id"]: m for m in await openrouter_client.get_models()}
-    rows = finance.model_rows(usage, debates, catalogue, with_money=ctx.can("money"))
+    rows = finance.model_rows(
+        usage,
+        debates,
+        catalogue,
+        with_money=ctx.can("money"),
+        turned_off=(await runtime_settings.current()).disabled_models,
+    )
     return ModelsOut.model_validate({"period": period, "rows": rows})

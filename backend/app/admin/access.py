@@ -1,4 +1,4 @@
-"""Who may use the admin console: the `/api/admin/*` routes and sqladmin under `/api/admin/db`.
+"""Who may use the admin console (the `/api/admin/*` routes).
 
 `resolve_admin` turns the console's session cookie into an AdminContext. It refuses API tokens
 (an `Authorization` header is never accepted here), sessions that ended, and accounts that are

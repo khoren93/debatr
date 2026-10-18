@@ -34,7 +34,7 @@ from app.schemas.billing import (
     TransactionOut,
     UsageOut,
 )
-from app.services import ledger
+from app.services import ledger, runtime_settings
 from app.services.credits import apply_transaction
 from app.services.media.tts.elevenlabs import system_key_status
 
@@ -70,11 +70,12 @@ def transaction_out(tx: CreditTransaction) -> TransactionOut:
 @router.get("/config", response_model=BillingConfigOut)
 async def billing_config() -> BillingConfigOut:
     elevenlabs_ok, elevenlabs_reason = await run_in_threadpool(system_key_status)
+    levers = await runtime_settings.current()
     return BillingConfigOut(
         topup_amounts=settings.topup_amounts,
         currency=settings.STRIPE_CURRENCY,
         payments_mode=settings.payments_mode,  # type: ignore[arg-type]
-        signup_bonus_usd=settings.SIGNUP_BONUS_USD,
+        signup_bonus_usd=levers.signup_bonus_usd,
         credit_markup=settings.CREDIT_MARKUP,
         tts_price_per_1k_chars=settings.TTS_CREDIT_PRICE_PER_1K_CHARS,
         tts_price_per_min=round(settings.TTS_CREDIT_PRICE_PER_1K_CHARS, 4),

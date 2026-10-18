@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { CheckCircle2, Database, RefreshCw } from 'lucide-react';
+import { CheckCircle2, RefreshCw } from 'lucide-react';
 import { getOverview } from '../../api/admin/overview';
 import type { Overview, OverviewPeriod, SeriesPoint } from '../../api/admin/types';
 import { getErrorMessage } from '../../api/client';
@@ -223,17 +223,7 @@ const AdminOverview = () => {
 
   return (
     <Page>
-      <PageTitle
-        kicker="Admin console"
-        title="Overview"
-        right={
-          me.permissions.includes('database') && (
-            <a href="/api/admin/db/" className="flex items-center gap-1.5 text-xs text-muted hover:text-text">
-              <Database className="size-3.5" /> Raw tables
-            </a>
-          )
-        }
-      />
+      <PageTitle kicker="Admin console" title="Overview" />
 
       {/* One filter row scopes everything below it. */}
       <div className="sticky top-0 z-10 -mx-1 mt-6 flex flex-wrap items-center gap-3 bg-ink/85 px-1 py-2 backdrop-blur">

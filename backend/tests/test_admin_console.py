@@ -19,7 +19,6 @@ from starlette.routing import Route
 from starlette.types import Message
 
 from app.admin import access
-from app.admin import auth as sqladmin_auth
 from app.admin.access import (
     AdminContext,
     account_allows_console,
@@ -31,14 +30,13 @@ from app.admin.access import (
     ticket_cookie_name,
 )
 from app.admin.gate import AdminGate, gate_decision, hostname
-from app.admin.views import ParticipantAdmin, TurnAdmin, UserAdmin
 from app.api.admin import routes_auth
 from app.api.serializers import can_manage, can_view
 from app.core.config import settings
 from app.core.redis import admin_enroll_key, admin_totp_step_key
 from app.core.security import decrypt_totp_secret, encrypt_totp_secret, hash_password
 from app.manage import build_parser
-from app.models.models import AdminAuditLog, Debate, User
+from app.models.models import AdminAuditLog, AdminPasskey, Debate, User
 from app.schemas import admin as admin_schemas
 from app.schemas.admin import (
     AdminCodeRequest,
@@ -105,12 +103,40 @@ class FakeDB:
         self.users = {user.id: user for user in users}
         self.lookup: User | None = None  # what `scalar(select(User)…)` returns
         self.added: list[Any] = []
+        self.passkeys: list[AdminPasskey] = []
 
     async def get(self, model: type, key: Any) -> Any:
+        if model is AdminPasskey:
+            return next((p for p in self.passkeys if p.id == key), None)
         return self.users.get(key) if model is User else None
 
     async def scalar(self, statement: Any) -> Any:
+        if "admin_passkeys" in str(statement):
+            if "count" in str(statement):
+                return len(self.passkeys)
+            wanted = statement.compile().params.get("credential_id_1")
+            return next((p.id for p in self.passkeys if p.credential_id == wanted), None)
         return self.lookup
+
+    async def scalars(self, statement: Any) -> Any:
+        rows = list(self.passkeys)
+
+        class Rows:
+            def all(self) -> list[Any]:
+                return rows
+
+        return Rows()
+
+    async def flush(self) -> None:
+        for obj in self.added:
+            if isinstance(obj, AdminPasskey) and obj not in self.passkeys:
+                obj.id = obj.id or uuid.uuid4()
+                obj.created_at = obj.created_at or datetime.now(UTC)
+                self.passkeys.append(obj)
+
+    async def delete(self, obj: Any) -> None:
+        if obj in self.passkeys:
+            self.passkeys.remove(obj)
 
     def add(self, obj: Any) -> None:
         self.added.append(obj)
@@ -300,9 +326,10 @@ def test_account_checks() -> None:
 
 
 def test_permissions() -> None:
-    assert can("admin", "money") and can("admin", "database")
+    assert can("admin", "money") and can("admin", "audit") and can("admin", "system")
     assert can("moderator", "moderation") and not can("moderator", "money")
-    assert not can("moderator", "database") and not can(None, "console")
+    assert not can("moderator", "audit") and not can("moderator", "system")
+    assert not can(None, "console")
 
 
 def test_csrf_needed_for_unsafe_methods_only() -> None:
@@ -705,8 +732,6 @@ async def test_gate_middleware(production: pytest.MonkeyPatch) -> None:
     assert headers["x-frame-options"] == "DENY"
     assert (await _call(gate, "/api/debates", admin))[0] == 404  # the rest of the API is off
     assert (await _call(gate, "/api/health", admin))[2] == b"app"
-    status, headers, _ = await _call(gate, "/api/admin/db/login", admin)
-    assert status == 302 and headers["location"].startswith("/admin/login")
     assert (await _call(gate, "/api/admin/auth/login", admin, "POST"))[0] == 403  # no Origin
     assert (await _call(gate, "/api/admin/auth/me", "example.com"))[0] == 404
     assert (await _call(gate, "/api/debates", "example.com"))[2] == b"app"
@@ -716,13 +741,25 @@ async def test_gate_middleware(production: pytest.MonkeyPatch) -> None:
 
 
 def test_response_models_carry_no_secrets() -> None:
-    forbidden = {"password", "password_hash", "totp_secret_enc", "recovery_codes_json", "token"}
+    forbidden = {
+        "password",
+        "password_hash",
+        "totp_secret_enc",
+        "recovery_codes_json",
+        "token",
+        "public_key",
+        "credential_id",
+    }
     for name in (
         "AdminUserOut",
         "AdminSessionInfo",
         "AdminMeOut",
         "AdminSessionOut",
         "AdminLoginOut",
+        "AdminPasskeyOut",
+        "AuditEntryOut",
+        "LeverOut",
+        "AlertEntryOut",
     ):
         model = getattr(admin_schemas, name)
         assert not set(model.model_fields) & forbidden, name
@@ -744,16 +781,6 @@ def test_public_api_has_no_admin_bypass() -> None:
     assert can_view(private, owner) and can_manage(private, owner)
     assert not can_view(private, other) and not can_manage(private, other)
     assert not can_view(private, None)
-
-
-def test_sqladmin_is_locked_down() -> None:
-    names = {column.key for column in UserAdmin.form_columns}  # type: ignore[union-attr]
-    assert names == {"display_name", "is_active"}
-    details = {column.key for column in UserAdmin.column_details_list}  # type: ignore[union-attr]
-    assert not details & {"password_hash", "openrouter_key_enc", "totp_secret_enc", "admin_role"}
-    assert not UserAdmin.can_delete and not TurnAdmin.can_edit and not ParticipantAdmin.can_edit
-    (middleware,) = sqladmin_auth.authentication_backend.middlewares
-    assert middleware.kwargs["same_site"] == "strict"
 
 
 def test_manage_admin_commands_parse() -> None:

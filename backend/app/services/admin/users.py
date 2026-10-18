@@ -35,6 +35,7 @@ from app.models.models import (
 )
 from app.schemas.admin import UserFilters, UserSort
 from app.services import ledger
+from app.services.admin.audit import entry_out
 from app.services.admin.stats import ledger_category
 from app.services.debate_control import ACTIVE_STATUSES
 from app.services.engagement import recount
@@ -541,19 +542,7 @@ async def reactions(db: AsyncSession, user_id: uuid.UUID, limit: int = 5) -> dic
 
 
 def audit_out(entry: AdminAuditLog) -> dict[str, Any]:
-    return {
-        "id": str(entry.id),
-        "created_at": entry.created_at,
-        "actor_email": entry.actor_email,
-        "action": entry.action,
-        "target_type": entry.target_type,
-        "target_id": entry.target_id,
-        "reason": entry.reason,
-        "before": entry.before_json,
-        "after": entry.after_json,
-        "ip": entry.ip,
-        "ok": entry.ok,
-    }
+    return entry_out(entry)
 
 
 async def audit_entries(db: AsyncSession, user_id: uuid.UUID) -> list[dict[str, Any]]:
@@ -708,6 +697,22 @@ async def unpublish_all(db: AsyncSession, user_id: uuid.UUID) -> int:
         .values(is_public=False)
     )
     return int(getattr(result, "rowcount", 0) or 0)
+
+
+async def remove_reactions(db: AsyncSession, user_id: uuid.UUID) -> tuple[int, int]:
+    """Delete every like and vote the account gave and rebuild those debates' counters (against
+    boosting). (likes, votes) removed; not committed."""
+    reacted: set[uuid.UUID] = set()
+    removed: list[int] = []
+    for model in (DebateLike, DebateVote):
+        found = await db.scalars(select(model.debate_id).where(model.user_id == user_id))
+        ids = set(found.all())
+        reacted |= ids
+        await db.execute(delete(model).where(model.user_id == user_id))
+        removed.append(len(ids))
+    for debate_id in reacted:
+        await recount(db, debate_id, commit=False)
+    return removed[0], removed[1]
 
 
 @dataclass(frozen=True)

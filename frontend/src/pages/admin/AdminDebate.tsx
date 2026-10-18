@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, ArrowUpRight, Database } from 'lucide-react';
+import { ArrowLeft, ArrowUpRight } from 'lucide-react';
 import { getDebateCard } from '../../api/admin/debates';
 import type { AdminDebateCard } from '../../api/admin/types';
 import { getErrorMessage } from '../../api/client';
@@ -52,7 +52,6 @@ const AdminDebate = () => {
   if (!me) return null;
   const card = result?.card.debate.id === id ? result.card : null;
   const d = card?.debate;
-  const database = me.permissions.includes('database');
 
   return (
     <Page>
@@ -79,11 +78,6 @@ const AdminDebate = () => {
                 {d.url && (
                   <a href={d.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-muted hover:text-text">
                     Public page <ArrowUpRight className="size-3.5" />
-                  </a>
-                )}
-                {database && (
-                  <a href={`/api/admin/db/debate/details/${d.id}`} className="inline-flex items-center gap-1 text-muted hover:text-text">
-                    <Database className="size-3.5" /> Row
                   </a>
                 )}
               </div>
@@ -154,7 +148,7 @@ const AdminDebate = () => {
               </Panel>
             )}
             <ConfigPanel card={card} />
-            <AuditPanel targetId={d.id} entries={card.audit} aside="last 50 about this debate" />
+            <AuditPanel targetId={d.id} targetType="debate" entries={card.audit} aside="last 50 about this debate" />
           </div>
         </div>
       )}

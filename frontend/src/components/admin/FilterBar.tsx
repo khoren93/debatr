@@ -53,3 +53,13 @@ export const FilterBar = ({ params, filters, searchLabel, searchPlaceholder, onC
     </div>
   );
 };
+
+/** A filter set from elsewhere (a card's link), shown as a removable chip under the bar. */
+export const FilterChip = ({ label, onClear }: { label: string; onClear: () => void }) => (
+  <span className="inline-flex items-center gap-1.5 rounded-full border border-line-2 bg-surface-2 py-1 pl-3 pr-1.5 text-xs text-text-2">
+    {label}
+    <button type="button" onClick={onClear} aria-label={`Clear ${label}`} className="cursor-pointer rounded-full p-0.5 text-muted hover:text-text">
+      <X className="size-3.5" />
+    </button>
+  </span>
+);

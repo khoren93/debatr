@@ -43,7 +43,7 @@ from app.schemas.schemas import (
     StartDebateRequest,
     StopDebateResponse,
 )
-from app.services import api_tokens
+from app.services import api_tokens, runtime_settings
 from app.services.debate_control import ACTIVE_STATUSES
 from app.services.debate_control import stop_debate as stop_debate_run
 from app.services.engagement import engagement_out
@@ -207,6 +207,15 @@ async def _token_budget(db: AsyncSession, request: Request) -> Decimal | None:
     return await api_tokens.budget_left(db, request_api_token(request))
 
 
+async def _require_runnable(config: DebateConfig, *, starting: bool = True) -> None:
+    """Levers of the admin console: maintenance holds new runs (`starting`), turned-off models
+    are refused (the estimate says so too, before the wizard's Start)."""
+    levers = await runtime_settings.current()
+    if starting:
+        runtime_settings.require_runs_open(levers)
+    runtime_settings.require_models_enabled([p.model_id for p in config.participants], levers)
+
+
 def _apply_config(
     debate: Debate, config: DebateConfig, own_key: bool, est: EstimateOut | None = None
 ) -> None:
@@ -265,6 +274,7 @@ async def estimate(
     db: AsyncSession = Depends(get_db),
 ) -> EstimateOut:
     """Cost, length and credit impact of a configuration before running it."""
+    await _require_runnable(config, starting=False)
     _key, own_key = _resolve_provider_key(user, config.user_provider_key)
     own_tts_key = _tts_key(config, config.user_tts_key) is not None
     return await _estimate(config, user, own_key, own_tts_key, await _token_budget(db, request))
@@ -317,6 +327,7 @@ async def create_debate(
     tts_key = _tts_key(config, config.user_tts_key)
     est: EstimateOut | None = None
     if not config.draft:
+        await _require_runnable(config)
         est = await _estimate(
             config, user, own_key, tts_key is not None, await _token_budget(db, request)
         )
@@ -375,6 +386,7 @@ async def start_draft(
     stored = dict(debate.config_json or {})
     stored.pop("billing", None)
     config = DebateConfig.stored(stored)
+    await _require_runnable(config)
     provider_key, own_key = _resolve_provider_key(user, body.user_provider_key if body else None)
     tts_key = _tts_key(config, body.user_tts_key if body else None)
     est = await _estimate(
@@ -415,6 +427,7 @@ async def _resume_plan(
     stored = dict(debate.config_json or {})
     billing = stored.pop("billing", None) or {}
     config = DebateConfig.stored(stored)
+    await _require_runnable(config, starting=False)
     provider_key, own_key = _resolve_provider_key(user, body.user_provider_key if body else None)
     if billing.get("own_key") and not own_key:
         # Its turns so far were not charged; the system key would bill the whole debate.
@@ -460,6 +473,7 @@ async def resume_debate(
     anything after it) is dropped, the earlier turns and the participants' models stay."""
     debate = await load_debate(db, debate_id, full=True)
     plan = await _resume_plan(db, debate, user, request, body)
+    runtime_settings.require_runs_open(await runtime_settings.current())
     _require_sufficient(plan.est)
     await require_debate_slot(db, debate.user_id or user.id)
 

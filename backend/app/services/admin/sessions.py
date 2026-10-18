@@ -70,6 +70,8 @@ class SignInTicket(BaseModel):
     failures: int = 0
     # Enrollment in progress: the new TOTP secret (encrypted) shown to the admin once.
     pending_secret_enc: str | None = None
+    # A passkey sign-in in progress: its WebAuthn challenge (base64url, used once).
+    passkey_challenge: str | None = None
 
 
 def new_token() -> str:

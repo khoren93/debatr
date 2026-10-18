@@ -35,6 +35,7 @@ from app.schemas.admin import (
     RecoverRequest,
     RunsOut,
 )
+from app.services import runtime_settings
 from app.services.admin import audit, system
 from app.services.media.tts.elevenlabs import system_key_status, system_quota
 from app.services.openrouter_client import openrouter_client
@@ -223,11 +224,12 @@ async def providers(refresh: bool = False, _ctx: AdminContext = Depends(can_see)
         quota = await run_in_threadpool(system_quota) if ok else None
         if quota:
             elevenlabs.update(quota)
+    levers = await runtime_settings.current()
     payments = {
         "mode": settings.payments_mode,
         "currency": settings.STRIPE_CURRENCY,
         "topup_amounts": settings.topup_amounts,
-        "signup_bonus_usd": settings.SIGNUP_BONUS_USD,
+        "signup_bonus_usd": levers.signup_bonus_usd,
         "credit_markup": settings.CREDIT_MARKUP,
         "tts_price_per_1k_chars": settings.TTS_CREDIT_PRICE_PER_1K_CHARS,
     }

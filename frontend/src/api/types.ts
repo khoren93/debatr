@@ -356,6 +356,14 @@ export interface DeviceRequest {
   expires_at: string;
 }
 
+/** `GET /api/status`: levers of the admin console the site reacts to. */
+export interface SiteStatus {
+  registration_open: boolean;
+  /** New debates and audio builds are paused; running ones finish. */
+  maintenance: boolean;
+  maintenance_message: string | null;
+}
+
 export type PaymentsMode = 'stripe' | 'dev' | 'disabled';
 
 export interface BillingConfig {

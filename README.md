@@ -184,7 +184,9 @@ Follow these steps to get a copy up and running locally or on your server.
    - **API docs**: [http://localhost/api/docs](http://localhost/api/docs)
    - **Admin console**: [http://localhost/admin](http://localhost/admin). Give your account access first:
      `docker compose exec api python -m app.manage admin grant you@example.com` prints a one-time
-     enrollment code; sign in with your password, enter the code and set up an authenticator app.
+     enrollment code; sign in with your password, enter the code and set up an authenticator app
+     (a passkey can replace the code later, on the Security page). Optional Telegram alerts:
+     `ALERT_TELEGRAM_BOT_TOKEN` / `ALERT_TELEGRAM_CHAT_ID` in `.env`.
 
 ### 💻 Local development (hot reload)
 

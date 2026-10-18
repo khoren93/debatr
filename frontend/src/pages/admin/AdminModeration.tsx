@@ -208,7 +208,7 @@ const AdminModeration = () => {
                     )}
                     {r.reason && <span className="text-text-3">“{r.reason}”</span>}
                     <span className="ml-auto whitespace-nowrap text-muted">
-                      {r.actor_email ?? 'sqladmin'} · {formatTime(r.created_at)}
+                      {r.actor_email ?? 'unknown'} · {formatTime(r.created_at)}
                     </span>
                   </li>
                 ))}

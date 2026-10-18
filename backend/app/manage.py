@@ -8,8 +8,9 @@ CLI and have no API route behind them. Every change is written to the admin audi
 
 `admin` manages console access: `grant` gives a role (and prints the one-time enrollment code
 for setting up the authenticator on the first sign-in), `revoke` takes it away, `reset-2fa`
-clears a lost authenticator, `revoke-sessions` signs an admin out everywhere, `enroll-code`
-issues a fresh enrollment code, `list` shows who has access. Roles are granted nowhere else.
+clears a lost authenticator (and the passkeys), `revoke-sessions` signs an admin out everywhere,
+`enroll-code` issues a fresh enrollment code, `list` shows who has access. Roles are granted
+nowhere else.
 
 `credits` adds (or, with a negative amount, takes) credits through the ledger, the only way the
 balance changes (services/credits.apply_transaction_sync). The description is what the user
@@ -23,7 +24,7 @@ import uuid
 from collections.abc import Sequence
 from decimal import Decimal, InvalidOperation
 
-from sqlalchemy import select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.admin.access import ROLES
@@ -31,7 +32,7 @@ from app.core.config import settings
 from app.core.logging import setup_logging
 from app.core.redis import get_sync_redis
 from app.core.sync_db import get_sync_session
-from app.models.models import User
+from app.models.models import AdminPasskey, User
 from app.services.admin.audit import record_sync
 from app.services.admin.sessions import (
     ENROLL_SECONDS,
@@ -127,6 +128,11 @@ def _user_by_email(db: Session, email: str) -> User | None:
     return user
 
 
+def _drop_passkeys(db: Session, user: User) -> int:
+    result = db.execute(delete(AdminPasskey).where(AdminPasskey.user_id == user.id))
+    return int(getattr(result, "rowcount", 0) or 0)
+
+
 def _print_enrollment_code(user: User) -> None:
     code = issue_enrollment_code_sync(get_sync_redis(), str(user.id))
     host = settings.admin_hostname
@@ -164,7 +170,8 @@ def admin_revoke(email: str) -> int:
         before = user.admin_role
         user.admin_role = None
         user.session_epoch += 1
-        record_sync(db, "role.revoked", target=user, before={"role": before})
+        passkeys = _drop_passkeys(db, user)
+        record_sync(db, "role.revoked", target=user, before={"role": before, "passkeys": passkeys})
         db.commit()
         ended = revoke_all_sync(get_sync_redis(), str(user.id))
         drop_enrollment_code_sync(get_sync_redis(), str(user.id))
@@ -183,10 +190,15 @@ def admin_reset_2fa(email: str) -> int:
         user.totp_enabled_at = None
         user.recovery_codes_json = []
         user.session_epoch += 1
-        record_sync(db, "auth.2fa_reset", target=user, before={"enrolled": had})
+        passkeys = _drop_passkeys(db, user)
+        record_sync(
+            db, "auth.2fa_reset", target=user, before={"enrolled": had, "passkeys": passkeys}
+        )
         db.commit()
         ended = revoke_all_sync(get_sync_redis(), str(user.id))
-        print(f"{user.email}: authenticator cleared ({ended} sessions ended)")
+        print(
+            f"{user.email}: authenticator and {passkeys} passkeys cleared ({ended} sessions ended)"
+        )
         if user.admin_role:
             _print_enrollment_code(user)
         return 0
@@ -229,14 +241,21 @@ def admin_list() -> int:
         ).all()
         if not admins:
             print("No admins yet: python -m app.manage admin grant <email>")
+        counts = dict(
+            db.execute(
+                select(AdminPasskey.user_id, func.count()).group_by(AdminPasskey.user_id)
+            ).all()
+        )
         for user in admins:
             factor = (
                 f"2FA since {user.totp_enabled_at:%Y-%m-%d}"
                 if user.totp_enabled_at
                 else "2FA not set up"
             )
+            keys = counts.get(user.id, 0)
+            extra = f", {keys} passkey{'s' if keys != 1 else ''}" if keys else ""
             state = "" if user.is_active else ", disabled"
-            print(f"{user.email}  {user.admin_role}  {factor}{state}")
+            print(f"{user.email}  {user.admin_role}  {factor}{extra}{state}")
         return 0
 
 
@@ -252,7 +271,7 @@ def build_parser() -> argparse.ArgumentParser:
     grant.add_argument("--role", choices=ROLES, default="admin")
     for name, text in (
         ("revoke", "take the role away and end its sessions"),
-        ("reset-2fa", "clear a lost authenticator (prints a new enrollment code)"),
+        ("reset-2fa", "clear a lost authenticator and passkeys (prints a new enrollment code)"),
         ("revoke-sessions", "sign the admin out everywhere"),
         ("enroll-code", "issue a fresh enrollment code"),
     ):

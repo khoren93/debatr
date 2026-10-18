@@ -453,6 +453,26 @@ async def remove_openrouter_key(
     return CountOut(count=1)
 
 
+@router.post("/users/{user_id}/reactions/remove", response_model=CountOut)
+async def remove_reactions(
+    user_id: str,
+    body: ReasonRequest,
+    request: Request,
+    ctx: AdminContext = Depends(read_users),
+    db: AsyncSession = Depends(get_db),
+) -> CountOut:
+    """Delete the likes and votes the account gave (boosting); the counters are rebuilt."""
+    user = await _account(db, user_id)
+    likes, votes = await accounts.remove_reactions(db, user.id)
+    if not likes and not votes:
+        raise HTTPException(status_code=409, detail="The account gave no likes or votes")
+    await _record(
+        db, ctx, request, "user.reactions_removed", user, body.reason, likes=likes, votes=votes
+    )
+    await db.commit()
+    return CountOut(count=likes + votes)
+
+
 @router.post("/users/{user_id}/sign-out", response_model=CountOut)
 async def sign_out_everywhere(
     user_id: str,

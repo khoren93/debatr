@@ -5,6 +5,7 @@ import type { DebateConfig, Estimate, ImageSource, PaymentsMode, VoiceInfo } fro
 import { detectStyle } from '../../data/styles';
 import type { TtsKeyCheck, TtsKeyStatus } from '../../hooks/useElevenLabsKeyStatus';
 import { estimateCost } from '../../hooks/useEstimate';
+import { useSiteStatus } from '../../hooks/useSiteStatus';
 import { formatAge, formatCost, formatMinutes, shortModelName } from '../../lib/format';
 import { accountPath } from '../account/tabs';
 import { ErrorBox, Hint, ModelIcon, Spinner, SwitchTrack } from '../ui';
@@ -156,6 +157,7 @@ export const StepLaunch = ({
   onStart,
   goTo,
 }: StepLaunchProps) => {
+  const site = useSiteStatus();
   const toggleOutput = (value: WizardState['outputs'][number]) =>
     patch({
       outputs: state.outputs.includes(value)
@@ -183,7 +185,8 @@ export const StepLaunch = ({
         ? 'free models + voices'
         : 'model + voice cost';
   const insufficient = Boolean(estimate && !estimate.sufficient);
-  const canStart = ready && Boolean(estimate) && !insufficient && !starting && state.topic.trim().length > 0;
+  const paused = site.maintenance;
+  const canStart = ready && Boolean(estimate) && !insufficient && !starting && !paused && state.topic.trim().length > 0;
   const after = shown?.credits_after ?? null;
 
   const meta = [
@@ -514,7 +517,9 @@ export const StepLaunch = ({
             {starting && <Spinner className="size-4" />}
             Start the debate <ArrowRight className="size-4" strokeWidth={2.5} />
           </button>
-          <div className="text-center text-xs text-dim">Runs on our servers; the video renders in your browser when you export it.</div>
+          <div className={`text-center text-xs ${paused ? 'text-host' : 'text-dim'}`}>
+            {paused ? site.maintenance_message : 'Runs on our servers; the video renders in your browser when you export it.'}
+          </div>
         </div>
       </aside>
     </div>

@@ -11,6 +11,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    LargeBinary,
     Numeric,
     String,
     Text,
@@ -382,7 +383,7 @@ class AdminAuditLog(Base):
     actor_user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), nullable=True, index=True
     )
-    actor_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    actor_email: Mapped[str | None] = mapped_column(String(320), nullable=True, index=True)
     action: Mapped[str] = mapped_column(String(64), index=True)  # e.g. "auth.signed_in"
     target_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
     target_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
@@ -394,6 +395,40 @@ class AdminAuditLog(Base):
     ok: Mapped[bool] = mapped_column(Boolean, default=True)
 
     __table_args__ = (Index("ix_admin_audit_log_target", "target_type", "target_id"),)
+
+
+class AdminPasskey(Base):
+    """A passkey (WebAuthn credential) an admin may use instead of the TOTP code: at sign-in and
+    for sudo (app.services.admin.passkeys). Only the public key is stored."""
+
+    __tablename__ = "admin_passkeys"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    credential_id: Mapped[str] = mapped_column(String(1400), unique=True)  # base64url
+    public_key: Mapped[bytes] = mapped_column(LargeBinary)  # COSE key
+    sign_count: Mapped[int] = mapped_column(Integer, default=0)
+    transports: Mapped[list[str]] = mapped_column(JSON, default=list)
+    name: Mapped[str] = mapped_column(String(64))
+    aaguid: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    backed_up: Mapped[bool] = mapped_column(Boolean, default=False)  # synced (iCloud, Google…)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class RuntimeSetting(Base):
+    """A lever changed in the admin console without a deploy (app.services.runtime_settings:
+    only keys of its allowlist; without a row the env setting applies). Every change is in the
+    audit log."""
+
+    __tablename__ = "runtime_settings"
+
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    value_json: Mapped[Any] = mapped_column(JSON)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_by: Mapped[str | None] = mapped_column(String(320), nullable=True)  # admin's email
 
 
 class Preset(Base):

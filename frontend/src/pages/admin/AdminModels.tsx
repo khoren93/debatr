@@ -63,6 +63,7 @@ const columns = (withMoney: boolean): Column<ModelRow>[] => [
             {r.model}
             {r.is_free && <span className="text-ok"> · free</span>}
             {!r.in_catalogue && <span className="text-con"> · gone from OpenRouter</span>}
+            {r.disabled && <span className="text-host"> · turned off</span>}
           </span>
         </span>
       </span>

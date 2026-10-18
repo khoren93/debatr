@@ -116,6 +116,10 @@ class Settings(BaseSettings):
     # Development only: the console signs in with the password alone (no authenticator, no
     # enrollment, no sudo codes). Ignored in production.
     ADMIN_SKIP_2FA: bool = False
+    # Optional operator alerts to Telegram (app.services.alerts): a bot from @BotFather and the
+    # chat it writes to (your user id, or a group's id with the bot in it).
+    ALERT_TELEGRAM_BOT_TOKEN: str | None = None
+    ALERT_TELEGRAM_CHAT_ID: str | None = None
     ALLOWED_ORIGINS: str = "http://localhost,http://localhost:5173,http://localhost:3000"
 
     # Accounts, credits and billing

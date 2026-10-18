@@ -1,8 +1,9 @@
 import { useState, type FormEvent } from 'react';
 import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowRight, KeyRound, ShieldCheck } from 'lucide-react';
-import { adminLogin, confirmEnrollment, startEnrollment, verifyAdminCode } from '../../api/admin/auth';
+import { ArrowRight, Fingerprint, KeyRound, ShieldCheck } from 'lucide-react';
+import { adminLogin, confirmEnrollment, passkeySignInOptions, signInWithPasskey, startEnrollment, verifyAdminCode } from '../../api/admin/auth';
 import type { AdminMe, EnrollStartOut } from '../../api/admin/types';
+import { getPasskey, passkeysSupported } from '../../api/admin/webauthn';
 import { getErrorMessage, getErrorStatus } from '../../api/client';
 import { useAdminAuth } from '../../auth/AdminAuthContext';
 import { AuthLayout } from '../../components/account/AuthLayout';
@@ -16,7 +17,7 @@ type Step = 'password' | 'code' | 'enroll-code' | 'enroll-scan' | 'recovery';
 
 const TITLES: Record<Step, { kicker: string; title: string; subtitle: string }> = {
   password: { kicker: 'Admin console', title: 'Sign in', subtitle: 'Your Debatr account with admin access.' },
-  code: { kicker: 'Two-factor', title: 'Enter your code', subtitle: 'The 6-digit code from your authenticator app.' },
+  code: { kicker: 'Two-factor', title: 'Enter your code', subtitle: 'The 6-digit code from your authenticator app, or a passkey if you added one.' },
   'enroll-code': {
     kicker: 'First sign-in',
     title: 'Set up two-factor',
@@ -45,6 +46,7 @@ const AdminLogin = () => {
   const [enrollmentCode, setEnrollmentCode] = useState('');
   const [enrollment, setEnrollment] = useState<EnrollStartOut | null>(null);
   const [pending, setPending] = useState<{ me: AdminMe; codes: string[] } | null>(null);
+  const [passkey, setPasskey] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -52,8 +54,7 @@ const AdminLogin = () => {
 
   const go = (signedIn: AdminMe) => {
     setMe(signedIn);
-    if (next.startsWith('/api/admin/db/')) window.location.assign(next);
-    else navigate(next, { replace: true });
+    navigate(next, { replace: true });
   };
 
   const run = async (action: () => Promise<void>) => {
@@ -89,6 +90,7 @@ const AdminLogin = () => {
           return;
         }
         setCode('');
+        setPasskey(out.passkey && passkeysSupported());
         setStep(out.next === 'totp' ? 'code' : 'enroll-code');
       } catch (err) {
         if (getErrorStatus(err) === 401) throw new Error('Wrong email or password', { cause: err });
@@ -102,6 +104,13 @@ const AdminLogin = () => {
     void run(async () => {
       const out = await verifyAdminCode(useRecovery ? { recovery_code: code } : { code });
       go(out.me);
+    });
+  };
+
+  const usePasskey = () => {
+    void run(async () => {
+      const credential = await getPasskey(await passkeySignInOptions());
+      go((await signInWithPasskey(credential)).me);
     });
   };
 
@@ -159,6 +168,11 @@ const AdminLogin = () => {
             <Button type="submit" size="lg" className="w-full" loading={busy} icon={<ShieldCheck className="size-4" />}>
               Sign in
             </Button>
+            {passkey && (
+              <Button variant="secondary" size="lg" className="w-full" disabled={busy} icon={<Fingerprint className="size-4" />} onClick={usePasskey}>
+                Use a passkey
+              </Button>
+            )}
             <button
               type="button"
               onClick={() => {

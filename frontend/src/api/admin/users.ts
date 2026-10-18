@@ -55,6 +55,10 @@ export const revokeUserTokens = (id: string, reason: string, tokenId?: string) =
 export const removeUserOpenRouterKey = (id: string, reason: string) =>
   adminApi.post(`/users/${id}/openrouter-key/remove`, { reason }).then(() => undefined);
 
+/** Removes the likes and votes the account gave (boosting); resolves to how many went. */
+export const removeUserReactions = (id: string, reason: string) =>
+  adminApi.post<{ count: number }>(`/users/${id}/reactions/remove`, { reason }).then((r) => r.data.count);
+
 export const signOutUser = (id: string, reason: string) => adminApi.post(`/users/${id}/sign-out`, { reason }).then(() => undefined);
 
 export const setTemporaryPassword = (id: string, reason: string) =>

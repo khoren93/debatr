@@ -11,31 +11,32 @@ a local export may sit in the git-ignored `design/` folder (`Debatr Studio.html`
 
 ```
 backend/            FastAPI API + RQ worker (Python 3.12+, managed with uv)
-  app/main.py         FastAPI app, AdminGate + session + CORS middleware, sqladmin, /api/health
+  app/main.py         FastAPI app, AdminGate + session + CORS middleware, /api/health
   app/worker.py       RQ worker entrypoint (`python -m app.worker`)
   app/manage.py       operator commands on the server, not part of the public CLI: `admin grant |
                       revoke | list | reset-2fa | revoke-sessions | enroll-code`, `credits …`
                       (balance changes through the ledger)
   app/admin/          admin console access: gate (host / IP / Fetch Metadata / Origin, outermost
-                      middleware), access (sessions → AdminContext, CSRF, roles, sudo), auth
-                      (sqladmin behind the console session + its audit backend), views (sqladmin)
+                      middleware), access (sessions → AdminContext, CSRF, roles, sudo)
   app/scheduler.py    periodic jobs (`python -m app.scheduler`, RQ cron on the background queue:
-                      hourly trending check, recovery check every minute;
-                      `--refresh-trending` builds a batch now)
+                      hourly trending check, recovery check every minute, alerts check every 5
+                      minutes; `--refresh-trending` builds a batch now)
   app/core/           config (pydantic-settings), db (async SQLAlchemy), redis, logging,
                       ratelimit, auth (session cookie or Bearer API token; session-only deps),
                       security (bcrypt, Fernet, API token format/hash), ids
   app/api/admin/      admin console API (`/api/admin/*`): routes_auth (sign-in, 2FA, sessions,
-                      sudo), routes_overview (tiles, series, money, attention, tops), routes_users
-                      (list, CSV, card, ledger, debates, account changes), routes_debates (list,
-                      card, moderation queue, debate changes), routes_trending (batches, hide /
-                      show, build now), routes_system (queues, workers, scheduler, runs, limits,
-                      providers, health), routes_finance (finance series, CSV, models); later
-                      phases add the audit page, alerts, levers (PROGRESS stage A)
+                      sudo), routes_passkeys (WebAuthn sign-in, sudo, add / remove), routes_overview
+                      (tiles, series, money, attention, tops), routes_users (list, CSV, card,
+                      ledger, debates, account changes), routes_debates (list, card, moderation
+                      queue, debate changes), routes_trending (batches, hide / show, build now),
+                      routes_system (queues, workers, scheduler, runs, limits, providers, health),
+                      routes_finance (finance series, CSV, models), routes_audit (audit log page,
+                      facets, security summary), routes_settings (levers, alerts + test message)
   app/api/            routers: auth, tokens (API tokens + `debatr login` device flow), billing
                       (Stripe), debates, gallery (+ leaderboard), reactions (likes/votes), models,
-                      presets, topics (trending), stream (SSE), media; serializers.py builds the
-                      shared response models
+                      presets, topics (trending), stream (SSE), media, status (`GET /api/status`:
+                      sign-ups / maintenance for the site); serializers.py builds the shared
+                      response models
   app/services/       orchestrator (RQ jobs), scheduler (turn order), prompt_builder,
                       api_tokens (token budget, private-by-default, device flow in Redis),
                       openrouter_client, free_router (pins a Free Router participant's model),
@@ -50,9 +51,11 @@ backend/            FastAPI API + RQ worker (Python 3.12+, managed with uv)
                       resume (failed turn → Resume), heartbeat / recovery / fair_share /
                       free_quota (worker safety, see "Workers and queues"), debate_control (stop),
                       usage (provider_usage booking, debate context, ContextThreadPool),
-                      activity (user_activity_days, last_seen_at)
+                      activity (user_activity_days, last_seen_at), runtime_settings (levers of
+                      the console, cached per process), alerts (Telegram: rules, antispam, job)
   app/services/admin/ totp (codes, recovery / enrollment codes, QR), sessions (Redis: sessions,
-                      sign-in tickets, code failures), audit (append-only admin_audit_log),
+                      sign-in tickets, code failures), passkeys (WebAuthn options / checks),
+                      audit (append-only admin_audit_log: writing, the audit page's queries),
                       stats (overview queries + pure periods / buckets / attention rules),
                       users (list query with SQL totals, pure card statistics, CSV, deletion),
                       debates (debate list / card / moderation queue / trending batches),
@@ -73,13 +76,16 @@ frontend/           React 19 + Vite 8 + Tailwind 4 + TypeScript
   src/index.css       Tailwind theme tokens (colors ink/surface/accent/pro/con/host…, fonts, radii)
   src/api/            axios client, typed API functions per area (auth, billing, debates,
                       gallery, media, models, topics), shared types.ts, timeline.ts;
-                      admin/ = the console's own client (CSRF header, 401 → sign-in), types, auth
+                      status (site levers); admin/ = the console's own client (CSRF header,
+                      401 → sign-in), types, auth (+ passkeys), webauthn (navigator.credentials
+                      ⇄ JSON), audit, settings
   src/auth/           AuthContext (useAuth), RequireAuth route guard; AdminAuthContext
                       (useAdminAuth, RequireAdmin) for the console
   src/hooks/          useDebateStream (SSE), useDebateMedia (polling), useTrendingTopics,
                       useModels, useBillingConfig, useVoices (wizard voice catalogue),
                       useLeaderboard (cached model ranking), useElevenLabsKeyStatus (checks
-                      the browser's ElevenLabs key), useEstimate (debounced wizard estimate)
+                      the browser's ElevenLabs key), useEstimate (debounced wizard estimate),
+                      useSiteStatus (sign-ups closed / maintenance banner, cached a minute)
   src/components/ui/  design-system primitives (Button, Card, Chip, Segmented, Field, Pill,
                       Progress, Modal/ConfirmDialog, Toast, Avatar/SpeakerBadge, Thumb, Logo,
                       Dropdown — custom select, portalled list; SwitchTrack,
@@ -127,10 +133,13 @@ frontend/           React 19 + Vite 8 + Tailwind 4 + TypeScript
                       (filters in the URL), AdminUser (/admin/users/:id), AdminDebates,
                       AdminDebate (/admin/debates/:id), AdminModeration (keyboard queue),
                       AdminTrending, AdminFinance, AdminModels, AdminSystem (#runs #queues
-                      #limits #providers #health),
-                      AdminSecurity; components/admin: AdminShell, SudoDialog,
-                      ActionDialog (reason + sudo retry, ⌘↵), DataTable + Pager, FilterBar +
-                      filters.ts (URL filters), RecoveryCodes, StatTile, AttentionList; users/ =
+                      #limits #providers #health), AdminSettings (levers + alerts), AdminAudit
+                      (`?tab=security`, filters in the URL, diff per entry),
+                      AdminSecurity (sessions, recovery codes, passkeys); components/admin:
+                      AdminShell, SudoDialog (code or passkey), ActionDialog (reason + sudo
+                      retry, ⌘↵), DataTable + Pager, FilterBar + FilterChip + filters.ts (URL
+                      filters), RecoveryCodes, PasskeysCard, AlertsCard, StatTile, AttentionList;
+                      users/ =
                       the account card's actions and sections; debates/ = the debate card's
                       actions, transcript and panels; system/ = the System page's sections
                       (useLoad.ts: load + poll); components/admin/charts:
@@ -218,8 +227,7 @@ docker compose exec api python -m app.manage credits user@example.com 5 --reason
 0. Accounts: `POST /api/auth/register|login` set `request.session["uid"]` and `["epoch"]` in the
    signed session cookie (`SameSite=Strict`, `__Host-session` in production so sibling
    subdomains can neither read nor plant it, `session` over plain-http dev:
-   `core/auth.session_cookie_options`, also passed to sqladmin's own SessionMiddleware so it
-   never re-issues the cookie with its defaults; the SPA reads the session with same-site
+   `core/auth.session_cookie_options`; the SPA reads the session with same-site
    requests, so links from other sites still arrive signed in). `get_current_user` drops a
    cookie whose epoch is not `users.session_epoch`: a password change (this browser is signed in
    again), "sign out everywhere", a temporary password or disabling in the console end every
@@ -301,9 +309,9 @@ API). `POST /api/debates/{id}/publish` assigns the slug.
   `verdict_json`. `finish_debate_job` runs a stand-alone check when the verdict step gave no answer
   (fails closed: flagged) before the status turns `completed`, then publishes approved debates
   whose owner wants them public and whose turns all succeeded (`moderation.should_auto_publish`).
-- Flagged debates stay private: the owner's Publish only sets `publish_requested`; sqladmin in the
-  console (Debates, filter Moderation=flagged) has Approve (publishes when the owner asked) /
-  Reject / Stop actions, each audited. Rejected debates cannot be published by the owner.
+- Flagged debates stay private: the owner's Publish only sets `publish_requested`; the console's
+  Moderation page approves (publishes when the owner asked) or rejects them, each audited.
+  Rejected debates cannot be published by the owner.
   `moderation` in `DebateDetail` goes to the owner only; configs from before auto-publish count
   as `false`.
 Stopping: `POST /api/debates/{id}/stop` sets the status, sets `debate:{id}:stop` in Redis
@@ -514,6 +522,8 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   without its worker) and get `stop_grace_period: 6m`, so a deploy lets the running turn finish.
 - Fair share (`services/fair_share`): `MAX_ACTIVE_DEBATES_PER_USER` (create, start, resume) and
   `MAX_ACTIVE_MEDIA_PER_USER` (`POST /media`) answer 429; the user row is locked until commit.
+  Both, `FREE_MODELS_PER_MINUTE` and `SIGNUP_BONUS_USD` are only defaults: the console's levers
+  (`services/runtime_settings`, see "Admin console") override them without a deploy.
 - Passing provider failures (429, 5xx, dropped connection, empty answer; `RETRY_STATUSES`) are
   tried again after `RETRY_PAUSES` (3 s, 10 s) within the turn's deadline, only before any text
   was streamed, since a failed turn stops the debate.
@@ -599,7 +609,7 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   tokens): `users.last_seen_at` at most every 10 min and one `user_activity_days` row per UTC day
   (migration 0012 backfilled days from sign-ups, logins, debates, likes, votes and tokens).
 
-### Admin console (`/admin`, `/api/admin/*`; the plan is PROGRESS stage A)
+### Admin console (`/admin`, `/api/admin/*`)
 
 - Own origin: `ADMIN_HOST` (production: e.g. an `admin.` subdomain; empty in development =
   the site's origin; empty in production = console off, error at startup). `app/admin/gate.py`
@@ -608,7 +618,7 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   none (every `*.ai-debates.net` app is the same *site*, so SameSite cookies do not protect the
   console from them) and unsafe methods without the console's Origin, and adds no-store / noindex
   / DENY headers. `frontend/Caddyfile` has the `http://{$ADMIN_HOST}` block (console routes only,
-  strict CSP; sqladmin pages get one that allows its inline script).
+  strict CSP).
 - Admins are accounts with `users.admin_role` (`admin` | `moderator`, `access.PERMISSIONS`),
   granted only by `python -m app.manage admin grant`, which prints a one-time enrollment code
   (Redis, 24 h). Sign-in (`routes_auth`): password (5 tries per 15 min per IP and per email, one
@@ -624,13 +634,52 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   12 h, listed and revocable; `resolve_admin` re-checks role, `is_active`, enrollment and
   `users.session_epoch` (bumped by password change, 2FA reset, sign-out everywhere) on every
   request and never accepts an `Authorization` header. Unsafe methods need `X-CSRF-Token`
-  (from `/auth/me`). `require_sudo`: a TOTP code confirmed in the last 5 min (403 with
-  `X-Admin-Sudo: required`; the UI asks and retries).
+  (from `/auth/me`). `require_sudo`: a TOTP code (or a passkey) confirmed in the last 5 min (403
+  with `X-Admin-Sudo: required`; the UI asks and retries).
+- Passkeys (`services/admin/passkeys`, `routes_passkeys`, py_webauthn; table `admin_passkeys`,
+  public keys only): added on the Security page after sudo (at most 10), then usable instead of
+  the TOTP code at sign-in (`AdminLoginOut.passkey`, "Use a passkey") and for sudo
+  (`AdminMeOut.passkeys`). TOTP stays the base: enrollment needs it, and it or a recovery code
+  still works without the passkey. User verification required; RP ID / origin = `ADMIN_HOST`
+  over https in production (never the request's headers), the page's origin in development. The
+  challenge lives 5 min in the sign-in ticket or in Redis per session and is used once; a wrong
+  answer counts like a wrong code. `app.manage admin reset-2fa` / `revoke` delete the passkeys.
+  The frontend converts options and credentials by hand (`src/api/admin/webauthn.ts`).
 - `admin_audit_log` is append-only (trigger refuses UPDATE / DELETE / TRUNCATE; no foreign
-  keys). Everything goes in: sign-ins and failures, 2FA, sessions, sudo, server commands
-  (`record_sync`), sqladmin edits (`SqladminAudit`) and actions (`record_action`); `scrub` drops
-  secret fields. sqladmin lives at `/api/admin/db` behind the console session (role `admin`);
-  its own login page redirects to `/admin/login`.
+  keys). Everything goes in: sign-ins and failures, 2FA and passkeys, sessions, sudo, server
+  commands (`record_sync`), every console change with its reason and before / after; `scrub`
+  drops secret fields. The Audit log page (`routes_audit`, permission `audit` = admins only;
+  `GET /audit` with `AuditQuery`: tab all | security (`auth.*`, `role.*`), search, actor, action
+  exact or `prefix.`, target, outcome, UTC days; `/audit/facets` for the dropdowns;
+  `/audit/security` = 7-day counts) shows a field-by-field diff per entry; cards link to it with
+  `?target_type=&target_id=`. (Old rows may carry `db.*` actions of the sqladmin the console
+  replaced.)
+- Levers (`services/runtime_settings`, table `runtime_settings`, Settings page, permission
+  `system`): `registration_open` (403 on `POST /auth/register`), `maintenance` +
+  `maintenance_message` (503 with the message on create / start / resume / `POST /media`; drafts,
+  estimates and running debates go on; the site shows a banner and the wizard's Start is off via
+  public `GET /api/status`), `disabled_models` (left out of `GET /api/models` = wizard, CLI, MCP;
+  400 on estimate / create / start / resume; the Free Router drops such a pick like a
+  classifier's, a pinned one gives way to the router, and it is never a fallback),
+  `signup_bonus_usd`, `free_models_per_minute`, `max_active_debates_per_user`,
+  `max_active_media_per_user`. Only the fields of `Levers` exist (pydantic limits); without a row
+  the env setting applies; a broken row is ignored. `PUT /settings/{key}` / `POST
+  /settings/{key}/reset` need sudo and a reason and write the row + audit entry in one
+  transaction; processes read through a 5 s cache (`CACHE_SECONDS`), so a change lands within
+  seconds everywhere. Tests stub the table with the `levers` fixture (conftest).
+- Alerts (`services/alerts`, optional `ALERT_TELEGRAM_BOT_TOKEN` + `ALERT_TELEGRAM_CHAT_ID`):
+  a console sign-in (with how the second factor was passed) and a locked second factor go out
+  at once from the API (`notify_soon`, a background task); a failed trending batch from its
+  job; `check_alerts_job` (scheduler, every 5 min) gathers facts and `decide` (pure) raises:
+  5+ failed console sign-ins in 15 min, newly flagged debates, 3+ failed debates in an hour at
+  30 %+ of finished ones, runs without heartbeat or waiting job for 10+ min on two checks in a
+  row, OpenRouter < $5 / < $1, ElevenLabs key rejected or < 10 % / < 2 % characters, new top-ups,
+  disk ≥ 85 % / 95 %. Antispam: a quiet key per kind and severity (an escalation sends again);
+  flagged debates and top-ups are told new by the ids the last check saw (the first check after
+  a Redis reset reports none). Every alert, sent or not, lands in `alerts:recent` (Settings page,
+  "Send a test"). httpx errors print the URL with the bot token, so only their class name is
+  kept. The alerts run on the scheduler and the background queue: with every worker down,
+  nothing reports it.
 - Overview (`GET /api/admin/overview?period=24h|7d|30d|90d|all&refresh=`): one cached answer
   (Redis 60 s per period and permission scope) built in a read-only transaction with a 5 s
   statement timeout (`access.read_only_db`). Tiles carry the previous period for deltas; series
@@ -654,8 +703,9 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   transaction: credits (adjustment / bonus / refund through `apply_transaction`, `provider_ref =
   admin:<idempotency_key>` from the dialog so a retry never moves money twice, sudo above
   `ADMIN_SUDO_USD`, at most $1000), disable (bumps the epoch; optionally stops runs, revokes
-  tokens, unpublishes) / enable, revoke one or all tokens, remove the stored OpenRouter key, sign
-  out everywhere, temporary password (sudo, shown once) and delete (sudo + typed email: debates
+  tokens, unpublishes) / enable, revoke one or all tokens, remove the stored OpenRouter key,
+  remove every like and vote it gave (boosting; counters rebuilt), sign out everywhere,
+  temporary password (sudo, shown once) and delete (sudo + typed email: debates
   and their `MEDIA_ROOT` folders go too, counters of debates it liked are rebuilt). Accounts with
   a console role and the admin's own are never disabled, deleted or given passwords here (409:
   `app.manage` on the server).
@@ -684,7 +734,8 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   Stripe is configured. Models (`/api/admin/models?period=30d|90d|all`, `debates.read`; cost per
   turn with `money`): per answering model tries and failures by kind, p50 / p90 of turn time and
   first word (`percentile_cont`), tokens, judge / audience wins and fact-check accuracy
-  (`ranking.build_leaderboard` over every finished debate), Free Router picks. The console's
+  (`ranking.build_leaderboard` over every finished debate), Free Router picks, turned off (a
+  lever). The console's
   `/auth/me` carries the server's `version` (shown above "Sign out").
 - Trending (`/api/admin/trending*`): batches with feed / headline / dropped counts and cost, a
   batch's topics, dropped topics and blocked headlines; hide / show a topic (`moderation`);
@@ -747,8 +798,8 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
 - The `frontend` container name (`ai-debates-frontend-1`) is referenced by the external Caddy
   on the production host via the `caddy_net` network. `frontend/Caddyfile` trusts private-range
   proxies (`trusted_proxies`) so the external Caddy's `X-Forwarded-Proto: https` and client IP
-  reach uvicorn; without it sqladmin links its CSS as `http://` (blocked, unstyled admin) and
-  every visitor shares one IP for rate limits and view counts.
+  reach uvicorn; without it the API sees `http` and every visitor shares one IP for rate limits,
+  the console's IP checks and view counts.
 - `DEBATE_CREATE_RATE_LIMIT` (per IP per hour) and `LOGIN_RATE_LIMIT` are extra abuse limits on
   top of accounts/credits; set 0 to disable.
 - Stripe: without `STRIPE_SECRET_KEY` the checkout endpoint returns 503 and the Account page
@@ -762,8 +813,9 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   undecryptable (users must re-enter them) and the admins' TOTP secrets unreadable (reset each
   with `python -m app.manage admin reset-2fa <email>`).
 - Production needs `ADMIN_HOST` in `.env`, a DNS record for it and a block in the external Caddy
-  that proxies it to the frontend container like the site; without `ADMIN_HOST` the console and
-  sqladmin are off. The external Caddy must pass the original Host header (its default).
+  that proxies it to the frontend container like the site; without `ADMIN_HOST` the console is
+  off. The external Caddy must pass the original Host header (its default). Passkeys are bound
+  to that host: a passkey added on one `ADMIN_HOST` does not work on another.
 - Media: `MEDIA_ROOT` is `./media` natively and the `media_data` volume (`/media`) in Docker;
   the worker image target installs ffmpeg, the api target does not. Docker runs `worker`
   (`TURN_WORKERS` replicas, `--queues default,background`), `media-worker` (`--queues media`)

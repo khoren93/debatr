@@ -1,7 +1,8 @@
 import { Link, NavLink, useLocation } from 'react-router-dom';
-import { Home, LayoutGrid, Play, Plus, Trophy, UserRound } from 'lucide-react';
+import { Home, LayoutGrid, Play, Plus, Trophy, UserRound, Wrench } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useAuth } from '../../auth/AuthContext';
+import { useSiteStatus } from '../../hooks/useSiteStatus';
 import { formatMoney } from '../../lib/format';
 import { Avatar, Logo, Progress } from '../ui';
 
@@ -129,6 +130,18 @@ const MobileTabs = () => (
   </nav>
 );
 
+/** Maintenance mode (admin console lever): new debates are paused, running ones finish. */
+const MaintenanceBanner = () => {
+  const status = useSiteStatus();
+  if (!status.maintenance) return null;
+  return (
+    <div role="status" className="flex items-start gap-2.5 border-b border-host/25 bg-host/10 px-[clamp(18px,4vw,48px)] py-2.5 text-[13px] text-text-2">
+      <Wrench className="mt-0.5 size-4 shrink-0 text-host" />
+      <span>{status.maintenance_message}</span>
+    </div>
+  );
+};
+
 /** Desktop sidebar + mobile top bar / bottom tabs around the routed page. */
 export const AppShell = ({ children }: { children: ReactNode }) => {
   const { pathname } = useLocation();
@@ -140,6 +153,7 @@ export const AppShell = ({ children }: { children: ReactNode }) => {
       {!bare && <Sidebar />}
       <main className="flex min-w-0 flex-1 flex-col overflow-x-clip pb-24 md:pb-0">
         {!bare && <MobileTopBar />}
+        {!bare && <MaintenanceBanner />}
         <div className="mx-auto flex w-full max-w-[1364px] flex-1 flex-col">{children}</div>
       </main>
       {!bare && <MobileTabs />}

@@ -32,6 +32,7 @@ from starlette.concurrency import run_in_threadpool
 from app.core.config import settings
 from app.core.redis import debate_beat_key, free_models_window_key, media_beat_key, recovery_key
 from app.models.models import Debate, ProviderUsage, Turn, User
+from app.services import runtime_settings
 from app.services.fair_share import REFUSALS_KEY, REFUSALS_SECONDS
 from app.services.queue_manager import (
     BACKGROUND_QUEUE_NAME,
@@ -350,10 +351,11 @@ async def limits(
             )
         )
     ).one()
+    levers = await runtime_settings.current()
     at_limit: list[dict[str, Any]] = []
     for kind, column, cap in (
-        ("debate", Debate.status, settings.MAX_ACTIVE_DEBATES_PER_USER),
-        ("media", Debate.media_status, settings.MAX_ACTIVE_MEDIA_PER_USER),
+        ("debate", Debate.status, levers.max_active_debates_per_user),
+        ("media", Debate.media_status, levers.max_active_media_per_user),
     ):
         if cap <= 0:
             continue
@@ -405,13 +407,13 @@ async def limits(
         for (kind, uid), (count, last) in sorted(grouped.items(), key=lambda i: -i[1][1])
     ]
     return {
-        "free_per_minute": settings.FREE_MODELS_PER_MINUTE,
+        "free_per_minute": levers.free_models_per_minute,
         "free_used_this_minute": int(used or 0),
         "free_requests_24h": int(calls[0] or 0),
         "free_rate_limited_24h": int(calls[1] or 0),
         "free_daily_cap": free_daily_cap(total_credits),
-        "max_debates_per_user": settings.MAX_ACTIVE_DEBATES_PER_USER,
-        "max_media_per_user": settings.MAX_ACTIVE_MEDIA_PER_USER,
+        "max_debates_per_user": levers.max_active_debates_per_user,
+        "max_media_per_user": levers.max_active_media_per_user,
         "debate_create_rate_limit": settings.DEBATE_CREATE_RATE_LIMIT,
         "login_rate_limit": settings.LOGIN_RATE_LIMIT,
         "at_limit_now": at_limit,
@@ -645,6 +647,8 @@ def config_flags() -> list[dict[str, str]]:
         ("OPENROUTER_API_KEY", present(settings.OPENROUTER_API_KEY)),
         ("ELEVENLABS_API_KEY", present(settings.ELEVENLABS_API_KEY)),
         ("STRIPE_SECRET_KEY", present(settings.STRIPE_SECRET_KEY)),
+        ("ALERT_TELEGRAM_BOT_TOKEN", present(settings.ALERT_TELEGRAM_BOT_TOKEN)),
+        ("ALERT_TELEGRAM_CHAT_ID", present(settings.ALERT_TELEGRAM_CHAT_ID)),
         ("MEDIA_API_TOKEN", present(settings.MEDIA_API_TOKEN)),
         ("DEV_FAKE_PAYMENTS", settings.DEV_FAKE_PAYMENTS),
         ("SIGNUP_BONUS_USD", settings.SIGNUP_BONUS_USD),

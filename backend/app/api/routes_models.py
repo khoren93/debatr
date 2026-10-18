@@ -10,6 +10,7 @@ from app.schemas.schemas import (
     ValidateModelsResponse,
     ValidationResult,
 )
+from app.services import runtime_settings
 from app.services.openrouter_client import openrouter_client
 
 router = APIRouter()
@@ -26,8 +27,11 @@ async def get_credits(
 
 @router.get("", response_model=ModelsResponse)
 async def get_models() -> ModelsResponse:
-    """Available OpenRouter models (cached)."""
+    """Available OpenRouter models (cached), without the ones the admin console turned off."""
     models = await openrouter_client.get_models()
+    off = set((await runtime_settings.current()).disabled_models)
+    if off:
+        models = [m for m in models if m.get("id") not in off]
     return ModelsResponse.model_validate({"data": models, "timestamp": time.time()})
 
 

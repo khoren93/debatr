@@ -1,13 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { X } from 'lucide-react';
 import { listDebates, type DebateListQuery } from '../../api/admin/debates';
 import type { AdminDebateList, AdminDebateRow, DebateSort } from '../../api/admin/types';
 import { getErrorMessage } from '../../api/client';
 import { useAdminAuth } from '../../auth/AdminAuthContext';
 import { Page, PageTitle } from '../../components/layout/AppShell';
 import { DataTable, Pager, type Column } from '../../components/admin/DataTable';
-import { FilterBar } from '../../components/admin/FilterBar';
+import { FilterBar, FilterChip } from '../../components/admin/FilterBar';
 import { DebateFlags, DebateStatusText, ModerationText } from '../../components/admin/debates/DebateBits';
 import { flag, nextOrder, pageOf, pick, pickKey, utcDaysBack, withChanges, type FilterSpec } from '../../components/admin/filters';
 import { formatUsd } from '../../components/admin/helpers';
@@ -161,15 +160,6 @@ const columns = (withMoney: boolean): Column<AdminDebateRow>[] => [
   { key: 'reach', header: 'Likes · votes · views', sort: 'likes', align: 'right', className: 'whitespace-nowrap text-text-3', cell: (d) => `${d.likes} · ${d.votes} · ${d.views}` },
 ];
 
-const Chip = ({ label, onClear }: { label: string; onClear: () => void }) => (
-  <span className="inline-flex items-center gap-1.5 rounded-full border border-line-2 bg-surface-2 py-1 pl-3 pr-1.5 text-xs text-text-2">
-    {label}
-    <button type="button" onClick={onClear} aria-label={`Clear ${label}`} className="cursor-pointer rounded-full p-0.5 text-muted hover:text-text">
-      <X className="size-3.5" />
-    </button>
-  </span>
-);
-
 const AdminDebates = () => {
   const { me } = useAdminAuth();
   const [params, setParams] = useSearchParams();
@@ -217,8 +207,8 @@ const AdminDebates = () => {
       </div>
       {(query.model || query.user_id) && (
         <div className="mt-3 flex flex-wrap gap-2">
-          {query.model && <Chip label={`Model: ${shortModelName(query.model)}`} onClear={() => update({ model: '' })} />}
-          {query.user_id && <Chip label={`Owner: ${owner?.email ?? query.user_id.slice(0, 8)}`} onClear={() => update({ user_id: '' })} />}
+          {query.model && <FilterChip label={`Model: ${shortModelName(query.model)}`} onClear={() => update({ model: '' })} />}
+          {query.user_id && <FilterChip label={`Owner: ${owner?.email ?? query.user_id.slice(0, 8)}`} onClear={() => update({ user_id: '' })} />}
         </div>
       )}
 

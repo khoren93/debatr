@@ -1,5 +1,5 @@
 import { adminApi } from './client';
-import type { AdminLoginOut, AdminMe, AdminSessionRow, AdminSignedIn, EnrollStartOut } from './types';
+import type { AdminLoginOut, AdminMe, AdminPasskey, AdminSessionRow, AdminSignedIn, EnrollStartOut, PasskeyOptions } from './types';
 
 export const getAdminMe = () => adminApi.get<AdminMe>('/auth/me').then((r) => r.data);
 
@@ -28,3 +28,26 @@ export const confirmSudo = (code: string) =>
 
 export const regenerateRecoveryCodes = () =>
   adminApi.post<{ recovery_codes: string[] }>('/auth/recovery-codes').then((r) => r.data);
+
+// --- passkeys (credential = PublicKeyCredential as JSON, see ./webauthn) ----------------------------
+
+export const passkeySignInOptions = () => adminApi.post<PasskeyOptions>('/auth/passkey/options').then((r) => r.data.options);
+
+export const signInWithPasskey = (credential: unknown) =>
+  adminApi.post<AdminSignedIn>('/auth/passkey', { credential }).then((r) => r.data);
+
+export const listPasskeys = () => adminApi.get<AdminPasskey[]>('/auth/passkeys').then((r) => r.data);
+
+/** Needs sudo. */
+export const passkeyAddOptions = () => adminApi.post<PasskeyOptions>('/auth/passkeys/options').then((r) => r.data.options);
+
+export const addPasskey = (name: string, credential: unknown) =>
+  adminApi.post<AdminPasskey>('/auth/passkeys', { name, credential }).then((r) => r.data);
+
+/** Needs sudo. */
+export const removePasskey = (id: string) => adminApi.delete(`/auth/passkeys/${id}`).then(() => undefined);
+
+export const sudoPasskeyOptions = () => adminApi.post<PasskeyOptions>('/auth/sudo/passkey/options').then((r) => r.data.options);
+
+export const confirmSudoWithPasskey = (credential: unknown) =>
+  adminApi.post<{ sudo_until: string }>('/auth/sudo/passkey', { credential }).then((r) => r.data);

@@ -42,8 +42,7 @@ class SessionCookieOptions(TypedDict):
 
 
 def session_cookie_options() -> SessionCookieOptions:
-    """Options of the signed session cookie, for the API and sqladmin alike: sqladmin adds a
-    SessionMiddleware of its own, which would re-issue the cookie with its defaults.
+    """Options of the signed session cookie (main.py's SessionMiddleware).
 
     SameSite=Strict: the cookie never rides along a request started on another site, so a link
     or form elsewhere cannot act as the signed-in user. The SPA reads the session with same-site

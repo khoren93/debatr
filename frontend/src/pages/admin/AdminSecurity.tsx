@@ -7,6 +7,7 @@ import type { AdminSessionRow } from '../../api/admin/types';
 import { getErrorMessage } from '../../api/client';
 import { useAdminAuth } from '../../auth/AdminAuthContext';
 import { Page, PageTitle } from '../../components/layout/AppShell';
+import { PasskeysCard } from '../../components/admin/PasskeysCard';
 import { RecoveryCodes } from '../../components/admin/RecoveryCodes';
 import { SudoDialog } from '../../components/admin/SudoDialog';
 import { describeAgent, formatTime } from '../../components/admin/helpers';
@@ -121,17 +122,20 @@ const AdminSecurity = () => {
         </Card>
 
         {me.two_factor ? (
-          <Card>
-            <SectionLabel>Recovery codes</SectionLabel>
-            <div className="mt-2 font-display text-2xl font-bold">{me.recovery_codes_left} left</div>
-            <p className="mt-2 text-sm leading-relaxed text-muted">
-              New codes replace all the old ones. Lost the phone and the codes? On the server:{' '}
-              <code className="font-mono text-xs text-text-2">python -m app.manage admin reset-2fa {me.user.email}</code>
-            </p>
-            <Button variant="secondary" size="sm" className="mt-4" icon={<RefreshCw className="size-4" />} loading={busy && !revoking && !everywhere} onClick={newCodes}>
-              Make new codes
-            </Button>
-          </Card>
+          <div className="grid content-start gap-5">
+            <Card>
+              <SectionLabel>Recovery codes</SectionLabel>
+              <div className="mt-2 font-display text-2xl font-bold">{me.recovery_codes_left} left</div>
+              <p className="mt-2 text-sm leading-relaxed text-muted">
+                New codes replace all the old ones. Lost the phone and the codes? On the server:{' '}
+                <code className="font-mono text-xs text-text-2">python -m app.manage admin reset-2fa {me.user.email}</code>
+              </p>
+              <Button variant="secondary" size="sm" className="mt-4" icon={<RefreshCw className="size-4" />} loading={busy && !revoking && !everywhere} onClick={newCodes}>
+                Make new codes
+              </Button>
+            </Card>
+            <PasskeysCard />
+          </div>
         ) : (
           <Card>
             <SectionLabel>Two-factor</SectionLabel>
