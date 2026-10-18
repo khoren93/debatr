@@ -1,6 +1,14 @@
 {
     # ACME email for Let's Encrypt (only used when DOMAIN_NAME enables TLS)
     email {$ACME_EMAIL:no-email}
+
+    # In production the external Caddy terminates TLS and reaches this container over a private
+    # Docker network. Trusting it keeps its X-Forwarded-Proto/-For: otherwise this server sends
+    # "http" and the external Caddy's IP to the API, so the admin panel links its CSS/JS as
+    # http:// (blocked on the https page) and every visitor shares one IP for rate limits/views.
+    servers {
+        trusted_proxies static private_ranges
+    }
 }
 
 {$DOMAIN_NAME:localhost} {

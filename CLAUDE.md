@@ -554,7 +554,10 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   15 → 18 started from an empty database). The redis:8 image declares no `VOLUME`: `redis_data`
   keeps its RDB snapshot.
 - The `frontend` container name (`ai-debates-frontend-1`) is referenced by the external Caddy
-  on the production host via the `caddy_net` network.
+  on the production host via the `caddy_net` network. `frontend/Caddyfile` trusts private-range
+  proxies (`trusted_proxies`) so the external Caddy's `X-Forwarded-Proto: https` and client IP
+  reach uvicorn; without it sqladmin links its CSS as `http://` (blocked, unstyled admin) and
+  every visitor shares one IP for rate limits and view counts.
 - `DEBATE_CREATE_RATE_LIMIT` (per IP per hour) and `LOGIN_RATE_LIMIT` are extra abuse limits on
   top of accounts/credits; set 0 to disable.
 - Stripe: without `STRIPE_SECRET_KEY` the checkout endpoint returns 503 and the Account page
