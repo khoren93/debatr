@@ -1,7 +1,7 @@
 from datetime import datetime
-from typing import Any, Literal
+from typing import Any, Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator
 
 from app.schemas.visuals import Scene, SceneCheck
 
@@ -117,8 +117,19 @@ class NewsContext(BaseModel):
         return value
 
 
+# The topic is drawn on the video (the intro poster, the stage between scenes, the Short), where
+# up to 150 characters fit in three lines. Configs saved before this limit may hold up to 500:
+# `DebateConfig.stored` still loads them (drafts, resume, the wizard's remix).
+TOPIC_MAX_LENGTH = 150
+STORED_TOPIC_MAX_LENGTH = 500
+
+
 class DebateConfig(BaseModel):
-    topic: str = Field(min_length=1, max_length=500)
+    topic: str = Field(
+        min_length=1,
+        max_length=STORED_TOPIC_MAX_LENGTH,
+        json_schema_extra={"maxLength": TOPIC_MAX_LENGTH},
+    )
     description: str | None = Field(default=None, max_length=4000)
     # The news story the topic came from (trending topics), when the user grounds the debate in it.
     news: NewsContext | None = None
@@ -141,6 +152,18 @@ class DebateConfig(BaseModel):
     user_provider_key: str | None = Field(default=None, max_length=300)
     # Optional BYOK ElevenLabs key for the automatic audio build. Never persisted either.
     user_tts_key: str | None = Field(default=None, max_length=200)
+
+    @field_validator("topic")
+    @classmethod
+    def _topic_fits_the_video(cls, value: str, info: ValidationInfo) -> str:
+        if len(value) > TOPIC_MAX_LENGTH and not (info.context or {}).get("stored"):
+            raise ValueError(f"The topic must be at most {TOPIC_MAX_LENGTH} characters")
+        return value
+
+    @classmethod
+    def stored(cls, data: dict[str, Any]) -> Self:
+        """A configuration saved earlier, checked by the rules of its time (longer topics)."""
+        return cls.model_validate(data, context={"stored": True})
 
     @field_validator("participants")
     @classmethod

@@ -43,6 +43,7 @@ from app.core.config import settings
 from app.core.redis import get_sync_redis, trending_lock_key
 from app.core.sync_db import get_sync_session
 from app.models.models import TrendingBatch, TrendingTopic, utcnow
+from app.schemas.schemas import TOPIC_MAX_LENGTH
 from app.services.media import llm
 from app.services.openrouter_client import OpenRouterError
 
@@ -456,7 +457,9 @@ def parse_topics(text: str, pool: list[Headline]) -> tuple[list[TopicDraft], lis
                 if headline not in sources:
                     sources.append(headline)
         key = _title_key(question)
-        if not sources:
+        if len(question) > TOPIC_MAX_LENGTH:  # the question becomes the debate topic
+            reason = "question too long"
+        elif not sources:
             reason = "no source headline"
         elif term := blocked_term(question, label, brief):
             reason = f"blocked term: {term}"

@@ -45,17 +45,6 @@ export const Favicon = ({ url }: { url: string | undefined }) => {
 
 const randomOf = <T,>(list: T[]): T | undefined => list[Math.floor(Math.random() * list.length)];
 
-/** "UPDATED TODAY · 07:00" in the viewer's time zone. */
-const updatedLabel = (iso: string) => {
-  const at = new Date(iso);
-  const time = at.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-  const day = new Date();
-  if (at.toDateString() === day.toDateString()) return `Updated today · ${time}`;
-  day.setDate(day.getDate() - 1);
-  if (at.toDateString() === day.toDateString()) return `Updated yesterday · ${time}`;
-  return `Updated ${at.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} · ${time}`;
-};
-
 const matches = (topic: TrendingTopic, terms: string[]) => {
   const haystack = `${topic.question} ${topic.brief} ${topic.label} ${categoryOf(topic.category).label} ${topic.sources.map((s) => s.outlet).join(' ')}`.toLowerCase();
   return terms.every((t) => haystack.includes(t));
@@ -139,16 +128,7 @@ export const TrendingBrowser = ({ isPicked, onPick, onUnpick, onUseQuery }: Tren
 
   return (
     <div className="grid min-w-0 content-start gap-4">
-      <div className="min-w-0">
-        {data?.updated_at && (
-          <div className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.08em] text-accent">
-            <span className="size-1.5 rounded-full bg-accent animate-pulse-dot" aria-hidden="true" />
-            {updatedLabel(data.updated_at)}
-          </div>
-        )}
-        <h2 className="mt-2 font-display text-[clamp(22px,2.4vw,28px)] font-bold tracking-[-0.025em]">Trending topics</h2>
-        <p className="mt-1 text-[13px] text-muted">Debate-ready questions from today's news — each linked to its source.</p>
-      </div>
+      <h2 className="min-w-0 font-display text-[clamp(22px,2.4vw,28px)] font-bold tracking-[-0.025em]">Trending topics</h2>
 
       <div className="flex gap-2">
         <label className="flex h-11 min-w-0 flex-1 items-center gap-2.5 rounded-field border border-line bg-surface px-3.5 text-muted focus-within:border-accent">

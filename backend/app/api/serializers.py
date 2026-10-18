@@ -196,7 +196,7 @@ def owner_config(debate: Debate) -> DebateConfig | None:
     stored = dict(debate.config_json or {})
     stored.pop("billing", None)
     try:
-        return DebateConfig.model_validate(stored)
+        return DebateConfig.stored(stored)
     except ValueError:
         return None
 

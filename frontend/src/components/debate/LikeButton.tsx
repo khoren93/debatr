@@ -4,23 +4,22 @@ import { Heart } from 'lucide-react';
 import { getErrorMessage } from '../../api/client';
 import { setLike } from '../../api/debates';
 import type { DebateDetail } from '../../api/types';
-import { formatCount } from '../../lib/format';
 import { useToast } from '../ui';
-import { TOOL_BUTTON } from './toolButton';
+import { ICON_ON_PHONES, TOOL_BUTTON } from './toolButton';
 
 interface Props {
   debate: DebateDetail;
   onChange: (likes: number, liked: boolean) => void;
 }
 
-/** Heart toggle with the like count. Anonymous visitors are sent to sign in; owners see the count. */
+/** Heart toggle (the count is in the page's meta line). Anonymous visitors are sent to sign in. */
 export const LikeButton = ({ debate, onChange }: Props) => {
   const toast = useToast();
   const navigate = useNavigate();
   const location = useLocation();
   const [busy, setBusy] = useState(false);
   const { likes, liked, can_like: canLike } = debate.engagement;
-  const signIn = !canLike && !debate.is_owner;
+  const signIn = !canLike;
 
   const toggle = async () => {
     if (signIn) {
@@ -42,19 +41,18 @@ export const LikeButton = ({ debate, onChange }: Props) => {
     }
   };
 
-  const title = debate.is_owner ? 'Likes on your debate' : signIn ? 'Sign in to like this debate' : liked ? 'Unlike' : 'Like this debate';
+  const title = signIn ? 'Sign in to like this debate' : liked ? 'Unlike' : 'Like this debate';
   return (
     <button
       type="button"
       onClick={toggle}
-      disabled={debate.is_owner}
       aria-pressed={liked}
       title={title}
-      aria-label={`${title} (${likes})`}
-      className={`${TOOL_BUTTON} disabled:cursor-default disabled:hover:bg-surface ${liked ? '!border-like/45 text-like' : ''}`}
+      aria-label={title}
+      className={`${TOOL_BUTTON} ${ICON_ON_PHONES} ${liked ? '!border-like/45 text-like' : ''}`}
     >
       <Heart className={`size-4 transition-transform ${liked ? 'scale-110 fill-current' : ''}`} />
-      {likes > 0 ? formatCount(likes) : 'Like'}
+      <span className="max-sm:hidden">{liked ? 'Liked' : 'Like'}</span>
     </button>
   );
 };

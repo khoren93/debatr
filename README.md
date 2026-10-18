@@ -247,7 +247,7 @@ Run `make` to list every target. The most useful ones:
    - **Speakers**: a host plus two or more debaters, each with a model (OpenRouter's free router by
      default), a voice and a persona. The voice engine is chosen here too: free Edge voices or premium
      ElevenLabs voices.
-   - **Format & launch**: spoken or written style, which outputs to produce (audio, 16:9 video, 9:16
+   - **Review**: spoken or written style, which outputs to produce (audio, 16:9 video, 9:16
      Short) and the render quality, visual scenes (pictures, fact-check) and whether to publish to
      the gallery; the estimate shows cost, length, turns and your credits after the run. Your own
      OpenRouter / ElevenLabs keys are managed on the Account page.

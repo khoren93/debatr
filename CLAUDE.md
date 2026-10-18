@@ -74,7 +74,7 @@ frontend/           React 19 + Vite 8 + Tailwind 4 + TypeScript
                            PersonaPicker (persona presets + Custom), PickerFace, usePickerPopover
   src/components/debate/   DebatePlayer (Remotion Player with own controls: SegmentBar = seek bar
                            by turns, PlayerShell/placeholders), LiveCard (live frame: cast, speaker,
-                           streamed captions), DebateActions (Like/Share/Remix/Export/… toolbar,
+                           streamed captions), DebateActions (16:9 / 9:16 format icons + Like/Share/Remix/Export/… toolbar,
                            SharePopover = link + gallery switch + moderation), ExportRail
                            (slide-over: ExportCard browser MP4 render, MP3, PublishKit = YouTube
                            title/description with chapters/tags + canvas thumbnails, youtubeKit.ts),
@@ -110,10 +110,11 @@ cli/                `debatr` package (PyPI): CLI + MCP server, Python 3.10+, uv,
   src/debatr/markers.py, styling.py, render.py  live terminal output (markers hidden, inline Markdown)
   tests/              pytest on a fake server (httpx.MockTransport) and the SDK's in-process client
 scripts/screenshots/  `make screenshots`: README images (numbered phone screens, a 16:9 frame, the
-                    hero and a social preview) shot from the local stack with playwright-core and
-                    the installed Chrome; the "live" screen replays a finished debate through
-                    intercepted requests. Account/debate in its git-ignored .env; output in out/
-                    (git-ignored: the images are uploaded to GitHub, not committed)
+                    hero = three phones, also the social preview: JPEG under 1 MB) shot from the
+                    local stack with playwright-core and the installed Chrome; views / likes /
+                    votes / model ratings are invented per id in the browser (SHOWCASE=off: real).
+                    Account/debate in its git-ignored .env; output in out/ (git-ignored: the
+                    images are uploaded to GitHub, not committed)
 design/             local Claude Design export (`Debatr Studio.html`), git-ignored
 docker-compose.yml  full stack; docker-compose.dev.yml = only Postgres + Redis for native dev
 ```
@@ -171,7 +172,10 @@ docker compose up -d --build                     # full stack on http://localhos
 0. Accounts: `POST /api/auth/register|login` set `request.session["uid"]` in the signed session
    cookie (the admin panel uses the same cookie under `token`). `get_current_user` /
    `require_user` in `app/core/auth.py`. New accounts get `SIGNUP_BONUS_USD` credits.
-1. `POST /api/debates` (signed-in users only) validates `DebateConfig`, estimates the run
+1. `POST /api/debates` (signed-in users only) validates `DebateConfig` (`topic` ≤
+   `TOPIC_MAX_LENGTH` = 150: it is drawn on the video; configs saved before the limit hold up to
+   500 and are re-read with `DebateConfig.stored`; the wizard, CLI and trending topics keep to
+   it), estimates the run
    (`services/estimate.py`) and rejects with 402 when credits are insufficient, stores the debate
    (`status=queued`, or `draft` when `draft=true`) with `user_id` and `config_json.billing.own_key`,
    puts the OpenRouter key to use in Redis (`debate:{id}:provider_key`, TTL) — the request key or
@@ -357,7 +361,8 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   (`components/ModelLogo.tsx`; no mascots or avatars), captions on a dark plate (current word in
   the accent). `SceneStage` sits in the centre of both compositions (16:9: cards in side columns
   1+1 / 2+1 / 2+2; 9:16: debaters 1–2 as a row of `SpeakerRowCard`s, the stage, debaters 3–4,
-  captions; with two debaters the stage takes the second row's place) and shows the round +
+  captions; the stage's box is centred in the frame, with two debaters it takes the second
+  row's place) and shows the round +
   topic when no scene is up. Intro, hook and end cards carry the same brand lockup. The long
   intro and the Short's hook card are a face-off (`components/FaceOff.tsx`, the gallery cover's
   look: slanted sides in speaker colours, big logos, VS) fully drawn on frame 0, which is the

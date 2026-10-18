@@ -191,10 +191,8 @@ export const StepSpeakers = ({
 
   return (
     <div className="mt-7 grid gap-[22px] animate-rise">
-      <div className="text-sm text-muted">Cast the speakers. Each gets a model, a voice and a persona.</div>
-
       {(modelsError || paidLocked) && (
-        <div className="-mt-2 grid gap-2">
+        <div className="grid gap-2">
           {modelsError && <ErrorBox>Could not load the model list: {modelsError}</ErrorBox>}
           {paidLocked && (
             <Hint className="mt-0">

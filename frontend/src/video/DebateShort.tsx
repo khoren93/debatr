@@ -21,8 +21,8 @@ export interface ShortProps {
 const HOST_COLOR = '#FFC46B';
 // 9:16 layout (unit as in the mockup's phone frame): brand · speaker · round on top, debaters 1–2,
 // the visual stage in the middle (round + question between scenes), debaters 3–4, then the
-// captions, clear of the platform's UI at the bottom. With two debaters the stage takes the
-// second row's place, so the captions stay where they are.
+// captions, clear of the platform's UI at the bottom. The stage's box is centred in the frame;
+// debaters 3–4 take its lower part, so the rows and the captions stay where they are.
 const U = (SHORT_W * 1.75) / 100;
 const BAR_U = U * 0.9;
 const X = 60;
@@ -30,12 +30,13 @@ const W = SHORT_W - 2 * X;
 const GAP = 32;
 const ROW_H = 140;
 const ROW_W = (W - GAP) / 2;
-const ROW_A_Y = 230;
-const STAGE_Y = ROW_A_Y + ROW_H + GAP;
-const STAGE_H = 760;
+const STAGE_Y = SHORT_H / 2 - 525;
+const STAGE_END = SHORT_H - STAGE_Y;
+const ROW_A_Y = STAGE_Y - GAP - ROW_H;
+const ROW_B_Y = STAGE_END - ROW_H;
+const STAGE_H = ROW_B_Y - GAP - STAGE_Y;
 const STAGE_K = Math.min(W / 1160, STAGE_H / 700);
-const ROW_B_Y = STAGE_Y + STAGE_H + GAP;
-const CAPTIONS_Y = ROW_B_Y + ROW_H + 40;
+const CAPTIONS_Y = STAGE_END + 36;
 
 export const DebateShort = ({ timeline, mediaBase, highlightIndex }: ShortProps) => {
   const frame = useCurrentFrame();
@@ -55,7 +56,7 @@ export const DebateShort = ({ timeline, mediaBase, highlightIndex }: ShortProps)
   // Segment times are absolute; the composition clock starts at the hook card.
   const offsetMs = SHORT_HOOK_MS - h.start_ms;
   const rows = [debaters.slice(0, 2), debaters.slice(2, 4)];
-  const stageH = rows[1].length > 0 ? STAGE_H : ROW_B_Y + ROW_H - STAGE_Y;
+  const stageH = rows[1].length > 0 ? STAGE_H : STAGE_END - STAGE_Y;
   const row = (speakers: typeof debaters, y: number) => (
     <div style={{ position: 'absolute', top: y, left: X, width: W, display: 'flex', justifyContent: 'center', gap: GAP }}>
       {speakers.map((d) => (
@@ -99,7 +100,7 @@ export const DebateShort = ({ timeline, mediaBase, highlightIndex }: ShortProps)
           {row(rows[0], ROW_A_Y)}
           <SceneStage timeline={timeline} mediaBase={mediaBase} seg={current} ms={absMs} x={X} y={STAGE_Y} w={W} h={stageH} k={STAGE_K} />
           {rows[1].length > 0 && row(rows[1], ROW_B_Y)}
-          <div style={{ position: 'absolute', left: 3 * U, right: 3 * U, top: CAPTIONS_Y, height: 330, display: 'flex', alignItems: 'flex-start', justifyContent: 'center' }}>
+          <div style={{ position: 'absolute', left: 3 * U, right: 3 * U, top: CAPTIONS_Y, height: SHORT_H - CAPTIONS_Y - 60, display: 'flex', alignItems: 'flex-start', justifyContent: 'center' }}>
             <Captions seg={seg} offsetMs={offsetMs} fontSize={2.8 * U} maxWidth={SHORT_W - 6 * U} combineMs={900} />
           </div>
         </div>

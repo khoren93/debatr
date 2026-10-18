@@ -3,7 +3,7 @@ import type { TrendingTopic } from '../../api/types';
 import { formatAge } from '../../lib/format';
 import { Dropdown, Hint } from '../ui';
 import { Favicon, TrendingBrowser } from './TrendingBrowser';
-import { LANGUAGES, LENGTH_OPTIONS, MAX_ROUNDS, MIN_ROUNDS, MIN_TOPIC_LENGTH, lengthOption, roundsHint, topicValid, type NewsPick, type WizardState } from './wizardState';
+import { LANGUAGES, LENGTH_OPTIONS, MAX_ROUNDS, MIN_ROUNDS, MIN_TOPIC_LENGTH, TOPIC_MAX_LENGTH, lengthOption, roundsHint, topicValid, type NewsPick, type WizardState } from './wizardState';
 
 interface StepTopicProps {
   state: WizardState;
@@ -91,12 +91,18 @@ export const StepTopic = ({ state, patch, showErrors, estimateLine, onContinue }
               // A trending topic stays linked only while its question is unchanged.
               onChange={(e) => patch(news ? { topic: e.target.value, news: null } : { topic: e.target.value })}
               placeholder="Are cryptocurrencies the future of finance or a bubble?"
-              maxLength={500}
+              maxLength={TOPIC_MAX_LENGTH}
               className={`w-full resize-none rounded-[14px] border bg-ink px-4 py-3.5 font-display text-[19px] font-semibold leading-[1.3] tracking-[-0.01em] text-text outline-none transition-colors focus:border-accent ${
                 valid ? 'border-accent/45' : 'border-line-2'
               }`}
             />
             {showErrors && !valid && <Hint tone="danger">Give the speakers a topic of at least {MIN_TOPIC_LENGTH} characters.</Hint>}
+            {/* The question is drawn on the video: past three quarters of the limit, count down. */}
+            {state.topic.length >= TOPIC_MAX_LENGTH * 0.75 && (
+              <div className={`text-right font-mono text-[11px] ${state.topic.length >= TOPIC_MAX_LENGTH ? 'text-host' : 'text-dim'}`} aria-live="polite">
+                {state.topic.length} / {TOPIC_MAX_LENGTH}
+              </div>
+            )}
             {news && <LinkedStory news={news} onRemove={unpick} />}
           </div>
 

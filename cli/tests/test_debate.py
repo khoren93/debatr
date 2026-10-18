@@ -58,12 +58,13 @@ def test_names_and_stances():
         ({"length": "epic"}, "Length"),
         ({"style": "poem"}, "Style"),
         ({"debaters": [Debater("has space")]}, "Not a model id"),
+        ({"topic": "x" * 151}, "longer than 150 characters"),
     ],
 )
 def test_invalid_options(kwargs, message):
-    args = {"debaters": [Debater(), Debater()], **kwargs}
+    args = {"debaters": [Debater(), Debater()], "topic": "Q?", **kwargs}
     with pytest.raises(ValueError, match=message):
-        build_config("Q?", args.pop("debaters"), **args)
+        build_config(args.pop("topic"), args.pop("debaters"), **args)
 
 
 def test_no_host_frees_a_seat():

@@ -20,7 +20,7 @@ import { FREE_ROUTER_ID, speakerNames } from '../../lib/modelNames';
 export const WIZARD_STORAGE_KEY = 'debatr.wizard.v1';
 
 export type WizardStep = 1 | 2 | 3;
-export const STEP_LABELS: readonly string[] = ['Topic', 'Speakers', 'Format & launch'];
+export const STEP_LABELS: readonly string[] = ['Topic', 'Speakers', 'Review'];
 export const LAST_STEP: WizardStep = 3;
 
 export const MIN_ROUNDS = 1;
@@ -28,6 +28,10 @@ export const MAX_ROUNDS = 5;
 export const MIN_DEBATERS = 2;
 export const MAX_DEBATERS = 4;
 export const MIN_TOPIC_LENGTH = 4;
+/** The topic is drawn on the video, where 150 characters fit in three lines (mirrors
+ *  backend schemas.TOPIC_MAX_LENGTH; older debates may hold longer ones). */
+export const TOPIC_MAX_LENGTH = 150;
+const clipTopic = (topic: string) => (topic.length > TOPIC_MAX_LENGTH ? topic.slice(0, TOPIC_MAX_LENGTH).trimEnd() : topic);
 
 /** Speakers have no name fields: the host is "The Host", debaters are named after their models. */
 export interface Speaker {
@@ -337,7 +341,7 @@ export const stateFromConfig = (config: DebateConfig, base: WizardState): Wizard
   return {
     ...base,
     step: 1,
-    topic: config.topic,
+    topic: clipTopic(config.topic),
     description: config.description ?? '',
     news: config.news?.brief ? { ...config.news } : null,
     language: normalizeLanguage(config.language, base.language),
@@ -469,7 +473,7 @@ export const sanitizeState = (raw: unknown): WizardState => {
   return {
     // Older four-step states: "Format" and "Review" are now one step.
     step: step >= 1 ? (Math.min(LAST_STEP, Math.floor(step)) as WizardStep) : 1,
-    topic: str(raw.topic),
+    topic: clipTopic(str(raw.topic)),
     description: str(raw.description),
     // Older states could switch the story off ("ground"): a linked topic now always sends it.
     news: raw.ground === false ? null : sanitizeNews(raw.news),

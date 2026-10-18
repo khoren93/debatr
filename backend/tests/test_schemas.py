@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from app.schemas.schemas import DebateConfig
+from app.schemas.schemas import TOPIC_MAX_LENGTH, DebateConfig
 
 MOD = {"role": "moderator", "model_id": "m/mod", "display_name": "Moderator"}
 DEB = {"role": "debater", "model_id": "m/deb", "display_name": "Alice"}
@@ -13,6 +13,19 @@ def test_minimal_config_defaults():
     assert cfg.length_preset == "medium"
     assert cfg.intensity == 5
     assert cfg.user_provider_key is None
+
+
+def test_topic_length_is_capped_for_the_video_but_old_configs_still_load():
+    fits = {"topic": "x" * TOPIC_MAX_LENGTH, "participants": [DEB]}
+    too_long = {"topic": "x" * (TOPIC_MAX_LENGTH + 1), "participants": [DEB]}
+    assert DebateConfig.model_validate(fits).topic == fits["topic"]
+    with pytest.raises(ValidationError, match=f"at most {TOPIC_MAX_LENGTH} characters"):
+        DebateConfig.model_validate(too_long)
+    # Saved before the limit: drafts, resume and the wizard's remix must keep working.
+    assert DebateConfig.stored({**too_long, "topic": "x" * 500}).topic == "x" * 500
+    with pytest.raises(ValidationError):
+        DebateConfig.stored({**too_long, "topic": "x" * 501})
+    assert DebateConfig.model_json_schema()["properties"]["topic"]["maxLength"] == TOPIC_MAX_LENGTH
 
 
 def test_provider_key_is_excluded_from_persisted_config():

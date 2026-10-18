@@ -219,9 +219,14 @@ const Gallery = () => {
           </button>
         )}
       </div>
-      <div className="mt-3.5 flex flex-wrap gap-2" role="tablist" aria-label="Categories">
+      {/* One swipeable row on phones (edge to edge), wrapped on wider screens. */}
+      <div
+        className="-mx-[clamp(18px,4vw,48px)] mt-3.5 flex gap-2 overflow-x-auto px-[clamp(18px,4vw,48px)] [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:px-0 [&::-webkit-scrollbar]:hidden"
+        role="tablist"
+        aria-label="Categories"
+      >
         {CATEGORY_OPTIONS.map((opt) => (
-          <Chip key={opt.value} active={opt.value === category} onClick={() => setCategory(opt.value)}>
+          <Chip key={opt.value} className="shrink-0" active={opt.value === category} onClick={() => setCategory(opt.value)}>
             {opt.label}
           </Chip>
         ))}

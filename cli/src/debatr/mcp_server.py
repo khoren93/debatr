@@ -23,6 +23,7 @@ from debatr.api import TERMINAL_EVENTS, TERMINAL_STATUSES, ApiError, DebatrClien
 from debatr.config import Settings, resolve
 from debatr.debate import (
     FREE_MODEL,
+    TOPIC_MAX_LENGTH,
     Debater,
     build_config,
     digest,
@@ -259,7 +260,9 @@ def create_server(
 
     @server.tool(title="Estimate a debate", annotations=READ_ONLY)
     async def estimate_debate(
-        topic: Annotated[str, Field(description="The question to debate.")],
+        topic: Annotated[
+            str, Field(description="The question to debate.", max_length=TOPIC_MAX_LENGTH)
+        ],
         debaters: Annotated[
             list[DebaterSpec] | None,
             Field(description="1-7 debaters (default: two free models, for and against)."),
@@ -294,7 +297,11 @@ def create_server(
     @server.tool(title="Start a debate", annotations=WRITES)
     async def start_debate(
         topic: Annotated[
-            str, Field(description="The question, phrased so there are sides to take.")
+            str,
+            Field(
+                description="The question, phrased so there are sides to take.",
+                max_length=TOPIC_MAX_LENGTH,
+            ),
         ],
         debaters: Annotated[
             list[DebaterSpec] | None,

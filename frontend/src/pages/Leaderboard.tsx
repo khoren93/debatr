@@ -56,7 +56,7 @@ const Row = ({ entry, rank }: { entry: LeaderboardEntry; rank: number | null }) 
             {provider || entry.model_id}
             <span className="md:hidden">
               {' '}
-              · {entry.votes} votes · {entry.debates} debates
+              · {formatCount(entry.votes)} {entry.votes === 1 ? 'vote' : 'votes'} · {entry.debates} {entry.debates === 1 ? 'debate' : 'debates'}
             </span>
           </span>
         </span>
@@ -160,7 +160,7 @@ const Leaderboard = () => {
     <Page>
       <PageTitle kicker="Public" title="Model ranking" right={<Segmented options={PRICE_OPTIONS} value={price} onChange={setPrice} size="sm" />} />
       <p className="mt-3 max-w-[720px] text-sm leading-[1.55] text-muted text-pretty">
-        Which model argues best — according to people, not the AI judge. Every audience vote counts as a win of the chosen model over its opponents; ratings are on an Elo-like scale where 1000 is average. Only models with at least one public debate are listed; until their debates get votes they have no rating.
+        Which model argues best — by audience votes, not the AI judge. Elo-like ratings, 1000 is average.
         {data && (
           <span className="text-text-3">
             {' '}

@@ -44,6 +44,21 @@ export const formatDate = (iso: string | null | undefined) =>
 export const formatDateShort = (iso: string | null | undefined) =>
   iso ? new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
 
+/** "Today", "Yesterday", "5 days ago", "3 weeks ago", "2 months ago", "1 year ago" (calendar days, viewer's zone). */
+export const formatAgo = (iso: string | null | undefined, now: Date = new Date()) => {
+  const at = iso ? new Date(iso) : null;
+  if (!at || Number.isNaN(at.getTime())) return '';
+  const day = (d: Date) => Date.UTC(d.getFullYear(), d.getMonth(), d.getDate());
+  const days = Math.max(0, Math.round((day(now) - day(at)) / 86_400_000));
+  if (days === 0) return 'Today';
+  if (days === 1) return 'Yesterday';
+  if (days < 14) return `${days} days ago`;
+  if (days < 60) return `${Math.floor(days / 7)} weeks ago`;
+  if (days < 365) return `${Math.floor(days / 30)} months ago`;
+  const years = Math.floor(days / 365);
+  return years === 1 ? '1 year ago' : `${years} years ago`;
+};
+
 /** "4:13" (or "1:02:13" past an hour). */
 export const formatDuration = (ms: number | null | undefined) => {
   if (!ms || ms <= 0) return '—';

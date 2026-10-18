@@ -5,11 +5,11 @@ import { modelAuthor, modelIcon } from '../../lib/modelIcons';
 import { debaterNames } from './helpers';
 
 /** Horizontal lean of every seam between two sides, in % of the width (top vs bottom). */
-const LEAN = 5;
+const LEAN = 3.5;
 /** Logo width in % of the card width by number of sides. */
-const LOGO_CQW: Record<number, number> = { 2: 21, 3: 15, 4: 11.5 };
+const LOGO_CQW: Record<number, number> = { 2: 15.5, 3: 12, 4: 9.5 };
 /** Height of the logo centres, in % of the cover height. */
-const LOGO_Y = 43;
+const LOGO_Y = 52;
 
 const sideClip = (i: number, n: number) => {
   const left = (i / n) * 100;
@@ -60,7 +60,7 @@ export const DebateCover = ({ participants, topLeft, topRight }: DebateCoverProp
   const logo = LOGO_CQW[n] ?? 11;
 
   return (
-    <div className="relative aspect-video overflow-hidden bg-ink" style={{ containerType: 'inline-size' }}>
+    <div className="relative aspect-[5/2] overflow-hidden bg-ink" style={{ containerType: 'inline-size' }}>
       {sides.map((_, i) => {
         const color = debaterColor(i);
         const cx = ((i + 0.5) / n) * 100;
@@ -91,7 +91,7 @@ export const DebateCover = ({ participants, topLeft, topRight }: DebateCoverProp
         return (
           <div key={i} className="absolute flex -translate-x-1/2 -translate-y-1/2 flex-col items-center" style={{ left: `${cx}%`, top: `${LOGO_Y}%`, width: `${100 / n - 4}%` }}>
             <span className="transition-transform duration-300 group-hover:scale-[1.06]">{p ? <BigLogo modelId={p.model} color={color} size={logo} /> : <span className="block rounded-full bg-white/10" style={{ width: `${logo}cqw`, height: `${logo}cqw` }} />}</span>
-            <span className="mt-[2.4cqw] max-w-full truncate font-mono font-semibold uppercase" style={{ color, fontSize: `${n > 2 ? 2.1 : 2.8}cqw`, letterSpacing: n > 2 ? '0.03em' : '0.12em' }}>
+            <span className="mt-[1.8cqw] max-w-full truncate font-mono font-semibold uppercase" style={{ color, fontSize: `${n > 2 ? 2.1 : 2.8}cqw`, letterSpacing: n > 2 ? '0.03em' : '0.12em' }}>
               {p ? names[i] : '—'}
             </span>
           </div>
@@ -102,7 +102,7 @@ export const DebateCover = ({ participants, topLeft, topRight }: DebateCoverProp
         <span
           key={k}
           className="absolute grid -translate-x-1/2 -translate-y-1/2 -rotate-[8deg] place-items-center rounded-full border-accent bg-ink font-display font-extrabold text-accent"
-          style={{ left: `${((k + 1) / n) * 100 + LEAN * (1 - (2 * LOGO_Y) / 100)}%`, top: `${LOGO_Y}%`, width: `${n > 2 ? 7.5 : 9.5}cqw`, height: `${n > 2 ? 7.5 : 9.5}cqw`, fontSize: `${n > 2 ? 3 : 3.8}cqw`, borderWidth: '0.35cqw', boxShadow: '0 0 4cqw rgba(217,255,61,0.35)' }}
+          style={{ left: `${((k + 1) / n) * 100 + LEAN * (1 - (2 * LOGO_Y) / 100)}%`, top: `${LOGO_Y}%`, width: `${n > 2 ? 6.5 : 8}cqw`, height: `${n > 2 ? 6.5 : 8}cqw`, fontSize: `${n > 2 ? 2.6 : 3.2}cqw`, borderWidth: '0.35cqw', boxShadow: '0 0 4cqw rgba(217,255,61,0.35)' }}
         >
           VS
         </span>

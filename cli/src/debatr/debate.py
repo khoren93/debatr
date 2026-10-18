@@ -21,6 +21,8 @@ STYLES = ("markdown", "spoken")
 VOICE_ENGINES = ("edge", "elevenlabs")
 MAX_PARTICIPANTS = 8
 MAX_ROUNDS = 10
+# The server's limit: the topic is drawn on the video (older servers took up to 500).
+TOPIC_MAX_LENGTH = 150
 HOST_PERSONA = (
     "You are an impartial debate moderator. Introduce the topic, keep speakers on time, "
     "summarize each round."
@@ -88,8 +90,8 @@ def build_config(
     topic = " ".join(topic.split())
     if not topic:
         raise ValueError("The topic is empty")
-    if len(topic) > 500:
-        raise ValueError("The topic is longer than 500 characters")
+    if len(topic) > TOPIC_MAX_LENGTH:
+        raise ValueError(f"The topic is longer than {TOPIC_MAX_LENGTH} characters")
     if not debaters:
         raise ValueError("A debate needs at least one debater")
     seats = MAX_PARTICIPANTS - (1 if host_model else 0)

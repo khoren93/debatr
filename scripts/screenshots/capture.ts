@@ -1,6 +1,6 @@
 /**
  * Captures the README images from a running Debatr: phone screenshots of the main screens, a
- * frame of the 16:9 video, and the hero / social preview composed from them.
+ * frame of the 16:9 video, and the hero composed from three of the screens.
  *
  *   make screenshots DEBATR_EMAIL=you@example.com DEBATR_PASSWORD=… [DEBATE=<id>]
  *
@@ -10,18 +10,20 @@
  *
  * Needs the stack on DEBATR_URL (default http://localhost) with a batch of trending topics, and
  * an account whose newest finished debate has its audio built with scenes (DEBATE=<id> picks
- * another one). Nothing is created or changed on the server: the "live" screen replays that
- * finished debate through intercepted requests. The browser is the installed Google Chrome
+ * another one). Nothing is created or changed on the server: the audience numbers (views,
+ * likes, votes, model ratings) are invented in the browser, see "Showcase numbers"
+ * (SHOWCASE=off shows the real ones). The browser is the installed Google Chrome
  * (SCREENSHOT_CHANNEL=chromium uses Playwright's own build instead).
  *
- * Screens are numbered in the order a debate is made and watched (01_topics … 09_leaderboard).
- * ONLY=live,verdict shoots a subset (names without the number), ONLY=hero only recomposes the hero; OUT=<dir> writes somewhere else than
- * scripts/screenshots/out/ (git-ignored: the images are uploaded to GitHub, not committed).
+ * Screens are numbered in the order a debate is made and watched (01_topics … 06_leaderboard).
+ * ONLY=episode,verdict shoots a subset (names without the number), ONLY=hero only recomposes the
+ * hero; OUT=<dir> writes somewhere else than scripts/screenshots/out/ (git-ignored: the images
+ * are uploaded to GitHub, not committed).
  */
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { type Browser, type BrowserContext, chromium, type Page } from 'playwright-core';
+import { type Browser, type BrowserContext, chromium, type Page, type Route } from 'playwright-core';
 
 const root = join(import.meta.dirname, '..', '..');
 const envFile = join(import.meta.dirname, '.env');
@@ -34,22 +36,9 @@ const DESKTOP = { width: 1440, height: 1000 };
 const ONLY = process.env.ONLY?.split(',').filter(Boolean) ?? [];
 const WIZARD_KEY = 'debatr.wizard.v1';
 
-interface Turn {
-  seq_index: number;
-  round_id: string;
-  turn_type: string;
-  speaker_role: string;
-  speaker_id: string | null;
-  speaker_name: string;
-  text: string;
-  visuals: { scenes?: unknown[] } | null;
-}
 interface Debate {
   id: string;
-  status: string;
-  media_status: string;
-  turns: Turn[];
-  [key: string]: unknown;
+  turns: unknown[];
 }
 interface TimelineVisual {
   seq_index: number;
@@ -64,7 +53,7 @@ interface Timeline {
 }
 
 /** The phone screens in the order a debate is made and watched: `screens/01_topics.webp` … */
-const SCREENS = ['topics', 'speakers', 'format', 'live', 'scenes', 'verdict', 'short', 'gallery', 'leaderboard'];
+const SCREENS = ['topics', 'speakers', 'episode', 'verdict', 'short', 'leaderboard'];
 const screenFile = (name: string) => join(screens, `${String(SCREENS.indexOf(name) + 1).padStart(2, '0')}_${name}.webp`);
 const wanted = (name: string) => ONLY.length === 0 || ONLY.includes(name);
 const fail = (message: string): never => {
@@ -207,6 +196,116 @@ function shortSceneTime(timeline: Timeline): number {
 /** Height of the sticky mobile top bar, so scrolled-to elements are not under it. */
 const TOP_BAR = 70;
 
+// --- Showcase numbers ---------------------------------------------------------------------
+
+/*
+ * A local stack has no audience: every debate says 0 likes and the model ranking is empty. The
+ * screenshots show invented but plausible numbers instead, patched into the API responses in
+ * the browser. They are derived from the debate or model id, so every run and every screen
+ * (debate page, ranking, wizard ranks) shows the same ones.
+ */
+
+/** A stable number in [0, 1) for `key` (FNV-1a with a final mix). */
+function unit(key: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < key.length; i++) h = Math.imul(h ^ key.charCodeAt(i), 0x01000193);
+  h ^= h >>> 15;
+  h = Math.imul(h, 0x2c1b3c6d);
+  h ^= h >>> 12;
+  return (h >>> 0) / 2 ** 32;
+}
+const between = (key: string, min: number, max: number) => min + (max - min) * unit(key);
+const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+
+interface Participant {
+  id: string;
+  role: string;
+}
+interface Audience {
+  total: number;
+  counts: Record<string, number>;
+}
+interface DebateDetail {
+  id: string;
+  views: number;
+  participants: Participant[];
+  is_public: boolean;
+  engagement: { likes: number; audience: Audience };
+}
+interface LeaderboardEntry {
+  model_id: string;
+  is_free: boolean;
+  rating: number;
+  rated: boolean;
+  debates: number;
+  votes: number;
+  vote_share: number | null;
+  audience_wins: number;
+  audience_contests: number;
+  judge_wins: number;
+  judge_contests: number;
+}
+interface Leaderboard {
+  entries: LeaderboardEntry[];
+  total_votes: number;
+}
+
+/** Views (700–6.8k), likes (3.5–8.5 %), audience votes (2–5 %) and their split for one debate. */
+function audienceOf(id: string, participants: Participant[]): { views: number; likes: number; audience: Audience } {
+  const views = Math.round(Math.exp(between(`${id}:views`, Math.log(700), Math.log(6800))));
+  const likes = Math.round(views * between(`${id}:likes`, 0.035, 0.085));
+  const debaters = participants.filter((p) => p.role === 'debater').map((p) => p.id);
+  if (debaters.length < 2) return { views, likes, audience: { total: 0, counts: {} } };
+  const total = Math.round(views * between(`${id}:votes`, 0.02, 0.05));
+  const weights = debaters.map((d) => 0.6 + unit(`${id}:${d}`));
+  const sum = weights.reduce((a, b) => a + b, 0);
+  const counts: Record<string, number> = {};
+  let left = total;
+  debaters.forEach((d, i) => {
+    counts[d] = i === debaters.length - 1 ? left : Math.round((total * weights[i]) / sum);
+    left -= counts[d];
+  });
+  return { views, likes, audience: { total, counts } };
+}
+
+function detailWithAudience(detail: DebateDetail): DebateDetail {
+  if (!detail.is_public) return detail;
+  const { views, likes, audience } = audienceOf(detail.id, detail.participants);
+  const engagement = { ...detail.engagement, likes, audience: { ...detail.engagement.audience, ...audience } };
+  return { ...detail, views, engagement };
+}
+
+/**
+ * Ratings around 1000: paid models a little above free ones, the judge's record nudges them,
+ * the rest is noise. Vote shares and audience wins follow the rating.
+ */
+function rankModels(board: Leaderboard): Leaderboard {
+  const entries = board.entries.map((e) => {
+    const judged = e.judge_contests > 0 ? e.judge_wins / e.judge_contests : 0.5;
+    const rating = Math.round(1000 + (e.is_free ? -55 : 25) + (judged - 0.5) * 70 + between(`${e.model_id}:rating`, -45, 45));
+    const share = clamp(0.5 + (rating - 1000) / 420, 0.22, 0.78);
+    const votes = Math.round(e.debates * between(`${e.model_id}:votes`, 50, 180) * share);
+    const wins = clamp(Math.round(e.debates * (share + between(`${e.model_id}:wins`, -0.15, 0.15))), 0, e.debates);
+    return { ...e, rating, rated: true, votes, vote_share: Math.round(share * 1000) / 1000, audience_wins: wins, audience_contests: e.debates };
+  });
+  entries.sort((a, b) => b.rating - a.rating);
+  return { ...board, entries, total_votes: entries.reduce((sum, e) => sum + e.votes, 0) };
+}
+
+/** Routes the model ranking and debate pages through the showcase numbers. */
+async function showcase(context: BrowserContext): Promise<void> {
+  if (process.env.SHOWCASE === 'off') return;
+  const patch =
+    <T>(transform: (json: T) => unknown) =>
+    async (route: Route) => {
+      const response = await route.fetch();
+      if (!response.ok()) return route.fulfill({ response });
+      await route.fulfill({ response, json: transform((await response.json()) as T) });
+    };
+  await context.route(/\/api\/gallery\/leaderboard(\?|$)/, patch(rankModels));
+  await context.route(/\/api\/debates\/[0-9a-f-]{36}(\?|$)/, patch(detailWithAudience));
+}
+
 // --- Screens ---------------------------------------------------------------------------
 
 async function captureWizard(context: BrowserContext, shooter: Shooter, debate: Debate): Promise<void> {
@@ -223,65 +322,15 @@ async function captureWizard(context: BrowserContext, shooter: Shooter, debate: 
     await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
     await shooter.shoot(page, 'topics');
   }
-  if (wanted('speakers') || wanted('format')) {
+  if (wanted('speakers')) {
     // A remix of the shown debate fills the wizard with its lineup.
     await page.goto(`${BASE}/create?remix=${debate.id}`);
     await page.waitForURL(`${BASE}/create`);
     await page.getByRole('button', { name: /^Continue/ }).last().click();
     await page.waitForTimeout(600);
-    if (wanted('speakers')) await shooter.shoot(page, 'speakers');
-    await page.getByRole('button', { name: /^Continue/ }).last().click();
-    await page.waitForTimeout(1500);
-    if (wanted('format')) await shooter.shoot(page, 'format');
+    await shooter.shoot(page, 'speakers');
     await page.evaluate((key) => localStorage.removeItem(key), WIZARD_KEY);
   }
-  await page.close();
-}
-
-/** Replays the debate as if it were running: the turns before `seq` done, `seq` half-written. */
-async function captureLive(context: BrowserContext, shooter: Shooter, debate: Debate): Promise<void> {
-  const debaters = debate.turns.filter((t) => t.speaker_role === 'debater' && t.round_id !== 'round_1');
-  const live = debaters.at(-1) ?? debate.turns.at(-2)!;
-  const words = live.text.split(/(\s+)/);
-  const partial = words.slice(0, Math.round(words.length * 0.55)).join('');
-  // A running debate is not in the gallery yet: no likes, votes or share link.
-  const running = {
-    ...debate,
-    status: 'running',
-    media_status: 'none',
-    ended_at: null,
-    verdict: null,
-    is_public: false,
-    slug: null,
-    share_url: null,
-    published_at: null,
-    turns: debate.turns.filter((t) => t.seq_index < live.seq_index),
-  };
-  const event = (name: string, data: unknown) => `event: ${name}\ndata: ${JSON.stringify(data)}\n\n`;
-  const stream =
-    'retry: 86400000\n\n' +
-    event('turn_started', {
-      seq_index: live.seq_index,
-      speaker_name: live.speaker_name,
-      speaker_role: live.speaker_role,
-      turn_type: live.turn_type,
-      round_id: live.round_id,
-    }) +
-    event('turn_delta', { seq_index: live.seq_index, delta: partial, speaker_name: live.speaker_name });
-
-  const page = await context.newPage();
-  await page.route(`**/api/debates/${debate.id}`, (route) => route.fulfill({ json: running }));
-  await page.route(`**/api/debates/${debate.id}/stream`, (route) =>
-    route.fulfill({ status: 200, headers: { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' }, body: stream }),
-  );
-  await page.route(`**/api/debates/${debate.id}/media`, (route) =>
-    route.fulfill({ json: { debate_id: debate.id, media_status: 'none', progress: null, options: null, urls: null, stats: null, started_at: null, finished_at: null } }),
-  );
-  await page.goto(`${BASE}/debate/${debate.id}`);
-  await page.getByText('Live', { exact: true }).first().waitFor();
-  await page.waitForTimeout(1500);
-  await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
-  await shooter.shoot(page, 'live');
   await page.close();
 }
 
@@ -289,30 +338,18 @@ async function captureDebate(context: BrowserContext, shooter: Shooter, debate: 
   const page = await context.newPage();
   await page.goto(`${BASE}/debate/${debate.id}`);
   await page.getByRole('slider').first().waitFor();
+  if (wanted('episode')) {
+    // The finished episode as it opens: the face-off poster with its play button.
+    await page.waitForTimeout(800);
+    await shooter.shoot(page, 'episode');
+  }
   await hidePausedOverlay(page);
 
-  if (wanted('scenes')) {
-    // The first debater turn with a fact-checked scene, else with the most scenes.
-    const turns = debate.turns.filter((t) => t.speaker_role === 'debater' && t.visuals?.scenes?.length);
-    const turn = turns.find((t) => JSON.stringify(t.visuals).includes('"verified"')) ?? turns[0];
-    if (turn) {
-      // The end of the turn: its last words and the scene board above the bottom tabs.
-      await page.locator(`#turn-${turn.seq_index}`).evaluate((el) => {
-        const bottom = el.getBoundingClientRect().bottom + window.scrollY;
-        window.scrollTo({ top: bottom - window.innerHeight + 96, behavior: 'instant' });
-        // Phones show the scenes as a strip: swipe to the first one with a fact-check or dispute badge.
-        const badge = [...el.querySelectorAll('span')].find((s) => /^(Fact-checked|disputed by)/i.test(s.textContent?.trim() ?? ''));
-        const card = badge?.closest<HTMLElement>('.snap-start');
-        const strip = card?.parentElement;
-        if (card && strip) strip.scrollTo({ left: card.offsetLeft - strip.offsetLeft, behavior: 'instant' });
-      });
-      await shooter.shoot(page, 'scenes');
-    }
-  }
   if (wanted('verdict')) {
     const tab = page.getByRole('tab', { name: 'Verdict' });
     await tab.click();
     await page.waitForTimeout(600);
+    // The judge's ruling from the tabs down (the audience's split is on the episode screen).
     await tab.evaluate((el, offset) => {
       window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - offset, behavior: 'instant' });
     }, TOP_BAR + 8);
@@ -320,7 +357,7 @@ async function captureDebate(context: BrowserContext, shooter: Shooter, debate: 
     await page.getByRole('tab', { name: 'Transcript' }).click();
   }
   if (wanted('short')) {
-    await page.getByRole('tab', { name: 'Short 9:16' }).click();
+    await page.getByRole('button', { name: 'Short 9:16' }).click();
     await seek(page, shortSceneTime(timeline));
     await scrollTo(page, '.__remotion-player', TOP_BAR);
     await shooter.shoot(page, 'short');
@@ -328,20 +365,12 @@ async function captureDebate(context: BrowserContext, shooter: Shooter, debate: 
   await page.close();
 }
 
-async function capturePublic(context: BrowserContext, shooter: Shooter): Promise<void> {
+async function captureLeaderboard(context: BrowserContext, shooter: Shooter): Promise<void> {
   const page = await context.newPage();
-  if (wanted('gallery')) {
-    await page.goto(`${BASE}/gallery`);
-    await page.getByRole('heading', { name: 'Gallery' }).waitFor();
-    await page.waitForTimeout(800);
-    await shooter.shoot(page, 'gallery');
-  }
-  if (wanted('leaderboard')) {
-    await page.goto(`${BASE}/leaderboard`);
-    await page.getByRole('heading', { name: 'Model ranking' }).waitFor();
-    await page.waitForTimeout(800);
-    await shooter.shoot(page, 'leaderboard');
-  }
+  await page.goto(`${BASE}/leaderboard`);
+  await page.getByRole('heading', { name: 'Model ranking' }).waitFor();
+  await page.waitForTimeout(800);
+  await shooter.shoot(page, 'leaderboard');
   await page.close();
 }
 
@@ -364,15 +393,15 @@ async function captureFrame(browser: Browser, context: BrowserContext, debate: D
 /** The mark of frontend/public/favicon.svg. */
 const MARK = `<svg width="46" height="46" viewBox="0 0 64 64"><rect width="64" height="64" rx="18" fill="#D9FF3D"/><path d="M14 18a6 6 0 0 1 6-6h11a19 19 0 0 1 0 38h-7l-10 8.5V18Z" fill="#0A0B0F"/><g fill="#D9FF3D"><rect x="20.9" y="26" width="5" height="10" rx="2.5"/><rect x="28.5" y="21" width="5" height="20" rx="2.5"/><rect x="36.1" y="24.5" width="5" height="13" rx="2.5"/></g></svg>`;
 
-/** Phones on the hero, left and right of the video frame. */
-const HERO_PHONES = ['verdict', 'short'] as const;
+/** Phones on the hero: the big one in front, then the two smaller ones behind it (left, right). */
+const HERO_PHONES = { main: 'episode', left: 'verdict', right: 'short' } as const;
 
 const inline = (path: string) => `data:image/webp;base64,${readFileSync(path).toString('base64')}`;
 
-/** The README hero (1280×640): the pitch on the left, the video and two phones on the right. */
+/** The README hero (1280×640): the pitch on the left, three phones on the right. */
 function heroHtml(): string {
-  const phone = (name: string, style: string) =>
-    `<img class="phone" src="${inline(screenFile(name))}" alt="" style="${style}">`;
+  const phone = (name: string, left: number, top: number, width: number, main = false) =>
+    `<img class="phone${main ? ' main' : ''}" src="${inline(screenFile(name))}" alt="" style="left:${left}px;top:${top}px;width:${width}px">`;
   const pill = (color: string, label: string) => `<span class="pill"><i style="background:${color}"></i>${label}</span>`;
   return `<!doctype html><html><head><meta charset="utf-8">
   <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=DM+Sans:opsz,wght@9..40,400..700&family=JetBrains+Mono:wght@400;500&display=block" rel="stylesheet">
@@ -383,11 +412,11 @@ function heroHtml(): string {
     .disp{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;letter-spacing:-0.035em}
     .pill{display:flex;align-items:center;gap:9px;height:38px;padding:0 15px;border-radius:999px;background:#12141B;border:1px solid rgba(255,255,255,.09);font-size:15px;font-weight:500;color:#D5D8E2}
     .pill i{width:8px;height:8px;border-radius:50%}
-    .frame{position:absolute;left:668px;top:58px;width:560px;border-radius:18px;border:1px solid rgba(255,255,255,.12);box-shadow:0 40px 90px rgba(0,0,0,.6)}
-    .phone{position:absolute;width:206px;border-radius:32px;border:5px solid #1E212B;box-shadow:0 30px 70px rgba(0,0,0,.65)}
+    .phone{position:absolute;border-radius:30px;border:5px solid #1E212B;box-shadow:0 30px 60px rgba(0,0,0,.6)}
+    .phone.main{border-radius:36px;border:6px solid #2C303C;box-shadow:0 40px 80px rgba(0,0,0,.7)}
   </style></head><body><div class="hero">
-    <div class="glow" style="left:760px;top:120px;width:420px;height:300px;background:#6C9CFF;opacity:.18"></div>
-    <div class="glow" style="left:980px;top:300px;width:360px;height:300px;background:#FF7A66;opacity:.14"></div>
+    <div class="glow" style="left:720px;top:110px;width:300px;height:320px;background:#6C9CFF;opacity:.2"></div>
+    <div class="glow" style="left:960px;top:150px;width:300px;height:320px;background:#FF7A66;opacity:.16"></div>
     <div class="glow" style="left:-120px;top:380px;width:420px;height:320px;background:#D9FF3D;opacity:.08"></div>
     <div style="position:absolute;left:72px;top:0;height:640px;width:560px;display:flex;flex-direction:column;justify-content:center;gap:24px">
       <div style="display:flex;align-items:center;gap:14px">${MARK}<span class="disp" style="font-size:31px;font-weight:700;letter-spacing:-0.025em">Debatr</span></div>
@@ -397,27 +426,29 @@ function heroHtml(): string {
       <div style="display:flex;gap:24px;font-family:'JetBrains Mono',monospace;font-size:13px;color:#8B90A0;letter-spacing:.08em">
         <span>OPEN SOURCE</span><span>SELF-HOST</span><span>CLI + MCP</span><span>MIT</span></div>
     </div>
-    <img class="frame" src="${inline(join(assets, 'frame.webp'))}" alt="">
-    ${phone(HERO_PHONES[0], 'left:636px;top:262px')}
-    ${phone(HERO_PHONES[1], 'left:1040px;top:226px')}
+    ${phone(HERO_PHONES.left, 706, 118, 226)}${phone(HERO_PHONES.right, 1032, 118, 226)}${phone(HERO_PHONES.main, 846, 56, 265, true)}
   </div></body></html>`;
 }
 
-async function captureHero(browser: Browser, encoder: Page): Promise<void> {
-  const html = heroHtml();
-  for (const scale of [2, 1]) {
-    const page = await browser.newPage({ viewport: { width: 1280, height: 640 }, deviceScaleFactor: scale });
-    await page.setContent(html, { waitUntil: 'networkidle' });
-    await settle(page, 300);
-    if (scale === 2) {
-      const png = await page.screenshot({ type: 'png' });
-      save(join(assets, 'hero.webp'), await encode(encoder, png, 'image/webp', 0.92));
-    } else {
-      // GitHub's social preview and the site's og:image: JPEG, 1280×640, under 1 MB.
-      save(join(assets, 'social-preview.jpg'), await page.screenshot({ type: 'jpeg', quality: 90 }));
-    }
-    await page.close();
+/** GitHub takes social previews up to 1 MB. */
+const SOCIAL_PREVIEW_MAX = 1024 * 1024;
+
+/**
+ * One image for the README and GitHub's social preview (Settings → Social preview takes no
+ * WebP): a 2560×1280 JPEG, its quality lowered until it fits in 1 MB.
+ */
+async function captureHero(browser: Browser): Promise<void> {
+  const page = await browser.newPage({ viewport: { width: 1280, height: 640 }, deviceScaleFactor: 2 });
+  await page.setContent(heroHtml(), { waitUntil: 'networkidle' });
+  await settle(page, 300);
+  let jpeg: Buffer = Buffer.alloc(0);
+  for (const quality of [92, 88, 84, 80, 75]) {
+    jpeg = await page.screenshot({ type: 'jpeg', quality });
+    if (jpeg.length <= SOCIAL_PREVIEW_MAX) break;
   }
+  if (jpeg.length > SOCIAL_PREVIEW_MAX) console.warn('! hero.jpg is over 1 MB: too big for the social preview');
+  save(join(assets, 'hero.jpg'), jpeg);
+  await page.close();
 }
 
 // --- Main --------------------------------------------------------------------------------
@@ -439,20 +470,20 @@ try {
       locale: 'en-US',
     });
     await signIn(context);
+    await showcase(context);
     const { debate, timeline } = await pickDebate(context);
     const shooter = new Shooter(encoder);
 
     await captureWizard(context, shooter, debate);
-    if (wanted('live')) await captureLive(context, shooter, debate);
     await captureDebate(context, shooter, debate, timeline);
-    await capturePublic(context, shooter);
+    if (wanted('leaderboard')) await captureLeaderboard(context, shooter);
     if (wanted('frame')) {
       const frame = await captureFrame(browser, context, debate, timeline);
       save(join(assets, 'frame.webp'), await encode(encoder, frame, 'image/webp', 0.9));
     }
   }
   // Composed from the files on disk, so ONLY=hero redraws it without shooting again.
-  if (wanted('hero')) await captureHero(browser, encoder);
+  if (wanted('hero')) await captureHero(browser);
 } finally {
   await browser.close();
 }

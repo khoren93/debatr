@@ -374,7 +374,7 @@ async def start_draft(
         raise HTTPException(status_code=409, detail=f"Debate is already {debate.status}")
     stored = dict(debate.config_json or {})
     stored.pop("billing", None)
-    config = DebateConfig.model_validate(stored)
+    config = DebateConfig.stored(stored)
     provider_key, own_key = _resolve_provider_key(user, body.user_provider_key if body else None)
     tts_key = _tts_key(config, body.user_tts_key if body else None)
     est = await _estimate(
@@ -414,7 +414,7 @@ async def _resume_plan(
         raise HTTPException(status_code=409, detail="Wait for the audio build to finish")
     stored = dict(debate.config_json or {})
     billing = stored.pop("billing", None) or {}
-    config = DebateConfig.model_validate(stored)
+    config = DebateConfig.stored(stored)
     provider_key, own_key = _resolve_provider_key(user, body.user_provider_key if body else None)
     if billing.get("own_key") and not own_key:
         # Its turns so far were not charged; the system key would bill the whole debate.

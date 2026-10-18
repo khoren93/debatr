@@ -167,6 +167,11 @@ def test_parse_topics_grounds_normalises_and_drops() -> None:
             {"label": "Bad", "question": "Should porn sites verify ages?", "sources": [1]},
             {"label": "Again", "question": "Should the EU delay its AI rules?", "sources": [2]},
             {"label": "Short", "question": "Why?", "sources": [1]},
+            {
+                "label": "Long",
+                "question": "Should " + "very " * 40 + "long questions pass?",
+                "sources": [1],
+            },
         ]
     )
     topics, dropped = parse_topics(text, pool)
@@ -180,6 +185,7 @@ def test_parse_topics_grounds_normalises_and_drops() -> None:
         "no source headline",
         "blocked term: porn",
         "duplicate",
+        "question too long",
     ]
 
 

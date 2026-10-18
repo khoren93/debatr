@@ -68,7 +68,7 @@ export const PremiumVoicesBadge = () => (
 );
 
 /** Likes · views · length row of a public card (icons instead of words). */
-export const CardStats = ({ likes, views, durationMs }: { likes: number; views: number; durationMs: number | null | undefined }) => (
+export const CardStats = ({ likes, views, durationMs }: { likes: number; views: number; durationMs?: number | null }) => (
   <span className="inline-flex items-center gap-2.5">
     <span className="inline-flex items-center gap-1" title={`${likes} likes`}>
       <Heart className="size-3" /> {formatCount(likes)}

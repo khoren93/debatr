@@ -9,7 +9,8 @@ import { absoluteMediaBase, debateFilesBase } from '../api/media';
 import { ACTIVE_STATUSES, type Audience, type DebateDetail, type Turn } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { Page } from '../components/layout/AppShell';
-import { Button, ConfirmDialog, EmptyState, ErrorBox, LinkButton, PageLoader, Pill, Segmented, useToast } from '../components/ui';
+import { Button, ConfirmDialog, EmptyState, ErrorBox, LinkButton, PageLoader, Pill, useToast } from '../components/ui';
+import { CardStats } from '../components/cards';
 import { AudienceVote } from '../components/debate/AudienceVote';
 import { DebateActions } from '../components/debate/DebateActions';
 import { DebatePlayer, PlayerPlaceholder, SegmentBar, type BarSegment } from '../components/debate/DebatePlayer';
@@ -25,7 +26,7 @@ import { useDebateMedia } from '../hooks/useDebateMedia';
 import { useDebateStream } from '../hooks/useDebateStream';
 import { checkElevenLabsKey } from '../hooks/useElevenLabsKeyStatus';
 import { getLocalKey } from '../lib/localKeys';
-import { STAGE_COLORS, STAGE_LABELS, formatCount, formatDateShort, formatDuration, roundLabel, shortModelName, stageOf } from '../lib/format';
+import { STAGE_COLORS, STAGE_LABELS, formatAgo, formatDate, roundLabel, shortModelName, stageOf } from '../lib/format';
 import { msToFrame } from '../video/utils';
 
 interface Props {
@@ -320,7 +321,6 @@ const DebateView = ({ id, slug }: Props) => {
   const voicing = media?.media_status === 'queued' || media?.media_status === 'running';
   const mediaBase = media?.urls ? absoluteMediaBase(media.urls.base) : '';
   const verdictTurn = debate.turns.find(isJudgeTurn) ?? null;
-  const durationMs = timeline?.total_ms ?? debate.duration_ms;
   const lastStatus = debate.turns.at(-1)?.visuals?.status;
   const studio = !streaming && (lastStatus === 'designing' || lastStatus === 'checking') ? lastStatus : null;
   const backTo = slug || !isOwner ? { to: '/gallery', label: 'Gallery' } : { to: '/library', label: 'Library' };
@@ -355,37 +355,55 @@ const DebateView = ({ id, slug }: Props) => {
     </>
   );
 
+  // With the video ready its poster shows the question and the debaters, so the header keeps only
+  // the meta line (the question stays the page's heading for screen readers).
+  const posterHeader = !isActive && (media?.media_status ?? debate.media_status) === 'ready';
+  const backLink = (
+    <Link to={backTo.to} className="inline-flex w-max items-center gap-2 text-[13px] font-medium text-muted hover:text-text">
+      <ArrowLeft className="size-4" /> {backTo.label}
+    </Link>
+  );
+  const meta = (
+    <div className="flex flex-wrap items-center gap-x-3.5 gap-y-1.5 text-xs text-muted">
+      {/* A finished debate needs no status: that is what the gallery shows. */}
+      {stage !== 'completed' && (
+        <span className="inline-flex items-center gap-1.5 font-mono" style={{ color: STAGE_COLORS[stage] }}>
+          <span className={`size-1.5 rounded-full ${stage === 'live' || stage === 'rendering' ? 'animate-pulse-dot' : ''}`} style={{ background: STAGE_COLORS[stage] }} />
+          {STAGE_LABELS[stage]}
+        </span>
+      )}
+      <span title={formatDate(debate.created_at)}>{formatAgo(debate.created_at)}</span>
+      {debate.is_public && <CardStats likes={debate.engagement.likes} views={debate.views} />}
+      {debate.author_name && !isOwner && <span>by {debate.author_name}</span>}
+      {isOwner && debate.moderation?.status === 'flagged' && !debate.is_public && (
+        <span className="inline-flex items-center gap-1 text-host">
+          <ShieldAlert className="size-3" /> in review
+        </span>
+      )}
+    </div>
+  );
+
   return (
     <Page>
       <div className="mx-auto grid w-full max-w-[1180px] gap-[22px]">
-        <Link to={backTo.to} className="inline-flex w-max items-center gap-2 text-[13px] font-medium text-muted hover:text-text">
-          <ArrowLeft className="size-4" /> {backTo.label}
-        </Link>
-
-        <header className="min-w-0">
-          <h1 className="font-display text-[clamp(28px,3.4vw,46px)] font-extrabold leading-[1.02] tracking-[-0.035em] text-balance">{topic}</h1>
-          <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2.5">
-            {debaters.length > 0 && <DebaterChips debaters={debaters} />}
-            <div className="flex flex-wrap items-center gap-x-3.5 gap-y-1.5 font-mono text-xs text-muted">
-              <span className="inline-flex items-center gap-1.5" style={{ color: STAGE_COLORS[stage] }}>
-                <span className={`size-1.5 rounded-full ${stage === 'live' || stage === 'rendering' ? 'animate-pulse-dot' : ''}`} style={{ background: STAGE_COLORS[stage] }} />
-                {STAGE_LABELS[stage]}
-              </span>
-              <span>{formatDateShort(debate.created_at)}</span>
-              {durationMs ? <span>{formatDuration(durationMs)}</span> : null}
-              <span>
-                {debate.turns.length} {debate.turns.length === 1 ? 'turn' : 'turns'}
-              </span>
-              {debate.is_public && <span>{formatCount(debate.views)} {debate.views === 1 ? "view" : "views"}</span>}
-              {debate.author_name && !isOwner && <span>by {debate.author_name}</span>}
-              {isOwner && debate.moderation?.status === 'flagged' && !debate.is_public && (
-                <span className="inline-flex items-center gap-1 text-host">
-                  <ShieldAlert className="size-3" /> in review
-                </span>
-              )}
-            </div>
-          </div>
-        </header>
+        {posterHeader ? (
+          <header className="flex min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-2">
+            <h1 className="sr-only">{topic}</h1>
+            {backLink}
+            {meta}
+          </header>
+        ) : (
+          <>
+            {backLink}
+            <header className="min-w-0">
+              <h1 className="font-display text-[clamp(28px,3.4vw,46px)] font-extrabold leading-[1.02] tracking-[-0.035em] text-balance">{topic}</h1>
+              <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2.5">
+                {debaters.length > 0 && <DebaterChips debaters={debaters} />}
+                {meta}
+              </div>
+            </header>
+          </>
+        )}
 
         {debate.status === 'error' && (
           <ErrorBox className="flex flex-wrap items-center gap-x-4 gap-y-2">
@@ -407,18 +425,7 @@ const DebateView = ({ id, slug }: Props) => {
         )}
 
         <div className="grid min-w-0 gap-3">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            {playable ? (
-              <Segmented
-                className="!border-white/6 !bg-surface"
-                options={[
-                  { value: 'long' as const, label: 'YouTube 16:9' },
-                  { value: 'short' as const, label: 'Short 9:16' },
-                ]}
-                value={format}
-                onChange={changeFormat}
-              />
-            ) : null}
+          <div className="flex flex-wrap items-center gap-3 sm:justify-end">
             <DebateActions
               debate={debate}
               timeline={timeline}
@@ -428,6 +435,8 @@ const DebateView = ({ id, slug }: Props) => {
               railOpen={railOpen}
               canExport={canExport}
               onToggleRail={() => setRailOpen((v) => !v)}
+              format={playable ? format : undefined}
+              onFormat={changeFormat}
               onLikes={updateLikes}
               onPatch={(patch) => setDebate((d) => (d ? { ...d, ...patch } : d))}
               onGenerate={openRegenerate}

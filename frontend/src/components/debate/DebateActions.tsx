@@ -1,11 +1,11 @@
-import { Captions, Copy, Ellipsis, FileText, PanelRight, Repeat2, Share, Sparkles, Square, Trash2 } from 'lucide-react';
+import { Captions, Copy, Ellipsis, FileText, PanelRight, RectangleHorizontal, RectangleVertical, Repeat2, Share, Sparkles, Square, Trash2 } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import type { Timeline } from '../../api/timeline';
 import type { DebateDetail } from '../../api/types';
 import { formatCost, formatTokens } from '../../lib/format';
 import { useToast } from '../ui';
-import { debateMarkdown, downloadText, timelineSrt, transcriptText } from './helpers';
+import { debateMarkdown, downloadText, timelineSrt, transcriptText, type VideoFormat } from './helpers';
 import { LikeButton } from './LikeButton';
 import { SharePopover } from './SharePopover';
 import { ICON_ON_PHONES, TOOL_BUTTON } from './toolButton';
@@ -21,6 +21,9 @@ interface Props {
   /** Export panel has something to show (renders or the owner's tools). */
   canExport: boolean;
   onToggleRail: () => void;
+  /** Player format switch (16:9 episode / 9:16 Short), shown while a video plays. */
+  format?: VideoFormat;
+  onFormat?: (format: VideoFormat) => void;
   onLikes: (likes: number, liked: boolean) => void;
   onPatch: (patch: Partial<DebateDetail>) => void;
   onGenerate: () => void;
@@ -37,8 +40,13 @@ const MenuItem = ({ icon, children, onClick, danger = false }: { icon: ReactNode
   </button>
 );
 
-/** Toolbar over the player: like, share, remix, export panel and the "more" menu. */
-export const DebateActions = ({ debate, timeline, isActive, completed, voicing, railOpen, canExport, onToggleRail, onLikes, onPatch, onGenerate, onStop, onDelete }: Props) => {
+const FORMATS = [
+  { value: 'long', label: 'YouTube 16:9', Icon: RectangleHorizontal },
+  { value: 'short', label: 'Short 9:16', Icon: RectangleVertical },
+] as const;
+
+/** Toolbar over the player: video format, like, share, remix, export panel and the "more" menu. */
+export const DebateActions = ({ debate, timeline, isActive, completed, voicing, railOpen, canExport, onToggleRail, format, onFormat, onLikes, onPatch, onGenerate, onStop, onDelete }: Props) => {
   const toast = useToast();
   const [open, setOpen] = useState<'share' | 'menu' | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -85,7 +93,25 @@ export const DebateActions = ({ debate, timeline, isActive, completed, voicing, 
 
   return (
     <div ref={rootRef} className="relative flex flex-wrap gap-2">
-      {debate.is_public && <LikeButton debate={debate} onChange={onLikes} />}
+      {format && onFormat && (
+        <div role="group" aria-label="Video format" className="inline-flex h-10 shrink-0 items-center gap-0.5 rounded-[11px] border border-white/10 bg-surface p-[3px]">
+          {FORMATS.map(({ value, label, Icon }) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => onFormat(value)}
+              aria-pressed={format === value}
+              aria-label={label}
+              title={label}
+              className={`grid h-full w-[34px] place-items-center rounded-[8px] transition-colors cursor-pointer ${format === value ? 'bg-surface-3 text-accent' : 'text-muted hover:text-text'}`}
+            >
+              <Icon className="size-4" />
+            </button>
+          ))}
+        </div>
+      )}
+      {/* Owners cannot like their own debate; its count is in the page's meta line. */}
+      {debate.is_public && !owner && <LikeButton debate={debate} onChange={onLikes} />}
       {owner && isActive && (
         <button type="button" onClick={onStop} className={`${TOOL_BUTTON} text-con`}>
           <Square className="size-3.5 fill-current" /> Stop

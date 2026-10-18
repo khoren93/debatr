@@ -572,7 +572,10 @@ def run(
     ctx: typer.Context,
     topic: Annotated[
         str | None,
-        typer.Argument(help='The question, e.g. "Should cities ban cars?"', show_default=False),
+        typer.Argument(
+            help='The question, e.g. "Should cities ban cars?" (at most 150 characters)',
+            show_default=False,
+        ),
     ] = None,
     debater: Annotated[
         list[str] | None,

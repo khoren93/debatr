@@ -14,6 +14,7 @@ from app.core.db import get_db
 from app.core.redis import get_async_redis, trending_queued_key
 from app.models.models import TrendingBatch, TrendingTopic, utcnow
 from app.schemas.schemas import (
+    TOPIC_MAX_LENGTH,
     TrendingCategory,
     TrendingSource,
     TrendingTopicOut,
@@ -42,10 +43,10 @@ async def _refresh_if_stale(latest: datetime | None) -> None:
         logger.warning("Could not enqueue the trending refresh", exc_info=True)
 
 
-def _topic_out(topic: TrendingTopic) -> TrendingTopicOut:
+def _topic_out(topic: TrendingTopic, rank: int) -> TrendingTopicOut:
     return TrendingTopicOut(
         id=str(topic.id),
-        rank=topic.rank,
+        rank=rank,
         label=topic.label,
         question=topic.question,
         brief=topic.brief,
@@ -58,7 +59,8 @@ def _topic_out(topic: TrendingTopic) -> TrendingTopicOut:
 
 @router.get("/trending", response_model=TrendingTopicsOut)
 async def trending_topics(db: AsyncSession = Depends(get_db)) -> TrendingTopicsOut:
-    """Topics of the newest batch, hottest first (hidden ones left out)."""
+    """Topics of the newest batch, hottest first (hidden ones left out, and questions too long
+    for a debate topic: batches built before the limit had them)."""
     batch = (
         await db.execute(select(TrendingBatch).order_by(TrendingBatch.created_at.desc()).limit(1))
     ).scalar_one_or_none()
@@ -76,9 +78,10 @@ async def trending_topics(db: AsyncSession = Depends(get_db)) -> TrendingTopicsO
             .scalars()
             .all()
         )
+        topics = [t for t in topics if len(t.question) <= TOPIC_MAX_LENGTH]
     counts = Counter(t.category for t in topics)
     return TrendingTopicsOut(
         updated_at=batch.created_at if batch else None,
-        topics=[_topic_out(t) for t in topics],
+        topics=[_topic_out(t, rank) for rank, t in enumerate(topics, start=1)],
         categories=[TrendingCategory(id=c, count=counts[c]) for c in TOPIC_CATEGORIES],
     )

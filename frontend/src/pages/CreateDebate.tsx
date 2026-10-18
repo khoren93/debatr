@@ -38,7 +38,7 @@ import { formatCost, formatMinutes } from '../lib/format';
 
 /**
  * Three-step wizard: topic (trending news or your own, format) → speakers (models, voices,
- * personas; named after their models) → format & launch (outputs, scenes, estimate, start).
+ * personas; named after their models) → review (outputs, scenes, estimate, start).
  * `?draft=<id>` edits a saved draft, `?remix=<id>` starts a new debate prefilled from an existing one.
  */
 const CreateDebate = () => {
