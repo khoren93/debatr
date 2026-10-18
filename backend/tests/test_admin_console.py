@@ -459,6 +459,49 @@ async def test_sign_in_with_a_code_then_sudo(redis: FakeRedis) -> None:
     assert len(fresh.recovery_codes) == 10
 
 
+async def test_skip_2fa_signs_in_with_the_password_alone(
+    redis: FakeRedis, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(settings, "ADMIN_SKIP_2FA", True)
+    user = _user()  # never enrolled
+    db = FakeDB(user)
+    db.lookup = user
+    response = Response()
+    out = await routes_auth.login(
+        AdminLoginRequest(email=user.email, password=PASSWORD),
+        _request(),
+        response,
+        db,  # type: ignore[arg-type]
+    )
+    token = _cookie(response, "debatr_admin")
+    assert out.next == "done" and out.me is not None and not out.me.two_factor and token
+    ctx = await resolve_admin(_request("GET", cookies={"debatr_admin": token}), db)  # type: ignore[arg-type]
+    assert isinstance(ctx, AdminContext) and await require_sudo(ctx) is ctx
+    (row,) = [r for r in db.added if isinstance(r, AdminAuditLog)]
+    assert row.action == "auth.signed_in" and row.after_json is not None
+
+
+async def test_skip_2fa_is_ignored_in_production(
+    redis: FakeRedis, production: pytest.MonkeyPatch
+) -> None:
+    production.setattr(settings, "ADMIN_SKIP_2FA", True)
+    assert not settings.admin_skip_2fa
+    user = _user()
+    db = FakeDB(user)
+    db.lookup = user
+    out = await routes_auth.login(
+        AdminLoginRequest(email=user.email, password=PASSWORD),
+        _request(),
+        Response(),
+        db,  # type: ignore[arg-type]
+    )
+    assert out.next == "enroll" and out.me is None
+    session = AdminSession(
+        user_id=str(user.id), csrf="c", created_at=0, last_seen_at=0, ip="", user_agent="", epoch=0
+    )
+    assert not account_allows_console(user, session)
+
+
 async def test_recovery_code_signs_in_once(redis: FakeRedis) -> None:
     plain, hashes = totp.new_recovery_codes()
     user = _enrolled(totp.new_secret(), recovery_codes_json=hashes)

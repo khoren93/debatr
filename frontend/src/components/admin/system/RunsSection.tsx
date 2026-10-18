@@ -24,7 +24,7 @@ export const RunsSection = () => {
       key: 'debate',
       header: 'Run',
       cell: (r) => (
-        <span className="flex min-w-0 max-w-[340px] flex-col">
+        <span className="flex min-w-0 max-w-[340px] 2xl:max-w-[520px] flex-col">
           <Link to={`/admin/debates/${r.debate_id}`} className="truncate font-semibold text-text-2 hover:text-text hover:underline">
             {r.title}
           </Link>

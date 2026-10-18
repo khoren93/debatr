@@ -5,7 +5,9 @@ import { Page } from '../../components/layout/AppShell';
 import { LinkButton } from '../../components/ui';
 import AdminDebate from './AdminDebate';
 import AdminDebates from './AdminDebates';
+import AdminFinance from './AdminFinance';
 import AdminLogin from './AdminLogin';
+import AdminModels from './AdminModels';
 import AdminModeration from './AdminModeration';
 import AdminOverview from './AdminOverview';
 import AdminSecurity from './AdminSecurity';
@@ -45,6 +47,8 @@ const AdminApp = () => (
         <Route path="debates/:id" element={<AdminDebate />} />
         <Route path="moderation" element={<AdminModeration />} />
         <Route path="trending" element={<AdminTrending />} />
+        <Route path="finance" element={<AdminFinance />} />
+        <Route path="models" element={<AdminModels />} />
         <Route path="system" element={<AdminSystem />} />
         <Route path="security" element={<AdminSecurity />} />
         <Route path="*" element={<AdminNotFound />} />

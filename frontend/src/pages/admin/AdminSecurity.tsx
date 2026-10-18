@@ -120,17 +120,27 @@ const AdminSecurity = () => {
           </ul>
         </Card>
 
-        <Card>
-          <SectionLabel>Recovery codes</SectionLabel>
-          <div className="mt-2 font-display text-2xl font-bold">{me.recovery_codes_left} left</div>
-          <p className="mt-2 text-sm leading-relaxed text-muted">
-            New codes replace all the old ones. Lost the phone and the codes? On the server:{' '}
-            <code className="font-mono text-xs text-text-2">python -m app.manage admin reset-2fa {me.user.email}</code>
-          </p>
-          <Button variant="secondary" size="sm" className="mt-4" icon={<RefreshCw className="size-4" />} loading={busy && !revoking && !everywhere} onClick={newCodes}>
-            Make new codes
-          </Button>
-        </Card>
+        {me.two_factor ? (
+          <Card>
+            <SectionLabel>Recovery codes</SectionLabel>
+            <div className="mt-2 font-display text-2xl font-bold">{me.recovery_codes_left} left</div>
+            <p className="mt-2 text-sm leading-relaxed text-muted">
+              New codes replace all the old ones. Lost the phone and the codes? On the server:{' '}
+              <code className="font-mono text-xs text-text-2">python -m app.manage admin reset-2fa {me.user.email}</code>
+            </p>
+            <Button variant="secondary" size="sm" className="mt-4" icon={<RefreshCw className="size-4" />} loading={busy && !revoking && !everywhere} onClick={newCodes}>
+              Make new codes
+            </Button>
+          </Card>
+        ) : (
+          <Card>
+            <SectionLabel>Two-factor</SectionLabel>
+            <div className="mt-2 font-display text-2xl font-bold">Off on this server</div>
+            <p className="mt-2 text-sm leading-relaxed text-muted">
+              <code className="font-mono text-xs text-text-2">ADMIN_SKIP_2FA</code> lets the console in with the password alone and skips confirmation codes. Production ignores it.
+            </p>
+          </Card>
+        )}
       </div>
 
       <ConfirmDialog

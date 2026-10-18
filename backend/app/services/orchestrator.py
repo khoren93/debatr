@@ -38,6 +38,7 @@ from app.services.events import publish_event
 from app.services.free_quota import is_free_model, wait_for_slot
 from app.services.free_router import (
     FREE_ROUTER_ID,
+    fallback_models,
     is_classifier,
     is_free_router,
     participant_row,
@@ -146,10 +147,13 @@ def _history(db: Session, debate_id: uuid.UUID) -> list[dict[str, Any]]:
 
 
 def _compute_totals(db: Session, debate: Debate) -> dict[str, Any]:
-    """Token/cost totals over all turns plus the (cheap) verdict analysis call."""
+    """Token/cost totals over all turns plus the fact-checks (`analysis_cost`): what the owner is
+    charged for. `service_cost` (verdict structuring, the gallery check) is kept apart: those
+    calls serve the site, not the user, so a debate on free models stays free."""
     turns = db.scalars(select(Turn).where(Turn.debate_id == debate.id)).all()
     previous = debate.totals_json or {}
     analysis_cost = float(previous.get("analysis_cost") or 0.0)
+    service_cost = float(previous.get("service_cost") or 0.0)
     # Turns a resume dropped (services/resume) were paid for as well.
     discarded_cost = float(previous.get("discarded_cost") or 0.0)
     totals: dict[str, Any] = {
@@ -161,6 +165,8 @@ def _compute_totals(db: Session, debate: Debate) -> dict[str, Any]:
     }
     if discarded_cost:
         totals["discarded_cost"] = discarded_cost
+    if service_cost:
+        totals["service_cost"] = service_cost
     for t in turns:
         usage = t.usage_json or {}
         totals["tokens_in"] += int(usage.get("prompt_tokens") or 0)
@@ -402,6 +408,30 @@ def _ask_router(
     return result
 
 
+def _answer_without_router(
+    debate_id: str,
+    generate: Callable[[str], GenerationResult],
+    deadline: float,
+    failed: GenerationResult,
+) -> GenerationResult:
+    """The router picked a classifier on every try: a free model that argued well lately
+    answers instead (`free_router.fallback_models`); the router's failure stands if none can."""
+    for candidate in fallback_models(exclude=[failed.model or ""]):
+        if time.monotonic() + 10 > deadline or _stop_requested(debate_id):
+            break
+        logger.warning(
+            "Free Router kept picking %s for debate %s; %s answers instead",
+            failed.model,
+            debate_id,
+            candidate,
+        )
+        result = generate(candidate)
+        if result.text and not result.error:
+            result.model = result.model or candidate
+            return result
+    return failed
+
+
 def _announcing(
     debate_id: str, started: dict[str, Any], run: Callable[[str], GenerationResult]
 ) -> Callable[[str], GenerationResult]:
@@ -448,6 +478,8 @@ def _generate_as(
             result.error,
         )
     result = _ask_router(str(debate.id), generate, deadline)
+    if result.error_kind == "classifier" and not result.text and not result.stopped:
+        result = _answer_without_router(str(debate.id), generate, deadline, result)
     answered = routed_model(result.model)
     if (
         answered
@@ -507,19 +539,21 @@ def _store_verdict(db: Session, debate: Debate, verdict_text: str, api_key: str 
     debate.verdict_json = verdict
     if moderation is not None:
         apply_check(debate, moderation)
-    _add_analysis_cost(debate, usage)
+    _add_service_cost(debate, usage)
     db.commit()
     publish_event(
         str(debate.id), "verdict_ready", {"debate_id": str(debate.id), "verdict": verdict}
     )
 
 
-def _add_analysis_cost(debate: Debate, usage: dict[str, Any] | None) -> None:
+def _add_service_cost(debate: Debate, usage: dict[str, Any] | None) -> None:
+    """Verdict structuring and the gallery check: our cost, never the owner's (`service_cost`
+    stays out of `cost`, which `credits.debate_charge_usd` bills)."""
     cost = float((usage or {}).get("cost") or 0.0)
     if cost:
         totals = debate.totals_json or {}
-        totals_cost = float(totals.get("analysis_cost") or 0.0) + cost
-        debate.totals_json = {**totals, "analysis_cost": totals_cost}
+        totals_cost = round(float(totals.get("service_cost") or 0.0) + cost, 6)
+        debate.totals_json = {**totals, "service_cost": totals_cost}
 
 
 def _ensure_moderated(db: Session, debate: Debate, api_key: str | None) -> None:
@@ -535,7 +569,7 @@ def _ensure_moderated(db: Session, debate: Debate, api_key: str | None) -> None:
             verdict_text=verdict.text if verdict and not verdict.error else "",
         )
         apply_check(debate, result)
-        _add_analysis_cost(debate, usage)
+        _add_service_cost(debate, usage)
         db.commit()
     except Exception:
         logger.exception("Moderation check failed for debate %s", debate.id)

@@ -1,5 +1,5 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { Activity, Database, Flag, Gauge, LogOut, MessagesSquare, Newspaper, ShieldCheck, Users } from 'lucide-react';
+import { Activity, Bot, Database, Flag, Gauge, LogOut, MessagesSquare, Newspaper, ShieldCheck, Users, Wallet } from 'lucide-react';
 import { useAdminAuth } from '../../auth/AdminAuthContext';
 import { Logo } from '../ui';
 import { formatTime } from './helpers';
@@ -11,6 +11,8 @@ const NAV = [
   { to: '/admin/debates', label: 'Debates', icon: MessagesSquare, end: false, permission: 'debates.read' },
   { to: '/admin/moderation', label: 'Moderation', icon: Flag, end: false, permission: 'moderation' },
   { to: '/admin/trending', label: 'Trending', icon: Newspaper, end: false, permission: 'moderation' },
+  { to: '/admin/finance', label: 'Finance', icon: Wallet, end: false, permission: 'money' },
+  { to: '/admin/models', label: 'Models', icon: Bot, end: false, permission: 'debates.read' },
   { to: '/admin/system', label: 'System', icon: Activity, end: false, permission: 'system' },
   { to: '/admin/security', label: 'Security', icon: ShieldCheck, end: false, permission: 'console' },
 ];
@@ -65,6 +67,9 @@ export const AdminShell = () => {
           <div className="mt-2 font-mono text-[10px] uppercase tracking-[0.06em] text-dim">
             {me.user.role} · signed in until {formatTime(me.session.ends_at)}
           </div>
+          <div className="mt-1 font-mono text-[10px] text-dim" title="The commit the server runs">
+            build {me.version}
+          </div>
           <button type="button" onClick={leave} className="mt-3 flex w-full cursor-pointer items-center justify-center gap-2 rounded-[10px] border border-line-2 bg-surface-2 px-3 py-2 text-xs font-semibold hover:bg-surface-3">
             <LogOut className="size-3.5" /> Sign out
           </button>
@@ -95,7 +100,7 @@ export const AdminShell = () => {
             )}
           </nav>
         </header>
-        <div className="mx-auto flex w-full max-w-[1364px] flex-1 flex-col">
+        <div className="mx-auto flex w-full max-w-[1920px] flex-1 flex-col">
           <Outlet />
         </div>
       </main>

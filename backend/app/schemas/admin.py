@@ -25,11 +25,6 @@ class AdminLoginRequest(BaseModel):
         return normalize_email(value)
 
 
-class AdminLoginOut(BaseModel):
-    # What the sign-in page asks for next: the authenticator code, or setting one up.
-    next: Literal["totp", "enroll"]
-
-
 class AdminCodeRequest(BaseModel):
     """A TOTP code, or one of the recovery codes instead."""
 
@@ -72,6 +67,16 @@ class AdminMeOut(BaseModel):
     session: AdminSessionInfo
     recovery_codes_left: int
     permissions: list[str]
+    version: str  # the commit the server runs (APP_VERSION)
+    # False when ADMIN_SKIP_2FA (development) lets the console in with the password alone.
+    two_factor: bool = True
+
+
+class AdminLoginOut(BaseModel):
+    # What the sign-in page asks for next: the authenticator code, setting one up, or nothing
+    # ("done" with ADMIN_SKIP_2FA: signed in, `me` is set).
+    next: Literal["totp", "enroll", "done"]
+    me: AdminMeOut | None = None
 
 
 class AdminSignedInOut(BaseModel):
@@ -891,3 +896,104 @@ class OrphansDeleteOut(BaseModel):
     deleted: int
     bytes: int
     skipped: list[str]  # no longer orphans (or gone)
+
+
+# --- finance and models -----------------------------------------------------------------------
+
+FinancePeriod = Literal["30d", "90d", "12m", "all"]
+ModelsPeriod = Literal["30d", "90d", "all"]
+
+
+class MoneyRow(BaseModel):
+    topups: float
+    bonuses: float
+    refunds: float
+    adjustments_in: float
+    adjustments_out: float
+    charged_models: float
+    charged_voices: float
+    charged_pictures: float
+    charged: float
+    cost_billed: float  # system-key cost of what users pay for
+    cost_unbilled: float  # system-key cost nobody pays us for
+    cost_openrouter: float
+    cost_elevenlabs: float
+    cost: float
+    margin: float  # charged - refunds - cost
+    markup: float | None  # charged / cost_billed
+
+
+class FinancePoint(MoneyRow):
+    t: datetime
+
+
+class TopAccount(BaseModel):
+    user_id: str
+    email: str
+    amount: float
+
+
+class StripeMissing(BaseModel):
+    id: str
+    email: str | None
+    amount: float
+    created: datetime
+
+
+class StripeReconciliation(BaseModel):
+    configured: bool
+    error: str | None = None
+    sessions: int = 0  # paid checkout sessions in the period
+    paid_total: float = 0.0
+    credited: int = 0  # top-up rows from Stripe in the period
+    credited_total: float = 0.0
+    missing: list[StripeMissing] = Field(default_factory=list)  # paid, never credited
+    unmatched: list[str] = Field(default_factory=list)  # credited, no paid session listed
+
+
+class FinanceOut(BaseModel):
+    period: FinancePeriod
+    bucket: Literal["day", "week", "month"]
+    start: datetime
+    end: datetime
+    totals: MoneyRow
+    series: list[FinancePoint]
+    cost_by_purpose: dict[str, float]  # system keys
+    cost_tracked_since: datetime | None
+    liabilities: float
+    negative_balances: int
+    negative_total: float
+    top_payers: list[TopAccount]  # by top-ups
+    top_spenders: list[TopAccount]  # by charges
+    stripe: StripeReconciliation
+
+
+class ModelRow(BaseModel):
+    model: str
+    name: str
+    is_free: bool
+    in_catalogue: bool  # still offered by OpenRouter
+    debates: int  # finished debates it argued in
+    tries: int  # turn and verdict calls, retries included
+    failure_rate: float | None
+    errors: dict[str, int]  # error kind -> failed tries
+    own_key_tries: int
+    duration_p50_ms: int | None
+    duration_p90_ms: int | None
+    ttft_p50_ms: int | None
+    ttft_p90_ms: int | None
+    cost_per_turn: float | None  # `money` permission
+    avg_tokens_out: int | None
+    judge_wins: int
+    judge_contests: int
+    audience_wins: int
+    audience_contests: int
+    claims_checked: int
+    claims_verified: int
+    claims_disputed: int
+    router_pins: int  # debates where the Free Router settled on it
+
+
+class ModelsOut(BaseModel):
+    period: ModelsPeriod
+    rows: list[ModelRow]

@@ -6,6 +6,7 @@ disabled, lost their role, have no second factor or bumped their `session_epoch`
 change, 2FA reset, "sign out everywhere"). Unsafe methods also need the session's CSRF token in
 `X-CSRF-Token`, on top of AdminGate's Fetch Metadata and Origin checks. `require_admin(perm)`
 adds the role check and `require_sudo` a TOTP code confirmed within the last few minutes.
+With ADMIN_SKIP_2FA (development only) neither the second factor nor sudo is asked for.
 """
 
 import hmac
@@ -122,7 +123,7 @@ def account_allows_console(user: User | None, session: AdminSession) -> bool:
         user is not None
         and user.is_active
         and user.admin_role in ROLES
-        and user.totp_enabled_at is not None
+        and (user.totp_enabled_at is not None or settings.admin_skip_2fa)
         and user.session_epoch == session.epoch
         and str(user.id) == session.user_id
     )
@@ -211,6 +212,6 @@ def sudo_required() -> HTTPException:
 
 
 async def require_sudo(ctx: AdminContext = Depends(current_admin)) -> AdminContext:
-    if not ctx.session.is_sudo(time.time()):
+    if not settings.admin_skip_2fa and not ctx.session.is_sudo(time.time()):
         raise sudo_required()
     return ctx

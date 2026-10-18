@@ -128,6 +128,8 @@ async def build_overview(
 
 def _with_admin_items(out: OverviewOut, ctx: AdminContext) -> OverviewOut:
     """Items about the signed-in admin (not part of the shared cache)."""
+    if settings.admin_skip_2fa:
+        return out
     left = len(ctx.user.recovery_codes_json or [])
     extra = stats.attention_items(Signals(recovery_codes_left=left))
     return out.model_copy(update={"attention": [*out.attention, *extra]}) if extra else out

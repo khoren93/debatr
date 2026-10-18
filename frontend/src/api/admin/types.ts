@@ -25,10 +25,16 @@ export interface AdminMe {
   session: AdminSessionInfo;
   recovery_codes_left: number;
   permissions: string[];
+  /** The commit the server runs ("dev" locally without a build-arg). */
+  version: string;
+  /** False when ADMIN_SKIP_2FA (development) lets the console in with the password alone. */
+  two_factor: boolean;
 }
 
 export interface AdminLoginOut {
-  next: 'totp' | 'enroll';
+  /** "done" with ADMIN_SKIP_2FA: already signed in, `me` is set. */
+  next: 'totp' | 'enroll' | 'done';
+  me?: AdminMe | null;
 }
 
 export interface EnrollStartOut {
@@ -706,4 +712,94 @@ export interface HealthOut {
   };
   backup: { at?: string; file?: string; bytes?: number; remote?: string } | null;
   config: { name: string; value: string }[];
+}
+
+// --- finance and models (routes_finance.py) ----------------------------------------------------
+
+export type FinancePeriod = '30d' | '90d' | '12m' | 'all';
+export type ModelsPeriod = '30d' | '90d' | 'all';
+
+export interface MoneyRow {
+  topups: number;
+  bonuses: number;
+  refunds: number;
+  adjustments_in: number;
+  adjustments_out: number;
+  charged_models: number;
+  charged_voices: number;
+  charged_pictures: number;
+  charged: number;
+  /** System-key cost of what users pay for. */
+  cost_billed: number;
+  /** System-key cost nobody pays us for (director, sketches, checks, trending…). */
+  cost_unbilled: number;
+  cost_openrouter: number;
+  cost_elevenlabs: number;
+  cost: number;
+  margin: number;
+  markup: number | null;
+}
+
+export interface FinancePoint extends MoneyRow {
+  t: string;
+}
+
+export interface TopAccount {
+  user_id: string;
+  email: string;
+  amount: number;
+}
+
+export interface StripeReconciliation {
+  configured: boolean;
+  error?: string | null;
+  sessions: number;
+  paid_total: number;
+  credited: number;
+  credited_total: number;
+  missing: { id: string; email: string | null; amount: number; created: string }[];
+  unmatched: string[];
+}
+
+export interface FinanceOut {
+  period: FinancePeriod;
+  bucket: 'day' | 'week' | 'month';
+  start: string;
+  end: string;
+  totals: MoneyRow;
+  series: FinancePoint[];
+  cost_by_purpose: Record<string, number>;
+  cost_tracked_since: string | null;
+  liabilities: number;
+  negative_balances: number;
+  negative_total: number;
+  top_payers: TopAccount[];
+  top_spenders: TopAccount[];
+  stripe: StripeReconciliation;
+}
+
+export interface ModelRow {
+  model: string;
+  name: string;
+  is_free: boolean;
+  in_catalogue: boolean;
+  debates: number;
+  tries: number;
+  failure_rate: number | null;
+  errors: Record<string, number>;
+  own_key_tries: number;
+  duration_p50_ms: number | null;
+  duration_p90_ms: number | null;
+  ttft_p50_ms: number | null;
+  ttft_p90_ms: number | null;
+  cost_per_turn: number | null;
+  avg_tokens_out: number | null;
+  judge_wins: number;
+  judge_contests: number;
+  audience_wins: number;
+  audience_contests: number;
+  claims_checked: number;
+  claims_verified: number;
+  claims_disputed: number;
+  router_pins: number;
 }

@@ -11,12 +11,20 @@ The router also picks models that cannot debate (a content-safety classifier ans
 with "User Safety: safe"). The worker drops such a pick as soon as the stream's first chunk names
 it, before any text reaches the viewers, and asks the router again; an answer too short for a
 turn is asked again too (`orchestrator._ask_router`). Only a real turn pins its model.
+
+The router sometimes picks a classifier for every try of a turn (seen with a content-safety
+model, several debates in a row), which used to stop the debate. Then the turn goes to a free
+model that argued well lately instead (`fallback_models`, from `provider_usage`), and that model
+is pinned like any router pick.
 """
 
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
+from datetime import timedelta
 from typing import Any
 
-from app.models.models import DebateParticipant
+from sqlalchemy import func, select
+
+from app.models.models import DebateParticipant, ProviderUsage, utcnow
 
 FREE_ROUTER_ID = "openrouter/free"  # mirrors FREE_ROUTER_ID in frontend/src/lib/modelNames.ts
 FREE_SUFFIX = ":free"
@@ -80,3 +88,56 @@ def resolved_participants(
         pinned = pinned_model(str(p.get("model_id") or ""), participant_row(rows, i, p.get("role")))
         resolved.append({**p, "model_id": pinned} if pinned else p)
     return resolved
+
+
+# --- fallback models (when the router keeps picking classifiers) -------------------------------
+
+FALLBACK_DAYS = 7
+FALLBACK_LIMIT = 3
+FALLBACK_MIN_ANSWERS = 2
+FALLBACK_MIN_SUCCESS = 0.8
+
+
+def pick_fallbacks(
+    rows: Iterable[tuple[str, int, int]], exclude: Iterable[str] = (), limit: int = FALLBACK_LIMIT
+) -> list[str]:
+    """(model, answered, tries) of recent `:free` turns -> the steadiest debaters, best first:
+    concrete chat models that answered at least FALLBACK_MIN_ANSWERS turns and
+    FALLBACK_MIN_SUCCESS of their tries."""
+    skip = set(exclude)
+    good = [
+        (answered / tries, answered, model)
+        for model, answered, tries in rows
+        if routed_model(model)
+        and not is_classifier(model)
+        and model not in skip
+        and tries > 0
+        and answered >= FALLBACK_MIN_ANSWERS
+        and answered / tries >= FALLBACK_MIN_SUCCESS
+    ]
+    good.sort(key=lambda g: (-g[0], -g[1], g[2]))
+    return [model for _, _, model in good[:limit]]
+
+
+def fallback_models(exclude: Iterable[str] = ()) -> list[str]:
+    """Free models that answered debate turns well in the last FALLBACK_DAYS (never raises)."""
+    from app.core.sync_db import get_sync_session  # worker side only
+
+    try:
+        with get_sync_session() as db:
+            rows = db.execute(
+                select(
+                    ProviderUsage.model,
+                    func.count().filter(ProviderUsage.ok.is_(True)),
+                    func.count(),
+                )
+                .where(
+                    ProviderUsage.purpose == "turn",
+                    ProviderUsage.model.like(f"%{FREE_SUFFIX}"),
+                    ProviderUsage.created_at >= utcnow() - timedelta(days=FALLBACK_DAYS),
+                )
+                .group_by(ProviderUsage.model)
+            ).all()
+    except Exception:  # a broken lookup must not stop the turn any more than it already is
+        return []
+    return pick_fallbacks(((str(m), int(a), int(t)) for m, a, t in rows), exclude)

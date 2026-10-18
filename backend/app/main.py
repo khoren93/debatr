@@ -56,6 +56,11 @@ logger = logging.getLogger(__name__)
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     if not settings.admin_console_enabled:
         logger.error("ADMIN_HOST is not set: the admin console is off (see .env.example)")
+    if settings.ADMIN_SKIP_2FA:
+        if settings.is_production:
+            logger.error("ADMIN_SKIP_2FA is ignored in production: the console asks for 2FA")
+        else:
+            logger.warning("ADMIN_SKIP_2FA: the admin console signs in with the password alone")
     insecure = settings.insecure_defaults()
     if insecure:
         message = f"Placeholder secrets in use: {', '.join(insecure)}"

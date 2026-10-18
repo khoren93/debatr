@@ -181,3 +181,74 @@ def test_router_without_a_row_still_answers():
     models = FakeModels({FREE_ROUTER_ID: _ok("qwen/qwen3:free")})
     _, used = _generate_as(debate, 0, _host(), models)
     assert used == "qwen/qwen3:free"
+
+
+# --- fallback when the router keeps picking classifiers ---------------------------------------
+
+
+def test_pick_fallbacks_prefers_steady_chat_models() -> None:
+    from app.services.free_router import pick_fallbacks
+
+    rows = [
+        ("meta-llama/llama-4-maverick:free", 18, 20),  # 90 %
+        ("deepseek/deepseek-r1:free", 9, 10),  # 90 %, fewer answers
+        ("qwen/qwen3-coder:free", 5, 5),  # 100 %
+        ("nvidia/nemotron-3.5-content-safety:free", 30, 30),  # a classifier
+        ("x-ai/grok-4.2", 40, 40),  # not free
+        ("mistral/flaky:free", 6, 10),  # 60 %: too unreliable
+        ("one/lucky:free", 1, 1),  # too little evidence
+    ]
+    assert pick_fallbacks(rows) == [
+        "qwen/qwen3-coder:free",
+        "meta-llama/llama-4-maverick:free",
+        "deepseek/deepseek-r1:free",
+    ]
+    assert pick_fallbacks(rows, exclude=["qwen/qwen3-coder:free"], limit=1) == [
+        "meta-llama/llama-4-maverick:free"
+    ]
+
+
+def _classifier_pick() -> GenerationResult:
+    return GenerationResult(
+        error="The Free Router picked nvidia/x-content-safety:free, which cannot debate",
+        error_kind="classifier",
+        model="nvidia/x-content-safety:free",
+        retryable=True,
+        rerouted=True,
+    )
+
+
+def test_classifier_picks_hand_the_turn_to_a_proven_free_model(monkeypatch: Any) -> None:
+    from app.services import orchestrator
+
+    monkeypatch.setattr(orchestrator, "_stop_requested", lambda debate_id: False)
+    monkeypatch.setattr(
+        orchestrator, "fallback_models", lambda exclude=(): ["a/broken:free", "b/steady:free"]
+    )
+    row = _row("debater", FREE_ROUTER_ID)
+    debate = _debate([_row("moderator", "openai/gpt-4o"), row])
+    models = FakeModels(
+        {
+            FREE_ROUTER_ID: _classifier_pick(),
+            "a/broken:free": GenerationResult(error="429", error_kind="rate_limited"),
+            "b/steady:free": _ok(None),
+        }
+    )
+    speaker = {"role": "debater", "model_id": FREE_ROUTER_ID, "display_name": "Free Router A"}
+    result, used = _generate_as(debate, 1, speaker, models)
+    assert models.calls == [FREE_ROUTER_ID] * 3 + ["a/broken:free", "b/steady:free"]
+    assert (result.error, used, row.model_id) == (None, "b/steady:free", "b/steady:free")
+
+
+def test_without_fallbacks_the_classifier_failure_stands(monkeypatch: Any) -> None:
+    from app.services import orchestrator
+
+    monkeypatch.setattr(orchestrator, "_stop_requested", lambda debate_id: False)
+    monkeypatch.setattr(orchestrator, "fallback_models", lambda exclude=(): [])
+    debate = _debate([_row("moderator", FREE_ROUTER_ID)])
+    result, used = _generate_as(
+        debate, 0, _host(), FakeModels({FREE_ROUTER_ID: _classifier_pick()})
+    )
+    # As before the fallback: the turn fails, named after the classifier the router picked.
+    assert result.error_kind == "classifier" and used == "nvidia/x-content-safety:free"
+    assert debate.participants[0].model_id == FREE_ROUTER_ID  # nothing pinned

@@ -246,7 +246,7 @@ const LEDGER_COLUMNS: Column<AdminLedgerRow>[] = [
     key: 'title',
     header: 'Description',
     cell: (t) => (
-      <span className="flex min-w-0 max-w-[340px] flex-col">
+      <span className="flex min-w-0 max-w-[340px] 2xl:max-w-[520px] flex-col">
         <span className="truncate text-text-2" title={t.title}>
           {t.title}
         </span>
@@ -299,7 +299,7 @@ export const DebatesPanel = ({ userId, version }: { userId: string; version: num
       key: 'title',
       header: 'Debate',
       cell: (d) => (
-        <span className="flex min-w-0 max-w-[360px] flex-col">
+        <span className="flex min-w-0 max-w-[360px] 2xl:max-w-[540px] flex-col">
           <span className="truncate font-semibold text-text-2" title={d.title}>
             {d.title}
           </span>

@@ -113,6 +113,9 @@ class Settings(BaseSettings):
     ADMIN_ALLOWED_IPS: str = ""
     # Credit adjustments above this need a fresh TOTP code (sudo).
     ADMIN_SUDO_USD: float = 20.0
+    # Development only: the console signs in with the password alone (no authenticator, no
+    # enrollment, no sudo codes). Ignored in production.
+    ADMIN_SKIP_2FA: bool = False
     ALLOWED_ORIGINS: str = "http://localhost,http://localhost:5173,http://localhost:3000"
 
     # Accounts, credits and billing
@@ -187,6 +190,11 @@ class Settings(BaseSettings):
     def admin_console_enabled(self) -> bool:
         """Production serves the console only on its own host."""
         return bool(self.admin_hostname) or not self.is_production
+
+    @property
+    def admin_skip_2fa(self) -> bool:
+        """ADMIN_SKIP_2FA, honoured outside production only."""
+        return self.ADMIN_SKIP_2FA and not self.is_production
 
     @property
     def admin_networks(self) -> list[IPv4Network | IPv6Network]:

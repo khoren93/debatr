@@ -96,7 +96,7 @@ const columns = (withMoney: boolean): Column<AdminDebateRow>[] => [
     key: 'title',
     header: 'Debate',
     cell: (d) => (
-      <span className="flex min-w-0 max-w-[340px] flex-col">
+      <span className="flex min-w-0 max-w-[340px] 2xl:max-w-[520px] flex-col">
         <span className="truncate font-semibold text-text" title={d.title}>
           {d.title}
         </span>

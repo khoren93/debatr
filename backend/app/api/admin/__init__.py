@@ -6,6 +6,7 @@ from app.admin.access import enforce_admin_api_limit
 from app.api.admin import (
     routes_auth,
     routes_debates,
+    routes_finance,
     routes_overview,
     routes_system,
     routes_trending,
@@ -19,3 +20,4 @@ router.include_router(routes_users.router, tags=["admin"])
 router.include_router(routes_debates.router, tags=["admin"])
 router.include_router(routes_trending.router, tags=["admin"])
 router.include_router(routes_system.router, tags=["admin"])
+router.include_router(routes_finance.router, tags=["admin"])

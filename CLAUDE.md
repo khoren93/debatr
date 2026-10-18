@@ -30,7 +30,8 @@ backend/            FastAPI API + RQ worker (Python 3.12+, managed with uv)
                       (list, CSV, card, ledger, debates, account changes), routes_debates (list,
                       card, moderation queue, debate changes), routes_trending (batches, hide /
                       show, build now), routes_system (queues, workers, scheduler, runs, limits,
-                      providers, health); later phases add finance, … (PROGRESS stage A)
+                      providers, health), routes_finance (finance series, CSV, models); later
+                      phases add the audit page, alerts, levers (PROGRESS stage A)
   app/api/            routers: auth, tokens (API tokens + `debatr login` device flow), billing
                       (Stripe), debates, gallery (+ leaderboard), reactions (likes/votes), models,
                       presets, topics (trending), stream (SSE), media; serializers.py builds the
@@ -55,7 +56,8 @@ backend/            FastAPI API + RQ worker (Python 3.12+, managed with uv)
                       stats (overview queries + pure periods / buckets / attention rules),
                       users (list query with SQL totals, pure card statistics, CSV, deletion),
                       debates (debate list / card / moderation queue / trending batches),
-                      system (RQ / cron snapshot, runs in flight, limits, health, media scan)
+                      system (RQ / cron snapshot, runs in flight, limits, health, media scan),
+                      finance (money per day / week / month, Stripe reconciliation, model rows)
   app/services/media/ audio pipeline: script (markdown→speech), tts/ (elevenlabs, edge),
                       ffmpeg, highlights (LLM picks shorts), visuals (LLM visual director),
                       sketch (SVG line art → sanitized path data), images (Commons photos / AI
@@ -124,7 +126,8 @@ frontend/           React 19 + Vite 8 + Tailwind 4 + TypeScript
                       outside AppShell and AuthProvider: AdminLogin, AdminOverview, AdminUsers
                       (filters in the URL), AdminUser (/admin/users/:id), AdminDebates,
                       AdminDebate (/admin/debates/:id), AdminModeration (keyboard queue),
-                      AdminTrending, AdminSystem (#runs #queues #limits #providers #health),
+                      AdminTrending, AdminFinance, AdminModels, AdminSystem (#runs #queues
+                      #limits #providers #health),
                       AdminSecurity; components/admin: AdminShell, SudoDialog,
                       ActionDialog (reason + sudo retry, ⌘↵), DataTable + Pager, FilterBar +
                       filters.ts (URL filters), RecoveryCodes, StatTile, AttentionList; users/ =
@@ -259,7 +262,9 @@ docker compose exec api python -m app.manage credits user@example.com 5 --reason
    `DebateParticipant.model_id` (lineup, gallery filter, leaderboard, video
    via `resolved_participants`); `config_json` keeps the router, so remixes/drafts ask it again
    (`ParticipantOut.router`). A pinned model that fails before writing anything falls back to the
-   router for that turn (free models often 429 upstream). `Turn.model_used` = the model that
+   router for that turn (free models often 429 upstream). When the router picks a classifier on
+   every try of a turn, a `:free` model that argued well in the last week answers instead and is
+   pinned (`free_router.fallback_models`, from `provider_usage`). `Turn.model_used` = the model that
    answered for router turns, the configured id otherwise. Names stay "Free Router A/B" (the
    host introduces them before any debater speaks).
 5. The worker publishes events to Redis channel `debate:{id}`; `GET /api/debates/{id}/stream`
@@ -268,7 +273,9 @@ docker compose exec api python -m app.manage credits user@example.com 5 --reason
    `MEDIA_HIGHLIGHTS_MODEL` (regex fallback) into `debates.verdict_json`
    (`winner_id`, `headline`, `feedback`). At the terminal state `services/credits.py` charges the
    owner (`cost × CREDIT_MARKUP`, skipped with an own key; minus what earlier runs of the debate
-   were charged, so repeats and resumed runs are safe: `charge_due`, refs `…:llm`, `…:llm:2`) and
+   were charged, so repeats and resumed runs are safe: `charge_due`, refs `…:llm`, `…:llm:2`;
+   `totals_json.cost` = turns + fact-checks (`analysis_cost`) + discarded turns, while the verdict
+   structuring and the gallery check go to `service_cost`, which nobody is billed for) and
    `_auto_media` queues the audio build when `config_json.media_plan.outputs` contains `audio`.
 
 SSE events: `connected`, `debate_started`, `turn_started`, `turn_delta`, `turn_completed`,
@@ -609,6 +616,9 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   sign-in the enrollment code + a code from the new authenticator → 10 recovery codes (hashes
   stored). Wrong codes: 5 per ticket, 5 per account in 15 min → locked; a code works once
   (`admin:totp_step`). TOTP secrets: Fernet with a key derived from `SECRET_KEY` + own context.
+  `ADMIN_SKIP_2FA=true` (development only, `settings.admin_skip_2fa` is false in production):
+  the password alone signs in (`next="done"`), no enrollment, `require_sudo` passes,
+  `AdminMeOut.two_factor=false`.
 - Sessions live in Redis (`services/admin/sessions`): `__Host-debatr_admin` cookie (HttpOnly,
   SameSite=Strict; no prefix over plain http), only its SHA-256 stored, idle 30 min, absolute
   12 h, listed and revocable; `resolve_admin` re-checks role, `is_active`, enrollment and
@@ -665,6 +675,17 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   (`money`: up to the net charge, `provider_ref = admin:refund:<debate>:<idempotency_key>`, sudo
   above `ADMIN_SUDO_USD`). `GET /moderation` = flagged debates oldest first + recent decisions;
   the page is keyboard-driven (j/k, a, r, o). Moderators get `debates.read` + `moderation` only.
+- Finance (`/api/admin/finance?period=30d|90d|12m|all`, `money`; CSV via `POST /finance/export`,
+  sudo): ledger sums (top-ups, bonuses, refunds, adjustments, charges by category) against the
+  system-key cost (`provider_usage`, by provider and purpose) per day / week / month; margin =
+  charged − refunds − cost; effective markup = charged ÷ cost of the billed purposes (`turn`,
+  `verdict`, `factcheck`, `image`, `tts`); the rest is "cost nobody pays"; liabilities, top payers
+  and spenders; Stripe checkout sessions of the period reconciled with `stripe:<id>` top-ups when
+  Stripe is configured. Models (`/api/admin/models?period=30d|90d|all`, `debates.read`; cost per
+  turn with `money`): per answering model tries and failures by kind, p50 / p90 of turn time and
+  first word (`percentile_cont`), tokens, judge / audience wins and fact-check accuracy
+  (`ranking.build_leaderboard` over every finished debate), Free Router picks. The console's
+  `/auth/me` carries the server's `version` (shown above "Sign out").
 - Trending (`/api/admin/trending*`): batches with feed / headline / dropped counts and cost, a
   batch's topics, dropped topics and blocked headlines; hide / show a topic (`moderation`);
   build now (`system`).

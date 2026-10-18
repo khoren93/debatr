@@ -149,7 +149,9 @@ def admin_grant(email: str, role: str) -> int:
         record_sync(db, "role.granted", target=user, before={"role": before}, after={"role": role})
         db.commit()
         print(f"{user.email}: role {before or 'none'} -> {role}")
-        if user.totp_enabled_at is None:
+        if settings.admin_skip_2fa:
+            print("ADMIN_SKIP_2FA is on: sign in to the console with the password alone.")
+        elif user.totp_enabled_at is None:
             _print_enrollment_code(user)
         return 0
 

@@ -84,6 +84,10 @@ const AdminLogin = () => {
     void run(async () => {
       try {
         const out = await adminLogin(email.trim(), password);
+        if (out.next === 'done' && out.me) {
+          go(out.me);
+          return;
+        }
         setCode('');
         setStep(out.next === 'totp' ? 'code' : 'enroll-code');
       } catch (err) {

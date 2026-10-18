@@ -60,7 +60,7 @@ const COLUMNS: Column<AdminUserRow>[] = [
     header: 'Account',
     sort: 'email',
     cell: (u) => (
-      <span className="flex min-w-0 max-w-[280px] flex-col">
+      <span className="flex min-w-0 max-w-[280px] 2xl:max-w-[420px] flex-col">
         <span className="flex items-center gap-2">
           <span className="truncate font-semibold text-text">{u.display_name}</span>
           <UserBadges role={u.role} active={u.is_active} />

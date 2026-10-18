@@ -7,6 +7,7 @@
    `python -m app.manage admin grant` (shows the new secret as a QR code), then
    `POST /enroll/confirm` with a code from the app → the session and ten recovery codes.
 Wrong codes count per ticket (5 → password again) and per account (5 in 15 min → locked).
+With ADMIN_SKIP_2FA (development only) `POST /login` signs in at once (`next="done"`).
 Every outcome lands in the audit log.
 """
 
@@ -32,6 +33,7 @@ from app.admin.access import (
     set_cookie,
     ticket_cookie_name,
 )
+from app.core.config import settings
 from app.core.db import get_db
 from app.core.ratelimit import (
     ADMIN_LOGIN_ATTEMPTS,
@@ -111,6 +113,8 @@ def me_out(user: User, session: AdminSession, session_hash: str) -> AdminMeOut:
         ),
         recovery_codes_left=len(user.recovery_codes_json or []),
         permissions=[name for name in PERMISSION_NAMES if can(role, name)],
+        version=settings.APP_VERSION,
+        two_factor=not settings.admin_skip_2fa,
     )
 
 
@@ -169,6 +173,9 @@ async def login(
         )
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=WRONG_LOGIN)
 
+    if settings.admin_skip_2fa:
+        signed_in = await _sign_in(request, response, db, get_async_redis(), user, skipped=True)
+        return AdminLoginOut(next="done", me=signed_in.me)
     ticket = SignInTicket(
         user_id=str(user.id),
         epoch=user.session_epoch,
@@ -250,7 +257,13 @@ def _secret_of(user: User) -> str:
 
 
 async def _sign_in(
-    request: Request, response: Response, db: AsyncSession, redis: AsyncRedis, user: User
+    request: Request,
+    response: Response,
+    db: AsyncSession,
+    redis: AsyncRedis,
+    user: User,
+    *,
+    skipped: bool = False,
 ) -> AdminSignedInOut:
     token, hashed, session = await sessions.create_session(
         redis,
@@ -262,7 +275,8 @@ async def _sign_in(
     )
     set_cookie(response, request, session_cookie_name(request), token, sessions.ABSOLUTE_SECONDS)
     clear_cookie(response, request, ticket_cookie_name(request))
-    await audit.record(db, "auth.signed_in", request=request, actor=user)
+    after = {"second_factor": "skipped (ADMIN_SKIP_2FA)"} if skipped else None
+    await audit.record(db, "auth.signed_in", request=request, actor=user, after=after)
     return AdminSignedInOut(me=me_out(user, session, hashed))
 
 

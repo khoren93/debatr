@@ -105,7 +105,7 @@ export const HealthSection = () => {
       header: 'Folder',
       cell: (d) =>
         d.title ? (
-          <Link to={`/admin/debates/${d.name}`} className="flex min-w-0 max-w-[360px] flex-col hover:underline">
+          <Link to={`/admin/debates/${d.name}`} className="flex min-w-0 max-w-[360px] 2xl:max-w-[540px] flex-col hover:underline">
             <span className="truncate text-text-2">{d.title}</span>
             <span className="font-mono text-[11px] text-muted">{d.name}</span>
           </Link>
