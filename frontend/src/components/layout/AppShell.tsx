@@ -138,7 +138,7 @@ export const AppShell = ({ children }: { children: ReactNode }) => {
     <div className="relative flex min-h-screen bg-ink">
       {/* The sidebar stays pinned to the left edge; only the page content is capped and centred. */}
       {!bare && <Sidebar />}
-      <main className="flex min-w-0 flex-1 flex-col pb-24 md:pb-0">
+      <main className="flex min-w-0 flex-1 flex-col overflow-x-clip pb-24 md:pb-0">
         {!bare && <MobileTopBar />}
         <div className="mx-auto flex w-full max-w-[1364px] flex-1 flex-col">{children}</div>
       </main>
@@ -147,9 +147,9 @@ export const AppShell = ({ children }: { children: ReactNode }) => {
   );
 };
 
-/** Standard page padding from the design. */
-export const Page = ({ children, className = '' }: { children: ReactNode; className?: string }) => (
-  <section className={`w-full px-[clamp(18px,4vw,48px)] pt-[clamp(20px,3.5vw,44px)] pb-24 ${className}`}>
+/** Standard page padding from the design; `fit` leaves little room below (a page meant to fit one screen). */
+export const Page = ({ children, className = '', fit = false }: { children: ReactNode; className?: string; fit?: boolean }) => (
+  <section className={`w-full px-[clamp(18px,4vw,48px)] pt-[clamp(20px,3.5vw,44px)] ${fit ? 'pb-8' : 'pb-24'} ${className}`}>
     {children}
   </section>
 );

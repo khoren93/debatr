@@ -6,10 +6,34 @@ import { debaterNames } from './helpers';
 
 /** Horizontal lean of every seam between two sides, in % of the width (top vs bottom). */
 const LEAN = 3.5;
-/** Logo width in % of the card width by number of sides. */
-const LOGO_CQW: Record<number, number> = { 2: 15.5, 3: 12, 4: 9.5 };
-/** Height of the logo centres, in % of the cover height. */
-const LOGO_Y = 52;
+
+interface CoverLayout {
+  aspect: string;
+  /** Height of the logo centres, in % of the cover height. */
+  logoY: number;
+  /** Logo width in % of the cover width by number of sides. */
+  logo: Record<number, number>;
+  /** VS mark diameter and name size in % of the width: [two sides, three or four]. */
+  vs: [number, number];
+  name: [number, number];
+  /** Smallest name size in px (the poster also runs at phone width). */
+  nameMin?: number;
+  /** Space between a logo and its name, in % of the width. */
+  gap: number;
+  /** Padding of the top-corner overlays. */
+  corners: string;
+  /** Shade at the bottom (the poster's question sits on it). */
+  shade: string;
+  vsClass?: string;
+}
+
+const LAYOUTS = {
+  /** Gallery / library cards. */
+  card: { aspect: 'aspect-[5/2]', logoY: 52, logo: { 2: 15.5, 3: 12, 4: 9.5 }, vs: [8, 6.5], name: [2.8, 2.1], gap: 1.8, corners: 'p-3', shade: 'h-1/3 from-black/45' },
+  /** The long video's first frame (`video/components/FaceOff` in the intro card): logos higher up,
+   *  room for the question below, a pulsing VS mark. */
+  poster: { aspect: 'aspect-video', logoY: 36, logo: { 2: 13, 3: 9.4, 4: 7.3 }, vs: [7.2, 5.6], name: [1.7, 1.4], nameMin: 9, gap: 2.2, corners: 'px-[2.4cqw] py-[2.2cqw]', shade: 'h-3/5 from-ink/90', vsClass: 'motion-safe:animate-vs-pulse' },
+} satisfies Record<string, CoverLayout>;
 
 const sideClip = (i: number, n: number) => {
   const left = (i / n) * 100;
@@ -42,9 +66,13 @@ const BigLogo = ({ modelId, color, size }: { modelId: string; color: string; siz
 
 interface DebateCoverProps {
   participants: Participant[];
+  /** `card` = 5:2 gallery cover, `poster` = 16:9 like the video's first frame. */
+  layout?: keyof typeof LAYOUTS;
   /** Overlays in the top corners (badges). */
   topLeft?: ReactNode;
   topRight?: ReactNode;
+  /** Drawn over everything else (sized in `cqw` of the cover). */
+  children?: ReactNode;
 }
 
 /**
@@ -52,15 +80,17 @@ interface DebateCoverProps {
  * speaker colour, the halves split by slanted seams with a VS mark. Pure markup — nothing to
  * generate, works for old debates, and never gives the winner away (blind voting).
  */
-export const DebateCover = ({ participants, topLeft, topRight }: DebateCoverProps) => {
+export const DebateCover = ({ participants, layout = 'card', topLeft, topRight, children }: DebateCoverProps) => {
+  const look: CoverLayout = LAYOUTS[layout];
   const debaters = participants.filter((p) => p.role !== 'moderator').slice(0, 4);
   const names = debaterNames(participants);
   const sides = debaters.length >= 2 ? debaters : [...debaters, ...Array.from({ length: 2 - debaters.length }, () => null)];
   const n = sides.length;
-  const logo = LOGO_CQW[n] ?? 11;
+  const logo = look.logo[n] ?? look.logo[4];
+  const vs = n > 2 ? look.vs[1] : look.vs[0];
 
   return (
-    <div className="relative aspect-[5/2] overflow-hidden bg-ink" style={{ containerType: 'inline-size' }}>
+    <div className={`relative overflow-hidden bg-ink ${look.aspect}`} style={{ containerType: 'inline-size' }}>
       {sides.map((_, i) => {
         const color = debaterColor(i);
         const cx = ((i + 0.5) / n) * 100;
@@ -70,7 +100,7 @@ export const DebateCover = ({ participants, topLeft, topRight }: DebateCoverProp
             className="absolute inset-0"
             style={{
               clipPath: sideClip(i, n),
-              background: `radial-gradient(circle at ${cx}% ${LOGO_Y}%, ${color}66 0%, ${color}1f 38%, transparent 70%), linear-gradient(180deg, ${color}26, ${color}0d)`,
+              background: `radial-gradient(circle at ${cx}% ${look.logoY}%, ${color}66 0%, ${color}1f 38%, transparent 70%), linear-gradient(180deg, ${color}26, ${color}0d)`,
             }}
           />
         );
@@ -83,15 +113,16 @@ export const DebateCover = ({ participants, topLeft, topRight }: DebateCoverProp
           return <line key={k} x1={x + LEAN} y1={0} x2={x - LEAN} y2={100} stroke="rgba(255,255,255,0.55)" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />;
         })}
       </svg>
-      <div className="absolute inset-x-0 bottom-0 h-1/3 bg-linear-to-t from-black/45 to-transparent" />
+      <div className={`absolute inset-x-0 bottom-0 bg-linear-to-t to-transparent ${look.shade}`} />
 
       {sides.map((p, i) => {
         const color = debaterColor(i);
         const cx = ((i + 0.5) / n) * 100;
+        const name = n > 2 ? look.name[1] : look.name[0];
         return (
-          <div key={i} className="absolute flex -translate-x-1/2 -translate-y-1/2 flex-col items-center" style={{ left: `${cx}%`, top: `${LOGO_Y}%`, width: `${100 / n - 4}%` }}>
+          <div key={i} className="absolute flex -translate-x-1/2 -translate-y-1/2 flex-col items-center" style={{ left: `${cx}%`, top: `${look.logoY}%`, width: `${100 / n - 4}%` }}>
             <span className="transition-transform duration-300 group-hover:scale-[1.06]">{p ? <BigLogo modelId={p.model} color={color} size={logo} /> : <span className="block rounded-full bg-white/10" style={{ width: `${logo}cqw`, height: `${logo}cqw` }} />}</span>
-            <span className="mt-[1.8cqw] max-w-full truncate font-mono font-semibold uppercase" style={{ color, fontSize: `${n > 2 ? 2.1 : 2.8}cqw`, letterSpacing: n > 2 ? '0.03em' : '0.12em' }}>
+            <span className="max-w-full truncate font-mono font-semibold uppercase" style={{ color, marginTop: `${look.gap}cqw`, fontSize: look.nameMin ? `max(${look.nameMin}px, ${name}cqw)` : `${name}cqw`, letterSpacing: n > 2 ? '0.03em' : '0.12em' }}>
               {p ? names[i] : '—'}
             </span>
           </div>
@@ -101,19 +132,20 @@ export const DebateCover = ({ participants, topLeft, topRight }: DebateCoverProp
       {sides.slice(1).map((_, k) => (
         <span
           key={k}
-          className="absolute grid -translate-x-1/2 -translate-y-1/2 -rotate-[8deg] place-items-center rounded-full border-accent bg-ink font-display font-extrabold text-accent"
-          style={{ left: `${((k + 1) / n) * 100 + LEAN * (1 - (2 * LOGO_Y) / 100)}%`, top: `${LOGO_Y}%`, width: `${n > 2 ? 6.5 : 8}cqw`, height: `${n > 2 ? 6.5 : 8}cqw`, fontSize: `${n > 2 ? 2.6 : 3.2}cqw`, borderWidth: '0.35cqw', boxShadow: '0 0 4cqw rgba(217,255,61,0.35)' }}
+          className={`absolute grid -translate-x-1/2 -translate-y-1/2 -rotate-[8deg] place-items-center rounded-full border-accent bg-ink font-display font-extrabold text-accent ${look.vsClass ?? ''}`}
+          style={{ left: `${((k + 1) / n) * 100 + LEAN * (1 - (2 * look.logoY) / 100)}%`, top: `${look.logoY}%`, width: `${vs}cqw`, height: `${vs}cqw`, fontSize: `${vs * 0.4}cqw`, borderWidth: `${vs * 0.044}cqw`, boxShadow: `0 0 ${vs / 2}cqw rgba(217,255,61,0.35)` }}
         >
           VS
         </span>
       ))}
 
       {(topLeft || topRight) && (
-        <div className="absolute inset-x-0 top-0 flex items-center justify-between gap-2 p-3">
+        <div className={`absolute inset-x-0 top-0 flex items-center justify-between gap-2 ${look.corners}`}>
           <div className="min-w-0 flex-1">{topLeft}</div>
           {topRight && <div className="shrink-0">{topRight}</div>}
         </div>
       )}
+      {children}
     </div>
   );
 };

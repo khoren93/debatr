@@ -45,6 +45,7 @@
   --animate-rise: rise 0.4s ease both;
   --animate-pulse-dot: pulse-dot 1.6s infinite;
   --animate-bars: bars 1s infinite;
+  --animate-vs-pulse: vs-pulse 3.2s ease-in-out infinite;
 
   @keyframes rise {
     from {
@@ -63,6 +64,17 @@
     }
     50% {
       opacity: 1;
+    }
+  }
+  /* The face-off's VS mark (it pulses once in the video's intro). */
+  @keyframes vs-pulse {
+    0%,
+    70%,
+    100% {
+      scale: 1;
+    }
+    82% {
+      scale: 1.16;
     }
   }
   @keyframes bars {
