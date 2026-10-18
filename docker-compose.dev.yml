@@ -2,7 +2,7 @@
 #   docker compose -f docker-compose.dev.yml up -d
 services:
   db:
-    image: postgres:15-alpine
+    image: postgres:18-alpine
     ports:
       - "5432:5432"
     environment:
@@ -10,7 +10,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
       POSTGRES_DB: ${POSTGRES_DB:-ai_debates}
     volumes:
-      - postgres_data_dev:/var/lib/postgresql/data
+      - postgresql_data_dev:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-ai_debates}"]
       interval: 5s
@@ -18,9 +18,12 @@ services:
       retries: 12
 
   redis:
-    image: redis:7-alpine
+    image: redis:8-alpine
     ports:
       - "6379:6379"
+    volumes:
+      - redis_data_dev:/data
 
 volumes:
-  postgres_data_dev:
+  postgresql_data_dev:
+  redis_data_dev:

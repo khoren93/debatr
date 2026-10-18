@@ -9,11 +9,13 @@ x-backend-env: &backend-env
 
 services:
   db:
-    # Keep the major version: upgrading requires migrating the data volume (pg_upgrade).
-    image: postgres:15-alpine
+    # Keep the major version: upgrading requires migrating the data (dump + restore or pg_upgrade).
+    # Since 18 the image keeps the cluster in /var/lib/postgresql/<major>/docker and the volume
+    # sits one level up.
+    image: postgres:18-alpine
     restart: always
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgresql_data:/var/lib/postgresql
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
@@ -25,8 +27,11 @@ services:
       retries: 12
 
   redis:
-    image: redis:7-alpine
+    image: redis:8-alpine
     restart: always
+    # The redis:8 image declares no VOLUME: without this its RDB snapshot dies with the container.
+    volumes:
+      - redis_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -142,5 +147,6 @@ services:
       - api
 
 volumes:
-  postgres_data:
+  postgresql_data:
+  redis_data:
   media_data:

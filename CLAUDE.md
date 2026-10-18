@@ -548,7 +548,11 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
 
 - `.env` is shared by Docker and native dev: leave `DATABASE_URL`/`REDIS_URL` unset so the
   localhost defaults apply natively; docker-compose injects the container URLs.
-- Postgres stays on major version 15 in compose — bumping it requires migrating the volume.
+- Postgres stays on major version 18 in compose. Since 18 the image keeps the cluster in
+  `/var/lib/postgresql/18/docker` (volume `postgresql_data` at `/var/lib/postgresql`) and refuses
+  a data directory of another major, so a bump needs the data moved (dump + restore or pg_upgrade;
+  15 → 18 started from an empty database). The redis:8 image declares no `VOLUME`: `redis_data`
+  keeps its RDB snapshot.
 - The `frontend` container name (`ai-debates-frontend-1`) is referenced by the external Caddy
   on the production host via the `caddy_net` network.
 - `DEBATE_CREATE_RATE_LIMIT` (per IP per hour) and `LOGIN_RATE_LIMIT` are extra abuse limits on
