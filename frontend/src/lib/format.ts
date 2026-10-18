@@ -176,11 +176,16 @@ export const roundHeading = (roundId: string, turnType: string) => {
   return roundId === 'verdict' || !type || turnType.startsWith('moderator') ? round : `${round} · ${type.toUpperCase()}`;
 };
 
-/** Leading "[emotion]" cue of a spoken turn, if any. */
+/** Audio cues further in ("[firm]", "[laughs]"; backend media/script._TAG_RE), never "[label](url)". */
+const AUDIO_TAG_RE = /[ \t]*\[[a-zA-Z][a-zA-Z ,'-]{0,40}\](?!\()[ \t]*/g;
+
+/** Leading "[emotion]" cue of a spoken turn, if any; the body loses the later cues too. */
 export const splitEmotionTag = (text: string): { tone: string | null; body: string } => {
   const match = text.match(/^\s*\[([a-z][a-z ]{1,24})\]\s*/i);
-  if (!match) return { tone: null, body: text };
-  return { tone: match[1].toLowerCase(), body: text.slice(match[0].length) };
+  const rest = match ? text.slice(match[0].length) : text;
+  // A cue opening a line goes with its spaces; one between words leaves a single space.
+  const body = rest.replace(AUDIO_TAG_RE, (_cue, at: number) => (at === 0 || rest[at - 1] === '\n' ? '' : ' '));
+  return { tone: match ? match[1].toLowerCase() : null, body };
 };
 
 // --- Speaker colours --------------------------------------------------------

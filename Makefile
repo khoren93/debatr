@@ -7,7 +7,7 @@ s            ?=
 
 .DEFAULT_GOAL := help
 .PHONY: help install dev-up dev-down api worker media-worker scheduler trending web migrate migration \
-	lint format typecheck test check build cli up down restart logs ps deploy prod-logs prod-ps
+	lint format typecheck test check build cli screenshots up down restart logs ps deploy prod-logs prod-ps
 
 help: ## Show this list
 	@grep -E '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | \
@@ -53,6 +53,9 @@ migration: ## Create a migration: make migration m="describe change"
 
 cli: ## Run the CLI from the repo against the local stack: make cli a="run 'Tabs or spaces?'"
 	cd cli && uv run debatr --url $${DEBATR_URL:-http://localhost} $(a)
+
+screenshots: ## Shoot the README images from the local stack into scripts/screenshots/out (account: DEBATR_EMAIL/DEBATR_PASSWORD or scripts/screenshots/.env)
+	cd scripts/screenshots && npm install --no-audit --no-fund && npm run capture
 
 # --- Quality --------------------------------------------------------------------------
 

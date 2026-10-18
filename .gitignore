@@ -52,6 +52,9 @@ node_modules/
 npm-debug.log
 yarn-error.log
 
+# README images from `make screenshots` (uploaded to GitHub, not committed)
+/scripts/screenshots/out/
+
 # Tooling caches
 .ruff_cache/
 .pytest_cache/

@@ -26,7 +26,7 @@ interface ShellProps {
 export const PlayerShell = ({ frame, controls, vertical = false, fullscreen = false, shellRef }: ShellProps) => (
   <div ref={shellRef} className={`overflow-hidden bg-ink-2 ${fullscreen ? 'flex h-full w-full flex-col' : 'rounded-panel border border-white/8'}`}>
     <div className={`flex justify-center bg-[#08090C] ${vertical && !fullscreen ? 'p-5' : ''} ${fullscreen ? 'min-h-0 flex-1 items-center' : ''}`}>{frame}</div>
-    <div className="grid gap-2.5 border-t border-white/6 px-4 py-3">{controls}</div>
+    <div className="grid grid-cols-1 gap-2.5 border-t border-white/6 px-4 py-3">{controls}</div>
   </div>
 );
 

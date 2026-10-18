@@ -1,0 +1,12 @@
+{
+  "name": "debatr-screenshots",
+  "private": true,
+  "type": "module",
+  "description": "Captures the README images (screens, video frame, hero) from a running Debatr",
+  "scripts": {
+    "capture": "node capture.ts"
+  },
+  "devDependencies": {
+    "playwright-core": "1.63.0"
+  }
+}
