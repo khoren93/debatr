@@ -3,11 +3,12 @@ import { AbsoluteFill, Sequence, interpolate, useCurrentFrame, useVideoConfig } 
 import type { Timeline } from '../api/timeline';
 import { Background } from './components/Background';
 import { Captions } from './components/Captions';
-import { BrandLockup, BrandMark, EndCard, RoundChip } from './components/Chrome';
+import { BrandMark, EndCard, LabelChip, RoundChip } from './components/Chrome';
+import { FaceOff } from './components/FaceOff';
 import { SpeakerRowCard, SpeakingChip } from './components/SpeakerCard';
 import { debaterTag } from './speakers';
-import { DISPLAY_FONT, FONT, SHORT_HOOK_MS, SHORT_W, barHeight } from './constants';
-import { frameToMs, highlightRange, msToFrame } from './utils';
+import { ACCENT, DISPLAY_FONT, FONT, SHORT_H, SHORT_HOOK_MS, SHORT_W, barHeight } from './constants';
+import { frameToMs, headlineSize, highlightRange, msToFrame } from './utils';
 import { SceneStage } from './visuals/SceneStage';
 
 export interface ShortProps {
@@ -70,17 +71,16 @@ export const DebateShort = ({ timeline, mediaBase, highlightIndex }: ShortProps)
         <Audio src={`${mediaBase}/${timeline.full_audio_wav}`} trimBefore={msToFrame(h.start_ms)} trimAfter={msToFrame(h.end_ms)} />
       </Sequence>
 
+      {/* The hook card: the face-off with the clip's hook line, fully drawn on frame 0. */}
       {inHook && (
-        <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 70, textAlign: 'center', fontFamily: FONT, gap: 30, opacity: interpolate(frame / fps, [0, 0.3], [0, 1], { extrapolateRight: 'clamp' }) }}>
-          <BrandLockup size={64} />
-          <div style={{ fontFamily: DISPLAY_FONT, fontSize: 80, fontWeight: 800, letterSpacing: -2.4, color: '#F2F3F7', lineHeight: 1.08 }}>{h.hook}</div>
-          <div style={{ fontSize: 36, color: '#ffffffb3', fontWeight: 600 }}>
-            {debaters.map((d, i) => (
-              <span key={d.id}>
-                {i > 0 && ' vs '}
-                <span style={{ color: d.color }}>{d.name}</span>
-              </span>
-            ))}
+        <div style={{ position: 'absolute', inset: 0, fontFamily: FONT, opacity: interpolate(frame / fps, [SHORT_HOOK_MS / 1000 - 0.3, SHORT_HOOK_MS / 1000], [1, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }) }}>
+          <FaceOff debaters={debaters} width={SHORT_W} height={SHORT_H} logoY={0.3} logoSize={230} t={frame / fps} length={SHORT_HOOK_MS / 1000} />
+          <div style={{ position: 'absolute', top: 2.2 * U, left: 2.4 * U, right: 2.4 * U, height: barHeight(BAR_U), display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <BrandMark u={BAR_U} />
+            <LabelChip label="AI DEBATE" u={BAR_U} color={ACCENT} />
+          </div>
+          <div style={{ position: 'absolute', left: X, right: X, top: SHORT_H * 0.5, bottom: SHORT_H * 0.12, display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
+            <div style={{ fontFamily: DISPLAY_FONT, fontSize: headlineSize(h.hook, 80), fontWeight: 800, letterSpacing: -0.03 * headlineSize(h.hook, 80), color: '#F2F3F7', lineHeight: 1.08 }}>{h.hook}</div>
           </div>
         </div>
       )}

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useDelayRender } from 'remotion';
 import type { Timeline } from '../../api/timeline';
+import { DISPLAY_FONT, FONT, MONO_FONT } from '../constants';
 import { preloadLogos } from '../logos';
 import type { World } from './geo';
 
@@ -27,9 +28,15 @@ export const loadGeo = (): Promise<LoadedGeo> => {
 
 export const hasMapScene = (timeline: Timeline) => Boolean(timeline.visuals?.some((v) => v.scene.type === 'map'));
 
-/** Load what the scenes of this timeline need before rendering frames (MP4 export). */
+/** The web renderer draws text with whatever fonts are loaded at that moment: load the faces the
+ *  frames use (the intro's headline, the mono labels, the captions). A missing font only falls
+ *  back, so failures are ignored. */
+const preloadFonts = () =>
+  Promise.all([`800 100px ${DISPLAY_FONT}`, `500 30px ${MONO_FONT}`, `700 30px ${FONT}`, `400 30px ${FONT}`].map((font) => document.fonts.load(font))).catch(() => undefined);
+
+/** Load what the frames of this timeline need before rendering them (MP4 export). */
 export const preloadSceneAssets = async (timeline: Timeline): Promise<void> => {
-  await Promise.all([hasMapScene(timeline) ? loadGeo() : null, preloadLogos(timeline)]);
+  await Promise.all([hasMapScene(timeline) ? loadGeo() : null, preloadLogos(timeline), preloadFonts()]);
 };
 
 /** The loaded map; holds the frame (delayRender) while it is still loading. */

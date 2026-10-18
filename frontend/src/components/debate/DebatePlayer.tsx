@@ -293,7 +293,7 @@ const PausedOverlay = ({ playerRef }: { playerRef: RefObject<PlayerRef | null> }
   if (playing) return null;
   return (
     <div className="pointer-events-none absolute inset-0 grid place-items-center">
-      <div className="grid size-[clamp(48px,8cqw,84px)] place-items-center rounded-full bg-accent/92 text-ink shadow-[0_20px_50px_-10px_rgba(217,255,61,0.45)]">
+      <div className="grid size-[clamp(40px,9cqw,84px)] place-items-center rounded-full bg-accent/92 text-ink shadow-[0_20px_50px_-10px_rgba(217,255,61,0.45)]">
         <Play className="ml-[6%] size-[42%] fill-current" />
       </div>
     </div>
@@ -318,7 +318,8 @@ export const DebatePlayer = ({ timeline, mediaBase, format, highlightIndex, star
   const isLong = format === 'long';
   const { chapters, totalMs } = videoChapters(timeline, format, highlightIndex);
   const start = startSeq !== null ? chapters.find((c) => c.seq === startSeq) : undefined;
-  const initialFrame = start ? msToFrame(start.startMs) : 15;
+  // Frame 0 is the intro's face-off (or the Short's hook card), fully drawn: it is the poster.
+  const initialFrame = start ? msToFrame(start.startMs) : 0;
   const key = `${format}-${highlightIndex}-${start?.seq ?? ''}`;
 
   useEffect(() => {

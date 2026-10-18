@@ -1,8 +1,9 @@
 import { interpolate, useCurrentFrame, useVideoConfig } from 'remotion';
 import type { Timeline } from '../../api/timeline';
 import { APP_NAME } from '../../lib/brand';
-import { ACCENT, DISPLAY_FONT, FONT, MONO_FONT, barHeight } from '../constants';
-import { roundLabel } from '../utils';
+import { ACCENT, DISPLAY_FONT, FONT, INTRO_MS, MONO_FONT, barHeight } from '../constants';
+import { headlineSize, roundLabel } from '../utils';
+import { FaceOff } from './FaceOff';
 import { LogoTile } from './ModelLogo';
 
 const HOST = '#FFC46B';
@@ -32,32 +33,36 @@ export const BrandLockup = ({ size }: { size: number }) => (
 /** The brand in the top-left corner, as tall as the speaking chip. */
 export const BrandMark = ({ u }: { u: number }) => <BrandLockup size={barHeight(u)} />;
 
-/** "ROUND 1" / "VERDICT" pill in the top-right corner, as tall as the speaking chip. */
-export const RoundChip = ({ roundId, u }: { roundId: string; u: number }) => (
-  <div style={{ display: 'flex', alignItems: 'center', height: barHeight(u), boxSizing: 'border-box', padding: `0 ${1.5 * u}px`, borderRadius: 999, background: 'rgba(10,11,15,0.7)', border: '2px solid #ffffff24', fontFamily: MONO_FONT, fontSize: 1.25 * u, letterSpacing: 0.1 * 1.25 * u, color: HOST, whiteSpace: 'nowrap' }}>
-    {roundLabel(roundId).toUpperCase()}
+/** Mono pill in the top bar, as tall as the speaking chip. */
+export const LabelChip = ({ label, u, color = HOST }: { label: string; u: number; color?: string }) => (
+  <div style={{ display: 'flex', alignItems: 'center', height: barHeight(u), boxSizing: 'border-box', padding: `0 ${1.5 * u}px`, borderRadius: 999, background: 'rgba(10,11,15,0.7)', border: '2px solid #ffffff24', fontFamily: MONO_FONT, fontSize: 1.25 * u, letterSpacing: 0.1 * 1.25 * u, color, whiteSpace: 'nowrap' }}>
+    {label}
   </div>
 );
 
-export const IntroCard = ({ timeline, big }: { timeline: Timeline; big: boolean }) => {
+/** "ROUND 1" / "VERDICT" pill in the top-right corner. */
+export const RoundChip = ({ roundId, u }: { roundId: string; u: number }) => <LabelChip label={roundLabel(roundId).toUpperCase()} u={u} />;
+
+/** The long video's opening: the face-off under the brand bar, the question below. Fully drawn
+ *  on frame 0 (the player's poster, the MP4's first frame); it fades into the studio at the end.
+ *  The middle of the frame stays empty for the player's play button. */
+export const IntroCard = ({ timeline }: { timeline: Timeline }) => {
   const frame = useCurrentFrame();
-  const { fps } = useVideoConfig();
+  const { fps, width, height } = useVideoConfig();
   const t = frame / fps;
-  const o = interpolate(t, [0, 0.35, 1.4, 1.8], [0, 1, 1, 0], { extrapolateRight: 'clamp' });
-  const y = interpolate(t, [0, 0.5], [30, 0], { extrapolateRight: 'clamp' });
+  const length = INTRO_MS / 1000;
+  const o = interpolate(t, [length - 0.4, length], [1, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
+  const u = width / 100;
   const debaters = timeline.speakers.filter((s) => s.role === 'debater');
+  const size = headlineSize(timeline.topic, 4 * u);
   return (
-    <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: big ? 40 : 28, opacity: o, transform: `translateY(${y}px)`, fontFamily: FONT, padding: 60, textAlign: 'center' }}>
-      <BrandLockup size={big ? 72 : 60} />
-      <div style={{ fontFamily: DISPLAY_FONT, fontSize: big ? 84 : 64, fontWeight: 800, letterSpacing: big ? -2.5 : -2, color: '#F2F3F7', lineHeight: 1.05, maxWidth: big ? 1500 : 900 }}>{timeline.topic}</div>
-      <div style={{ fontSize: big ? 44 : 36, fontWeight: 700, color: '#ffffffcc' }}>
-        {debaters.map((d, i) => (
-          <span key={d.id}>
-            {i > 0 && <span style={{ opacity: 0.6 }}> vs </span>}
-            <span style={{ color: d.color }}>{d.name}</span>
-          </span>
-        ))}
+    <div style={{ position: 'absolute', inset: 0, opacity: o, fontFamily: FONT }}>
+      <FaceOff debaters={debaters} width={width} height={height} logoY={0.31} logoSize={13 * u} t={t} length={length} />
+      <div style={{ position: 'absolute', top: 2.2 * u, left: 2.4 * u, right: 2.4 * u, height: barHeight(u), display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <BrandMark u={u} />
+        <LabelChip label="AI DEBATE" u={u} color={ACCENT} />
       </div>
+      <div style={{ position: 'absolute', left: 7 * u, right: 7 * u, bottom: 5 * u, textAlign: 'center', fontFamily: DISPLAY_FONT, fontSize: size, fontWeight: 800, letterSpacing: -0.03 * size, lineHeight: 1.06, color: '#F2F3F7' }}>{timeline.topic}</div>
     </div>
   );
 };

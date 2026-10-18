@@ -358,7 +358,11 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   the accent). `SceneStage` sits in the centre of both compositions (16:9: cards in side columns
   1+1 / 2+1 / 2+2; 9:16: debaters 1–2 as a row of `SpeakerRowCard`s, the stage, debaters 3–4,
   captions; with two debaters the stage takes the second row's place) and shows the round +
-  topic when no scene is up. Intro, hook and end cards carry the same brand lockup. Logos come from
+  topic when no scene is up. Intro, hook and end cards carry the same brand lockup. The long
+  intro and the Short's hook card are a face-off (`components/FaceOff.tsx`, the gallery cover's
+  look: slanted sides in speaker colours, big logos, VS) fully drawn on frame 0, which is the
+  player's poster (`initialFrame` 0, the play button sits below the VS) and the MP4's first
+  frame; `preloadSceneAssets` also loads the fonts before an export. Logos come from
   `TimelineSpeaker.model_id` (older timelines: the short name, `modelIcons` BY_NAME).
   The web renderer serializes each `<svg>` into an image, so strokes animate via SVG attributes
   (`pathLength=1` + dashoffset), colours are attributes (no `currentColor`), text stays in HTML,

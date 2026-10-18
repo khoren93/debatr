@@ -58,7 +58,7 @@ export const DebateLong = ({ timeline, mediaBase }: DebateProps) => {
         <Audio src={`${mediaBase}/${timeline.full_audio_wav}`} />
       </Sequence>
 
-      {inIntro && <IntroCard timeline={timeline} big />}
+      {inIntro && <IntroCard timeline={timeline} />}
 
       {!inIntro && !inOutro && (
         <div style={{ position: 'absolute', inset: 0, opacity: showVerdict ? 0.05 : 1 }}>

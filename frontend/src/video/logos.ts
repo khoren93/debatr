@@ -8,7 +8,7 @@ import { speakerModelId } from './speakers';
  *  SVG sized in em (LobeHub's `width="1em"`) zoomed and cropped onto its canvas, so every logo is
  *  painted once onto a canvas as a PNG data URL: single-colour ones in the wanted colour
  *  (`color`), colour ones as they are (`color = null`). */
-const SIZE = 256;
+const SIZE = 512; // the intro's face-off draws logos ~250 px tall
 export const LOGO_COLOR = '#F2F3F7';
 const ready = new Map<string, string>();
 const pending = new Map<string, Promise<string>>();
