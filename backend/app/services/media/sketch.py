@@ -204,7 +204,7 @@ def sanitize_svg(text: str) -> SketchDrawing | None:
 
 def illustrate(subject: str, *, model: str) -> tuple[SketchDrawing | None, float]:
     """Ask the illustrator model for a drawing. Returns (drawing or None, usd spent)."""
-    text, usage = complete(model, build_sketch_messages(subject), max_tokens=6000)
+    text, usage = complete(model, build_sketch_messages(subject), purpose="sketch", max_tokens=6000)
     drawing = sanitize_svg(text)
     if drawing is None:
         logger.info("Sketch of %r was unusable", subject)

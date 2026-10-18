@@ -244,7 +244,10 @@ class ImageStudio:
             ffmpeg.to_jpeg(f, thumb)
             thumbs.append(thumb.read_bytes())
         text, usage = complete(
-            self.check_model, build_pick_messages(subject, thumbs), max_tokens=200
+            self.check_model,
+            build_pick_messages(subject, thumbs),
+            purpose="image_check",
+            max_tokens=200,
         )
         self.check_usd += float((usage or {}).get("cost") or 0.0)
         return parse_pick(text, len(files))
@@ -255,7 +258,11 @@ class ImageStudio:
         digest = image_digest("ai", subject)
         if cached := self._cached(digest):
             return cached
-        data, usage = generate_image(settings.MEDIA_IMAGE_MODEL, ai_prompt(subject))
+        data, usage = generate_image(
+            settings.MEDIA_IMAGE_MODEL,
+            ai_prompt(subject),
+            fallback_cost=settings.MEDIA_IMAGE_PRICE_USD,
+        )
         self.ai_usd += float((usage or {}).get("cost") or settings.MEDIA_IMAGE_PRICE_USD)
         self.ai_count += 1
         raw = tmp / "ai.bin"

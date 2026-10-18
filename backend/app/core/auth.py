@@ -19,6 +19,7 @@ from app.core.config import settings
 from app.core.db import get_db
 from app.core.security import hash_api_token, looks_like_api_token
 from app.models.models import ApiToken, User, utcnow
+from app.services.activity import note_activity
 
 SESSION_USER_KEY = "uid"
 # `api_tokens.last_used_at` is refreshed at most this often (not on every request).
@@ -110,7 +111,9 @@ async def get_current_user(request: Request, db: AsyncSession = Depends(get_db))
     """The user behind the request (API token or session cookie), or None when anonymous."""
     raw_token = bearer_token(request)
     if raw_token is not None:
-        return await _user_from_api_token(request, db, raw_token)
+        token_user = await _user_from_api_token(request, db, raw_token)
+        await note_activity(token_user)
+        return token_user
     raw = request.session.get(SESSION_USER_KEY)
     if not raw:
         return None
@@ -123,6 +126,7 @@ async def get_current_user(request: Request, db: AsyncSession = Depends(get_db))
     if user is None or not user.is_active:
         logout_session(request)
         return None
+    await note_activity(user)
     return user
 
 

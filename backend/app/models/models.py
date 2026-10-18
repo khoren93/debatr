@@ -1,11 +1,12 @@
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Any
 
 from sqlalchemy import (
     JSON,
     Boolean,
+    Date,
     DateTime,
     ForeignKey,
     Index,
@@ -56,8 +57,13 @@ class User(Base):
     openrouter_key_enc: Mapped[str | None] = mapped_column(Text, nullable=True)
     openrouter_key_last4: Mapped[str | None] = mapped_column(String(8), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, index=True
+    )
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Last request as this user (cookie or API token), written at most every ACTIVITY_TOUCH
+    # (app.services.activity); the days themselves are in user_activity_days.
+    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     # Admin console (app/admin): None | "admin" | "moderator". Granted only on the server
     # (`python -m app.manage admin grant`), never through the API.
     admin_role: Mapped[str | None] = mapped_column(String(16), nullable=True)
@@ -165,7 +171,9 @@ class Debate(Base):
     # Full DebateConfig JSON (never contains user API keys)
     config_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
 
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, index=True
+    )
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
@@ -216,6 +224,9 @@ class Debate(Base):
         passive_deletes=True,
         order_by="DebateParticipant.id",
     )
+
+    # An account's debates by date (library, admin user page, per-user statistics).
+    __table_args__ = (Index("ix_debates_user_id_created_at", "user_id", "created_at"),)
 
 
 class DebateParticipant(Base):
@@ -303,6 +314,56 @@ class DebateVote(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     __table_args__ = (Index("ix_debate_votes_debate_id", "debate_id"),)
+
+
+class UserActivityDay(Base):
+    """A UTC day on which an account used the site or the API (DAU / WAU / MAU, retention).
+    One row per user and day, written by app.services.activity."""
+
+    __tablename__ = "user_activity_days"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    day: Mapped[date] = mapped_column(Date, primary_key=True)
+
+    __table_args__ = (Index("ix_user_activity_days_day", "day"),)
+
+
+class ProviderUsage(Base):
+    """One paid provider call (or try): what it was for, on whose key, what it cost.
+
+    Append-only, written by app.services.usage from the single places that call providers
+    (media/llm.py, the orchestrator's turn stream, the TTS step). Unlike `totals_json` it keeps
+    retries and refused answers too, and tells the system key from the user's own."""
+
+    __tablename__ = "provider_usage"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, index=True
+    )
+    debate_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("debates.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    # turn | verdict | verdict_structure | moderation | factcheck | director | sketch |
+    # image | image_check | highlights | trending | trending_review | tts
+    purpose: Mapped[str] = mapped_column(String(32), index=True)
+    provider: Mapped[str] = mapped_column(String(16))  # openrouter | elevenlabs | edge
+    model: Mapped[str] = mapped_column(String(160))  # the model that answered when known
+    key_owner: Mapped[str] = mapped_column(String(8))  # system | user
+    tokens_in: Mapped[int] = mapped_column(Integer, default=0)
+    tokens_out: Mapped[int] = mapped_column(Integer, default=0)
+    chars: Mapped[int] = mapped_column(Integer, default=0)  # TTS characters billed
+    cost_usd: Mapped[Decimal] = mapped_column(Numeric(14, 6), default=Decimal(0))
+    ok: Mapped[bool] = mapped_column(Boolean, default=True)
+    error_kind: Mapped[str | None] = mapped_column(String(24), nullable=True)
+    duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # ttft_ms, seq_index, estimated (TTS price from a rate table) …
+    meta_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, server_default="{}")
 
 
 class AdminAuditLog(Base):

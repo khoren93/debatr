@@ -9,7 +9,7 @@ import json
 import logging
 import time
 import uuid
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import as_completed
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
@@ -74,6 +74,8 @@ from app.services.studio import (
     text_hash,
     usable_plan,
 )
+from app.services.usage import ContextThreadPool, KeyOwner, attributed
+from app.services.usage import record as record_usage
 
 logger = logging.getLogger(__name__)
 
@@ -141,6 +143,33 @@ def _speaker_for(turn: Turn, speakers: dict[str, TimelineSpeaker]) -> TimelineSp
     )
 
 
+def _book_tts(
+    options: MediaOptions,
+    task: TurnTask,
+    key: KeyOwner,
+    *,
+    chars: int,
+    started: float,
+    error: Exception | None = None,
+) -> None:
+    """One voiced turn in `provider_usage`. ElevenLabs bills characters on a subscription, so
+    the cost is an estimate from its price table; Edge voices are free."""
+    eleven = options.provider == "elevenlabs"
+    record_usage(
+        "tts",
+        provider=options.provider,
+        model=options.model_id if eleven else "edge-tts",
+        key=key,
+        chars=chars,
+        cost_usd=(estimate_usd(options.model_id, chars) or 0.0) if eleven else 0.0,
+        ok=error is None,
+        error_kind="other" if error is not None else None,
+        duration_ms=int((time.monotonic() - started) * 1000),
+        meta={"seq_index": task.seq_index, "estimated": eleven}
+        | ({"error": str(error)[:300]} if error is not None else {}),
+    )
+
+
 def _synthesize_turn(
     provider: TTSProvider,
     paths: MediaPaths,
@@ -148,6 +177,7 @@ def _synthesize_turn(
     options: MediaOptions,
     force: bool,
     code: str,
+    key: KeyOwner = "system",
 ) -> TurnAudio:
     wav = paths.turn_wav(task.seq_index)
     meta_path = paths.turn_meta(task.seq_index)
@@ -172,33 +202,41 @@ def _synthesize_turn(
     chunk_wavs: list[Path] = []
     char_cost = 0
     notes: list[str] = []
-    for i, chunk in enumerate(chunks):
-        previous = chunks[i - 1] if i > 0 else task.previous_text
-        following = chunks[i + 1] if i + 1 < len(chunks) else task.next_text
-        result = provider.synthesize(
-            SynthRequest(
-                text=chunk,
-                voice_id=task.voice_id,
-                model_id=options.model_id,
-                language_code=code,
-                previous_text=previous,
-                next_text=following,
+    started = time.monotonic()
+    try:
+        for i, chunk in enumerate(chunks):
+            previous = chunks[i - 1] if i > 0 else task.previous_text
+            following = chunks[i + 1] if i + 1 < len(chunks) else task.next_text
+            result = provider.synthesize(
+                SynthRequest(
+                    text=chunk,
+                    voice_id=task.voice_id,
+                    model_id=options.model_id,
+                    language_code=code,
+                    previous_text=previous,
+                    next_text=following,
+                )
             )
-        )
-        raw = paths.turn_raw(task.seq_index, i, result.ext)
-        raw.write_bytes(result.audio)
-        chunk_wav = paths.turn_chunk_wav(task.seq_index, i)
-        ffmpeg.normalize_turn(raw, chunk_wav)
-        raw.unlink(missing_ok=True)
-        duration = ffmpeg.probe_duration_ms(chunk_wav)
-        words = result.words or [
-            WordTiming(str(w["w"]), int(w["s"]), int(w["e"])) for w in even_words(chunk, duration)
-        ]
-        parts.append((clamp_words(words, duration), duration))
-        chunk_wavs.append(chunk_wav)
-        char_cost += result.char_cost
-        if result.note and result.note not in notes:
-            notes.append(result.note)
+            raw = paths.turn_raw(task.seq_index, i, result.ext)
+            raw.write_bytes(result.audio)
+            chunk_wav = paths.turn_chunk_wav(task.seq_index, i)
+            ffmpeg.normalize_turn(raw, chunk_wav)
+            raw.unlink(missing_ok=True)
+            duration = ffmpeg.probe_duration_ms(chunk_wav)
+            words = result.words or [
+                WordTiming(str(w["w"]), int(w["s"]), int(w["e"]))
+                for w in even_words(chunk, duration)
+            ]
+            parts.append((clamp_words(words, duration), duration))
+            chunk_wavs.append(chunk_wav)
+            char_cost += result.char_cost
+            if result.note and result.note not in notes:
+                notes.append(result.note)
+    except Exception as e:
+        # Chunks voiced before the failure were billed all the same.
+        _book_tts(options, task, key, chars=char_cost, started=started, error=e)
+        raise
+    _book_tts(options, task, key, chars=char_cost, started=started)
 
     if len(chunk_wavs) == 1:
         chunk_wavs[0].replace(wav)
@@ -245,7 +283,9 @@ def _pick_highlights(
         messages = build_highlights_messages(
             topic=topic, language=language, segments=segments, speakers=speakers
         )
-        text, _usage = complete(settings.MEDIA_HIGHLIGHTS_MODEL, messages, max_tokens=900)
+        text, _usage = complete(
+            settings.MEDIA_HIGHLIGHTS_MODEL, messages, purpose="highlights", max_tokens=900
+        )
         winner_name, picks = parse_highlights(extract_json(text))
         highlights = [
             hl
@@ -325,7 +365,7 @@ def _fill_scenes(
         set_media_state(db, debate, step="visuals", message="Drawing sketches, finding pictures…")
     filled: dict[str, Any] = {}
     usd = 0.0
-    with ThreadPoolExecutor(max_workers=max(1, settings.MEDIA_VISUALS_CONCURRENCY)) as pool:
+    with ContextThreadPool(max_workers=max(1, settings.MEDIA_VISUALS_CONCURRENCY)) as pool:
         sketch_jobs = {
             s.key: pool.submit(illustrate, s.subject, model=sketch_model) for _, s in todo_sketches
         }
@@ -411,7 +451,7 @@ def _plan_visuals(
         db, debate, step="visuals", current=0, total=total, message="Designing visual scenes…"
     )
     cost = 0.0
-    with ThreadPoolExecutor(max_workers=max(1, settings.MEDIA_VISUALS_CONCURRENCY)) as pool:
+    with ContextThreadPool(max_workers=max(1, settings.MEDIA_VISUALS_CONCURRENCY)) as pool:
         futures = {
             pool.submit(
                 plan_scenes, b, topic=topic, language=language, model=model, budget=budget_of(b)
@@ -526,6 +566,7 @@ def _build(
     if options.provider == "elevenlabs" and own_key and not user_key:
         raise RuntimeError("Your ElevenLabs key expired, generate the audio again with it")
     provider = get_provider(options.provider, api_key=user_key)
+    tts_key: KeyOwner = "user" if user_key else "system"
     if not provider.available():
         raise RuntimeError(f"TTS provider '{options.provider}' is not configured")
 
@@ -581,9 +622,9 @@ def _build(
     results: dict[int, TurnAudio] = {}
     done = 0
     tts_started = time.monotonic()
-    with ThreadPoolExecutor(max_workers=max(1, settings.TTS_CONCURRENCY)) as pool:
+    with ContextThreadPool(max_workers=max(1, settings.TTS_CONCURRENCY)) as pool:
         futures = [
-            pool.submit(_synthesize_turn, provider, paths, task, options, force, code)
+            pool.submit(_synthesize_turn, provider, paths, task, options, force, code, tts_key)
             for task in tasks
         ]
         try:
@@ -733,6 +774,7 @@ def _build(
 
 
 @beating(media_beat_key)
+@attributed
 def build_media_job(debate_id: str) -> None:
     with get_sync_session() as db:
         debate = db.get(Debate, uuid.UUID(debate_id))

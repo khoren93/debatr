@@ -87,7 +87,9 @@ def check_debate(
             description=conf.get("description"),
             verdict_text=verdict_text,
         )
-        text, usage = complete(model, messages, api_key=api_key, max_tokens=200)
+        text, usage = complete(
+            model, messages, purpose="moderation", api_key=api_key, max_tokens=200
+        )
         parsed = parse_moderation(extract_json(text))
         if parsed is None:
             return fallback_result(), usage or {}

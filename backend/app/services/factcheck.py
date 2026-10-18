@@ -158,7 +158,9 @@ def check_scene(
         sentence=claim_sentence(speech, scene.anchor),
         summary=scene_summary(scene),
     )
-    text, annotations, usage = complete_message(model, messages, api_key=api_key, max_tokens=500)
+    text, annotations, usage = complete_message(
+        model, messages, purpose="factcheck", api_key=api_key, max_tokens=500
+    )
     result = parse_check(text, annotations)
     if result is None:
         logger.info("Unusable fact-check reply for %s: %s", getattr(scene, "key", ""), text[:200])

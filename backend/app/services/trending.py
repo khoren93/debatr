@@ -574,6 +574,7 @@ def build_batch(model: str, topic_count: int) -> BatchResult:
     text, _, usage = llm.complete_message(
         model,
         build_topic_messages(pool, wanted, today=today),
+        purpose="trending",
         max_tokens=min(64000, 4000 + wanted * 400),
         read_timeout=GENERATE_TIMEOUT,
     )
@@ -586,7 +587,11 @@ def build_batch(model: str, topic_count: int) -> BatchResult:
         raise TrendingError("the model returned no usable topics")
 
     review_text, _, review_usage = llm.complete_message(
-        model, build_review_messages(topics), max_tokens=8000, read_timeout=GENERATE_TIMEOUT
+        model,
+        build_review_messages(topics),
+        purpose="trending_review",
+        max_tokens=8000,
+        read_timeout=GENERATE_TIMEOUT,
     )
     cost += _cost(review_usage)
     rejected = parse_review(review_text, len(topics))

@@ -160,7 +160,9 @@ def structure_verdict(
             debaters=debaters,
             description=conf.get("description"),
         )
-        text, usage = complete(model, messages, api_key=api_key, max_tokens=800)
+        text, usage = complete(
+            model, messages, purpose="verdict_structure", api_key=api_key, max_tokens=800
+        )
         payload = extract_json(text)
         moderation = parse_moderation(
             payload.get("moderation") if isinstance(payload, dict) else None

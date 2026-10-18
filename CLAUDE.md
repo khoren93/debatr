@@ -43,7 +43,9 @@ backend/            FastAPI API + RQ worker (Python 3.12+, managed with uv)
                       check of on-screen figures), markers ([visual: …] / [dispute N: …]),
                       trending (RSS news → daily debate topics with source links),
                       resume (failed turn → Resume), heartbeat / recovery / fair_share /
-                      free_quota (worker safety, see "Workers and queues"), debate_control (stop)
+                      free_quota (worker safety, see "Workers and queues"), debate_control (stop),
+                      usage (provider_usage booking, debate context, ContextThreadPool),
+                      activity (user_activity_days, last_seen_at)
   app/services/admin/ totp (codes, recovery / enrollment codes, QR), sessions (Redis: sessions,
                       sign-in tickets, code failures), audit (append-only admin_audit_log)
   app/services/media/ audio pipeline: script (markdown→speech), tts/ (elevenlabs, edge),
@@ -52,7 +54,8 @@ backend/            FastAPI API + RQ worker (Python 3.12+, managed with uv)
                       pictures + vision check), jobs (build_media_job), timeline
   app/schemas/timeline.py  Timeline contract shared with frontend/src/api/timeline.ts;
                       visuals.py = scene specs shared with frontend/src/api/visuals.ts
-  app/models/         SQLAlchemy ORM models (User, CreditTransaction, Debate, Turn, …)
+  app/models/         SQLAlchemy ORM models (User, CreditTransaction, Debate, Turn, ProviderUsage,
+                      UserActivityDay, AdminAuditLog, …)
   app/schemas/        Pydantic request/response schemas (schemas, auth, billing, media, admin)
   migrations/         Alembic (async env)
   tests/              pytest (pure unit tests, no DB/Redis needed)
@@ -545,6 +548,27 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
 - A personal OpenRouter key (`PUT /api/auth/me/openrouter-key`) is validated against OpenRouter,
   stored encrypted with `SECRET_KEY` (`core/security.py`) and shown masked (`…last4`).
 
+### Statistics data (provider costs, activity)
+
+- `provider_usage` (`services/usage`): one row per paid provider call or try — purpose (`turn |
+  verdict | verdict_structure | moderation | factcheck | director | sketch | image |
+  image_check | highlights | trending | trending_review | tts`), provider, the model that
+  answered, `key_owner` (`system` | `user`: the debate's own OpenRouter key or an own ElevenLabs
+  key), tokens, TTS chars, `cost_usd` (OpenRouter's `usage.cost`; ElevenLabs is an estimate from
+  `USD_PER_1K_CHARS`, `meta_json.estimated`), `ok` + `error_kind` (`usage.classify_error`),
+  `duration_ms`. Written only by `media/llm.py` (`complete` / `complete_message` /
+  `generate_image`, each with a required `purpose`), `orchestrator._generate` (every try,
+  `_book`) and the TTS step (`jobs._book_tts`). New provider calls must go through these. The
+  debate comes from `@usage.attributed` jobs via a context variable; worker thread pools use
+  `usage.ContextThreadPool` so it reaches sketches / pictures / fact-checks. Booking never fails
+  the caller. Unlike `totals_json` it includes retries, dropped router answers and the system-key
+  studio calls (director, sketches) that are not billed to users.
+- `turns.usage_json` also keeps `duration_ms`, `ttft_ms` and `error_kind` of the kept answer
+  (`orchestrator.turn_usage`).
+- Activity (`services/activity.note_activity`, called by `get_current_user` for cookies and
+  tokens): `users.last_seen_at` at most every 10 min and one `user_activity_days` row per UTC day
+  (migration 0012 backfilled days from sign-ups, logins, debates, likes, votes and tokens).
+
 ### Admin console (`/admin`, `/api/admin/*`; the plan is PROGRESS stage A)
 
 - Own origin: `ADMIN_HOST` (production: e.g. an `admin.` subdomain; empty in development =
@@ -603,7 +627,8 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   environment `pypi`). `hideStudioMarkers` in `lib/format.ts` and `cli/src/debatr/markers.py` are
   twins.
 - Tests are pure (no DB/Redis). Use `httpx.MockTransport` via `OpenRouterClient(transport=...)`
-  for client tests. Put integration checks behind Docker.
+  for client tests. Put integration checks behind Docker. `tests/conftest.py` keeps
+  `provider_usage` rows in memory (`usage_rows` fixture) and stubs `note_activity`.
 
 ## Gotchas
 

@@ -32,6 +32,7 @@ from app.core.redis import (
 from app.core.sync_db import get_sync_session
 from app.models.models import Debate, Turn, utcnow
 from app.services import queue_manager
+from app.services import usage as usage_log
 from app.services.credits import charge_debate_sync, charge_images_sync
 from app.services.events import publish_event
 from app.services.free_quota import is_free_model, wait_for_slot
@@ -95,6 +96,9 @@ class GenerationResult:
     retryable: bool = False  # a passing failure (rate limit, 5xx, connection, empty answer)
     rerouted: bool = False  # the router picked a classifier: dropped before any text, ask again
     model: str | None = None  # as named by the response (a router names the model it picked)
+    error_kind: str | None = None  # usage.classify_error's word for a failure
+    duration_ms: int | None = None  # request to end of stream
+    ttft_ms: int | None = None  # request to the first text
 
 
 def _normalize_usage(raw: dict[str, Any] | None) -> dict[str, Any]:
@@ -244,18 +248,21 @@ def _generate(
     messages: list[dict[str, Any]],
     api_key: str | None,
     deadline: float,
+    purpose: str = "turn",
 ) -> GenerationResult:
     """Stream one LLM response, forwarding deltas to subscribers, until `deadline`
-    (`time.monotonic()`; see LLM_TURN_TIMEOUT)."""
+    (`time.monotonic()`; see LLM_TURN_TIMEOUT). Every try is booked in `provider_usage`."""
     if api_key is None and is_free_model(model_id) and not wait_for_slot(deadline):
         return GenerationResult(
-            error="Free models are busy (OpenRouter's per-minute limit); resume in a minute"
+            error="Free models are busy (OpenRouter's per-minute limit); resume in a minute",
+            error_kind="free_quota",
         )
 
     async def run() -> GenerationResult:
         client = OpenRouterClient()
         result = GenerationResult()
         chunks = 0
+        started = time.monotonic()
         stream = client.stream_chat_completion(model_id, messages, api_key=api_key)
         try:
             async with asyncio.timeout(max(0.0, deadline - time.monotonic())):
@@ -271,9 +278,12 @@ def _generate(
                                 f"The Free Router picked {chunk.model}, which cannot debate"
                             )
                             result.retryable = result.rerouted = True
+                            result.error_kind = "classifier"
                             break
                     if not chunk.delta:
                         continue
+                    if result.ttft_ms is None:
+                        result.ttft_ms = int((time.monotonic() - started) * 1000)
                     result.text += chunk.delta
                     publish_event(
                         debate_id,
@@ -292,18 +302,64 @@ def _generate(
             logger.warning("%s gave no complete answer in time (debate %s)", model_id, debate_id)
             result.error = f"No complete answer within {settings.LLM_TURN_TIMEOUT:.0f} seconds"
             result.timed_out = True
+            result.error_kind = "timeout"
         except OpenRouterError as e:
             result.error = str(e)
             result.retryable = e.status_code is None or e.status_code in RETRY_STATUSES
+            result.error_kind = usage_log.classify_error(e.status_code)
         except Exception as e:
             logger.exception("Unexpected generation error for debate %s", debate_id)
             result.error = f"Unexpected error: {e}"
+            result.error_kind = "other"
         if not result.error and not result.stopped and not result.text.strip():
             result.error = "The model returned an empty answer"
             result.retryable = True
+            result.error_kind = "empty"
+        result.duration_ms = int((time.monotonic() - started) * 1000)
         return result
 
-    return asyncio.run(run())
+    result = asyncio.run(run())
+    _book(debate_id, seq_index, purpose, model_id, api_key, result)
+    return result
+
+
+def _book(
+    debate_id: str,
+    seq_index: int,
+    purpose: str,
+    model_id: str,
+    api_key: str | None,
+    result: GenerationResult,
+) -> None:
+    """One try of a turn in `provider_usage` (retries and dropped answers cost money too)."""
+    answered = result.model if is_free_router(model_id) and result.model else model_id
+    meta = {
+        "seq_index": seq_index,
+        "ttft_ms": result.ttft_ms,
+        "stopped": result.stopped or None,
+        "reported_model": result.model if result.model and result.model != answered else None,
+    }
+    usage_log.record(
+        purpose,
+        model=answered,
+        key=usage_log.key_owner(api_key),
+        usage=result.usage,
+        ok=result.error is None,
+        error_kind=result.error_kind,
+        duration_ms=result.duration_ms,
+        debate_id=debate_id,
+        meta={k: v for k, v in meta.items() if v is not None},
+    )
+
+
+def turn_usage(result: GenerationResult) -> dict[str, Any]:
+    """`turns.usage_json`: tokens and cost plus the timing of the answer that was kept."""
+    timing = {
+        "duration_ms": result.duration_ms,
+        "ttft_ms": result.ttft_ms,
+        "error_kind": result.error_kind,
+    }
+    return {**result.usage, **{k: v for k, v in timing.items() if v is not None}}
 
 
 def _failure(speaker: str, model_id: str, error: str | None) -> str:
@@ -429,7 +485,7 @@ def _save_turn(
         error=result.error,
         word_count=len(result.text.split()),
         model_used=model_id,
-        usage_json=result.usage,
+        usage_json=turn_usage(result),
         visuals_json=visuals or {},
     )
     db.add(turn)
@@ -569,6 +625,7 @@ def _auto_media(db: Session, debate: Debate) -> None:
 
 
 @beating(debate_beat_key)
+@usage_log.attributed
 def start_debate_job(debate_id: str, from_seq: int = 0) -> None:
     """Start a queued run: a new debate from its first turn, a resumed one from `from_seq`."""
     with get_session() as db:
@@ -588,6 +645,7 @@ def start_debate_job(debate_id: str, from_seq: int = 0) -> None:
 
 
 @beating(debate_beat_key)
+@usage_log.attributed
 def process_turn_job(debate_id: str, seq_index: int) -> None:
     with get_session() as db:
         debate = db.get(Debate, uuid.UUID(debate_id))
@@ -689,6 +747,7 @@ def process_turn_job(debate_id: str, seq_index: int) -> None:
 
 
 @beating(debate_beat_key)
+@usage_log.attributed
 def conduct_verdict_job(debate_id: str, seq_index: int) -> None:
     with get_session() as db:
         debate = db.get(Debate, uuid.UUID(debate_id))
@@ -735,6 +794,7 @@ def conduct_verdict_job(debate_id: str, seq_index: int) -> None:
                         messages,
                         api_key,
                         deadline,
+                        purpose="verdict",
                     ),
                 ),
                 deadline,
@@ -770,6 +830,7 @@ def conduct_verdict_job(debate_id: str, seq_index: int) -> None:
 
 
 @beating(debate_beat_key)
+@usage_log.attributed
 def finish_debate_job(debate_id: str) -> None:
     with get_session() as db:
         debate = db.get(Debate, uuid.UUID(debate_id))

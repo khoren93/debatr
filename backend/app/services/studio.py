@@ -22,7 +22,6 @@ build takes the stored plans instead of designing again (`media/jobs.py`).
 
 import hashlib
 import logging
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Any
 
@@ -60,6 +59,7 @@ from app.services.media.visuals import (
     scene_budget,
     scene_summary,
 )
+from app.services.usage import ContextThreadPool
 
 logger = logging.getLogger(__name__)
 
@@ -227,7 +227,7 @@ def plan_scenes(
 ) -> tuple[list[Any], float]:
     """Ask the director for a turn's candidates (spare included). Returns (scenes, usd)."""
     messages = build_director_messages(brief, topic=topic, language=language, budget=budget)
-    text, usage = complete(model, messages, max_tokens=1600)
+    text, usage = complete(model, messages, purpose="director", max_tokens=1600)
     try:
         payload = extract_json(text)
     except ValueError:
@@ -365,7 +365,7 @@ def _design(
     sketch_model = settings.MEDIA_SKETCH_MODEL or model
     results: dict[str, Any] = {}
     check_usd = 0.0
-    with ThreadPoolExecutor(max_workers=DESIGN_WORKERS) as pool:
+    with ContextThreadPool(max_workers=DESIGN_WORKERS) as pool:
         drawn = {s.key: pool.submit(illustrate, s.subject, model=sketch_model) for s in sketches}
         found = {s.key: pool.submit(studio.resolve, s) for s in pictures if studio is not None}
         checked = {
