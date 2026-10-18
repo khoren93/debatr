@@ -1,14 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Heart } from 'lucide-react';
 import { listGallery } from '../api/gallery';
 import type { GalleryItem } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { Page } from '../components/layout/AppShell';
-import { DebateCard, DurationChip, VersusLine } from '../components/cards';
-import { Bars, LinkButton } from '../components/ui';
+import { CardStats, DebateCard, DebateCover, PremiumVoicesBadge } from '../components/cards';
+import { Avatar, Bars, LinkButton } from '../components/ui';
 import { APP_DESCRIPTION } from '../lib/brand';
-import { formatCount } from '../lib/format';
 
 const FACTS = ['60+ models', 'Neural voices', '16:9 + 9:16', 'No install'];
 
@@ -158,7 +156,7 @@ const Landing = () => {
               Browse gallery →
             </Link>
           </div>
-          <div className="mt-[22px] grid grid-cols-[repeat(auto-fill,minmax(min(100%,280px),1fr))] gap-4">
+          <div className="mt-[22px] grid grid-cols-[repeat(auto-fill,minmax(min(100%,300px),1fr))] gap-5">
             {featured.map((item, i) => (
               <DebateCard
                 key={item.id}
@@ -166,14 +164,14 @@ const Landing = () => {
                 index={i}
                 to={`/d/${item.slug}`}
                 title={item.topic || item.title || 'Untitled debate'}
-                topLeft={<VersusLine participants={item.participants} />}
-                topRight={<DurationChip ms={item.duration_ms} premium={item.premium_voices} />}
-                footerLeft={<span>{formatCount(item.views)} views</span>}
-                footerRight={
-                  <span className="inline-flex items-center gap-1">
-                    <Heart className="size-3" /> {formatCount(item.likes)}
-                  </span>
+                cover={<DebateCover participants={item.participants} topRight={item.premium_voices ? <PremiumVoicesBadge /> : undefined} />}
+                footerLeft={
+                  <>
+                    <Avatar seed={item.author_name?.trim() || 'Anonymous'} size={20} />
+                    <span className="truncate">{item.author_name?.trim() || 'Anonymous'}</span>
+                  </>
                 }
+                footerRight={<CardStats likes={item.likes} views={item.views} durationMs={item.duration_ms} />}
               />
             ))}
           </div>

@@ -60,7 +60,9 @@ frontend/           React 19 + Vite 8 + Tailwind 4 + TypeScript
                       Dropdown — custom select, portalled list; SwitchTrack,
                       ModelIcon — provider logo of a model id via src/lib/modelIcons.ts)
   src/components/layout/AppShell.tsx  sidebar + mobile top bar/bottom tabs, Page, PageTitle
-  src/components/cards/    DebateCard (library / gallery / landing)
+  src/components/cards/    DebateCard (library / gallery / landing; title under the cover, CardStats =
+                           likes / views / length), DebateCover (face-off cover: each debater's logo
+                           on a half in its speaker colour, slanted seams, VS; markup, never the winner)
   src/components/create/   three-step wizard + wizardState.ts (state, persistence, config mapping):
                            StepTopic (TrendingBrowser = today's news topics in rank order with search,
                            categories, 10 per page + sticky "Your debate" panel), StepSpeakers

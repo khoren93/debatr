@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { AudioLines, Heart, Play, Trophy, X } from 'lucide-react';
+import { AudioLines, Play, Trophy, X } from 'lucide-react';
 import { getErrorMessage } from '../api/client';
 import { listGallery } from '../api/gallery';
 import { GALLERY_CATEGORIES, type GalleryCategory, type GalleryItem, type GalleryPeriod, type GallerySort } from '../api/types';
 import { Page, PageTitle } from '../components/layout/AppShell';
-import { DebateCard, DurationChip, VersusLine } from '../components/cards';
+import { CardStats, DebateCard, DebateCover, PremiumVoicesBadge } from '../components/cards';
 import { Avatar, Button, Chip, EmptyState, ErrorBox, LinkButton, ModelIcon, PageLoader, Segmented } from '../components/ui';
-import { formatCount, shortModelName } from '../lib/format';
+import { shortModelName } from '../lib/format';
 
 type CategoryFilter = 'all' | GalleryCategory;
 
@@ -165,7 +165,7 @@ const Gallery = () => {
       );
     }
     return (
-      <div className={`mt-[22px] grid grid-cols-[repeat(auto-fill,minmax(min(100%,280px),1fr))] gap-4 transition-opacity ${loading ? 'pointer-events-none opacity-50' : ''}`} aria-busy={loading}>
+      <div className={`mt-[22px] grid grid-cols-[repeat(auto-fill,minmax(min(100%,320px),1fr))] gap-5 transition-opacity ${loading ? 'pointer-events-none opacity-50' : ''}`} aria-busy={loading}>
         {shown.map((item, i) => {
           const author = item.author_name?.trim() || 'Anonymous';
           return (
@@ -175,24 +175,15 @@ const Gallery = () => {
               index={i}
               to={`/d/${item.slug}`}
               title={item.topic || item.title || 'Untitled debate'}
-              topLeft={<VersusLine participants={item.participants} />}
-              topRight={<DurationChip ms={item.duration_ms} premium={item.premium_voices} />}
+              cover={<DebateCover participants={item.participants} topRight={item.premium_voices ? <PremiumVoicesBadge /> : undefined} />}
               footerLeft={
                 <>
                   <Avatar seed={author} size={20} />
                   <span className="truncate">{author}</span>
                 </>
               }
-              footerRight={
-                <>
-                  {/* No verdict on the cards: the audience votes blind on the debate page. */}
-                  <span className="inline-flex items-center gap-1" title={`${item.likes} likes`}>
-                    <Heart className="size-3" /> {formatCount(item.likes)}
-                  </span>
-                  <span className="text-dim">·</span>
-                  <span>{formatCount(item.views)} views</span>
-                </>
-              }
+              // No verdict on the cards: the audience votes blind on the debate page.
+              footerRight={<CardStats likes={item.likes} views={item.views} durationMs={item.duration_ms} />}
             />
           );
         })}

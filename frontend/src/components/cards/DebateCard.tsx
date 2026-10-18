@@ -1,8 +1,8 @@
 import type { CSSProperties, ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { AudioLines } from 'lucide-react';
+import { AudioLines, Clock, Eye, Heart } from 'lucide-react';
 import type { Participant, Verdict } from '../../api/types';
-import { formatDuration, gradientFor } from '../../lib/format';
+import { formatCount, formatDuration, gradientFor } from '../../lib/format';
 import { ModelIcon, Thumb } from '../ui';
 import { debaterNames, verdictLabel } from './helpers';
 
@@ -15,6 +15,8 @@ interface DebateCardProps {
   topLeft?: ReactNode;
   /** Overlay in the top-right corner of the thumbnail (duration chip). */
   topRight?: ReactNode;
+  /** Picture in place of the gradient thumbnail (e.g. DebateCover); the title then sits below it. */
+  cover?: ReactNode;
   footerLeft?: ReactNode;
   footerRight?: ReactNode;
   /** Position in the grid — staggers the rise animation. */
@@ -24,21 +26,28 @@ interface DebateCardProps {
 }
 
 /** Gradient 16:9 thumbnail card used by the landing, library and gallery grids. */
-export const DebateCard = ({ id, to, title, topLeft, topRight, footerLeft, footerRight, index = 0, className = '', style }: DebateCardProps) => (
+export const DebateCard = ({ id, to, title, topLeft, topRight, cover, footerLeft, footerRight, index = 0, className = '', style }: DebateCardProps) => (
   <Link
     to={to}
     className={`group block overflow-hidden rounded-card border border-line bg-surface transition-[transform,border-color] duration-200 hover:-translate-y-[3px] hover:border-line-3 animate-rise ${className}`}
     style={{ animationDelay: `${Math.min(index, 10) * 40}ms`, ...style }}
   >
-    <Thumb gradient={gradientFor(id)}>
-      <div className="flex items-center justify-between gap-2">
-        <div className="min-w-0 flex-1">{topLeft}</div>
-        {topRight && <div className="shrink-0">{topRight}</div>}
-      </div>
-      <div className="line-clamp-3 font-display text-[17px] font-bold leading-[1.15] tracking-[-0.02em] text-balance">{title}</div>
-    </Thumb>
+    {cover ? (
+      <>
+        {cover}
+        <div className="line-clamp-2 px-3.5 pt-3 font-display text-[16px] font-bold leading-[1.2] tracking-[-0.02em] text-balance">{title}</div>
+      </>
+    ) : (
+      <Thumb gradient={gradientFor(id)}>
+        <div className="flex items-center justify-between gap-2">
+          <div className="min-w-0 flex-1">{topLeft}</div>
+          {topRight && <div className="shrink-0">{topRight}</div>}
+        </div>
+        <div className="line-clamp-3 font-display text-[17px] font-bold leading-[1.15] tracking-[-0.02em] text-balance">{title}</div>
+      </Thumb>
+    )}
     {(footerLeft || footerRight) && (
-      <div className="flex items-center justify-between gap-2.5 px-3.5 py-3 text-xs text-muted">
+      <div className={`flex items-center justify-between gap-2.5 px-3.5 pb-3 text-xs text-muted ${cover ? 'pt-2' : 'pt-3'}`}>
         <div className="flex min-w-0 items-center gap-2">{footerLeft}</div>
         {footerRight && <div className="flex shrink-0 items-center gap-1.5">{footerRight}</div>}
       </div>
@@ -46,11 +55,32 @@ export const DebateCard = ({ id, to, title, topLeft, topRight, footerLeft, foote
   </Link>
 );
 
-/** "4:13" chip for the thumbnail corner ("—" when the debate has no audio yet); `premium` adds the premium-voices mark. */
-export const DurationChip = ({ ms, premium = false }: { ms: number | null | undefined; premium?: boolean }) => (
-  <span className="inline-flex items-center gap-1 rounded-md bg-black/45 px-2 py-[3px] font-mono text-[10px] text-text" title={premium ? 'Premium voices' : undefined}>
-    {premium && <AudioLines className="size-3 text-accent" aria-label="Premium voices" />}
-    {formatDuration(ms)}
+/** "4:13" chip for the thumbnail corner ("—" when the debate has no audio yet). */
+export const DurationChip = ({ ms }: { ms: number | null | undefined }) => (
+  <span className="inline-block rounded-md bg-black/45 px-2 py-[3px] font-mono text-[10px] text-text">{formatDuration(ms)}</span>
+);
+
+/** Cover badge of a debate voiced with premium (ElevenLabs) voices. */
+export const PremiumVoicesBadge = () => (
+  <span className="inline-flex items-center gap-1 rounded-md bg-black/55 px-2 py-[3px] font-mono text-[10px] tracking-[0.06em] text-accent backdrop-blur-sm" title="Voiced with premium voices">
+    <AudioLines className="size-3" /> PREMIUM VOICES
+  </span>
+);
+
+/** Likes · views · length row of a public card (icons instead of words). */
+export const CardStats = ({ likes, views, durationMs }: { likes: number; views: number; durationMs: number | null | undefined }) => (
+  <span className="inline-flex items-center gap-2.5">
+    <span className="inline-flex items-center gap-1" title={`${likes} likes`}>
+      <Heart className="size-3" /> {formatCount(likes)}
+    </span>
+    <span className="inline-flex items-center gap-1" title={`${views} views`}>
+      <Eye className="size-3" /> {formatCount(views)}
+    </span>
+    {durationMs ? (
+      <span className="inline-flex items-center gap-1" title="Length">
+        <Clock className="size-3" /> {formatDuration(durationMs)}
+      </span>
+    ) : null}
   </span>
 );
 
