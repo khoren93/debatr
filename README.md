@@ -1,23 +1,45 @@
-# 🤖 AI Debates · Debatr
+<div align="center">
+  <img src="frontend/public/favicon.svg" width="72" height="72" alt="">
+  <h1>Debatr</h1>
+  <p><strong>Two AIs. One topic. A video in minutes.</strong></p>
+  <p>
+    Stage debates between any LLMs on OpenRouter, watch them argue live with charts and fact-checks,<br>
+    get the judge's verdict and export a 16:9 episode plus a 9:16 Short right in your browser.
+  </p>
+  <p>
+    <a href="https://github.com/khoren93/debatr/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/khoren93/debatr/actions/workflows/ci.yml/badge.svg"></a>
+    <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue.svg"></a>
+    <a href="https://ai-debates.net"><img alt="Live: ai-debates.net" src="https://img.shields.io/badge/live-ai--debates.net-D9FF3D.svg"></a>
+    <a href="https://pypi.org/project/debatr/"><img alt="debatr CLI on PyPI" src="https://img.shields.io/pypi/v/debatr.svg?label=debatr%20CLI"></a>
+    <img alt="Docker ready" src="https://img.shields.io/badge/docker-ready-blue.svg">
+  </p>
+</div>
 
-> **Two AIs. One topic. A video in minutes.**
+<img src="https://github.com/user-attachments/assets/9d06c118-6be6-4e54-9abc-bb78128eecb2" alt="Debatr: the debate page with the video, the judge's verdict and a 9:16 Short">
 
-![Project Status](https://img.shields.io/badge/status-active-success.svg)
-![License](https://img.shields.io/badge/license-MIT-blue.svg)
-![Docker](https://img.shields.io/badge/docker-ready-blue.svg)
-![VS Code](https://img.shields.io/badge/Made%20in-VS%20Code-0078d7.svg?style=flat&logo=visual-studio-code&logoColor=white)
+**[Try it live at ai-debates.net](https://ai-debates.net)** · free models cost nothing, or bring your
+own OpenRouter key.
 
 **Debatr** (the AI Debates studio) is a full-stack service that orchestrates structured debates between AI personas and turns them into content. Powered by **OpenRouter**, it lets you pit **hundreds of LLMs** against each other with custom roles, personalities and stances, watch the debate stream live, get a judge's verdict, and render a **16:9 YouTube video plus a 9:16 Short** right in the browser.
 
 Users sign up, run free models or bring their own OpenRouter key, buy credits with **Stripe**, keep a library of their debates and can publish them to a **public gallery** with share links.
 
-> **🚀 Try it live: [ai-debates.net](https://ai-debates.net)**
-
-![App Demo](https://github.com/user-attachments/assets/54c6768d-8b00-43a9-baa7-1312c8dc01a4)
-
 ---
 
 ## ✨ Key Features
+
+<table>
+  <tr>
+    <td width="33%" align="center"><img src="https://github.com/user-attachments/assets/e5fd9288-15cf-4b10-ac53-46e519ae2e1d" alt="Wizard step 1: trending topics from today's news"><br><sub>Topics from today's news</sub></td>
+    <td width="33%" align="center"><img src="https://github.com/user-attachments/assets/8149b106-ea3d-424e-b034-8bb9c96d3c20" alt="Wizard step 2: a model, a voice and a persona for every debater"><br><sub>Any model vs any model</sub></td>
+    <td width="33%" align="center"><img src="https://github.com/user-attachments/assets/dded1f51-6832-4bc4-a73e-4433eca70115" alt="Debate page: the video and the blind audience vote"><br><sub>The episode and the audience vote</sub></td>
+  </tr>
+  <tr>
+    <td width="33%" align="center"><img src="https://github.com/user-attachments/assets/4baf0c2d-bcbe-499a-8347-c9ae67847044" alt="The judge's verdict with feedback for every debater"><br><sub>The judge's verdict</sub></td>
+    <td width="33%" align="center"><img src="https://github.com/user-attachments/assets/f990d273-2ab6-4584-aabe-f37842eefe1b" alt="9:16 Short with a fact-checked figure on screen"><br><sub>A Short with fact-checked scenes</sub></td>
+    <td width="33%" align="center"><img src="https://github.com/user-attachments/assets/84ee7ba6-2788-45dc-a005-84db633ebdb5" alt="Model ranking from audience votes"><br><sub>The model leaderboard</sub></td>
+  </tr>
+</table>
 
 ### 🎬 Stage any debate
 - **⚔️ Any model vs any model**: pick from hundreds of LLMs on OpenRouter. Have **Claude** take
@@ -200,6 +222,7 @@ Run `make` to list every target. The most useful ones:
 | `make api` / `make worker` / `make web` | Run the API, worker and frontend with hot reload |
 | `make migrate` / `make migration m="..."` | Apply migrations / autogenerate a new one |
 | `make check` | Lint, type check, tests and frontend build |
+| `make screenshots` | Shoot the README images from the local stack (`scripts/screenshots`) |
 | `make deploy` | On the server: pull `main` and rebuild the production stack (`deploy.sh`) |
 | `make prod-logs s=worker` / `make prod-ps` | On the server: production logs / container status |
 

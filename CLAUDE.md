@@ -114,7 +114,8 @@ scripts/screenshots/  `make screenshots`: README images (numbered phone screens,
                     local stack with playwright-core and the installed Chrome; views / likes /
                     votes / model ratings are invented per id in the browser (SHOWCASE=off: real).
                     Account/debate in its git-ignored .env; output in out/ (git-ignored: the
-                    images are uploaded to GitHub, not committed)
+                    images are dragged into a GitHub comment box and README links the
+                    user-attachments URLs, never committed; PNG screens since that takes no WebP)
 design/             local Claude Design export (`Debatr Studio.html`), git-ignored
 docker-compose.yml  full stack; docker-compose.dev.yml = only Postgres + Redis for native dev
 ```

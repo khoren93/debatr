@@ -52,9 +52,12 @@ interface Timeline {
   highlights: { start_ms: number; end_ms: number }[];
 }
 
-/** The phone screens in the order a debate is made and watched: `screens/01_topics.webp` … */
+/**
+ * The phone screens in the order a debate is made and watched: `screens/01_topics.png` … PNG,
+ * since GitHub's attachments take no WebP.
+ */
 const SCREENS = ['topics', 'speakers', 'episode', 'verdict', 'short', 'leaderboard'];
-const screenFile = (name: string) => join(screens, `${String(SCREENS.indexOf(name) + 1).padStart(2, '0')}_${name}.webp`);
+const screenFile = (name: string) => join(screens, `${String(SCREENS.indexOf(name) + 1).padStart(2, '0')}_${name}.png`);
 const wanted = (name: string) => ONLY.length === 0 || ONLY.includes(name);
 const fail = (message: string): never => {
   console.error(`! ${message}`);
@@ -101,42 +104,16 @@ async function settle(page: Page, ms = 500): Promise<void> {
   await page.waitForTimeout(ms);
 }
 
-/** PNG → WebP through the browser's own encoder (no native image library needed). */
-async function encode(encoder: Page, png: Buffer, type: 'image/webp' | 'image/jpeg', quality: number): Promise<Buffer> {
-  const base64 = await encoder.evaluate(
-    async ({ data, type, quality }) => {
-      const image = new Image();
-      image.src = `data:image/png;base64,${data}`;
-      await image.decode();
-      const canvas = new OffscreenCanvas(image.naturalWidth, image.naturalHeight);
-      canvas.getContext('2d')!.drawImage(image, 0, 0);
-      const blob = await canvas.convertToBlob({ type, quality });
-      const bytes = new Uint8Array(await blob.arrayBuffer());
-      let binary = '';
-      for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-      return btoa(binary);
-    },
-    { data: png.toString('base64'), type, quality },
-  );
-  return Buffer.from(base64, 'base64');
-}
-
 function save(path: string, data: Buffer): void {
   writeFileSync(path, data);
   console.log(`+ ${path.replace(`${root}/`, '')} (${Math.round(data.length / 1024)} KB)`);
 }
 
-/** Saves the viewport as `screens/<name>.webp`. */
+/** Saves the viewport as `screens/<name>.png`. */
 class Shooter {
-  readonly encoder: Page;
-  constructor(encoder: Page) {
-    this.encoder = encoder;
-  }
-
   async shoot(page: Page, name: string): Promise<void> {
     await settle(page);
-    const png = await page.screenshot({ type: 'png' });
-    save(screenFile(name), await encode(this.encoder, png, 'image/webp', 0.9));
+    save(screenFile(name), await page.screenshot({ type: 'png' }));
   }
 }
 
@@ -396,7 +373,7 @@ const MARK = `<svg width="46" height="46" viewBox="0 0 64 64"><rect width="64" h
 /** Phones on the hero: the big one in front, then the two smaller ones behind it (left, right). */
 const HERO_PHONES = { main: 'episode', left: 'verdict', right: 'short' } as const;
 
-const inline = (path: string) => `data:image/webp;base64,${readFileSync(path).toString('base64')}`;
+const inline = (path: string) => `data:image/png;base64,${readFileSync(path).toString('base64')}`;
 
 /** The README hero (1280×640): the pitch on the left, three phones on the right. */
 function heroHtml(): string {
@@ -459,7 +436,6 @@ mkdirSync(screens, { recursive: true });
 const channel = process.env.SCREENSHOT_CHANNEL ?? 'chrome';
 const browser = await chromium.launch(channel === 'chromium' ? {} : { channel });
 try {
-  const encoder = await browser.newPage();
   if ([...SCREENS, 'frame'].some(wanted)) {
     const context = await browser.newContext({
       viewport: PHONE,
@@ -472,14 +448,13 @@ try {
     await signIn(context);
     await showcase(context);
     const { debate, timeline } = await pickDebate(context);
-    const shooter = new Shooter(encoder);
+    const shooter = new Shooter();
 
     await captureWizard(context, shooter, debate);
     await captureDebate(context, shooter, debate, timeline);
     if (wanted('leaderboard')) await captureLeaderboard(context, shooter);
     if (wanted('frame')) {
-      const frame = await captureFrame(browser, context, debate, timeline);
-      save(join(assets, 'frame.webp'), await encode(encoder, frame, 'image/webp', 0.9));
+      save(join(assets, 'frame.png'), await captureFrame(browser, context, debate, timeline));
     }
   }
   // Composed from the files on disk, so ONLY=hero redraws it without shooting again.
