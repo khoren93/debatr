@@ -356,6 +356,41 @@ def system_key_status(*, force: bool = False) -> tuple[bool, str | None]:
     return ok, reason
 
 
+_QUOTA_TTL = 300.0
+_quota_cache: tuple[float, dict[str, Any] | None] | None = None
+
+
+def system_quota() -> dict[str, Any] | None:
+    """The system key's plan and character quota ({tier, used, limit, resets_at}), or None when
+    there is no key or ElevenLabs does not answer (needs the "User read" permission). Cached
+    per process for a few minutes; for the admin console."""
+    global _quota_cache
+    if not settings.ELEVENLABS_API_KEY:
+        return None
+    now = time.monotonic()
+    if _quota_cache is not None and now - _quota_cache[0] < _QUOTA_TTL:
+        return _quota_cache[1]
+    provider = ElevenLabsProvider()
+    quota: dict[str, Any] | None = None
+    try:
+        with provider._client() as client:
+            response = provider._request(
+                client, "GET", f"{provider.base_url}/v1/user/subscription", attempts=1
+            )
+        if response.status_code == 200:
+            data = response.json()
+            quota = {
+                "tier": str(data.get("tier") or ""),
+                "used": int(data.get("character_count") or 0),
+                "limit": int(data.get("character_limit") or 0),
+                "resets_at": data.get("next_character_count_reset_unix"),
+            }
+    except (TTSError, ValueError):
+        quota = None
+    _quota_cache = (now, quota)
+    return quota
+
+
 def estimate_usd(model_id: str, chars: int) -> float | None:
     rate = USD_PER_1K_CHARS.get(model_id)
     return round(chars / 1000 * rate, 4) if rate else None

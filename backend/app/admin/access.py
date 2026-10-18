@@ -11,14 +11,15 @@ adds the role check and `require_sudo` a TOTP code confirmed within the last few
 import hmac
 import time
 import uuid
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from dataclasses import dataclass
 
 from fastapi import Depends, HTTPException, Request, Response, status
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.core.db import get_db
+from app.core.db import AsyncSessionLocal, get_db
 from app.core.ratelimit import enforce_limit
 from app.core.redis import get_async_redis
 from app.models.models import User
@@ -38,6 +39,18 @@ PERMISSIONS: dict[str, frozenset[str]] = {
 }
 API_REQUESTS_PER_WINDOW = 1200
 API_WINDOW_SECONDS = 600
+
+
+# Console reads run in a read-only transaction with a statement timeout, so a heavy statistics
+# query can neither change data nor hold the production database.
+READ_TIMEOUT_MS = 5000
+
+
+async def read_only_db() -> AsyncGenerator[AsyncSession]:
+    async with AsyncSessionLocal() as db:
+        await db.execute(text("SET TRANSACTION READ ONLY"))
+        await db.execute(text(f"SET LOCAL statement_timeout = {READ_TIMEOUT_MS}"))
+        yield db
 
 
 def can(role: str | None, permission: str) -> bool:

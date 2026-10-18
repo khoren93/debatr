@@ -26,7 +26,8 @@ backend/            FastAPI API + RQ worker (Python 3.12+, managed with uv)
                       ratelimit, auth (session cookie or Bearer API token; session-only deps),
                       security (bcrypt, Fernet, API token format/hash), ids
   app/api/admin/      admin console API (`/api/admin/*`): routes_auth (sign-in, 2FA, sessions,
-                      sudo); later phases add overview, users, debates, … (PROGRESS stage A)
+                      sudo), routes_overview (tiles, series, money, attention, tops); later phases
+                      add users, debates, … (PROGRESS stage A)
   app/api/            routers: auth, tokens (API tokens + `debatr login` device flow), billing
                       (Stripe), debates, gallery (+ leaderboard), reactions (likes/votes), models,
                       presets, topics (trending), stream (SSE), media; serializers.py builds the
@@ -47,7 +48,8 @@ backend/            FastAPI API + RQ worker (Python 3.12+, managed with uv)
                       usage (provider_usage booking, debate context, ContextThreadPool),
                       activity (user_activity_days, last_seen_at)
   app/services/admin/ totp (codes, recovery / enrollment codes, QR), sessions (Redis: sessions,
-                      sign-in tickets, code failures), audit (append-only admin_audit_log)
+                      sign-in tickets, code failures), audit (append-only admin_audit_log),
+                      stats (overview queries + pure periods / buckets / attention rules)
   app/services/media/ audio pipeline: script (markdown→speech), tts/ (elevenlabs, edge),
                       ffmpeg, highlights (LLM picks shorts), visuals (LLM visual director),
                       sketch (SVG line art → sanitized path data), images (Commons photos / AI
@@ -114,7 +116,9 @@ frontend/           React 19 + Vite 8 + Tailwind 4 + TypeScript
                       Device (/device?code=…, approves `debatr login`), Login (/login),
                       Register (/register); admin/ = the admin console (/admin/*, lazy AdminApp
                       outside AppShell and AuthProvider: AdminLogin, AdminOverview, AdminSecurity;
-                      components/admin: AdminShell, SudoDialog, RecoveryCodes)
+                      components/admin: AdminShell, SudoDialog, RecoveryCodes, StatTile,
+                      AttentionList; components/admin/charts: LineChart, StackedColumns,
+                      ChartCard (legend + table view), palette.ts = validated chart colours)
   src/lib/cli.ts      install / login / MCP setup snippets shown on the Account page
 cli/                `debatr` package (PyPI): CLI + MCP server, Python 3.10+, uv, only the public API
   src/debatr/cli.py   Typer commands (login, run, watch, resume, show, list, stop, delete, publish, audio,
@@ -598,6 +602,17 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   (`record_sync`), sqladmin edits (`SqladminAudit`) and actions (`record_action`); `scrub` drops
   secret fields. sqladmin lives at `/api/admin/db` behind the console session (role `admin`);
   its own login page redirects to `/admin/login`.
+- Overview (`GET /api/admin/overview?period=24h|7d|30d|90d|all&refresh=`): one cached answer
+  (Redis 60 s per period and permission scope) built in a read-only transaction with a 5 s
+  statement timeout (`access.read_only_db`). Tiles carry the previous period for deltas; series
+  are UTC buckets (hour / day / week, gaps filled); money and top spenders need the `money`
+  permission; `cost_tracked_since` marks periods older than `provider_usage`. The attention list
+  (`stats.attention_items`, pure) covers runs without a heartbeat, OpenRouter balance (cached
+  5 min), ElevenLabs key and character quota (`tts/elevenlabs.system_quota`), the last backup
+  (Redis `backup:last`, production only), flagged / failed debates, failed audio, negative
+  balances, failed console sign-ins, stale trending and the admin's last recovery codes.
+  Charts follow the dataviz rules: one axis, legend for 2+ series, crosshair / per-column
+  tooltips, keyboard arrows, a table view per chart, colours validated against the card surface.
 
 ## Conventions
 

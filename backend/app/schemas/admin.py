@@ -94,3 +94,121 @@ class RecoveryCodesOut(BaseModel):
 
 class SudoOut(BaseModel):
     sudo_until: datetime
+
+
+# --- overview ---------------------------------------------------------------------------------
+
+OverviewPeriod = Literal["24h", "7d", "30d", "90d", "all"]
+
+
+class Tile(BaseModel):
+    value: float
+    previous: float | None = None  # the period before (None for "all")
+
+
+class UserTiles(BaseModel):
+    new: Tile
+    active: Tile
+    total: int
+    dau: int
+    wau: int
+    mau: int
+
+
+class DebateTiles(BaseModel):
+    started: Tile
+    completed: Tile
+    failed: Tile
+    stopped: Tile
+    error_rate: Tile
+    running_now: int
+    media_ready: Tile
+    media_failed: Tile
+    renders: int  # MP4 exports of the debates created in the period
+    published: Tile
+    likes: Tile
+    votes: Tile
+
+
+class MoneyOut(BaseModel):
+    topups: float
+    bonuses: float
+    refunds: float
+    adjustments: float
+    charged: dict[str, float]  # models / voices / pictures, as positive amounts
+    charged_total: float
+    cost_system: float  # what providers cost us (system keys)
+    cost_user_keys: float  # spent on users' own keys (not ours)
+    cost_by_purpose: dict[str, float]
+    margin: float
+    topups_previous: float | None = None
+    charged_total_previous: float | None = None
+    cost_system_previous: float | None = None
+    margin_previous: float | None = None
+    liabilities: float  # credits users hold
+    negative_balances: int
+    negative_total: float
+    cost_tracked_since: datetime | None  # provider_usage starts here
+
+
+class SeriesPoint(BaseModel):
+    t: datetime
+    signups: float
+    active: float | None
+    completed: float
+    error: float
+    stopped: float
+    charged: float | None = None
+    topups: float | None = None
+    cost: float | None = None
+
+
+class AttentionItem(BaseModel):
+    key: str
+    severity: Literal["critical", "warning", "info"]
+    title: str
+    detail: str
+    href: str | None = None
+
+
+class TopModel(BaseModel):
+    model: str
+    debates: int
+    turns: int
+    failure_rate: float | None
+    avg_ttft_ms: int | None
+    cost: float
+
+
+class TopSpender(BaseModel):
+    user_id: str
+    email: str
+    display_name: str
+    spent: float
+
+
+class TopDebate(BaseModel):
+    id: str
+    title: str
+    slug: str | None
+    url: str | None  # the public page on the site, when published
+    likes: int
+    views: int
+    votes: int
+
+
+class OverviewOut(BaseModel):
+    period: OverviewPeriod
+    start: datetime
+    end: datetime
+    previous_start: datetime | None
+    bucket: Literal["hour", "day", "week"]
+    generated_at: datetime
+    users: UserTiles
+    debates: DebateTiles
+    money: MoneyOut | None  # only with the "money" permission
+    series: list[SeriesPoint]
+    attention: list[AttentionItem]
+    top_models: list[TopModel]
+    top_spenders: list[TopSpender] | None
+    top_debates: list[TopDebate]
