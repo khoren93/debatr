@@ -58,6 +58,16 @@ class User(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Admin console (app/admin): None | "admin" | "moderator". Granted only on the server
+    # (`python -m app.manage admin grant`), never through the API.
+    admin_role: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    # TOTP second factor of the console, encrypted (app.core.security.encrypt_totp_secret).
+    totp_secret_enc: Mapped[str | None] = mapped_column(Text, nullable=True)
+    totp_enabled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # SHA-256 of the unused one-time recovery codes.
+    recovery_codes_json: Mapped[list[str]] = mapped_column(JSON, default=list, server_default="[]")
+    # Bumped to end every session at once (password change, 2FA reset, "sign out everywhere").
+    session_epoch: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
     debates: Mapped[list["Debate"]] = relationship("Debate", back_populates="user")
     transactions: Mapped[list["CreditTransaction"]] = relationship(
@@ -293,6 +303,36 @@ class DebateVote(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     __table_args__ = (Index("ix_debate_votes_debate_id", "debate_id"),)
+
+
+class AdminAuditLog(Base):
+    """What admins did, and the console's security events (sign-ins, failures, 2FA changes).
+
+    Append-only: a database trigger refuses UPDATE, DELETE and TRUNCATE (migration 0011). No
+    foreign keys, so the record of what was done to or by an account outlives the account;
+    `actor_email` is a snapshot for the same reason."""
+
+    __tablename__ = "admin_audit_log"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, index=True
+    )
+    actor_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True, index=True
+    )
+    actor_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    action: Mapped[str] = mapped_column(String(64), index=True)  # e.g. "auth.signed_in"
+    target_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    target_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    before_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    after_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    user_agent: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    ok: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    __table_args__ = (Index("ix_admin_audit_log_target", "target_type", "target_id"),)
 
 
 class Preset(Base):

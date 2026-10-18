@@ -2,9 +2,6 @@
 
 from typing import Any
 
-from fastapi import Request
-
-from app.core.auth import is_admin_session
 from app.core.config import settings
 from app.models.models import Debate, Turn, User
 from app.schemas.schemas import (
@@ -34,17 +31,14 @@ def is_owner(debate: Debate, viewer: User | None) -> bool:
     return viewer is not None and debate.user_id == viewer.id
 
 
-def can_view(debate: Debate, viewer: User | None, request: Request | None = None) -> bool:
-    """Owners, admins and anyone for public or legacy (ownerless) debates."""
-    if debate.is_public or debate.user_id is None or is_owner(debate, viewer):
-        return True
-    return request is not None and is_admin_session(request)
+def can_view(debate: Debate, viewer: User | None) -> bool:
+    """Owners, and anyone for public or legacy (ownerless) debates. Admins read the others in
+    the admin console, never through this API."""
+    return debate.is_public or debate.user_id is None or is_owner(debate, viewer)
 
 
-def can_manage(debate: Debate, viewer: User | None, request: Request | None = None) -> bool:
-    if is_owner(debate, viewer):
-        return True
-    return request is not None and is_admin_session(request)
+def can_manage(debate: Debate, viewer: User | None) -> bool:
+    return is_owner(debate, viewer)
 
 
 def share_url(debate: Debate) -> str | None:

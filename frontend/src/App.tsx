@@ -1,6 +1,7 @@
 import { Suspense, lazy } from 'react';
 import { Route, Routes, useParams } from 'react-router-dom';
 import { AppShell, Page } from './components/layout/AppShell';
+import { AuthProvider } from './auth/AuthContext';
 import { RequireAuth } from './auth/RequireAuth';
 import { LinkButton, PageLoader } from './components/ui';
 import Landing from './pages/Landing';
@@ -15,6 +16,8 @@ import Device from './pages/Device';
 // The wizard and the debate page pull in Remotion (player + browser renderer): load them lazily.
 const CreateDebate = lazy(() => import('./pages/CreateDebate'));
 const DebateView = lazy(() => import('./pages/DebateView'));
+// The admin console: its own session, layout and pages, never downloaded by visitors of the site.
+const AdminApp = lazy(() => import('./pages/admin/AdminApp'));
 
 const NotFound = () => (
   <Page className="text-center">
@@ -40,8 +43,8 @@ const PublicDebateRoute = () => {
   return <DebateView key={`slug:${slug}`} slug={slug ?? ''} />;
 };
 
-function App() {
-  return (
+const Site = () => (
+  <AuthProvider>
     <AppShell>
       <Suspense fallback={<PageLoader />}>
         <Routes>
@@ -88,6 +91,22 @@ function App() {
         </Routes>
       </Suspense>
     </AppShell>
+  </AuthProvider>
+);
+
+function App() {
+  return (
+    <Routes>
+      <Route
+        path="/admin/*"
+        element={
+          <Suspense fallback={<PageLoader />}>
+            <AdminApp />
+          </Suspense>
+        }
+      />
+      <Route path="*" element={<Site />} />
+    </Routes>
   );
 }
 

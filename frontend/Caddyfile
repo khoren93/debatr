@@ -44,3 +44,57 @@
         -Server
     }
 }
+
+# The admin console on its own host (ADMIN_HOST, plain HTTP here: the external Caddy terminates
+# TLS). Only the console's pages, /api/admin (incl. sqladmin under /api/admin/db) and the health
+# check; the API refuses /api/admin on every other host (app/admin/gate.py), so on the site's
+# own host the console does not exist. Without ADMIN_HOST (development) the console is served on
+# the site's origin instead and this block only answers for admin.localhost.
+http://{$ADMIN_HOST:admin.localhost} {
+    root * /srv
+
+    @console_api path /api/admin /api/admin/* /api/health
+    handle @console_api {
+        reverse_proxy api:8000
+    }
+    handle /api* {
+        respond 404
+    }
+
+    handle /assets/* {
+        encode gzip zstd
+        header Cache-Control "public, max-age=31536000, immutable"
+        file_server
+    }
+
+    # Site pages do not exist here: anything that is neither a console route nor a file goes to
+    # the console.
+    handle {
+        @site_page {
+            not path /admin /admin/*
+            not file
+        }
+        redir @site_page /admin 302
+        encode gzip zstd
+        try_files {path} /index.html
+        header Cache-Control "no-cache"
+        file_server
+    }
+
+    # The SPA has no inline script; sqladmin's server-rendered pages carry one (flash messages).
+    # Neither may load anything from another origin or be framed.
+    @sqladmin path /api/admin/db /api/admin/db/*
+    header @sqladmin Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'"
+    @console_page not path /api/admin/db /api/admin/db/*
+    header @console_page Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'"
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Frame-Options "DENY"
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "no-referrer"
+        Cross-Origin-Opener-Policy "same-origin"
+        Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+        X-Robots-Tag "noindex, nofollow"
+        -Server
+    }
+}

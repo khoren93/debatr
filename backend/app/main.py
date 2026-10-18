@@ -10,9 +10,11 @@ from sqlalchemy import text
 from starlette.concurrency import run_in_threadpool
 from starlette.middleware.sessions import SessionMiddleware
 
-from app.admin.auth import authentication_backend
+from app.admin.auth import SqladminAudit, authentication_backend
+from app.admin.gate import AdminGate
 from app.admin.views import (
     ApiTokenAdmin,
+    AuditLogAdmin,
     CreditTransactionAdmin,
     DebateAdmin,
     LikeAdmin,
@@ -24,6 +26,7 @@ from app.admin.views import (
     UserAdmin,
     VoteAdmin,
 )
+from app.api import admin as admin_api
 from app.api import (
     routes_auth,
     routes_billing,
@@ -51,6 +54,8 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    if not settings.admin_console_enabled:
+        logger.error("ADMIN_HOST is not set: the admin console is off (see .env.example)")
     insecure = settings.insecure_defaults()
     if insecure:
         message = f"Placeholder secrets in use: {', '.join(insecure)}"
@@ -93,8 +98,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Admin panel
-admin = Admin(app, engine, authentication_backend=authentication_backend, base_url="/api/admin")
+# Outermost: the admin console's host, IP, Fetch Metadata and Origin checks run before CORS,
+# so no other origin ever gets a CORS answer from /api/admin.
+app.add_middleware(AdminGate)
+
+# Raw tables (sqladmin) inside the admin console, behind its session (app.admin.auth).
+admin = Admin(
+    app,
+    engine,
+    authentication_backend=authentication_backend,
+    base_url="/api/admin/db",
+    audit_backend=SqladminAudit(),
+)
 admin.add_view(UserAdmin)
 admin.add_view(ApiTokenAdmin)
 admin.add_view(CreditTransactionAdmin)
@@ -106,8 +121,10 @@ admin.add_view(TurnAdmin)
 admin.add_view(TrendingBatchAdmin)
 admin.add_view(TrendingTopicAdmin)
 admin.add_view(SessionAdmin)
+admin.add_view(AuditLogAdmin)
 
 # Routers
+app.include_router(admin_api.router, prefix="/api/admin")
 app.include_router(routes_auth.router, prefix="/api/auth", tags=["auth"])
 app.include_router(routes_tokens.router, prefix="/api/auth", tags=["api tokens"])
 app.include_router(routes_billing.router, prefix="/api/billing", tags=["billing"])

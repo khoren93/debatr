@@ -7,8 +7,10 @@ from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import RedirectResponse
 
+from app.admin.auth import record_action
 from app.core.db import AsyncSessionLocal
 from app.models.models import (
+    AdminAuditLog,
     ApiToken,
     CreditTransaction,
     Debate,
@@ -21,6 +23,7 @@ from app.models.models import (
     Turn,
     User,
 )
+from app.services.debate_control import ACTIVE_STATUSES, stop_debate
 from app.services.engagement import recount
 from app.services.moderation import mark_admin_decision, publish_async, wants_public
 from app.services.queue_manager import enqueue_trending_refresh
@@ -154,7 +157,7 @@ class DebateAdmin(ModelView, model=Debate):
 
     async def _moderate(self, request: Request, *, approved: bool) -> RedirectResponse:
         """Approve (and publish when the owner asked for the gallery) or reject."""
-        pks = [pk for pk in request.query_params.get("pks", "").split(",") if pk]
+        pks = _pks(request)
         async with AsyncSessionLocal() as db:
             for pk in pks:
                 debate = await db.get(Debate, uuid.UUID(pk))
@@ -164,8 +167,9 @@ class DebateAdmin(ModelView, model=Debate):
                 if approved and debate.status == "completed" and wants_public(debate):
                     await publish_async(db, debate)
             await db.commit()
-        referer = request.headers.get("referer")
-        return RedirectResponse(referer or request.url_for("admin:list", identity=self.identity))
+        verdict = "moderation.approved" if approved else "moderation.rejected"
+        await record_action(request, verdict, "debate", list(pks))
+        return _back(request, self)
 
     @action(
         name="approve",
@@ -182,6 +186,22 @@ class DebateAdmin(ModelView, model=Debate):
     )
     async def reject(self, request: Request) -> RedirectResponse:
         return await self._moderate(request, approved=False)
+
+    @action(
+        name="stop",
+        label="Stop",
+        confirmation_message="Stop these debates? A running turn ends early.",
+    )
+    async def stop(self, request: Request) -> RedirectResponse:
+        stopped: list[str | None] = []
+        async with AsyncSessionLocal() as db:
+            for pk in _pks(request):
+                debate = await db.get(Debate, uuid.UUID(pk))
+                if debate is not None and debate.status in ACTIVE_STATUSES:
+                    await stop_debate(db, debate)
+                    stopped.append(pk)
+        await record_action(request, "debate.stopped", "debate", stopped)
+        return _back(request, self)
 
 
 class _RecountOnDelete:
@@ -263,6 +283,10 @@ class SessionAdmin(ModelView, model=Session):
     icon = "fa-solid fa-clock-rotate-left"
 
 
+def _pks(request: Request) -> list[str]:
+    return [pk for pk in request.query_params.get("pks", "").split(",") if pk]
+
+
 def _back(request: Request, view: ModelView) -> RedirectResponse:
     referer = request.headers.get("referer")
     return RedirectResponse(referer or request.url_for("admin:list", identity=view.identity))
@@ -295,6 +319,7 @@ class TrendingBatchAdmin(ModelView, model=TrendingBatch):
     )
     async def build_now(self, request: Request) -> RedirectResponse:
         await run_in_threadpool(enqueue_trending_refresh, True)
+        await record_action(request, "trending.build_requested", "trending_batch", [None])
         return _back(request, self)
 
 
@@ -327,13 +352,15 @@ class TrendingTopicAdmin(ModelView, model=TrendingTopic):
     icon = "fa-solid fa-fire"
 
     async def _set_hidden(self, request: Request, hidden: bool) -> RedirectResponse:
-        pks = [pk for pk in request.query_params.get("pks", "").split(",") if pk]
+        pks = _pks(request)
         async with AsyncSessionLocal() as db:
             for pk in pks:
                 topic = await db.get(TrendingTopic, uuid.UUID(pk))
                 if topic is not None:
                     topic.is_hidden = hidden
             await db.commit()
+        action_name = "trending.hidden" if hidden else "trending.shown"
+        await record_action(request, action_name, "trending_topic", list(pks))
         return _back(request, self)
 
     @action(name="hide", label="Hide from the site")
@@ -343,3 +370,28 @@ class TrendingTopicAdmin(ModelView, model=TrendingTopic):
     @action(name="show", label="Show again")
     async def show(self, request: Request) -> RedirectResponse:
         return await self._set_hidden(request, False)
+
+
+class AuditLogAdmin(ModelView, model=AdminAuditLog):
+    """The admin audit log, read-only (the table itself refuses changes)."""
+
+    column_list = [
+        AdminAuditLog.created_at,
+        AdminAuditLog.action,
+        AdminAuditLog.ok,
+        AdminAuditLog.actor_email,
+        AdminAuditLog.target_type,
+        AdminAuditLog.target_id,
+        AdminAuditLog.ip,
+        AdminAuditLog.reason,
+    ]
+    column_searchable_list = [AdminAuditLog.action, AdminAuditLog.actor_email]
+    column_sortable_list = [AdminAuditLog.created_at, AdminAuditLog.action]
+    column_default_sort = (AdminAuditLog.created_at, True)
+    column_filters = [BooleanFilter(AdminAuditLog.ok, title="Succeeded")]
+    can_create = False
+    can_edit = False
+    can_delete = False
+    name = "Audit entry"
+    name_plural = "Audit log"
+    icon = "fa-solid fa-list-check"

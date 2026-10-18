@@ -11,16 +11,22 @@ a local export may sit in the git-ignored `design/` folder (`Debatr Studio.html`
 
 ```
 backend/            FastAPI API + RQ worker (Python 3.12+, managed with uv)
-  app/main.py         FastAPI app, session + CORS middleware, admin panel, /api/health
+  app/main.py         FastAPI app, AdminGate + session + CORS middleware, sqladmin, /api/health
   app/worker.py       RQ worker entrypoint (`python -m app.worker`)
-  app/manage.py       operator commands on the server (`python -m app.manage credits …`: balance
-                      changes through the ledger), not part of the public CLI
+  app/manage.py       operator commands on the server, not part of the public CLI: `admin grant |
+                      revoke | list | reset-2fa | revoke-sessions | enroll-code`, `credits …`
+                      (balance changes through the ledger)
+  app/admin/          admin console access: gate (host / IP / Fetch Metadata / Origin, outermost
+                      middleware), access (sessions → AdminContext, CSRF, roles, sudo), auth
+                      (sqladmin behind the console session + its audit backend), views (sqladmin)
   app/scheduler.py    periodic jobs (`python -m app.scheduler`, RQ cron on the background queue:
                       hourly trending check, recovery check every minute;
                       `--refresh-trending` builds a batch now)
   app/core/           config (pydantic-settings), db (async SQLAlchemy), redis, logging,
                       ratelimit, auth (session cookie or Bearer API token; session-only deps),
                       security (bcrypt, Fernet, API token format/hash), ids
+  app/api/admin/      admin console API (`/api/admin/*`): routes_auth (sign-in, 2FA, sessions,
+                      sudo); later phases add overview, users, debates, … (PROGRESS stage A)
   app/api/            routers: auth, tokens (API tokens + `debatr login` device flow), billing
                       (Stripe), debates, gallery (+ leaderboard), reactions (likes/votes), models,
                       presets, topics (trending), stream (SSE), media; serializers.py builds the
@@ -37,7 +43,9 @@ backend/            FastAPI API + RQ worker (Python 3.12+, managed with uv)
                       check of on-screen figures), markers ([visual: …] / [dispute N: …]),
                       trending (RSS news → daily debate topics with source links),
                       resume (failed turn → Resume), heartbeat / recovery / fair_share /
-                      free_quota (worker safety, see "Workers and queues")
+                      free_quota (worker safety, see "Workers and queues"), debate_control (stop)
+  app/services/admin/ totp (codes, recovery / enrollment codes, QR), sessions (Redis: sessions,
+                      sign-in tickets, code failures), audit (append-only admin_audit_log)
   app/services/media/ audio pipeline: script (markdown→speech), tts/ (elevenlabs, edge),
                       ffmpeg, highlights (LLM picks shorts), visuals (LLM visual director),
                       sketch (SVG line art → sanitized path data), images (Commons photos / AI
@@ -45,14 +53,16 @@ backend/            FastAPI API + RQ worker (Python 3.12+, managed with uv)
   app/schemas/timeline.py  Timeline contract shared with frontend/src/api/timeline.ts;
                       visuals.py = scene specs shared with frontend/src/api/visuals.ts
   app/models/         SQLAlchemy ORM models (User, CreditTransaction, Debate, Turn, …)
-  app/schemas/        Pydantic request/response schemas (schemas, auth, billing, media)
+  app/schemas/        Pydantic request/response schemas (schemas, auth, billing, media, admin)
   migrations/         Alembic (async env)
   tests/              pytest (pure unit tests, no DB/Redis needed)
 frontend/           React 19 + Vite 8 + Tailwind 4 + TypeScript
   src/index.css       Tailwind theme tokens (colors ink/surface/accent/pro/con/host…, fonts, radii)
   src/api/            axios client, typed API functions per area (auth, billing, debates,
-                      gallery, media, models, topics), shared types.ts, timeline.ts
-  src/auth/           AuthContext (useAuth), RequireAuth route guard
+                      gallery, media, models, topics), shared types.ts, timeline.ts;
+                      admin/ = the console's own client (CSRF header, 401 → sign-in), types, auth
+  src/auth/           AuthContext (useAuth), RequireAuth route guard; AdminAuthContext
+                      (useAdminAuth, RequireAdmin) for the console
   src/hooks/          useDebateStream (SSE), useDebateMedia (polling), useTrendingTopics,
                       useModels, useBillingConfig, useVoices (wizard voice catalogue),
                       useLeaderboard (cached model ranking), useElevenLabsKeyStatus (checks
@@ -99,7 +109,9 @@ frontend/           React 19 + Vite 8 + Tailwind 4 + TypeScript
                       CreateDebate (/create, `?draft=<id>`, `?remix=<id>`),
                       DebateView (/debate/:id and public /d/:slug), Account (/account?tab=…),
                       Device (/device?code=…, approves `debatr login`), Login (/login),
-                      Register (/register)
+                      Register (/register); admin/ = the admin console (/admin/*, lazy AdminApp
+                      outside AppShell and AuthProvider: AdminLogin, AdminOverview, AdminSecurity;
+                      components/admin: AdminShell, SudoDialog, RecoveryCodes)
   src/lib/cli.ts      install / login / MCP setup snippets shown on the Account page
 cli/                `debatr` package (PyPI): CLI + MCP server, Python 3.10+, uv, only the public API
   src/debatr/cli.py   Typer commands (login, run, watch, resume, show, list, stop, delete, publish, audio,
@@ -173,6 +185,7 @@ docker compose up -d --build                     # full stack on http://localhos
 ./deploy.sh                                      # production (adds docker-compose.prod.yml)
 make backup                                      # dump Postgres into ./backups (cron on the server)
 make backup-check                                # restore the newest dump into a scratch DB, compare counts
+docker compose exec api python -m app.manage admin grant you@example.com   # console access + enrollment code
 docker compose exec api python -m app.manage credits user@example.com 5 --reason "…"  # ledger adjustment
 ```
 
@@ -183,12 +196,8 @@ docker compose exec api python -m app.manage credits user@example.com 5 --reason
    SessionMiddleware so it never re-issues the cookie with its defaults; the SPA reads the
    session with same-site requests, so links from other sites still arrive signed in).
    `get_current_user` / `require_user` in `app/core/auth.py`. New accounts get
-   `SIGNUP_BONUS_USD` credits. The sqladmin panel (`ADMIN_USER` / `ADMIN_PASSWORD`, until the new
-   admin console replaces it) uses the same cookie under `token` + `admin_until` (12 h,
-   `is_admin_session`); its sign-in allows 5 attempts per IP per 15 min
-   (`enforce_admin_login_limit`) and logs each attempt with the IP. Its forms are allowlists
-   (`form_columns`, `column_details_list`): it cannot edit balances, turns or the lineup, nor
-   delete users (their debates would turn into ownerless rows readable by link).
+   `SIGNUP_BONUS_USD` credits. Admins sign in to the admin console separately (see "Admin
+   console"); the public API grants them nothing.
 1. `POST /api/debates` (signed-in users only) validates `DebateConfig` (`topic` ≤
    `TOPIC_MAX_LENGTH` = 150: it is drawn on the video; configs saved before the limit hold up to
    500 and are re-read with `DebateConfig.stored`; the wizard, CLI and trending topics keep to
@@ -243,9 +252,10 @@ SSE events: `connected`, `debate_started`, `turn_started`, `turn_delta`, `turn_c
 checking → ready).
 
 Debate statuses: `draft | queued | running | completed | error | stopped`.
-Access: owners and the admin session manage a debate; public (`is_public`, `slug`, `/d/{slug}`,
+Access: owners manage a debate; public (`is_public`, `slug`, `/d/{slug}`,
 `GET /api/gallery/{slug}`) and ownerless legacy rows are readable by anyone
-(`app/api/serializers.can_view / can_manage`). `POST /api/debates/{id}/publish` assigns the slug.
+(`app/api/serializers.can_view / can_manage`; admins work in the console, never through this
+API). `POST /api/debates/{id}/publish` assigns the slug.
 
 ### Gallery moderation and auto-publish
 
@@ -258,10 +268,11 @@ Access: owners and the admin session manage a debate; public (`is_public`, `slug
   `verdict_json`. `finish_debate_job` runs a stand-alone check when the verdict step gave no answer
   (fails closed: flagged) before the status turns `completed`, then publishes approved debates
   whose owner wants them public and whose turns all succeeded (`moderation.should_auto_publish`).
-- Flagged debates stay private: the owner's Publish only sets `publish_requested`; the admin panel
-  (Debates, filter Moderation=flagged) has Approve / Reject actions, and publishing from the admin
-  session approves. Rejected debates cannot be published by the owner. `moderation` in
-  `DebateDetail` goes to the owner/admin only; configs from before auto-publish count as `false`.
+- Flagged debates stay private: the owner's Publish only sets `publish_requested`; sqladmin in the
+  console (Debates, filter Moderation=flagged) has Approve (publishes when the owner asked) /
+  Reject / Stop actions, each audited. Rejected debates cannot be published by the owner.
+  `moderation` in `DebateDetail` goes to the owner only; configs from before auto-publish count
+  as `false`.
 Stopping: `POST /api/debates/{id}/stop` sets the status, sets `debate:{id}:stop` in Redis
 (checked by the worker every few chunks) and publishes `debate_stopped`.
 Failed turns: a turn (or verdict) without an answer — provider error, `LLM_TURN_TIMEOUT`, empty
@@ -307,7 +318,7 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
    `debates.media_json`, sets `media_status=queued` and enqueues `build_media_job` on the
    `media` RQ queue (`MEDIA_JOB_TIMEOUT`). An optional user ElevenLabs key goes to Redis
    (`debate:{id}:tts_key`), never to Postgres. ElevenLabs builds on the system key are paid
-   from the owner's credits (admin session or `X-Media-Token` are exempt). The system key is
+   from the owner's credits (`X-Media-Token` = MEDIA_API_TOKEN is exempt). The system key is
    probed (`tts/elevenlabs.system_key_status`, cached) so a rejected key disables premium
    voices in the UI instead of failing later; the key needs the Text to Speech, Voices read,
    User read and Forced alignment permissions.
@@ -534,6 +545,36 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
 - A personal OpenRouter key (`PUT /api/auth/me/openrouter-key`) is validated against OpenRouter,
   stored encrypted with `SECRET_KEY` (`core/security.py`) and shown masked (`…last4`).
 
+### Admin console (`/admin`, `/api/admin/*`; the plan is PROGRESS stage A)
+
+- Own origin: `ADMIN_HOST` (production: e.g. an `admin.` subdomain; empty in development =
+  the site's origin; empty in production = console off, error at startup). `app/admin/gate.py`
+  (outermost middleware) answers `/api/admin*` only on that host (404 elsewhere), 404s the rest of
+  the API there, enforces `ADMIN_ALLOWED_IPS`, refuses `Sec-Fetch-Site` other than same-origin /
+  none (every `*.ai-debates.net` app is the same *site*, so SameSite cookies do not protect the
+  console from them) and unsafe methods without the console's Origin, and adds no-store / noindex
+  / DENY headers. `frontend/Caddyfile` has the `http://{$ADMIN_HOST}` block (console routes only,
+  strict CSP; sqladmin pages get one that allows its inline script).
+- Admins are accounts with `users.admin_role` (`admin` | `moderator`, `access.PERMISSIONS`),
+  granted only by `python -m app.manage admin grant`, which prints a one-time enrollment code
+  (Redis, 24 h). Sign-in (`routes_auth`): password (5 tries per 15 min per IP and per email, one
+  answer for every refusal) → ticket cookie (10 min) → TOTP code or recovery code, or on the first
+  sign-in the enrollment code + a code from the new authenticator → 10 recovery codes (hashes
+  stored). Wrong codes: 5 per ticket, 5 per account in 15 min → locked; a code works once
+  (`admin:totp_step`). TOTP secrets: Fernet with a key derived from `SECRET_KEY` + own context.
+- Sessions live in Redis (`services/admin/sessions`): `__Host-debatr_admin` cookie (HttpOnly,
+  SameSite=Strict; no prefix over plain http), only its SHA-256 stored, idle 30 min, absolute
+  12 h, listed and revocable; `resolve_admin` re-checks role, `is_active`, enrollment and
+  `users.session_epoch` (bumped by password change, 2FA reset, sign-out everywhere) on every
+  request and never accepts an `Authorization` header. Unsafe methods need `X-CSRF-Token`
+  (from `/auth/me`). `require_sudo`: a TOTP code confirmed in the last 5 min (403 with
+  `X-Admin-Sudo: required`; the UI asks and retries).
+- `admin_audit_log` is append-only (trigger refuses UPDATE / DELETE / TRUNCATE; no foreign
+  keys). Everything goes in: sign-ins and failures, 2FA, sessions, sudo, server commands
+  (`record_sync`), sqladmin edits (`SqladminAudit`) and actions (`record_action`); `scrub` drops
+  secret fields. sqladmin lives at `/api/admin/db` behind the console session (role `admin`);
+  its own login page redirects to `/admin/login`.
+
 ## Conventions
 
 - Python: ruff (line length 100, isort), pyright `standard`, type hints everywhere,
@@ -588,7 +629,11 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   with `docker compose exec -T db sh -c 'pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --clean
   --if-exists --no-owner' < backups/<file>.dump` after stopping api/worker/scheduler.
 - Changing `SECRET_KEY` invalidates every login cookie and makes stored OpenRouter keys
-  undecryptable (users must re-enter them).
+  undecryptable (users must re-enter them) and the admins' TOTP secrets unreadable (reset each
+  with `python -m app.manage admin reset-2fa <email>`).
+- Production needs `ADMIN_HOST` in `.env`, a DNS record for it and a block in the external Caddy
+  that proxies it to the frontend container like the site; without `ADMIN_HOST` the console and
+  sqladmin are off. The external Caddy must pass the original Host header (its default).
 - Media: `MEDIA_ROOT` is `./media` natively and the `media_data` volume (`/media`) in Docker;
   the worker image target installs ffmpeg, the api target does not. Docker runs `worker`
   (`TURN_WORKERS` replicas, `--queues default,background`), `media-worker` (`--queues media`)
@@ -617,7 +662,7 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   later speakers must see the scenes they may dispute; `design_turn` never raises.
 - Old rows may have `turn_type=moderator_comment` and inline `"[Error ...]"` text; both are still
   handled (`scheduler.MODERATOR_TURN_TYPES`, `lib/format.isErrorTurn`). Debates created before
-  accounts have `user_id=NULL`: readable via their link, manageable only from the admin panel.
+  accounts have `user_id=NULL`: readable via their link, manageable only in the admin console.
 - Speaker names: the wizard has no name fields. `lib/modelNames.speakerNames` calls the host
   "The Host" and debaters after their model family ("Claude", "Gemini", "GPT-5.5", "Free
   Router"); two different models of one family get full titles, the same model twice gets

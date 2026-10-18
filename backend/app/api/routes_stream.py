@@ -52,7 +52,7 @@ async def stream_debate(
     debate = await db.get(Debate, uuid_id)
     if not debate:
         raise HTTPException(status_code=404, detail="Debate not found")
-    if not can_view(debate, viewer, request):
+    if not can_view(debate, viewer):
         raise HTTPException(status_code=403, detail="This debate is private")
     initial_status = debate.status
 

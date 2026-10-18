@@ -143,6 +143,8 @@ async def change_password(
     if not verify_password(body.current_password, user.password_hash):
         raise HTTPException(status_code=400, detail="Current password is wrong")
     user.password_hash = hash_password(body.new_password)
+    # Ends the admin console sessions of this account (app.admin.access compares the epoch).
+    user.session_epoch += 1
     await db.commit()
     return OkResponse()
 

@@ -182,7 +182,9 @@ Follow these steps to get a copy up and running locally or on your server.
 4. **Open**
    - **Frontend**: [http://localhost](http://localhost)
    - **API docs**: [http://localhost/api/docs](http://localhost/api/docs)
-   - **Admin panel**: [http://localhost/api/admin](http://localhost/api/admin) (`ADMIN_USER` / `ADMIN_PASSWORD`)
+   - **Admin console**: [http://localhost/admin](http://localhost/admin). Give your account access first:
+     `docker compose exec api python -m app.manage admin grant you@example.com` prints a one-time
+     enrollment code; sign in with your password, enter the code and set up an authenticator app.
 
 ### 💻 Local development (hot reload)
 
@@ -253,8 +255,10 @@ Run `make` to list every target. The most useful ones:
    ```
    `deploy.sh` pulls the latest code, rebuilds the containers (migrations run on start) and
    prunes old images. In production set `ENVIRONMENT=production` and replace every placeholder
-   secret in `.env` (`SECRET_KEY`, `POSTGRES_PASSWORD`, a non-default `ADMIN_USER` and a long
-   random `ADMIN_PASSWORD`, e.g. `openssl rand -base64 32`).
+   secret in `.env` (`SECRET_KEY`, `POSTGRES_PASSWORD`, e.g. `openssl rand -base64 32`).
+   The admin console runs on its own host: point a subdomain (e.g. `admin.your-domain.com`) at
+   the server, set `ADMIN_HOST` to it, proxy it to the frontend container like the site, then
+   `docker compose exec api python -m app.manage admin grant you@your-domain.com`.
 6. **Update later**: SSH into the server and run it again from the project dir (pushes do not
    deploy automatically):
    ```bash
@@ -317,7 +321,7 @@ server pass `--url http://localhost` (or set `DEBATR_URL`).
 - Free models and free Edge voices cost nothing; a personal OpenRouter key makes model usage free.
 - Top-ups go through Stripe Checkout (`STRIPE_SECRET_KEY`, webhook `/api/billing/webhook` with the
   `checkout.session.completed` event and `STRIPE_WEBHOOK_SECRET`). Every movement is recorded in the
-  `credit_transactions` ledger and visible on the Account page and in the admin panel.
+  `credit_transactions` ledger and visible on the Account page and in the admin console.
 - Manual credits (gifts, refunds, corrections) are ledger rows too, from the server:
   `docker compose exec api python -m app.manage credits user@example.com 5 --reason "…"`.
 
@@ -357,7 +361,8 @@ The system uses an event-driven architecture to handle long-running LLM generati
 `SIGNUP_BONUS_USD`, `CREDIT_MARKUP`, `TTS_CREDIT_PRICE_PER_1K_CHARS`, `TOPUP_AMOUNTS_USD`,
 `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` (or `DEV_FAKE_PAYMENTS`), `DEBATE_CREATE_RATE_LIMIT`,
 `LOGIN_RATE_LIMIT`, `TURN_JOB_TIMEOUT`, `LLM_TURN_TIMEOUT`, `TURN_WORKERS`,
-`MAX_ACTIVE_DEBATES_PER_USER`, `MAX_ACTIVE_MEDIA_PER_USER`, `FREE_MODELS_PER_MINUTE`, `MEDIA_JOB_TIMEOUT`, `ADMIN_USER` / `ADMIN_PASSWORD`, `SECRET_KEY`.
+`MAX_ACTIVE_DEBATES_PER_USER`, `MAX_ACTIVE_MEDIA_PER_USER`, `FREE_MODELS_PER_MINUTE`, `MEDIA_JOB_TIMEOUT`, `ADMIN_HOST` /
+`ADMIN_ALLOWED_IPS`, `SECRET_KEY`.
 
 ---
 

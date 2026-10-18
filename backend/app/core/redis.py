@@ -100,3 +100,36 @@ def trending_lock_key() -> str:
 def trending_queued_key() -> str:
     """Set by the API when it enqueues a refresh, so stale reads enqueue it only once."""
     return "trending:refresh:queued"
+
+
+# --- Admin console (app.admin.access, app.services.admin) --------------------
+
+
+def admin_session_key(token_hash: str) -> str:
+    """One admin console session, by the SHA-256 of its cookie (the cookie is never stored)."""
+    return f"admin:session:{token_hash}"
+
+
+def admin_user_sessions_key(user_id: str) -> str:
+    """Set of the session hashes of one admin, to list and revoke them."""
+    return f"admin:sessions:{user_id}"
+
+
+def admin_ticket_key(ticket_hash: str) -> str:
+    """A sign-in between the password and the TOTP code (minutes only)."""
+    return f"admin:ticket:{ticket_hash}"
+
+
+def admin_enroll_key(user_id: str) -> str:
+    """Hash of the one-time enrollment code printed by `app.manage admin grant`."""
+    return f"admin:enroll:{user_id}"
+
+
+def admin_totp_step_key(user_id: str) -> str:
+    """Last accepted TOTP time step of an admin, so a code is never accepted twice."""
+    return f"admin:totp_step:{user_id}"
+
+
+def admin_totp_failures_key(user_id: str) -> str:
+    """Wrong codes of an admin in the current window (locks the second factor)."""
+    return f"admin:totp_fail:{user_id}"

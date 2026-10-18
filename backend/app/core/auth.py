@@ -1,13 +1,12 @@
 """Login state for API requests.
 
-Browsers sign in with the signed session cookie (SessionMiddleware), which carries the user id;
-the same cookie also holds the admin panel login, under a different key. The CLI, scripts and AI
-agents (MCP) send a personal API token instead: `Authorization: Bearer debatr_…`. A token acts as
-its owner, except for account management (password, tokens, stored keys, payments), which needs
-the browser session (`require_session_user`).
+Browsers sign in with the signed session cookie (SessionMiddleware), which carries the user id.
+The CLI, scripts and AI agents (MCP) send a personal API token instead: `Authorization: Bearer
+debatr_…`. A token acts as its owner, except for account management (password, tokens, stored
+keys, payments), which needs the browser session (`require_session_user`). The admin console
+has server-side sessions of its own, on its own host (app.admin.access).
 """
 
-import time
 import uuid
 from datetime import timedelta
 from typing import Literal, TypedDict
@@ -22,11 +21,6 @@ from app.core.security import hash_api_token, looks_like_api_token
 from app.models.models import ApiToken, User, utcnow
 
 SESSION_USER_KEY = "uid"
-ADMIN_SESSION_KEY = "token"
-# Unix time the admin panel login ends. It shares the cookie with the user login, which lasts
-# SESSION_MAX_AGE, so it carries a shorter deadline of its own.
-ADMIN_UNTIL_KEY = "admin_until"
-ADMIN_SESSION_SECONDS = 12 * 60 * 60
 # `api_tokens.last_used_at` is refreshed at most this often (not on every request).
 TOKEN_TOUCH_INTERVAL = timedelta(minutes=1)
 
@@ -38,13 +32,12 @@ class SessionCookieOptions(TypedDict):
 
 
 def session_cookie_options() -> SessionCookieOptions:
-    """Options of the signed session cookie, for the API and the admin panel alike: sqladmin
-    adds a SessionMiddleware of its own, which would re-issue the cookie with its defaults.
+    """Options of the signed session cookie, for the API and sqladmin alike: sqladmin adds a
+    SessionMiddleware of its own, which would re-issue the cookie with its defaults.
 
     SameSite=Strict: the cookie never rides along a request started on another site, so a link
-    or form elsewhere cannot act as the signed-in user (sqladmin's actions are plain GET links).
-    The SPA reads the session with same-site requests, so a visitor who follows a link to the
-    site is still signed in."""
+    or form elsewhere cannot act as the signed-in user. The SPA reads the session with same-site
+    requests, so a visitor who follows a link to the site is still signed in."""
     return {
         "same_site": "strict",
         "https_only": settings.is_production,
@@ -58,28 +51,6 @@ def login_session(request: Request, user: User) -> None:
 
 def logout_session(request: Request) -> None:
     request.session.pop(SESSION_USER_KEY, None)
-
-
-def admin_login_session(request: Request, *, now: float | None = None) -> None:
-    started = time.time() if now is None else now
-    request.session[ADMIN_SESSION_KEY] = "authenticated"
-    request.session[ADMIN_UNTIL_KEY] = int(started + ADMIN_SESSION_SECONDS)
-
-
-def admin_logout_session(request: Request) -> None:
-    """End the admin panel login only: the user login in the same cookie stays."""
-    request.session.pop(ADMIN_SESSION_KEY, None)
-    request.session.pop(ADMIN_UNTIL_KEY, None)
-
-
-def is_admin_session(request: Request, *, now: float | None = None) -> bool:
-    """A live admin panel login. Logins from before the deadline existed have none and count as
-    ended."""
-    if request.session.get(ADMIN_SESSION_KEY) != "authenticated":
-        return False
-    until = request.session.get(ADMIN_UNTIL_KEY)
-    moment = time.time() if now is None else now
-    return isinstance(until, int) and until > moment
 
 
 def bearer_token(request: Request) -> str | None:

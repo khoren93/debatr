@@ -22,13 +22,13 @@ from sqlalchemy.orm import selectinload
 from starlette.concurrency import run_in_threadpool
 
 from app.api.serializers import can_manage, can_view, detail_out, share_url, summary_out
-from app.core.auth import get_current_user, is_admin_session, request_api_token, require_user
+from app.core.auth import get_current_user, request_api_token, require_user
 from app.core.config import settings
 from app.core.db import get_db
 from app.core.ratelimit import enforce_debate_create_limit
 from app.core.redis import get_async_redis, provider_key_key, stop_flag_key, tts_key_key
 from app.core.security import decrypt_secret
-from app.models.models import Debate, DebateParticipant, User, utcnow
+from app.models.models import Debate, DebateParticipant, User
 from app.schemas.schemas import (
     DebateConfig,
     DebateDetail,
@@ -44,12 +44,14 @@ from app.schemas.schemas import (
     StopDebateResponse,
 )
 from app.services import api_tokens
+from app.services.debate_control import ACTIVE_STATUSES
+from app.services.debate_control import stop_debate as stop_debate_run
 from app.services.engagement import engagement_out
 from app.services.estimate import Pricing, estimate_debate, pricing_from_models
 from app.services.fair_share import require_debate_slot
 from app.services.media.paths import MediaPaths
 from app.services.media.tts.elevenlabs import system_key_status
-from app.services.moderation import mark_admin_decision, publish_async
+from app.services.moderation import publish_async
 from app.services.openrouter_client import openrouter_client
 from app.services.queue_manager import enqueue_debate_start
 from app.services.resume import discarded, resume_point
@@ -57,8 +59,6 @@ from app.services.views import count_view
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
-
-ACTIVE_STATUSES = ("queued", "running")
 
 
 def _parse_uuid(debate_id: str) -> uuid.UUID:
@@ -79,8 +79,8 @@ async def load_debate(db: AsyncSession, debate_id: str, *, full: bool = False) -
     return debate
 
 
-def _require_manage(debate: Debate, user: User | None, request: Request) -> None:
-    if not can_manage(debate, user, request):
+def _require_manage(debate: Debate, user: User | None) -> None:
+    if not can_manage(debate, user):
         raise HTTPException(status_code=403, detail="You do not own this debate")
 
 
@@ -348,7 +348,7 @@ async def update_draft(
 ) -> DebateResponse:
     """Replace the configuration of a draft."""
     debate = await load_debate(db, debate_id)
-    _require_manage(debate, user, request)
+    _require_manage(debate, user)
     if debate.status != "draft":
         raise HTTPException(status_code=409, detail="Only drafts can be edited")
     if request_api_token(request) is not None:
@@ -369,7 +369,7 @@ async def start_draft(
 ) -> DebateResponse:
     """Queue a draft."""
     debate = await load_debate(db, debate_id)
-    _require_manage(debate, user, request)
+    _require_manage(debate, user)
     if debate.status != "draft":
         raise HTTPException(status_code=409, detail=f"Debate is already {debate.status}")
     stored = dict(debate.config_json or {})
@@ -407,7 +407,7 @@ async def _resume_plan(
     db: AsyncSession, debate: Debate, user: User, request: Request, body: StartDebateRequest | None
 ) -> _ResumePlan:
     """Check that a failed debate can be resumed with these keys and price the rest of it."""
-    _require_manage(debate, user, request)
+    _require_manage(debate, user)
     if debate.status != "error":
         raise HTTPException(status_code=409, detail="Only a debate that failed can be resumed")
     if debate.media_status in ("queued", "running"):
@@ -495,14 +495,14 @@ async def get_debate(
 ) -> DebateDetail:
     """Debate details including participants and all turns."""
     debate = await load_debate(db, debate_id, full=True)
-    if not can_view(debate, viewer, request):
+    if not can_view(debate, viewer):
         raise HTTPException(status_code=403, detail="This debate is private")
     await count_view(db, debate, viewer, request)
     return detail_out(
         debate,
         viewer,
         await engagement_out(db, debate, viewer),
-        manager=can_manage(debate, viewer, request),
+        manager=can_manage(debate, viewer),
     )
 
 
@@ -515,23 +515,11 @@ async def stop_debate(
 ) -> StopDebateResponse:
     """Stop a queued or running debate. The current turn finishes early."""
     debate = await load_debate(db, debate_id)
-    _require_manage(debate, user, request)
+    _require_manage(debate, user)
     if debate.status not in ACTIVE_STATUSES:
         raise HTTPException(status_code=409, detail=f"Debate is already {debate.status}")
 
-    debate.status = "stopped"
-    debate.ended_at = utcnow()
-    await db.commit()
-
-    try:
-        await get_async_redis().set(stop_flag_key(debate_id), "1", ex=3600)
-    except RedisError:
-        logger.warning("Could not set stop flag for %s; worker will stop at next turn", debate_id)
-    from app.services.events import publish_event_async
-
-    await publish_event_async(
-        debate_id, "debate_stopped", {"debate_id": debate_id, "status": "stopped"}
-    )
+    await stop_debate_run(db, debate)
     return StopDebateResponse(debate_id=debate_id, status="stopped")
 
 
@@ -544,7 +532,7 @@ async def delete_debate(
 ) -> None:
     """Delete a debate, its turns and generated media."""
     debate = await load_debate(db, debate_id)
-    _require_manage(debate, user, request)
+    _require_manage(debate, user)
     if debate.status in ACTIVE_STATUSES:
         # Make sure the worker stops touching it.
         with contextlib.suppress(RedisError):
@@ -563,22 +551,19 @@ async def publish_debate(
     db: AsyncSession = Depends(get_db),
 ) -> PublishOut:
     """Make a finished debate public (gallery + share link). A debate flagged by the AI check
-    is only queued for an admin review; publishing from the admin session approves it."""
+    is only queued for an admin review (approved in the admin console)."""
     debate = await load_debate(db, debate_id)
-    _require_manage(debate, user, request)
+    _require_manage(debate, user)
     if debate.status != "completed":
         raise HTTPException(status_code=409, detail="Only completed debates can be published")
-    admin = is_admin_session(request)
-    if debate.moderation_status == "rejected" and not admin:
+    if debate.moderation_status == "rejected":
         raise HTTPException(
             status_code=409, detail="This debate was not approved for the public gallery"
         )
-    if debate.moderation_status == "flagged" and not admin:
+    if debate.moderation_status == "flagged":
         debate.moderation_json = {**(debate.moderation_json or {}), "publish_requested": True}
         await db.commit()
         return PublishOut(is_public=False, slug=None, share_url=None, moderation_status="flagged")
-    if admin and debate.moderation_status in ("flagged", "rejected"):
-        mark_admin_decision(debate, approved=True)
     if not await publish_async(db, debate):
         raise HTTPException(status_code=500, detail="Could not allocate a share link")
     debate.category = body.category or debate.category
@@ -599,7 +584,7 @@ async def unpublish_debate(
     db: AsyncSession = Depends(get_db),
 ) -> PublishOut:
     debate = await load_debate(db, debate_id)
-    _require_manage(debate, user, request)
+    _require_manage(debate, user)
     debate.is_public = False
     # Withdraws a pending review request as well.
     debate.moderation_json = {**(debate.moderation_json or {}), "publish_requested": False}
@@ -622,7 +607,7 @@ async def report_render(
 ) -> RendersOut:
     """The browser reports a finished MP4 render (used for the usage stats)."""
     debate = await load_debate(db, debate_id)
-    _require_manage(debate, user, request)
+    _require_manage(debate, user)
     state = dict(debate.media_json or {})
     renders = dict(state.get("renders") or {})
     renders[body.kind] = int(renders.get(body.kind) or 0) + 1

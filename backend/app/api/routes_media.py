@@ -26,7 +26,7 @@ from sqlalchemy.orm import selectinload
 from starlette.concurrency import run_in_threadpool
 
 from app.api.serializers import can_manage, can_view
-from app.core.auth import get_current_user, is_admin_session, request_api_token
+from app.core.auth import get_current_user, request_api_token
 from app.core.config import TERMINAL_DEBATE_STATUSES, settings
 from app.core.db import get_db
 from app.core.redis import get_async_redis, tts_key_key
@@ -75,10 +75,8 @@ async def _load(db: AsyncSession, debate_id: str) -> Debate:
     return debate
 
 
-def _is_trusted(request: Request, media_token: str | None) -> bool:
-    """Admin session or shared token: premium voices without credits."""
-    if is_admin_session(request):
-        return True
+def _is_trusted(media_token: str | None) -> bool:
+    """Shared token (MEDIA_API_TOKEN): premium voices without credits."""
     return bool(
         settings.MEDIA_API_TOKEN
         and media_token
@@ -222,7 +220,7 @@ async def get_debate_media(
     db: AsyncSession = Depends(get_db),
 ) -> DebateMediaOut:
     debate = await _load(db, debate_id)
-    if not can_view(debate, viewer, request):
+    if not can_view(debate, viewer):
         raise HTTPException(status_code=403, detail="This debate is private")
     return media_out(debate)
 
@@ -249,7 +247,7 @@ async def generate_debate_media(
 ) -> MediaAccepted:
     """Queue the audio build (TTS per turn, mixing, timeline). Video is rendered client-side."""
     debate = await _load(db, debate_id)
-    if not can_manage(debate, user, request):
+    if not can_manage(debate, user):
         raise HTTPException(status_code=403, detail="You do not own this debate")
     if debate.status not in TERMINAL_DEBATE_STATUSES:
         raise HTTPException(status_code=409, detail="The debate has not finished yet")
@@ -260,7 +258,7 @@ async def generate_debate_media(
     if debate.user_id is not None:
         await require_media_slot(db, debate.user_id)
     own_tts_key = bool(body.user_tts_key)
-    trusted = _is_trusted(request, x_media_token)
+    trusted = _is_trusted(x_media_token)
     token = request_api_token(request)
     paid_voices = body.provider == "elevenlabs" and not own_tts_key and not trusted
     paid_pictures = body.visuals and body.images == "ai" and not trusted
@@ -372,7 +370,7 @@ async def delete_debate_media(
     db: AsyncSession = Depends(get_db),
 ) -> None:
     debate = await _load(db, debate_id)
-    if not can_manage(debate, user, request):
+    if not can_manage(debate, user):
         raise HTTPException(status_code=403, detail="You do not own this debate")
     if debate.media_status == "running":
         raise HTTPException(status_code=409, detail="A media build is in progress")

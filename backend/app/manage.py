@@ -1,9 +1,15 @@
 """Operator commands, run on the server inside the api container:
 
+    docker compose exec api python -m app.manage admin grant you@example.com
     docker compose exec api python -m app.manage credits user@example.com 5 --reason "beta tester"
 
 They act on the database directly, as the operator: they are not part of the public `debatr`
-CLI and have no API route behind them.
+CLI and have no API route behind them. Every change is written to the admin audit log.
+
+`admin` manages console access: `grant` gives a role (and prints the one-time enrollment code
+for setting up the authenticator on the first sign-in), `revoke` takes it away, `reset-2fa`
+clears a lost authenticator, `revoke-sessions` signs an admin out everywhere, `enroll-code`
+issues a fresh enrollment code, `list` shows who has access. Roles are granted nowhere else.
 
 `credits` adds (or, with a negative amount, takes) credits through the ledger, the only way the
 balance changes (services/credits.apply_transaction_sync). The description is what the user
@@ -18,10 +24,21 @@ from collections.abc import Sequence
 from decimal import Decimal, InvalidOperation
 
 from sqlalchemy import select
+from sqlalchemy.orm import Session
 
+from app.admin.access import ROLES
+from app.core.config import settings
 from app.core.logging import setup_logging
+from app.core.redis import get_sync_redis
 from app.core.sync_db import get_sync_session
 from app.models.models import User
+from app.services.admin.audit import record_sync
+from app.services.admin.sessions import (
+    ENROLL_SECONDS,
+    drop_enrollment_code_sync,
+    issue_enrollment_code_sync,
+    revoke_all_sync,
+)
 from app.services.credits import apply_transaction_sync, to_usd
 
 logger = logging.getLogger(__name__)
@@ -80,6 +97,13 @@ def change_credits(
         if not assume_yes and input("Apply? [y/N] ").strip().lower() not in ("y", "yes"):
             print("Cancelled")
             return 1
+        record_sync(
+            db,
+            "credits.changed",
+            target=user,
+            reason=reason,
+            after={"amount_usd": str(amount), "kind": kind, "description": text},
+        )
         tx = apply_transaction_sync(
             db,
             user.id,
@@ -98,10 +122,142 @@ def change_credits(
         return 0
 
 
+def _user_by_email(db: Session, email: str) -> User | None:
+    user = db.scalar(select(User).where(User.email == email.strip().lower()))
+    if user is None:
+        print(f"No account with the email {email}", file=sys.stderr)
+    return user
+
+
+def _print_enrollment_code(user: User) -> None:
+    code = issue_enrollment_code_sync(get_sync_redis(), str(user.id))
+    host = settings.admin_hostname
+    page = f"https://{host}/admin/login" if host else "/admin/login on the site"
+    print(f"Enrollment code (one use, {ENROLL_SECONDS // 3600} h): {code}")
+    print(f"  Sign in at {page} with this account's password, then enter the code to set")
+    print("  up an authenticator app. Keep it secret: with the password it adds a phone.")
+
+
+def admin_grant(email: str, role: str) -> int:
+    with get_sync_session() as db:
+        user = _user_by_email(db, email)
+        if user is None:
+            return 1
+        if not user.is_active:
+            print("The account is disabled", file=sys.stderr)
+            return 1
+        before = user.admin_role
+        user.admin_role = role
+        record_sync(db, "role.granted", target=user, before={"role": before}, after={"role": role})
+        db.commit()
+        print(f"{user.email}: role {before or 'none'} -> {role}")
+        if user.totp_enabled_at is None:
+            _print_enrollment_code(user)
+        return 0
+
+
+def admin_revoke(email: str) -> int:
+    with get_sync_session() as db:
+        user = _user_by_email(db, email)
+        if user is None:
+            return 1
+        before = user.admin_role
+        user.admin_role = None
+        user.session_epoch += 1
+        record_sync(db, "role.revoked", target=user, before={"role": before})
+        db.commit()
+        ended = revoke_all_sync(get_sync_redis(), str(user.id))
+        drop_enrollment_code_sync(get_sync_redis(), str(user.id))
+        print(f"{user.email}: role {before or 'none'} -> none ({ended} sessions ended)")
+        return 0
+
+
+def admin_reset_2fa(email: str) -> int:
+    """For a lost phone: the next sign-in sets up a new authenticator (with a new code)."""
+    with get_sync_session() as db:
+        user = _user_by_email(db, email)
+        if user is None:
+            return 1
+        had = user.totp_enabled_at is not None
+        user.totp_secret_enc = None
+        user.totp_enabled_at = None
+        user.recovery_codes_json = []
+        user.session_epoch += 1
+        record_sync(db, "auth.2fa_reset", target=user, before={"enrolled": had})
+        db.commit()
+        ended = revoke_all_sync(get_sync_redis(), str(user.id))
+        print(f"{user.email}: authenticator cleared ({ended} sessions ended)")
+        if user.admin_role:
+            _print_enrollment_code(user)
+        return 0
+
+
+def admin_revoke_sessions(email: str) -> int:
+    with get_sync_session() as db:
+        user = _user_by_email(db, email)
+        if user is None:
+            return 1
+        user.session_epoch += 1
+        record_sync(db, "auth.sessions_revoked", target=user)
+        db.commit()
+        ended = revoke_all_sync(get_sync_redis(), str(user.id))
+        print(f"{user.email}: {ended} console sessions ended")
+        return 0
+
+
+def admin_enroll_code(email: str) -> int:
+    with get_sync_session() as db:
+        user = _user_by_email(db, email)
+        if user is None:
+            return 1
+        if not user.admin_role:
+            print("The account has no admin role: grant one first", file=sys.stderr)
+            return 1
+        if user.totp_enabled_at is not None:
+            print("The authenticator is already set up (lost it? use reset-2fa)", file=sys.stderr)
+            return 1
+        record_sync(db, "auth.enroll_code_issued", target=user)
+        db.commit()
+        _print_enrollment_code(user)
+        return 0
+
+
+def admin_list() -> int:
+    with get_sync_session() as db:
+        admins = db.scalars(
+            select(User).where(User.admin_role.is_not(None)).order_by(User.email)
+        ).all()
+        if not admins:
+            print("No admins yet: python -m app.manage admin grant <email>")
+        for user in admins:
+            factor = (
+                f"2FA since {user.totp_enabled_at:%Y-%m-%d}"
+                if user.totp_enabled_at
+                else "2FA not set up"
+            )
+            state = "" if user.is_active else ", disabled"
+            print(f"{user.email}  {user.admin_role}  {factor}{state}")
+        return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="python -m app.manage", description=__doc__)
     parser.formatter_class = argparse.RawDescriptionHelpFormatter
     commands = parser.add_subparsers(dest="command", required=True)
+
+    admin = commands.add_parser("admin", help="admin console access")
+    actions = admin.add_subparsers(dest="action", required=True)
+    grant = actions.add_parser("grant", help="give a role (prints the enrollment code)")
+    grant.add_argument("email")
+    grant.add_argument("--role", choices=ROLES, default="admin")
+    for name, text in (
+        ("revoke", "take the role away and end its sessions"),
+        ("reset-2fa", "clear a lost authenticator (prints a new enrollment code)"),
+        ("revoke-sessions", "sign the admin out everywhere"),
+        ("enroll-code", "issue a fresh enrollment code"),
+    ):
+        actions.add_parser(name, help=text).add_argument("email")
+    actions.add_parser("list", help="who has console access")
 
     credits = commands.add_parser("credits", help="add or take credits through the ledger")
     credits.add_argument("email")
@@ -116,6 +272,18 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     setup_logging()
     args = build_parser().parse_args(argv)
+    if args.command == "admin":
+        if args.action == "list":
+            return admin_list()
+        if args.action == "grant":
+            return admin_grant(args.email, args.role)
+        handlers = {
+            "revoke": admin_revoke,
+            "reset-2fa": admin_reset_2fa,
+            "revoke-sessions": admin_revoke_sessions,
+            "enroll-code": admin_enroll_code,
+        }
+        return handlers[args.action](args.email)
     if args.command == "credits":
         reason = str(args.reason).strip()
         try:

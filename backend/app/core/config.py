@@ -1,4 +1,5 @@
 from functools import cached_property
+from ipaddress import IPv4Network, IPv6Network, ip_network
 from pathlib import Path
 from typing import Literal
 
@@ -96,11 +97,20 @@ class Settings(BaseSettings):
     FFMPEG_BIN: str = "ffmpeg"
     FFPROBE_BIN: str = "ffprobe"
 
-    # Site / admin
+    # Site
     SITE_URL: str = "http://localhost"
-    ADMIN_USER: str = "admin"
-    ADMIN_PASSWORD: str = "changeme"
     SECRET_KEY: str = "secret-key-for-sessions-change-me"
+
+    # Admin console (/admin + /api/admin, app/admin): admins are accounts with `users.admin_role`
+    # (granted with `python -m app.manage admin grant`), signing in with password + TOTP.
+    # Host the console answers on, e.g. "admin.example.com": its own origin, so a script on the
+    # site (or on a sibling subdomain) cannot reach it. Empty: the site's origin in development,
+    # no console at all in production.
+    ADMIN_HOST: str = ""
+    # Optional comma-separated CIDRs allowed to reach the console ("" = any address).
+    ADMIN_ALLOWED_IPS: str = ""
+    # Credit adjustments above this need a fresh TOTP code (sudo).
+    ADMIN_SUDO_USD: float = 20.0
     ALLOWED_ORIGINS: str = "http://localhost,http://localhost:5173,http://localhost:3000"
 
     # Accounts, credits and billing
@@ -164,13 +174,31 @@ class Settings(BaseSettings):
     def is_production(self) -> bool:
         return self.ENVIRONMENT == "production"
 
+    @property
+    def admin_hostname(self) -> str:
+        """ADMIN_HOST without scheme, port or path, lowercase ("" when unset)."""
+        raw = self.ADMIN_HOST.strip().lower()
+        raw = raw.split("://", 1)[-1].split("/", 1)[0]
+        return raw.rsplit(":", 1)[0] if raw.count(":") == 1 else raw
+
+    @property
+    def admin_console_enabled(self) -> bool:
+        """Production serves the console only on its own host."""
+        return bool(self.admin_hostname) or not self.is_production
+
+    @property
+    def admin_networks(self) -> list[IPv4Network | IPv6Network]:
+        return [
+            ip_network(part.strip(), strict=False)
+            for part in self.ADMIN_ALLOWED_IPS.split(",")
+            if part.strip()
+        ]
+
     def insecure_defaults(self) -> list[str]:
         """Names of secrets still set to their placeholder values."""
         found: list[str] = []
         if self.SECRET_KEY == "secret-key-for-sessions-change-me":
             found.append("SECRET_KEY")
-        if self.ADMIN_PASSWORD == "changeme":
-            found.append("ADMIN_PASSWORD")
         return found
 
 

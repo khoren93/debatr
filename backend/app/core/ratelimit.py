@@ -21,13 +21,20 @@ def _client_id(request: Request) -> str:
 
 
 async def enforce_limit(
-    request: Request, *, bucket: str, limit: int, window_seconds: int, what: str
+    request: Request,
+    *,
+    bucket: str,
+    limit: int,
+    window_seconds: int,
+    what: str,
+    key: str | None = None,
 ) -> None:
-    """Fixed-window counter per client IP. `limit <= 0` disables the check."""
+    """Fixed-window counter per client IP (or per `key`, e.g. a hashed email). `limit <= 0`
+    disables the check."""
     if limit <= 0:
         return
 
-    key = rate_limit_key(bucket, _client_id(request))
+    key = rate_limit_key(bucket, key or _client_id(request))
     try:
         redis = get_async_redis()
         async with redis.pipeline(transaction=True) as pipe:

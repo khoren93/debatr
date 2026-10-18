@@ -85,3 +85,19 @@ def looks_like_api_token(value: str) -> bool:
 
 def mask_api_token(last4: str) -> str:
     return f"{API_TOKEN_PREFIX}…{last4}"
+
+
+# --- Admin console TOTP secrets -------------------------------------------------
+
+# A key of their own (derived from SECRET_KEY with another context), so an OpenRouter key and a
+# TOTP secret never share an encryption key.
+_TOTP_CONTEXT = ":admin-totp"
+
+
+def encrypt_totp_secret(value: str) -> str:
+    return encrypt_secret(value, settings.SECRET_KEY + _TOTP_CONTEXT)
+
+
+def decrypt_totp_secret(token: str) -> str | None:
+    """None when unreadable (SECRET_KEY changed): reset with `app.manage admin reset-2fa`."""
+    return decrypt_secret(token, settings.SECRET_KEY + _TOTP_CONTEXT)
