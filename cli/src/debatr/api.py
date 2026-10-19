@@ -192,8 +192,13 @@ class DebatrClient:
         body = await self.request("GET", "/models")
         return list((body or {}).get("data") or [])
 
-    async def leaderboard(self) -> dict[str, Any]:
-        return await self.request("GET", "/gallery/leaderboard")
+    async def formats(self) -> list[dict[str, Any]]:
+        """Show formats with their seats, limits and (rap battle) flows."""
+        return list(await self.request("GET", "/formats") or [])
+
+    async def leaderboard(self, format: str | None = None) -> dict[str, Any]:
+        # Servers before formats ignore the parameter (they rank debates only).
+        return await self.request("GET", "/gallery/leaderboard", params={"format": format})
 
     async def gallery(
         self,
@@ -203,6 +208,7 @@ class DebatrClient:
         sort: str = "trending",
         period: str | None = None,
         category: str | None = None,
+        format: str | None = None,
         limit: int = 20,
         offset: int = 0,
     ) -> dict[str, Any]:
@@ -212,6 +218,7 @@ class DebatrClient:
             "sort": sort,
             "period": period,
             "category": category,
+            "format": format,
             "limit": limit,
             "offset": offset,
         }

@@ -1,7 +1,7 @@
 import type { PlayerRef } from '@remotion/player';
 import { Fragment, useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Lock, Repeat2, RotateCcw, ShieldAlert } from 'lucide-react';
+import { ArrowLeft, Lock, MicVocal, Repeat2, RotateCcw, ShieldAlert } from 'lucide-react';
 import { getErrorMessage, getErrorStatus } from '../api/client';
 import { deleteDebate, getDebate, resumeDebate, stopDebate } from '../api/debates';
 import { getPublicDebate } from '../api/gallery';
@@ -28,6 +28,7 @@ import { useDebateStream } from '../hooks/useDebateStream';
 import { checkElevenLabsKey } from '../hooks/useElevenLabsKeyStatus';
 import { getLocalKey } from '../lib/localKeys';
 import { STAGE_COLORS, STAGE_LABELS, formatAgo, formatDate, roundLabel, shortModelName, stageOf } from '../lib/format';
+import { formatSpec } from '../lib/formats';
 import { msToFrame } from '../video/utils';
 
 interface Props {
@@ -365,6 +366,7 @@ const DebateView = ({ id, slug }: Props) => {
       <ArrowLeft className="size-4" /> {backTo.label}
     </Link>
   );
+  const show = formatSpec(debate.settings.format);
   const meta = (
     <div className="flex flex-wrap items-center gap-x-3.5 gap-y-1.5 text-xs text-muted">
       {/* A finished debate needs no status: that is what the gallery shows. */}
@@ -372,6 +374,11 @@ const DebateView = ({ id, slug }: Props) => {
         <span className="inline-flex items-center gap-1.5 font-mono" style={{ color: STAGE_COLORS[stage] }}>
           <span className={`size-1.5 rounded-full ${stage === 'live' || stage === 'rendering' ? 'animate-pulse-dot' : ''}`} style={{ background: STAGE_COLORS[stage] }} />
           {STAGE_LABELS[stage]}
+        </span>
+      )}
+      {show.id === 'rap_battle' && (
+        <span className="inline-flex items-center gap-1 font-mono tracking-[0.04em] text-accent">
+          <MicVocal className="size-3" /> {show.label}
         </span>
       )}
       <span title={formatDate(debate.created_at)}>{formatAgo(debate.created_at)}</span>
@@ -508,7 +515,7 @@ const DebateView = ({ id, slug }: Props) => {
               onRevealVerdict={reveal}
             />
           )}
-          {tab === 'verdict' && <VerdictTab verdict={debate.verdict} verdictTurn={verdictTurn} lineup={lineup} isActive={isActive} markdown={markdown} hidden={verdictHidden} onReveal={reveal} />}
+          {tab === 'verdict' && <VerdictTab verdict={debate.verdict} verdictTurn={verdictTurn} lineup={lineup} isActive={isActive} markdown={markdown} hidden={verdictHidden} onReveal={reveal} show={show.show} />}
           {tab === 'details' && <DetailsTab debate={debate} lineup={lineup} timeline={timeline} />}
           <div ref={bottomRef} />
         </div>

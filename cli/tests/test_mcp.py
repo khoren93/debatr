@@ -5,7 +5,17 @@ from typing import Any
 
 import httpx
 import pytest
-from conftest import DEBATE_ID, LIVE_EVENTS, SITE, TOKEN, FakeServer, detail, free_estimate
+from conftest import (
+    DEBATE_ID,
+    FORMATS,
+    LIVE_EVENTS,
+    SITE,
+    TOKEN,
+    FakeServer,
+    battle_detail,
+    detail,
+    free_estimate,
+)
 from mcp import Client
 from mcp_types import CallToolResult, TextContent
 
@@ -40,6 +50,7 @@ async def test_tools_are_described(server: FakeServer, monkeypatch):
         tools = {t.name: t for t in (await client.list_tools()).tools}
     assert set(tools) == {
         "get_account",
+        "list_formats",
         "list_models",
         "estimate_debate",
         "start_debate",
@@ -225,3 +236,46 @@ async def test_resume_debate_is_capped_and_hinted(server: FakeServer, monkeypatc
         refused = await client.call_tool("resume_debate", {"debate_id": DEBATE_ID})
     assert "DEBATR_MAX_COST_USD" in error_text(refused)
     assert len(server.calls(f"POST /debates/{DEBATE_ID}/resume")) == 1
+
+
+async def test_agents_can_stage_a_rap_battle(server: FakeServer, monkeypatch):
+    server.on("GET /formats", [FORMATS])  # one response: the list
+    server.on("POST /debates/estimate", free_estimate(credits_cost_usd=0.6))
+    server.on("POST /debates", {"debate_id": DEBATE_ID})
+    server.on(f"GET /debates/{DEBATE_ID}", battle_detail("queued"))
+    async with Client(make(server, monkeypatch, cap=1.0)) as client:
+        formats = structured(await client.call_tool("list_formats", {}))["formats"]
+        battle = next(f for f in formats if f["id"] == "rap_battle")
+        assert battle["premium_voices_only"] and battle["default_flows"] == ["gritty", "sharp"]
+        assert battle["flows"][0] == {"id": "gritty", "sound": "Gritty baritone: Deep, slow"}
+
+        out = structured(
+            await client.call_tool(
+                "start_debate",
+                {
+                    "topic": "Tabs or spaces?",
+                    "format": "rap_battle",
+                    "audio": True,
+                    "flows": ["smooth", "sharp"],
+                },
+            )
+        )
+        assert out["turns_total"] == 6
+        body = json.loads(server.calls("POST /debates")[0].content)
+        assert body["format"] == "rap_battle" and body["media_plan"]["provider"] == "elevenlabs"
+        assert body["media_plan"]["flows"]["participant_1"] == "smooth"
+
+        three = await client.call_tool(
+            "start_debate",
+            {"topic": "Q?", "format": "rap_battle", "debaters": [{}, {}, {}]},
+        )
+        assert "exactly two rappers" in error_text(three)
+
+        server.on(f"GET /debates/{DEBATE_ID}", battle_detail())
+        done = structured(await client.call_tool("get_debate", {"debate_id": DEBATE_ID}))
+        assert done["format"] == "rap_battle"
+        assert done["verdict"]["rounds"][0]["scores"][0] == {
+            "speaker": "Nova",
+            "speaker_id": "participant_1",
+            "score": 8,
+        }

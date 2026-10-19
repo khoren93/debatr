@@ -80,6 +80,8 @@ class TimelineStats(BaseModel):
 class Timeline(BaseModel):
     version: Literal[1] = 1
     debate_id: str
+    # The show format (services/formats): the video's label ("AI DEBATE", "RAP BATTLE").
+    format: str = "debate"
     title: str
     topic: str
     language: str

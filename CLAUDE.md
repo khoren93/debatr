@@ -167,10 +167,12 @@ frontend/           React 19 + Vite 8 + Tailwind 4 + TypeScript
                       prompts) and the rappers' flows (mirrors media/music.FLOWS)
 cli/                `debatr` package (PyPI): CLI + MCP server, Python 3.10+, uv, only the public API
   src/debatr/cli.py   Typer commands (login, run, watch, resume, show, list, stop, delete, publish, audio,
-                      models, gallery, leaderboard, whoami, logout, mcp)
+                      models, formats, gallery, leaderboard, whoami, logout, mcp); `run --format
+                      rap_battle --flow …` (flow ids checked against `GET /api/formats`)
   src/debatr/api.py   async httpx client (ApiError messages, SSE parser), shared with the MCP server
-  src/debatr/mcp_server.py  MCPServer (mcp>=2.3) tools: start/get/estimate/stop/resume debates, models,
-                      gallery, leaderboard, account; DEBATR_MAX_COST_USD cap
+  src/debatr/mcp_server.py  MCPServer (mcp>=2.3) tools: start/get/estimate/stop/resume debates
+                      (`format`, `flows`), models, formats, gallery, leaderboard (per format),
+                      account; DEBATR_MAX_COST_USD cap
   src/debatr/debate.py  build_config (mirrors DebateConfig), debate refs, digest (--json / agents)
   src/debatr/config.py  server URL + token resolution, saved logins (0600 config.json)
   src/debatr/markers.py, styling.py, render.py  live terminal output (markers hidden, inline Markdown)
@@ -304,7 +306,12 @@ docker compose exec api python -m app.manage credits user@example.com 5 --reason
    key is on a paid plan (`GET /media/voices` answers `paid_plan` for an own key; a free-plan key
    is left out of a battle, which then runs on our key and credits). The regenerate dialog
    offers flows for the rappers and says whether the track is reused (same verses and flows) or
-   made again (paid).
+   made again (paid). `VerdictOut.rounds` (`verdict.stored_round_scores`) carries the judge's
+   scores to the verdict tab (a score sheet), the CLI and agents; `Timeline.format` labels the
+   video ("RAP BATTLE", `lib/formats.timelineFormat`: older battle timelines are told by their
+   verses). Gallery cards of battles carry a RAP BATTLE badge (`CoverBadge`), the gallery has a
+   format filter (`?format=rap_battle`), the ranking a Rappers tab (`/leaderboard?format=…`,
+   `useLeaderboard` caches per format) and `/create?format=rap_battle` opens the wizard on it.
 4. `openrouter_client.stream_chat_completion()` streams deltas and returns usage
    (tokens + cost). On HTTP 400 with a system prompt it retries once with the system prompt
    merged into the user message. Mid-stream `{"error": ...}` chunks raise `OpenRouterError`.
@@ -483,7 +490,9 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   makes the composition plan (an instrumental intro as long as the MC's speech + a bar, a
   section per verse with its rapper's flow — `MediaPlan.flows`, `music.FLOWS`, by default a male
   and a female voice —, a two-bar break before every new round, an outro under the verdict;
-  92 BPM, a bar per line) and `music.compose` makes one `POST /v1/music/detailed` call
+  92 BPM, a bar per line; every verse also names its voice — `solo male vocals` — and the other
+  one as a negative style, plus "a new … vocalist takes the mic" when the voice changes: the
+  model otherwise carried round 2's opening voice into the next verse; `PLAN_VERSION` 2) and `music.compose` makes one `POST /v1/music/detailed` call
   (`music_v2_5`, `with_timestamps`, `mp3_44100_128`; a 429/5xx is tried once more, a refusal
   fails the build with ElevenLabs' message). The track is cached by the plan's hash
   (`MEDIA_ROOT/{id}/music/<hash>.mp3` + words), so a rebuild with the same lyrics generates and
@@ -522,6 +531,9 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   verdict (`winner_id`, `headline`; a draw only when `verdict_json` came from the LLM), shows it
   when the judge announces the result (`announcement_index`: a win word next to the winner's
   name) or before the verdict ends, and `make_room` cuts the director's scenes around it.
+  Formats whose judge scores every round (`verdict_scores`, rap battle) get it even without
+  scenes, with `rounds` (the score sheet: `ScoreSheetView`, rows revealed one by one, totals,
+  crown) shown to the end of the verdict.
 - `map` scenes take ISO alpha-3 codes (`schemas/geo.py`: alpha-2, a few English names and `EU`
   are normalized; countries missing from the 110m atlas are dropped). `frontend/.../geo.ts`
   holds the same `COUNTRY_TABLE`, draws `world-atlas` 110m with d3-geo (Natural Earth, zoomed to

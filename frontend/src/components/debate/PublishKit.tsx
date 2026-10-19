@@ -51,7 +51,7 @@ export const PublishKit = ({ debate, lineup, timeline, active }: Props) => {
   const [thumbs, setThumbs] = useState<{ key: string; urls: string[]; blobs: Blob[] } | null>(null);
   const topic = debate.settings.topic || debate.title || 'AI debate';
   const debaters = lineup.filter((s) => s.tag !== 'HOST' && s.tag !== 'JUDGE');
-  const title = youtubeTitle(topic, debaters);
+  const title = youtubeTitle(topic, debaters, debate.settings.format);
   const description = youtubeDescription(debate, lineup, timeline);
   const tags = youtubeTags(debate, lineup);
   const variants = thumbnailVariants(topic, debaters, timeline, timeline?.total_ms ?? debate.duration_ms);

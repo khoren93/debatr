@@ -2,6 +2,7 @@ import type { Timeline } from '../../api/timeline';
 import type { DebateDetail } from '../../api/types';
 import { APP_NAME } from '../../lib/brand';
 import { formatDuration, shortModelName } from '../../lib/format';
+import { formatSpec } from '../../lib/formats';
 import { modelAuthor } from '../../lib/modelIcons';
 import { videoChapters, youtubeChapters, type SpeakerInfo } from './helpers';
 
@@ -19,9 +20,9 @@ const hashtag = (text: string) =>
 
 const versus = (debaters: SpeakerInfo[]) => debaters.map((d) => d.name).join(' vs ');
 
-export const youtubeTitle = (topic: string, debaters: SpeakerInfo[]) => {
+export const youtubeTitle = (topic: string, debaters: SpeakerInfo[], format?: string) => {
   const head = debaters.length > 1 ? `${versus(debaters)}: ` : '';
-  const full = `${head}${topic} | AI Debate`;
+  const full = `${head}${topic} | ${formatSpec(format).id === 'rap_battle' ? 'AI Rap Battle' : 'AI Debate'}`;
   if (full.length <= TITLE_MAX) return full;
   return truncate(`${head}${topic}`, TITLE_MAX);
 };
@@ -31,11 +32,14 @@ export const youtubeDescription = (debate: DebateDetail, lineup: SpeakerInfo[], 
   const debaters = lineup.filter((s) => s.tag !== 'HOST' && s.tag !== 'JUDGE');
   const host = lineup.find((s) => s.tag === 'HOST');
   const parts: string[] = [];
+  const battle = formatSpec(debate.settings.format).id === 'rap_battle';
   if (debate.settings.description?.trim()) parts.push(debate.settings.description.trim());
   parts.push(
-    `${debaters.length > 1 ? `${versus(debaters)} — AI models with opposing briefs — debate` : 'AI models debate'} “${topic}”. ${host ? `${host.name} moderates and an` : 'An'} AI judge weighs the arguments and gives the verdict. Who argued better?`,
+    battle
+      ? `${versus(debaters)} — two AI models — trade verses on “${topic}” over one beat. ${host ? `${host.name} hosts and an` : 'An'} AI judge scores every round. Who rapped better?`
+      : `${debaters.length > 1 ? `${versus(debaters)} — AI models with opposing briefs — debate` : 'AI models debate'} “${topic}”. ${host ? `${host.name} moderates and an` : 'An'} AI judge weighs the arguments and gives the verdict. Who argued better?`,
   );
-  parts.push(['Debaters', ...debaters.map((d) => `• ${d.name} (${d.tag}) — ${shortModelName(d.model)}`)].join('\n'));
+  parts.push([battle ? 'Rappers' : 'Debaters', ...debaters.map((d) => `• ${d.name} (${d.tag}) — ${shortModelName(d.model)}`)].join('\n'));
   if (timeline) {
     const { chapters, totalMs } = videoChapters(timeline, 'long', 0);
     const lines = youtubeChapters(chapters, totalMs);
@@ -47,7 +51,7 @@ export const youtubeDescription = (debate: DebateDetail, lineup: SpeakerInfo[], 
 };
 
 export const youtubeTags = (debate: DebateDetail, lineup: SpeakerInfo[]) => {
-  const tags = ['#AIDebate'];
+  const tags = [formatSpec(debate.settings.format).id === 'rap_battle' ? '#AIRapBattle' : '#AIDebate'];
   if (debate.category) tags.push(hashtag(debate.category));
   for (const s of lineup) {
     if (!s.model || ROUTERS.has(modelAuthor(s.model))) continue;

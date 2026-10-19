@@ -166,8 +166,105 @@ export const DefinitionView = ({ scene, ctx }: { scene: DefinitionScene; ctx: Sc
 
 const shortModel = (model: string) => model.split('/').pop() ?? model;
 
-/** The judge's result: the debaters line up, then the winner is crowned (or a draw stamped). */
+/** A rap battle's score sheet: the rappers on top, the judge's scores round by round (the
+ *  round's better score bright), the totals, then the winner is crowned. */
+const ScoreSheetView = ({ scene, ctx }: { scene: ScoreboardScene; ctx: SceneCtx }) => {
+  const { t, w, h, k, cast, id } = ctx;
+  const seed = seedOf(id);
+  const rounds = scene.rounds ?? [];
+  const debaters = scene.speaker_ids.map((sid) => cast.find((s) => s.id === sid)).filter((s) => s !== undefined);
+  const n = Math.max(1, debaters.length);
+  const labelW = w * 0.24;
+  const colW = (w - labelW) / n;
+  const cx = (i: number) => labelW + colW * (i + 0.5);
+  const headH = scene.headline ? 84 * k : 0;
+  const logo = Math.min(colW * 0.3, h * 0.19, 130 * k);
+  const crownH = 46 * k;
+  const nameFs = Math.min(40 * k, ...debaters.map((d) => fitFont(d.name, colW - 30 * k, 1, 44 * k, 22 * k)));
+  const tableTop = crownH + logo + nameFs * 1.5 + 20 * k;
+  const rowH = Math.min(76 * k, (h - headH - tableTop - 8 * k) / (rounds.length + 1));
+  const scoreFs = rowH * 0.56;
+  const totals = debaters.map((d) => rounds.reduce((sum, r) => sum + (r.scores[d.id] ?? 0), 0));
+  const rowAt = (i: number) => 600 + i * 550;
+  const totalAt = rowAt(rounds.length);
+  const decided = easeOut(ramp(t, totalAt + 500, 450));
+  const winnerIndex = debaters.findIndex((d) => d.id === scene.winner_id);
+  const row = (i: number) => tableTop + rowH * i;
+  return (
+    <>
+      <InkLayer w={w} h={h}>
+        {[...rounds.map((_, i) => i), rounds.length].map((i) => (
+          <Stroke key={i} d={sketch.line([w * 0.03, row(i)], [w * 0.97, row(i)], seed + i, { roughness: 0.6 })} p={easeOut(ramp(t, rowAt(i) - 200, 400))} color={INK_DIM} width={2 * k} />
+        ))}
+        {winnerIndex >= 0 && (
+          <Stroke
+            d={sketch.ellipse(cx(winnerIndex), row(rounds.length) + rowH / 2, scoreFs * 2.6, rowH * 1.05, seed + 9, { roughness: 1.3 })}
+            p={easeOut(ramp(t, totalAt + 500, 600))}
+            color={debaters[winnerIndex].color}
+            width={5 * k}
+          />
+        )}
+      </InkLayer>
+      {debaters.map((d, i) => {
+        const winner = i === winnerIndex;
+        const enter = ramp(t, i * 250, 450);
+        const dim = winnerIndex >= 0 && !winner ? 1 - 0.5 * decided : 1;
+        return (
+          <div key={d.id} style={{ position: 'absolute', left: labelW + colW * i, top: 0, width: colW, height: tableTop, opacity: Math.min(1, enter * 2) * dim, transform: `translateY(${(1 - easeOut(enter)) * 24 * k}px)` }}>
+            {winner && (
+              <div style={{ position: 'absolute', left: (colW - crownH) / 2, top: 0 }}>
+                <DrawnIcon name="crown" size={crownH} color={d.color} p={easeInOut(ramp(t, totalAt + 600, 800))} strokeWidth={1.8} fill={t > totalAt + 1400 ? `${d.color}40` : undefined} />
+              </div>
+            )}
+            <div style={{ position: 'absolute', left: (colW - logo) / 2, top: crownH }}>
+              <LogoTile speaker={d} size={logo} framed={winner && decided > 0} />
+            </div>
+            <div style={{ position: 'absolute', left: 8 * k, right: 8 * k, top: crownH + logo + 10 * k, textAlign: 'center', fontFamily: DISPLAY_FONT, fontWeight: 800, fontSize: nameFs, lineHeight: 1.1, color: d.color, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.name}</div>
+          </div>
+        );
+      })}
+      {rounds.map((r, i) => {
+        const best = Math.max(...debaters.map((d) => r.scores[d.id] ?? 0));
+        const shown = easeOut(ramp(t, rowAt(i), 400));
+        return (
+          <div key={r.round} style={{ opacity: shown }}>
+            <div style={{ position: 'absolute', left: w * 0.03, width: labelW - w * 0.03, top: row(i), height: rowH, display: 'flex', alignItems: 'center', fontFamily: MONO_FONT, fontSize: Math.min(26 * k, rowH * 0.36), letterSpacing: 3 * k, color: INK_DIM }}>
+              ROUND {r.round}
+            </div>
+            {debaters.map((d, j) => {
+              const score = r.scores[d.id];
+              return (
+                <div key={d.id} style={{ position: 'absolute', left: labelW + colW * j, width: colW, top: row(i), height: rowH, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: DISPLAY_FONT, fontWeight: 800, fontSize: scoreFs, color: d.color, opacity: score === best ? 1 : 0.45, transform: `scale(${0.7 + 0.3 * backOut(ramp(t, rowAt(i) + j * 120, 380))})` }}>
+                  {score ?? '–'}
+                </div>
+              );
+            })}
+          </div>
+        );
+      })}
+      <div style={{ opacity: easeOut(ramp(t, totalAt, 400)) }}>
+        <div style={{ position: 'absolute', left: w * 0.03, width: labelW - w * 0.03, top: row(rounds.length), height: rowH, display: 'flex', alignItems: 'center', fontFamily: FONT, fontWeight: 900, fontSize: Math.min(30 * k, rowH * 0.42), letterSpacing: 3 * k, color: INK }}>
+          TOTAL
+        </div>
+        {debaters.map((d, j) => (
+          <div key={d.id} style={{ position: 'absolute', left: labelW + colW * j, width: colW, top: row(rounds.length), height: rowH, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: DISPLAY_FONT, fontWeight: 900, fontSize: scoreFs * 1.15, color: d.color }}>
+            {totals[j]}
+          </div>
+        ))}
+      </div>
+      {scene.headline && (
+        <Reveal p={easeOut(ramp(t, totalAt + 900, 450))} style={{ position: 'absolute', left: w * 0.04, right: w * 0.04, bottom: 0, height: headH, display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center', fontFamily: FONT, fontWeight: 700, fontSize: fitFont(scene.headline, w * 0.9, 2, 34 * k, 22 * k), lineHeight: 1.2, color: INK }}>
+          {scene.headline}
+        </Reveal>
+      )}
+    </>
+  );
+};
+
+/** The judge's result: the debaters line up, then the winner is crowned (or a draw stamped).
+ *  With the judge's round scores (rap battles) it is the score sheet. */
 export const ScoreboardView = ({ scene, ctx }: { scene: ScoreboardScene; ctx: SceneCtx }) => {
+  if (scene.rounds?.length) return <ScoreSheetView scene={scene} ctx={ctx} />;
   const { t, w, h, k, cast, id } = ctx;
   const seed = seedOf(id);
   const debaters = scene.speaker_ids.map((sid) => cast.find((s) => s.id === sid)).filter((s) => s !== undefined);

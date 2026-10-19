@@ -1,6 +1,7 @@
 import { Audio } from '@remotion/media';
 import { AbsoluteFill, Sequence, interpolate, useCurrentFrame, useVideoConfig } from 'remotion';
 import type { Timeline } from '../api/timeline';
+import { timelineFormat } from '../lib/formats';
 import { Background } from './components/Background';
 import { Captions } from './components/Captions';
 import { BrandMark, EndCard, LabelChip, RoundChip } from './components/Chrome';
@@ -78,7 +79,7 @@ export const DebateShort = ({ timeline, mediaBase, highlightIndex }: ShortProps)
           <FaceOff debaters={debaters} width={SHORT_W} height={SHORT_H} logoY={0.3} logoSize={230} t={frame / fps} length={SHORT_HOOK_MS / 1000} />
           <div style={{ position: 'absolute', top: 2.2 * U, left: 2.4 * U, right: 2.4 * U, height: barHeight(BAR_U), display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <BrandMark u={BAR_U} />
-            <LabelChip label="AI DEBATE" u={BAR_U} color={ACCENT} />
+            <LabelChip label={timelineFormat(timeline).label} u={BAR_U} color={ACCENT} />
           </div>
           <div style={{ position: 'absolute', left: X, right: X, top: SHORT_H * 0.5, bottom: SHORT_H * 0.12, display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
             <div style={{ fontFamily: DISPLAY_FONT, fontSize: headlineSize(h.hook, 80), fontWeight: 800, letterSpacing: -0.03 * headlineSize(h.hook, 80), color: '#F2F3F7', lineHeight: 1.08 }}>{h.hook}</div>

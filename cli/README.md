@@ -67,6 +67,8 @@ debatr run "Nuclear or renewables?" \
   -d google/gemini-2.5-pro -n Ben -s "A grid operator who favours renewables" \
   --rounds 3 --length medium
 debatr run "Should we rewrite it in Rust?" --context "A 40k-line Go service, team of 4" --json
+debatr run "Tabs or spaces?" --format rap_battle --rounds 2 --length short   # verses only
+debatr run "Tabs or spaces?" --format rap_battle --audio --flow smooth --flow fierce
 ```
 
 | Option | What it does |
@@ -79,6 +81,7 @@ debatr run "Should we rewrite it in Rust?" --context "A 40k-line Go service, tea
 | `-c, --context TEXT` | Background the speakers should know. |
 | `--scenes`, `--fact-check` | Design charts and schemes for the web page; web fact-check of the figures (paid). |
 | `--audio`, `--voices` | Voice it when done (free `edge` voices or premium `elevenlabs`). |
+| `--format rap_battle`, `--flow FLOW` | A rap battle: an MC and two rappers trade verses (4/8/12/16 lines by `--length`), 1–3 rounds, the judge scores each round. With `--audio` ElevenLabs makes one track of beat and verses (paid); `--flow` sets how each rapper sounds (`debatr formats`). |
 | `--public` | Publish to the gallery when finished (after an automatic content check). Private by default. |
 | `-y, --yes`, `--max-cost USD` | Start paid runs without a prompt; refuse runs estimated above a limit. |
 | `--detach`, `--json` | Print the id and return at once; or no live output, a JSON result at the end. |
@@ -101,8 +104,9 @@ are asked whether to stop it on the server too.
 | `debatr stop` / `delete` / `publish` / `unpublish DEBATE` | Manage a debate. |
 | `debatr open DEBATE` | Open it in the browser: player, audience vote, video export. |
 | `debatr audio DEBATE [--build] [-o FILE]` | Download the voiced debate as MP3 (`--build` voices it first). |
-| `debatr gallery [WORDS] [--sort trending\|new\|top]` | Browse public debates. |
-| `debatr leaderboard [--free]` | Models ranked by audience votes. |
+| `debatr formats` | Show formats (debate, rap battle) and the rappers' flows. |
+| `debatr gallery [WORDS] [--sort trending\|new\|top] [--format F]` | Browse public debates and rap battles. |
+| `debatr leaderboard [--free] [--format F]` | Models ranked by audience votes: best debaters, or best rappers. |
 | `debatr whoami` / `logout` | The account, balance and token; sign out and revoke the token. |
 
 `DEBATE` is an id, a link (`…/debate/<id>`, `…/d/<slug>`) or a share slug. Commands that print
@@ -140,10 +144,10 @@ your `debatr login`.
 
 | Tool | What it does |
 |---|---|
-| `start_debate` | Starts a debate and returns its id at once (a debate takes 1–5 minutes). |
+| `start_debate` | Starts a debate (or a rap battle: `format="rap_battle"`) and returns its id at once (a debate takes 1–5 minutes). |
 | `get_debate` | Status, progress, verdict and transcript; `wait_seconds` waits for the end and reports progress per turn. |
 | `estimate_debate` | Price and length before starting. |
-| `list_models`, `get_leaderboard` | Models to cast, and how audiences rank them. |
+| `list_models`, `list_formats`, `get_leaderboard` | Models to cast, show formats and flows, and how audiences rank the models. |
 | `list_my_debates`, `search_gallery` | The user's debates; public debates to read. |
 | `resume_debate` | Runs a debate that stopped with an error again from the failed turn (within the cost limit). |
 | `stop_debate`, `publish_debate`, `get_account` | Manage a debate; balance and the token's limit. |

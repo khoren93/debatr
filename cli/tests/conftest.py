@@ -201,6 +201,67 @@ def server() -> FakeServer:
     return FakeServer()
 
 
+# `GET /api/formats`, as the server lists them (trimmed to what the CLI reads).
+FORMATS = [
+    {
+        "id": "debate",
+        "name": "Debate",
+        "tagline": "Models argue.",
+        "min_debaters": 1,
+        "max_debaters": 8,
+        "min_rounds": 1,
+        "max_rounds": 10,
+        "host_required": False,
+        "voices": "any",
+        "flows": [],
+        "default_flows": [],
+    },
+    {
+        "id": "rap_battle",
+        "name": "Rap battle",
+        "tagline": "Two models trade verses.",
+        "min_debaters": 2,
+        "max_debaters": 2,
+        "min_rounds": 1,
+        "max_rounds": 3,
+        "host_required": True,
+        "voices": "elevenlabs",
+        "flows": [
+            {"id": "gritty", "label": "Gritty baritone", "hint": "Deep, slow", "voice": "male"},
+            {"id": "sharp", "label": "Sharp double-time", "hint": "Fast", "voice": "female"},
+            {"id": "smooth", "label": "Smooth", "hint": "Warm", "voice": "male"},
+        ],
+        "default_flows": ["gritty", "sharp"],
+    },
+]
+
+
+def battle_detail(status: str = "completed") -> dict[str, Any]:
+    """A finished 2-round rap battle: the MC once, four verses, the judge's round scores."""
+    people = participants()
+    people[0]["name"] = "The MC"
+    verse = partial(turn, turn_type="verse")
+    turns = [
+        turn(0, "participant_0", "The MC", "Yo! Nova versus Atlas!"),
+        verse(1, "participant_1", "Nova", "Cats rule the night", round_id="round_1"),
+        verse(2, "participant_2", "Atlas", "Dogs hold it tight", round_id="round_1"),
+        verse(3, "participant_2", "Atlas", "Round two, my bite", round_id="round_2"),
+        verse(4, "participant_1", "Nova", "Still out of sight", round_id="round_2"),
+        turn(5, "judge", "The Judge", "Nova wins, 16 to 14."),
+    ]
+    rounds = [
+        {"round": 1, "scores": {"participant_1": 8, "participant_2": 7}},
+        {"round": 2, "scores": {"participant_1": 8, "participant_2": 7}},
+    ]
+    return detail(
+        status,
+        turns,
+        participants=people,
+        settings={**detail()["settings"], "format": "rap_battle", "num_rounds": 2},
+        verdict={**VERDICT, "rounds": rounds},
+    )
+
+
 def free_estimate(**extra: Any) -> dict[str, Any]:
     return {
         "turns": 4,

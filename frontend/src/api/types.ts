@@ -126,6 +126,8 @@ export interface Verdict {
   is_draw: boolean;
   headline: string;
   feedback: VerdictFeedback[];
+  /** The judge's score per round (rap battles), participant id -> score; empty otherwise. */
+  rounds?: { round: number; scores: Record<string, number> }[];
 }
 
 export interface MediaPlan {

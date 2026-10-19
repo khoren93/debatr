@@ -26,6 +26,7 @@ const linkButton = 'font-medium text-accent hover:text-accent-hover cursor-point
 /** "Who argued better?" — a blind audience vote, then the split next to the judge's pick. */
 export const AudienceVote = ({ debate, debaters, revealed, onReveal, onChange }: Props) => {
   const toast = useToast();
+  const battle = debate.settings.format === 'rap_battle';
   const location = useLocation();
   const navigate = useNavigate();
   const [pending, setPending] = useState<string | null>(null);
@@ -103,8 +104,8 @@ export const AudienceVote = ({ debate, debaters, revealed, onReveal, onChange }:
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="font-mono text-[11px] tracking-[0.08em] text-muted">AUDIENCE VOTE</div>
-          <h2 className="mt-2 font-display text-[clamp(20px,2vw,24px)] font-bold tracking-[-0.02em]">Who argued better?</h2>
-          <p className="mt-1 text-[13px] text-muted">Not who’s right — who made the stronger case.</p>
+          <h2 className="mt-2 font-display text-[clamp(20px,2vw,24px)] font-bold tracking-[-0.02em]">{battle ? 'Who rapped better?' : 'Who argued better?'}</h2>
+          <p className="mt-1 text-[13px] text-muted">{battle ? 'Bars, rhymes and punchlines — not which side you’re on.' : 'Not who’s right — who made the stronger case.'}</p>
         </div>
         {showResults && (
           <div className="whitespace-nowrap font-mono text-xs text-muted">

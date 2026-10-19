@@ -5,7 +5,7 @@ import { getErrorMessage, getErrorStatus } from '../api/client';
 import { getMotion } from '../api/motions';
 import type { MotionPage } from '../api/types';
 import { Page, PageTitle } from '../components/layout/AppShell';
-import { CardStats, DebateCard, DebateCover, PremiumVoicesBadge } from '../components/cards';
+import { CardStats, CoverBadge, DebateCard, DebateCover } from '../components/cards';
 import { Avatar, Button, EmptyState, ErrorBox, LinkButton, PageLoader } from '../components/ui';
 
 /** Language of a version when the topic is debated in more than one. */
@@ -100,7 +100,7 @@ const Topic = () => {
                 <DebateCover
                   participants={item.participants}
                   topLeft={languages.size > 1 ? <LanguageBadge code={item.language_code} /> : undefined}
-                  topRight={item.premium_voices ? <PremiumVoicesBadge /> : undefined}
+                  topRight={<CoverBadge format={item.format} premiumVoices={item.premium_voices} />}
                 />
               }
               footerLeft={

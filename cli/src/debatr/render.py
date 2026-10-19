@@ -11,11 +11,12 @@ from typing import Any
 
 from rich.console import Console, Group
 from rich.markdown import Markdown
+from rich.markup import escape
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from debatr.debate import round_heading, side_tags, total_turns, verdict_of
+from debatr.debate import format_name, round_heading, side_tags, total_turns, verdict_of
 from debatr.markers import StreamedTurn
 from debatr.styling import InlineMarkdown, Segment
 
@@ -136,8 +137,9 @@ def lineup(detail: dict[str, Any], url: str) -> Panel:
         pid = p.get("id") or f"participant_{i}"
         rows.append(speakers.header(name=str(p.get("name") or "Speaker"), speaker_id=pid))
     rounds = int(settings.get("num_rounds") or 1)
+    show = f"{format_name(detail)} · " if settings.get("format", "debate") != "debate" else ""
     facts = Text(
-        f"{rounds} round{'s' if rounds != 1 else ''} · "
+        f"{show}{rounds} round{'s' if rounds != 1 else ''} · "
         f"{str(settings.get('length_preset') or 'medium').replace('_', ' ')} turns · "
         f"{settings.get('language') or 'English'} · {total_turns(detail)} turns in total",
         style="dim",
@@ -162,6 +164,16 @@ def verdict_panel(detail: dict[str, Any]) -> Panel | None:
         body.append(winner)
     if verdict["headline"]:
         body += [Text(""), Text(verdict["headline"])]
+    if verdict.get("rounds"):
+        body.append(Text(""))
+        for r in verdict["rounds"]:
+            line = Text(f"Round {r['round']}: ", style="dim")
+            for i, score in enumerate(r["scores"]):
+                if i:
+                    line.append(" · ", style="dim")
+                color = speakers.color.get(score.get("speaker_id") or "", "")
+                line.append(f"{score['speaker']} {score['score']}", style=color)
+            body.append(line)
     for f in verdict["feedback"]:
         line = Text("\n")
         line.append(f"{f['speaker']}: ", style=speakers.color.get(f.get("speaker_id") or "", ""))
@@ -336,6 +348,11 @@ def estimate_table(est: dict[str, Any]) -> Table:
     if est.get("own_key"):
         cost += " (models on your OpenRouter key)"
     table.add_row("Cost", cost)
+    if est.get("music_ms"):
+        music = f"~{duration(est['music_ms'])} of beat and verses"
+        if est.get("music_cost_usd") and not est.get("own_tts_key"):
+            music += f" (~{usd(est['music_cost_usd'])} of the cost)"
+        table.add_row("Music", music)
     if est.get("credits_before") is not None and credits > 0:
         table.add_row("Balance", f"{usd(est['credits_before'])} → {usd(est.get('credits_after'))}")
     if est.get("token_budget_usd") is not None:
@@ -393,6 +410,36 @@ def debates_table(debates: list[dict[str, Any]]) -> Table:
     return table
 
 
+def formats_table(formats: list[dict[str, Any]]) -> Table:
+    table = Table(header_style="bold dim", box=None, pad_edge=False, show_lines=False)
+    table.add_column("Format", style="bold", no_wrap=True)
+    table.add_column("What it is", overflow="fold")
+    for f in formats:
+        seats = (
+            f"{f.get('min_debaters')}-{f.get('max_debaters')} debaters"
+            if f.get("min_debaters") != f.get("max_debaters")
+            else f"{f.get('max_debaters')} debaters"
+        )
+        bits = [
+            escape(str(f.get("tagline") or "")),
+            f"[dim]{seats} · {f.get('min_rounds')}-{f.get('max_rounds')} rounds"
+            + (" · premium voices only" if f.get("voices") == "elevenlabs" else "")
+            + "[/dim]",
+        ]
+        flows = f.get("flows") or []
+        if flows:
+            defaults = list(f.get("default_flows") or [])
+            bits.append("[dim]--flow:[/dim]")
+            for flow in flows:
+                mark = " [dim](default)[/dim]" if flow.get("id") in defaults else ""
+                bits.append(
+                    f"  [bold]{escape(str(flow.get('id')))}[/bold] {escape(str(flow.get('label')))}"
+                    f" [dim]· {escape(str(flow.get('hint')))} · {flow.get('voice')}[/dim]{mark}"
+                )
+        table.add_row(escape(str(f.get("id"))), "\n".join(bits))
+    return table
+
+
 def gallery_table(items: list[dict[str, Any]], site: str, width: int = WIDE) -> Table:
     wide = width >= WIDE
     table = Table(header_style="bold dim", box=None, pad_edge=False)
@@ -408,8 +455,13 @@ def gallery_table(items: list[dict[str, Any]], site: str, width: int = WIDE) -> 
             for p in item.get("participants") or []
             if p.get("role") != "moderator"
         ]
+        topic = str(item.get("topic") or item.get("title") or "")
+        if item.get("format") == "rap_battle":
+            topic = f"[magenta]RAP BATTLE[/magenta] {escape(topic)}"
+        else:
+            topic = escape(topic)
         table.add_row(
-            str(item.get("topic") or item.get("title") or ""),
+            topic,
             *([" vs ".join(models)] if wide else []),
             str(item.get("likes") or 0),
             str(item.get("votes") or 0),

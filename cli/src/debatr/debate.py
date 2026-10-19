@@ -19,8 +19,15 @@ DEBATER_NAMES = ("Nova", "Atlas", "Quill", "Sage", "Echo", "Juno", "Rook", "Vega
 LENGTHS = ("very_short", "short", "medium", "long")
 STYLES = ("markdown", "spoken")
 VOICE_ENGINES = ("edge", "elevenlabs")
+# Show formats (`GET /api/formats`): a debate, or a rap battle of an MC and two rappers voiced by
+# ElevenLabs (one music track; each rapper takes a flow instead of a voice).
+FORMATS = ("debate", "rap_battle")
 MAX_PARTICIPANTS = 8
 MAX_ROUNDS = 10
+BATTLE_MAX_ROUNDS = 3
+MC_NAME = "The MC"
+MC_PERSONA = "You are a high-energy battle rap MC."
+RAPPER_PERSONA = "You are a sharp, witty battle rapper."
 # The server's limit: the topic is drawn on the video (older servers took up to 500).
 TOPIC_MAX_LENGTH = 150
 HOST_PERSONA = (
@@ -35,6 +42,7 @@ TURN_TYPES = {
     "rebuttal": "Rebuttal",
     "closing": "Closing",
     "argument": "Argument",
+    "verse": "Verse",
     "verdict": "Verdict",
 }
 _SLUG_RE = re.compile(r"^[a-z0-9]{4,32}$")
@@ -78,15 +86,41 @@ def build_config(
     scenes: bool = False,
     fact_check: bool = False,
     audio: bool = False,
-    voices: str = "edge",
+    voices: str | None = None,
     public: bool = False,
     draft: bool = False,
     openrouter_key: str | None = None,
     elevenlabs_key: str | None = None,
+    format: str = "debate",
+    flows: list[str] | None = None,
 ) -> dict[str, Any]:
     """The request body of `POST /api/debates`. `host_model=None` runs without a host (the
-    judge's verdict then uses the server's default model). Raises ValueError with a message
-    for the user when an option is out of range."""
+    judge's verdict then uses the server's default model). `voices`: edge by default, premium
+    (elevenlabs) for a rap battle, the only voices it takes. `flows`: a rap battle's rappers, in
+    order (see `debatr formats`). Raises ValueError with a message for the user when an option
+    is out of range."""
+    if format not in FORMATS:
+        raise ValueError(f"Format must be one of: {', '.join(FORMATS)}")
+    battle = format == "rap_battle"
+    voices = voices or ("elevenlabs" if battle else "edge")
+    if battle:
+        if not host_model:
+            raise ValueError("A rap battle needs its MC: drop --no-host")
+        if len(debaters) != 2:
+            raise ValueError("A rap battle takes exactly two rappers (-d twice)")
+        if rounds > BATTLE_MAX_ROUNDS:
+            raise ValueError(f"A rap battle runs 1 to {BATTLE_MAX_ROUNDS} rounds")
+        if scenes or fact_check:
+            raise ValueError("A rap battle has no scenes or fact-checks")
+        if audio and voices != "elevenlabs":
+            raise ValueError("A rap battle is voiced with premium voices only (elevenlabs)")
+    flows = [f.strip() for f in flows or [] if f.strip()]
+    if flows and not battle:
+        raise ValueError("Flows are for rap battles (--format rap_battle)")
+    if flows and not audio:
+        raise ValueError("Flows shape the battle's music: add --audio")
+    if len(flows) > 2:
+        raise ValueError("A rap battle has two rappers: at most two flows")
     topic = " ".join(topic.split())
     if not topic:
         raise ValueError("The topic is empty")
@@ -113,17 +147,18 @@ def build_config(
     if context and len(context) > 4000:
         raise ValueError("The context is longer than 4000 characters")
 
+    host_name = MC_NAME if battle else HOST_NAME
     participants: list[dict[str, Any]] = []
     if host_model:
         participants.append(
             {
                 "role": "moderator",
                 "model_id": _check_model(host_model),
-                "display_name": HOST_NAME,
-                "persona_custom": HOST_PERSONA,
+                "display_name": host_name,
+                "persona_custom": MC_PERSONA if battle else HOST_PERSONA,
             }
         )
-    taken = {HOST_NAME.lower()} if host_model else set()
+    taken = {host_name.lower()} if host_model else set()
     spare = [
         n for n in DEBATER_NAMES if n.lower() not in {(d.name or "").lower() for d in debaters}
     ]
@@ -136,7 +171,8 @@ def build_config(
         if name.lower() in taken:
             raise ValueError(f"Two speakers are called {name!r}: names must be unique")
         taken.add(name.lower())
-        stance = (debater.stance or "").strip() or default_stance(i)
+        # A battle seats the sides itself (the first raps for the topic): a persona only.
+        stance = (debater.stance or "").strip() or (RAPPER_PERSONA if battle else default_stance(i))
         if len(stance) > 4000:
             raise ValueError(f"The stance of {name} is longer than 4000 characters")
         participants.append(
@@ -150,6 +186,8 @@ def build_config(
 
     visuals = scenes or fact_check
     config: dict[str, Any] = {
+        # Older servers know no formats: a debate goes without the field.
+        **({"format": format} if format != "debate" else {}),
         "topic": topic,
         "language": language,
         "participants": participants,
@@ -173,6 +211,12 @@ def build_config(
             "visuals": visuals,
             "images": "off",
         }
+        if flows:
+            # Speaker ids follow the participant list (the MC is participant_0).
+            first = len(participants) - len(debaters)
+            config["media_plan"]["flows"] = {
+                f"participant_{first + i}": flow for i, flow in enumerate(flows)
+            }
     if openrouter_key:
         config["user_provider_key"] = openrouter_key.strip()
     if elevenlabs_key and audio and voices == "elevenlabs":
@@ -246,15 +290,50 @@ def total_turns(detail: dict[str, Any]) -> int:
     participants = detail.get("participants") or []
     hosts = sum(1 for p in participants if p.get("role") == "moderator")
     debaters = len(participants) - hosts
-    rounds = int((detail.get("settings") or {}).get("num_rounds") or 1)
+    settings = detail.get("settings") or {}
+    rounds = int(settings.get("num_rounds") or 1)
+    if settings.get("format") == "rap_battle":  # the MC speaks once, before the verses
+        return min(hosts, 1) + rounds * debaters + 1
     return rounds * (min(hosts, 1) + debaters) + 1
+
+
+def format_name(detail: dict[str, Any]) -> str:
+    """'Debate', 'Rap battle' (servers before formats: a debate)."""
+    return (
+        str((detail.get("settings") or {}).get("format") or "debate").replace("_", " ").capitalize()
+    )
+
+
+def round_scores(detail: dict[str, Any]) -> list[dict[str, Any]]:
+    """The judge's score per round (rap battles): [{round, scores: [{speaker, speaker_id,
+    score}]}], speakers in line-up order."""
+    names = {
+        p.get("id") or f"participant_{i}": p.get("name")
+        for i, p in enumerate(detail.get("participants") or [])
+    }
+    out: list[dict[str, Any]] = []
+    for item in (detail.get("verdict") or {}).get("rounds") or []:
+        scores = item.get("scores") or {}
+        out.append(
+            {
+                "round": item.get("round"),
+                "scores": [
+                    {"speaker": names.get(sid, sid), "speaker_id": sid, "score": scores[sid]}
+                    for sid in names
+                    if sid in scores
+                ],
+            }
+        )
+    return out
 
 
 def verdict_of(detail: dict[str, Any]) -> dict[str, Any] | None:
     verdict = detail.get("verdict")
     if not verdict:
         return None
+    rounds = round_scores(detail)
     return {
+        **({"rounds": rounds} if rounds else {}),
         "winner": verdict.get("winner_name"),
         "winner_id": verdict.get("winner_id"),
         "is_draw": bool(verdict.get("is_draw")),
@@ -285,6 +364,8 @@ def transcript_markdown(detail: dict[str, Any], *, header: bool = True) -> str:
         lines += [f"# {detail.get('title') or settings.get('topic') or 'Debate'}", ""]
         if settings.get("description"):
             lines += [str(settings["description"]), ""]
+        if settings.get("format", "debate") != "debate":
+            lines.append(f"- Format: {format_name(detail)}")
         lines += [
             f"- Status: {detail.get('status')}",
             f"- Language: {settings.get('language', 'English')}",
@@ -307,6 +388,9 @@ def transcript_markdown(detail: dict[str, Any], *, header: bool = True) -> str:
         lines.append("**Draw**" if verdict["is_draw"] else f"**Winner: {verdict['winner']}**")
         if verdict["headline"]:
             lines += ["", verdict["headline"]]
+        for r in verdict.get("rounds") or []:
+            scores = ", ".join(f"{s['speaker']} {s['score']}" for s in r["scores"])
+            lines += ["", f"- Round {r['round']}: {scores}"]
         for f in verdict["feedback"]:
             lines += ["", f"- **{f['speaker']}**: {f['text']}"]
         lines.append("")
@@ -327,6 +411,7 @@ def digest(
         "id": detail.get("id"),
         "url": url,
         "status": detail.get("status"),
+        "format": settings.get("format") or "debate",
         "topic": settings.get("topic") or detail.get("title"),
         "language": settings.get("language"),
         "rounds": settings.get("num_rounds"),

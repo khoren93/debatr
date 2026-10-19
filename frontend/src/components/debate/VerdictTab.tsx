@@ -14,6 +14,8 @@ interface Props {
   markdown: boolean;
   /** Blind voting: the verdict stays covered until the viewer votes or reveals it. */
   hidden?: boolean;
+  /** The show in a sentence ("debate", "battle"). */
+  show?: string;
   onReveal?: () => void;
 }
 
@@ -30,14 +32,57 @@ export const VerdictGate = ({ onReveal, compact = false }: { onReveal?: () => vo
   </div>
 );
 
-/** Verdict tab: the judge's headline with the winner, feedback per debater, the full ruling. */
-export const VerdictTab = ({ verdict, verdictTurn, lineup, isActive, markdown, hidden = false, onReveal }: Props) => {
+/** The judge's scores round by round (rap battles), the totals last; the round's better score bright. */
+const ScoreSheet = ({ rounds, lineup, winnerId }: { rounds: NonNullable<Verdict['rounds']>; lineup: SpeakerInfo[]; winnerId: string | null }) => {
+  const debaters = lineup.filter((s) => rounds.some((r) => s.id in r.scores));
+  const total = (id: string) => rounds.reduce((sum, r) => sum + (r.scores[id] ?? 0), 0);
+  const cols = { gridTemplateColumns: `minmax(90px,1fr) repeat(${debaters.length}, minmax(64px,120px))` };
+  return (
+    <div className="overflow-x-auto rounded-[14px] border border-white/8 bg-ink/60" role="table" aria-label="The judge's scores">
+      <div className="grid items-center gap-x-3 border-b border-white/8 px-4 py-2.5" style={cols} role="row">
+        <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-muted" role="columnheader">
+          Scores
+        </span>
+        {debaters.map((d) => (
+          <span key={d.id} className="truncate text-center text-[13px] font-bold" style={{ color: d.color }} role="columnheader">
+            {d.name}
+          </span>
+        ))}
+      </div>
+      {rounds.map((r) => {
+        const best = Math.max(...debaters.map((d) => r.scores[d.id] ?? 0));
+        return (
+          <div key={r.round} className="grid items-center gap-x-3 border-b border-white/6 px-4 py-2" style={cols} role="row">
+            <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-text-3">Round {r.round}</span>
+            {debaters.map((d) => (
+              <span key={d.id} className={`text-center font-display text-lg font-bold ${r.scores[d.id] === best ? 'text-text' : 'text-dim'}`}>
+                {r.scores[d.id] ?? '—'}
+              </span>
+            ))}
+          </div>
+        );
+      })}
+      <div className="grid items-center gap-x-3 px-4 py-2.5" style={cols} role="row">
+        <span className="font-mono text-[11px] font-bold uppercase tracking-[0.08em] text-text">Total</span>
+        {debaters.map((d) => (
+          <span key={d.id} className="text-center font-display text-xl font-extrabold" style={{ color: d.id === winnerId ? d.color : undefined }}>
+            {total(d.id)}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+/** Verdict tab: the judge's headline with the winner, the round scores (battles), feedback per
+ *  debater, the full ruling. */
+export const VerdictTab = ({ verdict, verdictTurn, lineup, isActive, markdown, hidden = false, onReveal, show = 'debate' }: Props) => {
   if (!verdict && !verdictTurn) {
     return <EmptyState className="mt-5" title={isActive ? 'The judge is still deliberating' : 'No verdict'} text={isActive ? 'The verdict arrives after the last round.' : undefined} />;
   }
   if (hidden) return <VerdictGate onReveal={onReveal} />;
   const winner = verdict?.winner_id ? lineup.find((s) => s.id === verdict.winner_id) : undefined;
-  const headline = verdict?.headline || (verdict?.winner_name ? `${verdict.winner_name} wins the debate.` : 'The debate ends in a draw.');
+  const headline = verdict?.headline || (verdict?.winner_name ? `${verdict.winner_name} wins the ${show}.` : `The ${show} ends in a draw.`);
   const judgeModel = verdictTurn?.model_used || lineup.find((s) => s.id === 'judge')?.model;
   const fullText = verdictTurn?.text.trim() ?? '';
   return (
@@ -55,6 +100,8 @@ export const VerdictTab = ({ verdict, verdictTurn, lineup, isActive, markdown, h
           <div className="min-w-0 flex-1 font-display text-[clamp(26px,3vw,38px)] font-extrabold leading-[1.05] tracking-[-0.03em] text-balance">{headline}</div>
         </div>
       </div>
+
+      {verdict?.rounds && verdict.rounds.length > 0 && <ScoreSheet rounds={verdict.rounds} lineup={lineup} winnerId={verdict.winner_id} />}
 
       {verdict && verdict.feedback.length > 0 && (
         <div className="grid gap-x-6 gap-y-5 [grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr))]">

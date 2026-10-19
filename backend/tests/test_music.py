@@ -4,6 +4,7 @@ the estimate and the whole build with ffmpeg and ElevenLabs faked. Pure."""
 
 import itertools
 import json
+import re
 import uuid
 from pathlib import Path
 from typing import Any
@@ -63,6 +64,21 @@ def test_the_plan_frames_the_verses() -> None:
     assert "92 BPM" in intro.styles  # the first section sets the beat for the whole track
     assert sections[3].text.startswith("[Round 2]")
     assert sections[4].styles[0] == "female rapper"  # round 2: the second rapper opens
+
+
+def test_every_verse_names_its_voice_and_the_one_it_must_not_have() -> None:
+    # Round 2 of a male / female battle once came out with its last verse in the female voice:
+    # the model kept the voice of the verse before. The plan now says it both ways.
+    verses = [s for s in music.build_plan(0, _verses(), 0) if s.kind == "verse"]
+    voices = ["male", "female", "female", "male"]  # round 2: the second rapper opens
+    for section, voice in zip(verses, voices, strict=True):
+        other = music.OTHER_VOICE[voice]
+        assert f"solo {voice} vocals" in section.styles
+        assert {f"{other} vocals", f"{other} rapper"} <= set(section.negative)
+        assert not any(re.search(rf"\b{other}\b", style) for style in section.styles)
+    # The mic changes hands to the other voice: said; the same voice again after a break: not.
+    handovers = [any("takes the mic" in s for s in v.styles) for v in verses]
+    assert handovers == [False, True, False, True]
 
 
 def test_sections_stay_within_the_apis_limits() -> None:
@@ -465,3 +481,63 @@ async def test_the_voice_list_says_whether_an_own_key_may_make_music(
     # The system key (ours, paid) and Edge are not asked.
     assert await voices("elevenlabs", None) is None
     assert await voices("edge", None) is None
+
+
+# --- the result -----------------------------------------------------------------------------
+
+
+def test_the_judges_score_sheet_closes_the_battle() -> None:
+    from app.api import serializers
+    from app.schemas.timeline import TimelineSegment, TimelineVerdict
+    from app.schemas.visuals import ScoreboardScene
+    from app.services.verdict import stored_round_scores
+
+    verdict_json = {
+        "source": "llm",
+        "winner_id": "participant_1",
+        "winner_name": "Ann",
+        "headline": "Ann wins the battle.",
+        "rounds": [
+            {"round": 1, "scores": {"participant_1": 8, "participant_2": 7}},
+            {"round": "two"},  # malformed rows are skipped, never fail the build
+            {"round": 2, "scores": {"participant_1": 9, "participant_2": "7"}},
+        ],
+    }
+    rounds = stored_round_scores(verdict_json)
+    assert rounds == [
+        {"round": 1, "scores": {"participant_1": 8, "participant_2": 7}},
+        {"round": 2, "scores": {"participant_1": 9, "participant_2": 7}},
+    ]
+    out = serializers.verdict_out(Debate(verdict_json=verdict_json))
+    assert out is not None and [r.round for r in out.rounds] == [1, 2]
+    assert serializers.verdict_out(Debate(verdict_json={"winner_id": None})).rounds == []  # type: ignore[union-attr]
+
+    words = [
+        TimelineWord(w=w, s=i * 400, e=i * 400 + 300) for i, w in enumerate(["Ann", "wins", "it"])
+    ]
+    words += [TimelineWord(w="more", s=2_000 + i * 400, e=2_300 + i * 400) for i in range(60)]
+    segment = TimelineSegment(
+        seq_index=5,
+        speaker_id="judge",
+        speaker_name="The Judge",
+        round_id="verdict",
+        turn_type="verdict",
+        start_ms=90_000,
+        end_ms=120_000,
+        audio="turns/005.wav",
+        text="Ann wins it",
+        words=words,
+    )
+    speakers = [
+        TimelineSpeaker.model_validate(
+            {"id": f"participant_{i}", "name": n, "role": r, "model": "m", "color": "#fff"}
+            | {"mascot": "orb"}
+        )
+        for i, (n, r) in enumerate([("MC", "moderator"), ("Ann", "debater"), ("Bob", "debater")])
+    ]
+    verdict = TimelineVerdict(seq_index=5, winner_id="participant_1", winner_name="Ann")
+    [board] = jobs._add_scoreboard([], [segment], speakers, verdict, verdict_json)
+    assert isinstance(board.scene, ScoreboardScene)
+    assert [r.scores["participant_1"] for r in board.scene.rounds] == [8, 9]
+    # Shown from the announcement to the end of the verdict, while the judge goes round by round.
+    assert board.start_ms < 90_400 and board.end_ms == 120_400

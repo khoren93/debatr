@@ -31,7 +31,7 @@ from app.schemas.timeline import (
     TimelineVerdict,
     TimelineWord,
 )
-from app.schemas.visuals import ImageScene, SketchScene, TimelineVisual
+from app.schemas.visuals import ImageScene, ScoreboardRound, SketchScene, TimelineVisual
 from app.services import free_quota, runtime_settings
 from app.services.credits import (
     charge_images_sync,
@@ -85,6 +85,7 @@ from app.services.studio import (
 )
 from app.services.usage import ContextThreadPool, KeyOwner, attributed
 from app.services.usage import record as record_usage
+from app.services.verdict import stored_round_scores
 
 logger = logging.getLogger(__name__)
 
@@ -576,7 +577,8 @@ def _add_scoreboard(
     verdict_json: dict[str, Any] | None,
 ) -> list[TimelineVisual]:
     """The judge's scoreboard on the verdict turn. A draw is shown only when the structured
-    verdict says so (a regex fallback without a winner is not a reliable draw)."""
+    verdict says so (a regex fallback without a winner is not a reliable draw). Formats whose
+    judge scores every round (rap battle) get the score sheet too."""
     structured = verdict_json or {}
     is_draw = structured.get("source") == "llm" and bool(structured.get("is_draw"))
     segment = next((s for s in segments if s.seq_index == verdict.seq_index), None)
@@ -589,6 +591,7 @@ def _add_scoreboard(
         winner_id=verdict.winner_id,
         winner_name=verdict.winner_name,
         headline=str(structured.get("headline") or ""),
+        rounds=[ScoreboardRound.model_validate(r) for r in stored_round_scores(structured)],
     )
     return make_room(visuals, board)
 
@@ -1087,11 +1090,14 @@ def _finish(
             winner_id=winner.id if winner else None,
             winner_name=winner.name if winner else None,
         )
-        if options.visuals:
+        # The result is the show's last screen: formats without scenes that score every round
+        # (rap battle) get it too.
+        if options.visuals or format_of(conf).verdict_scores:
             visuals = _add_scoreboard(visuals, segments, speakers, verdict, debate.verdict_json)
 
     timeline = Timeline(
         debate_id=debate_id,
+        format=format_of(conf).id,
         title=str(debate.title or conf.get("topic") or "Debate"),
         topic=str(conf.get("topic") or ""),
         language=language,

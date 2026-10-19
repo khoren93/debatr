@@ -1,5 +1,5 @@
 import pytest
-from conftest import DEBATE_ID, detail
+from conftest import DEBATE_ID, battle_detail, detail
 
 from debatr.debate import (
     FREE_MODEL,
@@ -135,3 +135,66 @@ def test_summaries():
     assert "transcript" not in out
     lean = digest(d, "u", turns="markdown")
     assert "turns" not in lean and "### Atlas" in lean["transcript"]
+
+
+# --- rap battles ------------------------------------------------------------------------------
+
+
+def test_a_rap_battle_config():
+    config = build_config(
+        "Tabs or spaces?",
+        [Debater("acme/alpha"), Debater("acme/beta", stance="A grumpy sysadmin")],
+        format="rap_battle",
+        rounds=2,
+        audio=True,
+        flows=["smooth", "fierce"],
+    )
+    assert config["format"] == "rap_battle"
+    host, one, two = config["participants"]
+    assert host["display_name"] == "The MC" and "battle rap MC" in host["persona_custom"]
+    # The format seats the sides: a rapper's persona carries no stance sentence.
+    assert one["persona_custom"] == "You are a sharp, witty battle rapper."
+    assert two["persona_custom"] == "A grumpy sysadmin"
+    assert "side" not in one
+    plan = config["media_plan"]
+    assert plan["provider"] == "elevenlabs"  # the only voices of a battle
+    assert plan["flows"] == {"participant_1": "smooth", "participant_2": "fierce"}
+    # A debate stays as older servers know it: no format field at all.
+    assert "format" not in build_config("Q?", [Debater(), Debater()])
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "message"),
+    [
+        ({"host_model": None}, "needs its MC"),
+        ({"rounds": 4}, "1 to 3 rounds"),
+        ({"scenes": True}, "no scenes"),
+        ({"audio": True, "voices": "edge"}, "premium voices only"),
+        ({"flows": ["gritty"]}, "add --audio"),
+        ({"audio": True, "flows": ["a", "b", "c"]}, "at most two flows"),
+    ],
+)
+def test_rap_battle_limits(kwargs, message):
+    with pytest.raises(ValueError, match=message):
+        build_config("Q?", [Debater(), Debater()], format="rap_battle", **kwargs)
+    with pytest.raises(ValueError, match="exactly two rappers"):
+        build_config("Q?", [Debater()] * 3, format="rap_battle")
+    with pytest.raises(ValueError, match="Flows are for rap battles"):
+        build_config("Q?", [Debater(), Debater()], audio=True, flows=["gritty"])
+
+
+def test_rap_battle_summaries():
+    battle = battle_detail()
+    assert total_turns(battle) == 6  # the MC once, four verses, the verdict
+    digest_ = digest(battle, "https://x", turns="none")
+    assert digest_["format"] == "rap_battle"
+    assert digest_["verdict"]["rounds"][1] == {
+        "round": 2,
+        "scores": [
+            {"speaker": "Nova", "speaker_id": "participant_1", "score": 8},
+            {"speaker": "Atlas", "speaker_id": "participant_2", "score": 7},
+        ],
+    }
+    markdown = transcript_markdown(battle)
+    assert "- Format: Rap battle" in markdown
+    assert "Round 2 · Verse" in markdown and "- Round 1: Nova 8, Atlas 7" in markdown

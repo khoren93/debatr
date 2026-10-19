@@ -8,17 +8,20 @@ import pytest
 from conftest import (
     DEBATE_ID,
     FINAL_TURNS,
+    FORMATS,
     LIVE_EVENTS,
     SITE,
     TOKEN,
     FakeServer,
+    battle_detail,
     detail,
     free_estimate,
     turn,
 )
+from rich.console import Console
 from typer.testing import CliRunner
 
-from debatr import cli
+from debatr import cli, render
 from debatr.config import Login, Store
 
 runner = CliRunner()
@@ -498,3 +501,58 @@ def test_resume_explains_why_not(app, server):
     result = app("resume", DEBATE_ID)
     assert result.exit_code == 1
     assert "Error: Only a debate that failed can be resumed" in result.output
+
+
+def test_a_rap_battle_from_the_terminal(app, server):
+    server.on("GET /formats", [FORMATS])  # one response: the list
+    server.on("POST /debates/estimate", free_estimate(credits_cost_usd=0.9, music_ms=150_000))
+    server.on("POST /debates", {"debate_id": DEBATE_ID, "status": "queued", "message": "ok"})
+    server.on(f"GET /debates/{DEBATE_ID}", battle_detail("queued"))
+    args = ["run", "Tabs or spaces?", "--format", "rap_battle", "--audio", "--detach", "--yes"]
+    result = app(*args, "--flow", "smooth", "--flow", "sharp")
+    assert result.exit_code == 0, result.output
+    console = Console(record=True, width=100)
+    console.print(render.estimate_table(free_estimate(credits_cost_usd=0.9, music_ms=150_000)))
+    assert "~2m 30s of beat and verses" in console.export_text()
+    body = json.loads(server.calls("POST /debates")[0].content)
+    assert body["format"] == "rap_battle" and body["media_plan"]["provider"] == "elevenlabs"
+    assert body["media_plan"]["flows"] == {"participant_1": "smooth", "participant_2": "sharp"}
+
+    # A typo would fall back to the default flow on the server: refused here, nothing started.
+    typo = app(*args, "--flow", "smoth")
+    assert typo.exit_code == 1 and "Unknown flow smoth: pick from gritty, sharp, smooth" in (
+        typo.output
+    )
+    assert len(server.calls("POST /debates")) == 1
+    too_many = app("run", "Q?", "--format", "rap_battle", "-d", "a/b", "-d", "a/c", "-d", "a/d")
+    assert too_many.exit_code == 1 and "exactly two rappers" in too_many.output
+
+
+def test_formats_gallery_and_leaderboard_by_format(app, server):
+    server.on("GET /formats", [FORMATS])  # one response: the list
+    listed = app("formats", token=None)
+    assert listed.exit_code == 0, listed.output
+    assert "rap_battle" in listed.output and "gritty" in listed.output
+    assert "(default)" in listed.output and "premium voices only" in listed.output
+
+    server.on(
+        "GET /gallery", {"items": [{"slug": "abcd1234", "topic": "Q?", "format": "rap_battle"}]}
+    )
+    shown = app("gallery", "--format", "rap_battle", token=None)
+    assert "RAP BATTLE" in shown.output
+    assert server.calls("GET /gallery")[0].url.params["format"] == "rap_battle"
+
+    server.on("GET /gallery/leaderboard", {"entries": [], "total_votes": 0})
+    app("leaderboard", token=None)
+    app("leaderboard", "--format", "rap_battle", token=None)
+    asked = [r.url.params.get("format") for r in server.calls("GET /gallery/leaderboard")]
+    assert asked == [None, "rap_battle"]
+
+
+def test_a_battle_without_its_track_explains_the_build(app, server):
+    server.on(f"GET /debates/{DEBATE_ID}", battle_detail())
+    server.on(f"GET /debates/{DEBATE_ID}/media", {"media_status": "none"})
+    missing = app("audio", DEBATE_ID)
+    assert missing.exit_code == 1 and "ElevenLabs, paid" in missing.output
+    edge = app("audio", DEBATE_ID, "--build", "--voices", "edge")
+    assert edge.exit_code == 1 and "premium voices only" in edge.output

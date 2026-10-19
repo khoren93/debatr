@@ -1,6 +1,7 @@
 import { interpolate, useCurrentFrame, useVideoConfig } from 'remotion';
 import type { Timeline } from '../../api/timeline';
 import { APP_NAME } from '../../lib/brand';
+import { timelineFormat } from '../../lib/formats';
 import { ACCENT, DISPLAY_FONT, FONT, INTRO_MS, MONO_FONT, barHeight } from '../constants';
 import { headlineSize, roundLabel } from '../utils';
 import { FaceOff } from './FaceOff';
@@ -60,7 +61,7 @@ export const IntroCard = ({ timeline }: { timeline: Timeline }) => {
       <FaceOff debaters={debaters} width={width} height={height} logoY={0.31} logoSize={13 * u} t={t} length={length} />
       <div style={{ position: 'absolute', top: 2.2 * u, left: 2.4 * u, right: 2.4 * u, height: barHeight(u), display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <BrandMark u={u} />
-        <LabelChip label="AI DEBATE" u={u} color={ACCENT} />
+        <LabelChip label={timelineFormat(timeline).label} u={u} color={ACCENT} />
       </div>
       <div style={{ position: 'absolute', left: 7 * u, right: 7 * u, bottom: 5 * u, textAlign: 'center', fontFamily: DISPLAY_FONT, fontSize: size, fontWeight: 800, letterSpacing: -0.03 * size, lineHeight: 1.06, color: '#F2F3F7' }}>{timeline.topic}</div>
     </div>
@@ -77,7 +78,7 @@ export const VerdictCard = ({ timeline, big, sinceMs }: { timeline: Timeline; bi
       <div style={{ fontFamily: MONO_FONT, fontSize: big ? 36 : 28, letterSpacing: 10, color: HOST }}>VERDICT</div>
       {winner && <LogoTile speaker={winner} size={big ? 150 : 120} framed />}
       <div style={{ fontFamily: DISPLAY_FONT, fontSize: big ? 110 : 84, fontWeight: 800, letterSpacing: -3, color: winner?.color ?? '#fff', lineHeight: 1, textShadow: `0 0 60px ${winner?.color ?? '#fff'}66` }}>{winner?.name ?? '—'}</div>
-      <div style={{ fontSize: big ? 36 : 30, color: '#ffffffb3', fontWeight: 600 }}>{winner ? 'wins this debate' : 'no winner'}</div>
+      <div style={{ fontSize: big ? 36 : 30, color: '#ffffffb3', fontWeight: 600 }}>{winner ? `wins this ${timelineFormat(timeline).show}` : 'no winner'}</div>
     </div>
   );
 };

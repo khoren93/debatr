@@ -386,12 +386,19 @@ class VerdictFeedback(BaseModel):
     text: str
 
 
+class RoundScoreOut(BaseModel):
+    round: int
+    scores: dict[str, int]  # participant id -> the judge's score
+
+
 class VerdictOut(BaseModel):
     winner_id: str | None = None
     winner_name: str | None = None
     is_draw: bool = True
     headline: str = ""
     feedback: list[VerdictFeedback] = Field(default_factory=list)
+    # Formats whose judge scores every round (rap battle); empty otherwise.
+    rounds: list[RoundScoreOut] = Field(default_factory=list)
 
 
 class BillingOut(BaseModel):

@@ -4,7 +4,7 @@ import { listGallery } from '../api/gallery';
 import type { GalleryItem, Participant } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { Page } from '../components/layout/AppShell';
-import { CardStats, DebateCard, DebateCover, PremiumVoicesBadge, VersionsBadge } from '../components/cards';
+import { CardStats, CoverBadge, DebateCard, DebateCover, VersionsBadge } from '../components/cards';
 import { Avatar, Bars, LinkButton, LogoMark } from '../components/ui';
 import { APP_DESCRIPTION, APP_NAME } from '../lib/brand';
 
@@ -168,7 +168,7 @@ const Landing = () => {
                   <DebateCover
                     participants={item.participants}
                     topLeft={<VersionsBadge motion={item.motion} participants={item.participants} />}
-                    topRight={item.premium_voices ? <PremiumVoicesBadge /> : undefined}
+                    topRight={<CoverBadge format={item.format} premiumVoices={item.premium_voices} />}
                   />
                 }
                 footerLeft={

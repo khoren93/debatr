@@ -1,6 +1,6 @@
 import type { CSSProperties, ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { AudioLines, Clock, Eye, Heart, Layers } from 'lucide-react';
+import { AudioLines, Clock, Eye, Heart, Layers, MicVocal } from 'lucide-react';
 import type { MotionRef, Participant, Verdict } from '../../api/types';
 import { formatCount, formatDuration, gradientFor } from '../../lib/format';
 import { ModelIcon, Thumb } from '../ui';
@@ -66,6 +66,19 @@ export const PremiumVoicesBadge = () => (
     <AudioLines className="size-3" /> PREMIUM VOICES
   </span>
 );
+
+/** Cover badge of a show format other than the debate ("RAP BATTLE"); nothing for a debate. */
+export const FormatBadge = ({ format }: { format: string | undefined }) =>
+  format === 'rap_battle' ? (
+    <span className="inline-flex items-center gap-1 rounded-md bg-black/55 px-2 py-[3px] font-mono text-[10px] tracking-[0.06em] text-accent backdrop-blur-sm" title="Rap battle: verses over one beat">
+      <MicVocal className="size-3" /> RAP BATTLE
+    </span>
+  ) : null;
+
+/** The cover's top-right badge: the format of a battle (always voiced with premium voices, so
+ *  that badge would say nothing new), else premium voices when the debate has them. */
+export const CoverBadge = ({ format, premiumVoices }: { format: string | undefined; premiumVoices: boolean }) =>
+  format === 'rap_battle' ? <FormatBadge format={format} /> : premiumVoices ? <PremiumVoicesBadge /> : null;
 
 /** Cover badge of a topic with several public versions: how many, and the logos of the models
  *  that argued it in the other versions (the cover already shows its own pair). */

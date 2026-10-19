@@ -546,6 +546,13 @@ class ImageScene(_Scene):
     source_url: Annotated[str, AfterValidator(_https_url)] = ""
 
 
+class ScoreboardRound(BaseModel):
+    """The judge's scores of one round (formats with `verdict_scores`: rap battles)."""
+
+    round: int
+    scores: dict[str, int]  # speaker id -> score
+
+
 class ScoreboardScene(_Scene):
     """The judge's result, built from `debates.verdict_json` by code (never by the director)."""
 
@@ -553,6 +560,7 @@ class ScoreboardScene(_Scene):
     speaker_ids: list[str]  # debaters in line-up order
     winner_id: str | None = None  # None: a draw
     headline: Annotated[str, BeforeValidator(_clip(160))] = ""
+    rounds: list[ScoreboardRound] = Field(default_factory=list)  # rap battles: the score sheet
 
 
 # What the visual director may design.

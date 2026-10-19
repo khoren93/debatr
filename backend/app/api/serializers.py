@@ -24,6 +24,7 @@ from app.schemas.schemas import (
     NewsContext,
     ParticipantOut,
     RemixParentOut,
+    RoundScoreOut,
     TurnOut,
     TurnUsage,
     VerdictFeedback,
@@ -36,6 +37,7 @@ from app.services.media.languages import language_code
 from app.services.motions import MotionInfo
 from app.services.scheduler import speaker_role_for
 from app.services.studio import turn_visuals_out
+from app.services.verdict import stored_round_scores
 
 
 def is_owner(debate: Debate, viewer: User | None) -> bool:
@@ -100,6 +102,7 @@ def verdict_out(debate: Debate) -> VerdictOut | None:
         is_draw=bool(raw.get("is_draw", winner_id is None)),
         headline=str(raw.get("headline") or ""),
         feedback=feedback,
+        rounds=[RoundScoreOut.model_validate(r) for r in stored_round_scores(raw)],
     )
 
 

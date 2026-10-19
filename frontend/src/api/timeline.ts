@@ -60,6 +60,8 @@ export interface TimelineVerdict {
 export interface Timeline {
   version: 1;
   debate_id: string;
+  /** Show format (lib/formats); missing in timelines built before formats reached the video. */
+  format?: string;
   title: string;
   topic: string;
   language: string;

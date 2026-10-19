@@ -1,5 +1,5 @@
 import { api } from './client';
-import type { DebateDetail, GalleryGroup, GalleryPeriod, GalleryResponse, GallerySort, Leaderboard } from './types';
+import type { DebateDetail, FormatId, GalleryGroup, GalleryPeriod, GalleryResponse, GallerySort, Leaderboard } from './types';
 
 export interface GalleryQuery {
   category?: string;
@@ -13,6 +13,8 @@ export interface GalleryQuery {
   period?: GalleryPeriod;
   /** `motion`: one card per topic (its best version under these filters). */
   group?: GalleryGroup;
+  /** Only debates of this show format (debates, rap battles). */
+  format?: FormatId;
   limit?: number;
   offset?: number;
 }
@@ -22,4 +24,5 @@ export const listGallery = (params: GalleryQuery = {}) => api.get<GalleryRespons
 export const getPublicDebate = (slug: string) =>
   api.get<DebateDetail>(`/gallery/${encodeURIComponent(slug)}`).then((r) => r.data);
 
-export const getLeaderboard = () => api.get<Leaderboard>('/gallery/leaderboard').then((r) => r.data);
+/** Models ranked within a show format (the server's default: debates). */
+export const getLeaderboard = (format: FormatId = 'debate') => api.get<Leaderboard>('/gallery/leaderboard', { params: { format } }).then((r) => r.data);

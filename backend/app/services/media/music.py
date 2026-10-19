@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 MUSIC_MODEL = "music_v2_5"
 # 192 kbps (the v2 models' "auto") is listed from the Creator plan up: ask for 128 explicitly.
 OUTPUT_FORMAT = "mp3_44100_128"
-PLAN_VERSION = 1  # bump when the plan's wording changes, so cached tracks are not reused
+PLAN_VERSION = 2  # bump when the plan's wording changes, so cached tracks are not reused
 BPM = 92
 BAR_MS = round(60_000 * 4 / BPM)  # one rapped line per bar (spike: 2.65 s a line at 92 BPM)
 VOICE_LEAD_MS = 600  # the MC and the judge start talking this far into their section
@@ -54,6 +54,10 @@ BEAT = (
 )
 NO_SINGING = ("singing", "melodic chorus", "auto-tune", "pop")
 INSTRUMENTAL_ONLY = ("vocals", "rap vocals", "spoken words", *NO_SINGING)
+# The model tends to keep the voice of the section before: a verse also names the voice it must
+# not have (the other one), and says when the mic changes hands. Without it a battle of a male
+# and a female rapper came out with round 2's second verse in the first verse's voice.
+OTHER_VOICE = {"male": "female", "female": "male"}
 
 Kind = Literal["intro", "verse", "break", "outro"]
 
@@ -177,6 +181,7 @@ def build_plan(
         )
     ]
     last_round = verses[0].round_number if verses else 1
+    last_voice: str | None = None
     for verse in verses:
         if verse.round_number != last_round:
             sections.append(
@@ -189,16 +194,26 @@ def build_plan(
                 )
             )
             last_round = verse.round_number
+        voice, other = verse.flow.voice, OTHER_VOICE[verse.flow.voice]
+        handover = (f"a new {voice} vocalist takes the mic",) if last_voice == other else ()
         sections.append(
             Section(
                 "verse",
                 verse_ms(verse.lyrics),
                 f"[Verse]\n{verse.lyrics}",
-                (*verse.flow.styles, "rap vocals", "clear diction", "on beat"),
-                NO_SINGING,
+                (
+                    *verse.flow.styles,
+                    f"solo {voice} vocals",
+                    *handover,
+                    "rap vocals",
+                    "clear diction",
+                    "on beat",
+                ),
+                (*NO_SINGING, f"{other} vocals", f"{other} rapper", f"{other} voice"),
                 verse.seq_index,
             )
         )
+        last_voice = voice
     sections.append(
         Section(
             "outro",

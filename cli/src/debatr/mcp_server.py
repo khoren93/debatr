@@ -58,6 +58,9 @@ the page has the player, audience voting and video export.
 4. A debate stops with status error when a model fails to answer; resume_debate runs that turn \
 again (same models, earlier turns kept) and goes on.
 
+Besides debates there are rap battles (start_debate(format="rap_battle"), see list_formats): an \
+MC and two rappers trade verses, the judge scores every round.
+
 Debates are private unless public=true. Paid models are charged to the user's Debatr credits; \
 this server refuses debates estimated above {cap} (DEBATR_MAX_COST_USD)."""
 
@@ -79,6 +82,16 @@ class DebaterSpec(BaseModel):
 
 
 Length = Literal["very_short", "short", "medium", "long"]
+Show = Literal["debate", "rap_battle"]
+SHOW_HELP = (
+    "debate, or rap_battle: an MC and exactly two rappers trade verses over one beat for 1-3 "
+    "rounds (rounds of 4/8/12/16 lines by length); with audio the track is made by ElevenLabs "
+    "Music and is paid from the user's credits."
+)
+FLOWS_HELP = (
+    "Rap battle with audio: how each rapper sounds, in the order of the debaters (ids from "
+    "list_formats, e.g. ['gritty', 'sharp'])."
+)
 
 
 def max_cost_cap() -> float:
@@ -138,6 +151,8 @@ def _config(
     fact_check: bool = False,
     audio: bool = False,
     public: bool = False,
+    show: str = "debate",
+    flows: list[str] | None = None,
 ) -> dict[str, Any]:
     specs = debaters or [DebaterSpec(), DebaterSpec()]
     try:
@@ -153,6 +168,8 @@ def _config(
             fact_check=fact_check,
             audio=audio,
             public=public,
+            format=show,
+            flows=flows,
         )
     except ValueError as e:
         raise ToolError(str(e)) from e
@@ -207,6 +224,41 @@ def create_server(
                 "expires_at": token.get("expires_at"),
             },
             "max_cost_per_debate_usd": cost_cap,
+        }
+
+    @server.tool(title="List formats", annotations=READ_ONLY)
+    async def list_formats() -> dict[str, Any]:
+        """Show formats for start_debate(format=…): seats, rounds, voices, and the rap
+        battle's flows (start_debate(flows=…))."""
+        client = await clients.get(auth=False)
+        try:
+            formats = await client.formats()
+        except ApiError as e:
+            raise _api(e) from e
+        return {
+            "formats": [
+                {
+                    "id": f.get("id"),
+                    "name": f.get("name"),
+                    "about": f.get("tagline"),
+                    "debaters": [f.get("min_debaters"), f.get("max_debaters")],
+                    "rounds": [f.get("min_rounds"), f.get("max_rounds")],
+                    "host_required": f.get("host_required"),
+                    "premium_voices_only": f.get("voices") == "elevenlabs",
+                    **(
+                        {
+                            "flows": [
+                                {"id": x.get("id"), "sound": f"{x.get('label')}: {x.get('hint')}"}
+                                for x in f.get("flows") or []
+                            ],
+                            "default_flows": f.get("default_flows") or [],
+                        }
+                        if f.get("flows")
+                        else {}
+                    ),
+                }
+                for f in formats
+            ]
         }
 
     @server.tool(title="List models", annotations=READ_ONLY)
@@ -275,6 +327,8 @@ def create_server(
         language: str = "English",
         fact_check: bool = False,
         audio: bool = False,
+        format: Annotated[Show, Field(description=SHOW_HELP)] = "debate",
+        flows: Annotated[list[str] | None, Field(description=FLOWS_HELP)] = None,
     ) -> dict[str, Any]:
         """Price and length of a debate before starting it (same arguments as start_debate)."""
         config = _config(
@@ -286,6 +340,8 @@ def create_server(
             language,
             fact_check=fact_check,
             audio=audio,
+            show=format,
+            flows=flows,
         )
         client = await clients.get()
         try:
@@ -321,11 +377,17 @@ def create_server(
             bool, Field(description="Web fact-check of the figures shown on screen (paid).")
         ] = False,
         audio: Annotated[
-            bool, Field(description="Voice it with free voices when done (MP3 + video page).")
+            bool,
+            Field(
+                description="Voice it when done (MP3 + video page): free voices for a debate, "
+                "the paid ElevenLabs track for a rap battle."
+            ),
         ] = False,
         public: Annotated[
             bool, Field(description="Publish to the public gallery when finished.")
         ] = False,
+        format: Annotated[Show, Field(description=SHOW_HELP)] = "debate",
+        flows: Annotated[list[str] | None, Field(description=FLOWS_HELP)] = None,
         max_cost_usd: Annotated[
             float | None,
             Field(ge=0, description="Refuse to start above this estimate (USD)."),
@@ -345,6 +407,8 @@ def create_server(
             fact_check,
             audio,
             public,
+            format,
+            flows,
         )
         limit = cost_cap if max_cost_usd is None else min(max_cost_usd, cost_cap)
         client = await clients.get()
@@ -514,13 +578,16 @@ def create_server(
         query: Annotated[str, Field(description="Words in the topic.")] = "",
         model: Annotated[str, Field(description="Only debates this model argued in.")] = "",
         sort: Literal["trending", "new", "top"] = "trending",
+        format: Annotated[
+            Show | None, Field(description="Only debates or only rap battles.")
+        ] = None,
         limit: Annotated[int, Field(ge=1, le=50)] = 10,
     ) -> dict[str, Any]:
-        """Public debates from the gallery; read one with get_debate(url)."""
+        """Public debates and rap battles from the gallery; read one with get_debate(url)."""
         client = await clients.get(auth=False)
         try:
             body = await client.gallery(
-                q=query or None, model=model or None, sort=sort, limit=limit
+                q=query or None, model=model or None, sort=sort, format=format, limit=limit
             )
         except ApiError as e:
             raise _api(e) from e
@@ -529,6 +596,7 @@ def create_server(
             "debates": [
                 {
                     "url": f"{client.base_url}/d/{item.get('slug')}",
+                    "format": item.get("format") or "debate",
                     "topic": item.get("topic"),
                     "models": [
                         p.get("model")
@@ -547,6 +615,9 @@ def create_server(
     @server.tool(title="Model leaderboard", annotations=READ_ONLY)
     async def get_leaderboard(
         free_only: Annotated[bool, Field(description="Only free models.")] = False,
+        format: Annotated[
+            Show, Field(description="Rank debaters, or rappers (votes on rap battles).")
+        ] = "debate",
         limit: Annotated[int, Field(ge=1, le=100)] = 20,
     ) -> dict[str, Any]:
         """Models ranked by audience votes on public debates (Elo-like rating, 1000 =
@@ -554,7 +625,7 @@ def create_server(
         and the accuracy of their fact-checked figures."""
         client = await clients.get(auth=False)
         try:
-            body = await client.leaderboard()
+            body = await client.leaderboard(None if format == "debate" else format)
         except ApiError as e:
             raise _api(e) from e
         entries = [e for e in body.get("entries") or [] if not free_only or e.get("is_free")]

@@ -81,6 +81,13 @@ class Format(str, Enum):
     json = "json"
 
 
+class Show(str, Enum):
+    """Show formats (`debatr formats`)."""
+
+    debate = "debate"
+    rap_battle = "rap_battle"
+
+
 class Sort(str, Enum):
     trending = "trending"
     new = "new"
@@ -405,16 +412,24 @@ def gallery(
     model: Annotated[
         str | None, typer.Option("--model", help="Debates this model argued in.")
     ] = None,
+    show: Annotated[
+        Show | None, typer.Option("--format", help="Only debates or only rap battles.")
+    ] = None,
     limit: Annotated[int, typer.Option("--limit", min=1, max=100)] = 15,
     json_out: Annotated[bool, typer.Option("--json", help="Print JSON.")] = False,
 ) -> None:
-    """Browse public debates."""
+    """Browse public debates and rap battles."""
     client = client_of(ctx)
 
     async def go() -> dict[str, Any]:
         async with client:
             return await client.gallery(
-                q=search, model=model, sort=sort.value, period=period.value, limit=limit
+                q=search,
+                model=model,
+                sort=sort.value,
+                period=period.value,
+                format=show.value if show else None,
+                limit=limit,
             )
 
     body = run_async(go())
@@ -430,18 +445,40 @@ def gallery(
 
 
 @app.command()
+def formats(
+    ctx: typer.Context,
+    json_out: Annotated[bool, typer.Option("--json", help="Print JSON.")] = False,
+) -> None:
+    """Show formats (`run --format`) and the rap battle's flows (`run --flow`)."""
+    client = client_of(ctx)
+
+    async def go() -> list[dict[str, Any]]:
+        async with client:
+            return await client.formats()
+
+    body = run_async(go())
+    if json_out:
+        print_json(body)
+        return
+    out.print(render.formats_table(body))
+
+
+@app.command()
 def leaderboard(
     ctx: typer.Context,
     free: Annotated[bool, typer.Option("--free", help="Only free models.")] = False,
+    show: Annotated[
+        Show, typer.Option("--format", help="Best debaters, or best rappers (rap_battle).")
+    ] = Show.debate,
     limit: Annotated[int, typer.Option("--limit", min=1)] = 20,
     json_out: Annotated[bool, typer.Option("--json", help="Print JSON.")] = False,
 ) -> None:
-    """Models ranked by audience votes (Elo-like rating, 1000 = average)."""
+    """Models ranked by audience votes (Elo-like rating, 1000 = average), per format."""
     client = client_of(ctx)
 
     async def go() -> dict[str, Any]:
         async with client:
-            return await client.leaderboard()
+            return await client.leaderboard(None if show is Show.debate else show.value)
 
     body = run_async(go())
     entries = [e for e in body.get("entries") or [] if not free or e.get("is_free")][:limit]
@@ -600,6 +637,22 @@ def run(
             metavar="TEXT",
         ),
     ] = None,
+    show: Annotated[
+        Show,
+        typer.Option(
+            "--format",
+            help="debate, or rap_battle: an MC and two rappers over one beat (2 debaters, "
+            "1-3 rounds; --audio makes the track with ElevenLabs, paid).",
+        ),
+    ] = Show.debate,
+    flow: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--flow",
+            help="Rap battle: how each rapper sounds, in the order of -d (see `debatr formats`).",
+            metavar="FLOW",
+        ),
+    ] = None,
     host: Annotated[
         str,
         typer.Option("--host", help="Model of the host, who also judges.", metavar="MODEL"),
@@ -645,8 +698,12 @@ def run(
         typer.Option("--audio", help="Voice the debate when it ends (MP3 + video on the web)."),
     ] = False,
     voices: Annotated[
-        Voices, typer.Option("--voices", help="edge (free) or elevenlabs (premium, paid).")
-    ] = Voices.edge,
+        Voices | None,
+        typer.Option(
+            "--voices",
+            help="edge (free) or elevenlabs (premium, paid; the only voices of a rap battle).",
+        ),
+    ] = None,
     public: Annotated[
         bool,
         typer.Option("--public", help="Publish to the gallery when done (after a content check)."),
@@ -692,6 +749,7 @@ def run(
       debatr run "Should cities ban cars?"
       debatr run "Is AI art real art?" -d anthropic/claude-sonnet-4.5 -d openai/gpt-5 --rounds 3
       debatr run "Nuclear or renewables?" -d MODEL -n Ada -s "A nuclear engineer" -d MODEL -n Ben
+      debatr run "Tabs or spaces?" --format rap_battle --rounds 1 --length very_short
     """
     openrouter_key = os.environ.get(ENV_OPENROUTER_KEY) or None
     elevenlabs_key = os.environ.get(ENV_ELEVENLABS_KEY) or None
@@ -732,11 +790,13 @@ def run(
                 scenes=scenes,
                 fact_check=fact_check,
                 audio=audio,
-                voices=voices.value,
+                voices=voices.value if voices else None,
                 public=public,
                 draft=draft,
                 openrouter_key=openrouter_key,
                 elevenlabs_key=elevenlabs_key,
+                format=show.value,
+                flows=flow,
             )
         except ValueError as e:
             fail(str(e))
@@ -750,6 +810,7 @@ def run(
 
     async def go() -> dict[str, Any] | None:
         async with DebatrClient(s.url, s.token) as client:
+            await _check_flows(client, config)
             if not config.get("draft"):
                 await _check_cost(client, config, quiet=quiet, yes=yes, max_cost=max_cost)
             created = await client.create_debate(config)
@@ -785,6 +846,26 @@ def run(
         _on_interrupt(s, started["id"], offer_stop=True)
     if final is not None:
         report(final, debate_url(s.url, final), json_out)
+
+
+async def _check_flows(client: DebatrClient, config: dict[str, Any]) -> None:
+    """Unknown flow ids would quietly fall back to the defaults on the server: name them."""
+    chosen = set(((config.get("media_plan") or {}).get("flows") or {}).values())
+    if not chosen:
+        return
+    try:
+        formats = await client.formats()
+    except ApiError:
+        return  # an older server: it checks what it knows
+    known = {
+        str(f.get("id"))
+        for fmt in formats
+        if fmt.get("id") == config.get("format")
+        for f in fmt.get("flows") or []
+    }
+    unknown = sorted(chosen - known)
+    if known and unknown:
+        fail(f"Unknown flow {', '.join(unknown)}: pick from {', '.join(sorted(known))}")
 
 
 async def _check_cost(
@@ -1118,7 +1199,10 @@ def audio(
     build: Annotated[
         bool, typer.Option("--build", help="Voice the debate first if it has no audio yet.")
     ] = False,
-    voices: Annotated[Voices, typer.Option("--voices", help="Voices for --build.")] = Voices.edge,
+    voices: Annotated[
+        Voices | None,
+        typer.Option("--voices", help="Voices for --build (edge; a rap battle: elevenlabs)."),
+    ] = None,
     wait: Annotated[
         bool, typer.Option("--wait/--no-wait", help="Wait for an audio build in progress.")
     ] = True,
@@ -1134,9 +1218,17 @@ def audio(
             state = media.get("media_status")
             if state in ("none", "error") and build:
                 plan = detail.get("media_plan") or {}
-                await client.build_media(
-                    debate_id, {"provider": voices.value, "visuals": bool(plan.get("visuals"))}
-                )
+                battle = (detail.get("settings") or {}).get("format") == "rap_battle"
+                provider = voices.value if voices else ("elevenlabs" if battle else "edge")
+                if battle and provider != "elevenlabs":
+                    fail("A rap battle is voiced with premium voices only: --voices elevenlabs")
+                options: dict[str, Any] = {
+                    "provider": provider,
+                    "visuals": bool(plan.get("visuals")),
+                }
+                if plan.get("flows"):
+                    options["flows"] = plan["flows"]
+                await client.build_media(debate_id, options)
                 state = "queued"
             if state in ("queued", "running"):
                 if not wait:
@@ -1153,7 +1245,12 @@ def audio(
                 problem = (media.get("progress") or {}).get("error")
                 if problem:
                     fail(f"The audio build failed: {problem}")
-                fail("This debate has no audio yet: add --build to voice it (free Edge voices).")
+                battle = (detail.get("settings") or {}).get("format") == "rap_battle"
+                fail(
+                    "This rap battle has no track yet: add --build to make it (ElevenLabs, paid)."
+                    if battle
+                    else "This debate has no audio yet: add --build to voice it (free Edge voices)."
+                )
             urls = media.get("urls") or {}
             dest = output or Path(f"debate-{debate_id[:8]}.mp3")
             with err.status(f"Downloading {dest}…"):

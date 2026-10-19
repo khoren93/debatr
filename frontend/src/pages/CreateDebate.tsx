@@ -52,6 +52,8 @@ const CreateDebate = () => {
   const [searchParams] = useSearchParams();
   const draftId = searchParams.get('draft');
   const remixId = draftId ? null : searchParams.get('remix');
+  // `?format=rap_battle` (links from the gallery and the ranking) opens the wizard on that format.
+  const formatParam = draftId || remixId ? null : searchParams.get('format');
   const { user, refresh } = useAuth();
   const { models, loading: modelsLoading, error: modelsError } = useModels();
   const { config: billing, loaded: billingLoaded } = useBillingConfig();
@@ -74,7 +76,11 @@ const CreateDebate = () => {
   };
   const formatLocks = Object.fromEntries(FORMAT_IDS.flatMap((id) => (formatLock(FORMATS[id]) ? [[id, formatLock(FORMATS[id])]] : []))) as Partial<Record<FormatId, string>>;
 
-  const [state, setState] = useState<WizardState>(() => (draftId ? initialState() : loadWizardState()));
+  const [state, setState] = useState<WizardState>(() => {
+    if (draftId) return initialState();
+    const stored = loadWizardState();
+    return formatParam && (FORMAT_IDS as string[]).includes(formatParam) ? applyFormat({ ...stored, step: 1 }, formatParam as FormatId) : stored;
+  });
   const [draftLoaded, setDraftLoaded] = useState<string | null>(null);
   const [draftError, setDraftError] = useState<string | null>(null);
   const [remixError, setRemixError] = useState<string | null>(null);
@@ -127,6 +133,11 @@ const CreateDebate = () => {
       cancelled = true;
     };
   }, [remixId, navigate, toast]);
+
+  // The format was applied when the state was made: drop the parameter from the address.
+  useEffect(() => {
+    if (formatParam) navigate('/create', { replace: true });
+  }, [formatParam, navigate]);
 
   // The in-progress wizard survives reloads (drafts live on the server instead). While a remix
   // loads, keep the stored state untouched in case it fails.

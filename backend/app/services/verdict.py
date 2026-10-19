@@ -143,6 +143,22 @@ def parse_round_scores(
     return [{"round": n, "scores": out[n]} for n in sorted(out)]
 
 
+def stored_round_scores(verdict_json: dict[str, Any] | None) -> list[dict[str, Any]]:
+    """`verdict_json.rounds` as written by `structure_verdict`, read defensively (the API's
+    verdict, the video's score sheet): entries that are not {round: int, scores: {id: int}} go."""
+    out: list[dict[str, Any]] = []
+    for item in (verdict_json or {}).get("rounds") or []:
+        if not isinstance(item, dict) or not isinstance(item.get("scores"), dict):
+            continue
+        try:
+            number = int(item["round"])
+            scores = {str(k): int(v) for k, v in item["scores"].items()}
+        except (KeyError, TypeError, ValueError):
+            continue
+        out.append({"round": number, "scores": scores})
+    return out
+
+
 _ROUND_LINE = re.compile(r"round\s*(\d+)\s*[:\-–—]?\s*([^\n.;!?]*)", re.I)  # noqa: RUF001
 
 

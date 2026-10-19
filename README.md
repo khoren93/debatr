@@ -53,6 +53,10 @@ Users sign up, run free models or bring their own OpenRouter key, buy credits wi
   launch with the exact cost and length before you hit start.
 - **⚡ Watch it live**: arguments stream in word by word, and you can stop the debate at any moment.
   If a model fails to answer, the debate stops on that turn and resumes from there with one click.
+- **🎤 Rap battles**: two models trade verses on your topic over one beat, with an MC to open and
+  a judge who scores every round. ElevenLabs Music generates the beat and the rapped verses as one
+  track; pick how each rapper sounds, and the video shows the lyrics karaoke-style and the
+  judge's score sheet. Battles get their own gallery filter and their own ranking of rappers.
 
 ### ⚖️ Who won?
 - **🧑‍⚖️ AI judge**: a verdict with the winner (or a draw), a headline and feedback for every
@@ -89,8 +93,9 @@ Users sign up, run free models or bring their own OpenRouter key, buy credits wi
 
 ### 🤖 From the terminal and for AI agents
 - **⌨️ `debatr` CLI**: `uv tool install debatr`, approve your computer in the browser once and run
-  a debate with one command. The turns stream into your terminal; `--json` makes it scriptable,
-  transcripts and audio export from there too, and `debatr resume` picks up a failed debate.
+  a debate (or `--format rap_battle`) with one command. The turns stream into your terminal;
+  `--json` makes it scriptable, transcripts and audio export from there too, and `debatr resume`
+  picks up a failed debate.
 - **🔌 MCP server**: give Claude, Cursor and other agents a debate tool (`debatr mcp`). They can
   stage a debate between any models to stress-test a decision or see both sides of a question,
   then read the verdict.
@@ -106,8 +111,8 @@ Users sign up, run free models or bring their own OpenRouter key, buy credits wi
 
 - [ ] **🧑‍⚖️ Human vs AI**: step into the arena yourself. Argue against a model of your choice, turn
   by turn, and let the judge decide who made the stronger case.
-- [ ] **🎭 New formats**: beyond the classic debate: rap battles, roasts, courtroom trials with a
-  prosecutor, defence and jury, Shark Tank pitches, Socratic dialogues and podcast interviews.
+- [ ] **🎭 More formats**: after the rap battle: courtroom trials with a prosecutor, defence and
+  jury, roasts, Shark Tank pitches, Socratic dialogues and podcast interviews.
 - [ ] **🏛️ Historical & fictional characters**: Socrates vs Nietzsche, Sherlock vs Poirot. Cast
   famous minds from history and fiction as your speakers, each with their own voice and style.
 - [ ] **🏆 Tournaments**: knockout brackets of 4–8 models on one question. Every match is a

@@ -10,6 +10,8 @@ export interface FormatSpec {
   name: string;
   /** The show in a sentence: "Start the battle", "Your battle". */
   show: string;
+  /** Badge on cards and in the video ("AI DEBATE", "RAP BATTLE"). */
+  label: string;
   tagline: string;
   /** "Host", "MC". */
   hostLabel: string;
@@ -45,6 +47,7 @@ export const FORMATS: Record<FormatId, FormatSpec> = {
     id: 'debate',
     name: 'Debate',
     show: 'debate',
+    label: 'AI DEBATE',
     tagline: 'Models argue a topic for and against; the judge picks a winner.',
     hostLabel: 'Host',
     hostName: 'The Host',
@@ -70,6 +73,7 @@ export const FORMATS: Record<FormatId, FormatSpec> = {
     id: 'rap_battle',
     name: 'Rap battle',
     show: 'battle',
+    label: 'RAP BATTLE',
     tagline: 'Two models trade verses over one beat; the judge scores every round.',
     hostLabel: 'MC',
     hostName: 'The MC',
@@ -99,6 +103,10 @@ export const FORMAT_IDS = Object.keys(FORMATS) as FormatId[];
 
 /** Unknown or missing ids run as a debate, like the backend's `format_of`. */
 export const formatSpec = (id: string | null | undefined): FormatSpec => FORMATS[(id ?? '') as FormatId] ?? FORMATS.debate;
+
+/** The format of a timeline; battles built before timelines carried it are told by their verses. */
+export const timelineFormat = (timeline: { format?: string; segments: { turn_type: string }[] }): FormatSpec =>
+  formatSpec(timeline.format ?? (timeline.segments.some((s) => s.turn_type === 'verse') ? 'rap_battle' : 'debate'));
 
 /** How a rapper sounds in the generated track (backend media/music.FLOWS). */
 export interface Flow {

@@ -8,6 +8,7 @@ except the model call is pure and unit-tested.
 
 import logging
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -34,6 +35,7 @@ from app.schemas.visuals import (
     RankingScene,
     RebuttalScene,
     ScaleScene,
+    ScoreboardRound,
     ScoreboardScene,
     SketchScene,
     StatScene,
@@ -664,9 +666,11 @@ def scoreboard_visual(
     winner_id: str | None,
     winner_name: str | None,
     headline: str = "",
+    rounds: Sequence[ScoreboardRound] = (),
 ) -> TimelineVisual:
     """The judge's result on the stage, from the structured verdict (no LLM): shown when the
-    judge announces it, otherwise shortly before the verdict ends."""
+    judge announces it, otherwise shortly before the verdict ends. A score sheet (`rounds`, rap
+    battles) stays to the end of the verdict, which goes through the rounds one by one."""
     words = [(w.w, w.s, w.e) for w in segment.words]
     duration = segment.end_ms - segment.start_ms
     at = announcement_index(words, winner_name if winner_id else None)
@@ -674,9 +678,13 @@ def scoreboard_visual(
         start = max(0, words[at][1] - LEAD_MS)
     else:
         start = max(0, duration - SCOREBOARD_MS - SCOREBOARD_TAIL_MS)
-    end = min(start + SCOREBOARD_MS, duration + END_HOLD_MS)
+    end = duration + END_HOLD_MS if rounds else min(start + SCOREBOARD_MS, duration + END_HOLD_MS)
     scene = ScoreboardScene(
-        type="scoreboard", speaker_ids=debater_ids, winner_id=winner_id, headline=headline
+        type="scoreboard",
+        speaker_ids=debater_ids,
+        winner_id=winner_id,
+        headline=headline,
+        rounds=list(rounds),
     )
     return TimelineVisual(
         id=f"v{segment.seq_index}_score",
