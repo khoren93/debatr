@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-10-20
+
 ### Added
 
 - **Rap battles** (`format: "rap_battle"`): an MC opens, two models trade verses of 4–16 lines
@@ -24,6 +26,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CLI 0.3.0**: `debatr run --format rap_battle --flow …`, `debatr formats`, `--format` for
   `gallery` and `leaderboard`, the judge's round scores in the output; MCP `list_formats` and
   `format` / `flows` in `start_debate` and `estimate_debate`.
+- **Admin console** on its own host (`ADMIN_HOST`, optional `ADMIN_ALLOWED_IPS`): sign-in with a
+  password and a TOTP code or a passkey, recovery codes, sessions you can revoke and a fresh code
+  for sensitive actions. Overview with charts and an attention list; users (filters, CSV, a card
+  with spend and activity, credits, disable, tokens, sign out everywhere, delete); debates (a
+  card with the video, the transcript with per-turn usage, provider calls; stop, resume, rebuild
+  audio, refund, publish); a keyboard-driven moderation queue; trending batches; finance (margin
+  per day / week / month, Stripe reconciliation); models (failures, speed, wins); system
+  (queues, workers, scheduler, runs in flight, limits, providers, health); settings that change
+  levers without a deploy (sign-ups, maintenance, turned-off models, prices, free limits); an
+  append-only audit log. Roles are granted only on the server (`python -m app.manage admin
+  grant`). It replaces the old sqladmin pages.
+- **Telegram alerts** (`ALERT_TELEGRAM_BOT_TOKEN`, `ALERT_TELEGRAM_CHAT_ID`): console sign-ins,
+  new accounts and debates, flagged or failing debates, stuck runs, low provider balances,
+  top-ups, a full disk; kinds can be muted in the console.
+- **Provider usage and activity data**: every paid provider call (cost, tokens, time, errors) and
+  one activity row per user and day, behind the console's statistics.
+- **Database backups**: `make backup` (compressed dumps, pruning, optional encrypted off-site copy
+  with rclone) and `make backup-check` (restores the newest dump into a scratch database).
+- **Premium voices in the gallery**: debates voiced with ElevenLabs rank higher in Trending, carry
+  a badge and have their own filter.
+- **Face-off covers**: gallery cards, the video's first frame and the Short's hook show the
+  debaters' logos on slanted halves in their colours.
 - **`GET /api/health/full`** for an outside uptime monitor: besides the database and Redis it
   answers 503 when a queue (`default`, `background`, `media`) has no worker or the cron
   scheduler is gone, which the Telegram alerts cannot report since they run on those processes.
@@ -56,8 +80,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `get_leaderboard`) shows models without audience votes as "no votes" instead of a 1000 rating;
   clearer `debatr resume --help`.
 
+- **Postgres 18 and Redis 8** in Docker Compose; Redis keeps its snapshot in a volume.
+
 ### Fixed
 
+- **Real client IPs behind a proxy**: the frontend's Caddy trusts private-range proxies, so the
+  API sees https and each visitor's address (rate limits, the console's IP checks, view counts).
 - **Paid models on the system key with an empty balance**: the estimate priced a model missing
   from the OpenRouter catalogue (`:nitro` / `:online` variants, models OpenRouter dropped) at $0
   and routers with a variable price (`openrouter/auto` and similar) below zero, so the balance
@@ -263,7 +291,8 @@ First public release of **AI Debates**.
 - Admin panel for debates, participants, turns and sessions.
 - Docker Compose setup with FastAPI, PostgreSQL, Redis + RQ and a React + Vite frontend.
 
-[Unreleased]: https://github.com/khoren93/debatr/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/khoren93/debatr/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/khoren93/debatr/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/khoren93/debatr/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/khoren93/debatr/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/khoren93/debatr/releases/tag/v1.0.0
