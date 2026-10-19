@@ -27,8 +27,10 @@ from app.core.redis import (
 )
 from app.services.admin.totp import code_hash, new_enrollment_code, normalize_code
 
-IDLE_SECONDS = 30 * 60
-ABSOLUTE_SECONDS = 12 * 60 * 60
+# One sign-in a day: a console tab left alone for hours stays signed in. Money and destructive
+# actions still ask for a fresh code (SUDO_SECONDS), and sessions can be revoked at once.
+IDLE_SECONDS = 24 * 60 * 60
+ABSOLUTE_SECONDS = 24 * 60 * 60
 # Room for installing an authenticator app on the first sign-in.
 TICKET_SECONDS = 10 * 60
 # `last_seen_at` (and so the idle deadline) is written at most this often.

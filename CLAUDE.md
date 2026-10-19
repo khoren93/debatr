@@ -661,9 +661,9 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   the password alone signs in (`next="done"`), no enrollment, `require_sudo` passes,
   `AdminMeOut.two_factor=false`.
 - Sessions live in Redis (`services/admin/sessions`): `__Host-debatr_admin` cookie (HttpOnly,
-  SameSite=Strict; no prefix over plain http), only its SHA-256 stored, idle 30 min, absolute
-  12 h, listed and revocable; `resolve_admin` re-checks role, `is_active`, enrollment and
-  `users.session_epoch` (bumped by password change, 2FA reset, sign-out everywhere) on every
+  SameSite=Strict; no prefix over plain http), only its SHA-256 stored, idle and absolute 24 h
+  (one sign-in a day), listed and revocable; `resolve_admin` re-checks role, `is_active`,
+  enrollment and `users.session_epoch` (bumped by password change, 2FA reset, sign-out everywhere) on every
   request and never accepts an `Authorization` header. Unsafe methods need `X-CSRF-Token`
   (from `/auth/me`). `require_sudo`: a TOTP code (or a passkey) confirmed in the last 5 min (403
   with `X-Admin-Sudo: required`; the UI asks and retries).
