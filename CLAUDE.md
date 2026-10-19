@@ -11,7 +11,8 @@ a local export may sit in the git-ignored `design/` folder (`Debatr Studio.html`
 
 ```
 backend/            FastAPI API + RQ worker (Python 3.12+, managed with uv)
-  app/main.py         FastAPI app, AdminGate + session + CORS middleware, /api/health
+  app/main.py         FastAPI app, AdminGate + session + CORS middleware, /api/health (+ /full:
+                      workers and scheduler, for an outside uptime monitor)
   app/worker.py       RQ worker entrypoint (`python -m app.worker`)
   app/manage.py       operator commands on the server, not part of the public CLI: `admin grant |
                       revoke | list | reset-2fa | revoke-sessions | enroll-code`, `credits …`
@@ -687,8 +688,11 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   `SettingsOut.alert_events`; a new alert kind goes there too): a muted alert is neither sent nor
   listed, and a change of the list is itself an alert that cannot be muted (`mutes`, like the
   test). Every other alert, sent or not, lands in `alerts:recent` (Settings page, "Send a test"). httpx errors print the URL with the bot token, so only their class name is
-  kept. The alerts run on the scheduler and the background queue: with every worker down,
-  nothing reports it.
+  kept. The alerts run on the scheduler and the background queue, so they cannot report their
+  own end: `GET /api/health/full` (public, closed on the admin host) answers 503 when a queue
+  has no worker (`queue_manager.process_checks`; a killed worker counts until its RQ key
+  expires, ≤ ~7 min) or the cron scheduler is gone, for an outside uptime monitor. The
+  container healthcheck stays on `/api/health` (the API works without workers).
 - Overview (`GET /api/admin/overview?period=24h|7d|30d|90d|all&refresh=`): one cached answer
   (Redis 60 s per period and permission scope) built in a read-only transaction with a 5 s
   statement timeout (`access.read_only_db`). Tiles carry the previous period for deltas; series

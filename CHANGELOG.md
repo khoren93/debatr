@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`GET /api/health/full`** for an outside uptime monitor: besides the database and Redis it
+  answers 503 when a queue (`default`, `background`, `media`) has no worker or the cron
+  scheduler is gone, which the Telegram alerts cannot report since they run on those processes.
+
+### Changed
+
+- **CLI 0.2.1**: `debatr run` and the MCP tools refuse topics over 150 characters before asking
+  the server (it draws the topic on the video); the leaderboard (`debatr leaderboard`, MCP
+  `get_leaderboard`) shows models without audience votes as "no votes" instead of a 1000 rating;
+  clearer `debatr resume --help`.
+
+### Fixed
+
+- **Paid models on the system key with an empty balance**: the estimate priced a model missing
+  from the OpenRouter catalogue (`:nitro` / `:online` variants, models OpenRouter dropped) at $0
+  and routers with a variable price (`openrouter/auto` and similar) below zero, so the balance
+  check let such runs through. On the system key every model now needs a catalogue price (else
+  400; without a catalogue only free models run), and variable-price routers are no longer
+  listed. An own OpenRouter key still takes any model id. A model OpenRouter dropped now fails
+  at once with a clear message instead of on the first turn.
+
 ## [1.2.0] - 2026-10-18
 
 ### Added

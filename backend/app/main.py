@@ -30,7 +30,8 @@ from app.core.config import settings
 from app.core.db import engine
 from app.core.logging import setup_logging
 from app.core.media_static import MediaStaticFiles
-from app.core.redis import close_async_redis, get_async_redis
+from app.core.redis import close_async_redis, get_async_redis, get_sync_redis
+from app.services import queue_manager
 from app.services.media.tts.elevenlabs import system_key_status
 
 setup_logging()
@@ -120,9 +121,7 @@ def read_root() -> dict[str, str]:
     return {"message": "Welcome to AI Debates API", "docs": "/api/docs"}
 
 
-@app.get("/api/health", tags=["meta"])
-async def health_check() -> JSONResponse:
-    """Liveness + readiness: verifies database and Redis connectivity."""
+async def _connectivity() -> dict[str, str]:
     checks: dict[str, str] = {}
     try:
         async with engine.connect() as conn:
@@ -135,9 +134,32 @@ async def health_check() -> JSONResponse:
         checks["redis"] = "ok"
     except Exception as e:
         checks["redis"] = f"error: {e.__class__.__name__}"
+    return checks
 
+
+def _health(checks: dict[str, str]) -> JSONResponse:
     healthy = all(v == "ok" for v in checks.values())
     return JSONResponse(
         status_code=200 if healthy else 503,
         content={"status": "ok" if healthy else "degraded", "checks": checks},
     )
+
+
+@app.get("/api/health", tags=["meta"])
+async def health_check() -> JSONResponse:
+    """Liveness + readiness: verifies database and Redis connectivity."""
+    return _health(await _connectivity())
+
+
+@app.get("/api/health/full", tags=["meta"])
+async def full_health_check() -> JSONResponse:
+    """For an outside uptime monitor: also 503 when a queue has no worker or the cron scheduler
+    is gone. The Telegram alerts run on those processes, so they cannot report their own end
+    (nor a server that is down). Not the container's healthcheck: the API is fine without them."""
+    checks = await _connectivity()
+    if checks["redis"] == "ok":
+        try:
+            checks |= await run_in_threadpool(queue_manager.process_checks, get_sync_redis())
+        except Exception as e:
+            checks["workers"] = f"error: {e.__class__.__name__}"
+    return _health(checks)

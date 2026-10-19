@@ -8,7 +8,7 @@ import pytest
 
 from app.core.config import settings
 from app.models.models import Turn, utcnow
-from app.services import free_quota, heartbeat, recovery
+from app.services import free_quota, heartbeat, queue_manager, recovery
 
 
 class FakeRedis:
@@ -156,3 +156,39 @@ def test_free_models_are_recognised():
     assert free_quota.is_free_model("openrouter/free")
     assert free_quota.is_free_model("qwen/qwen3:free")
     assert not free_quota.is_free_model("openai/gpt-5")
+
+
+def test_process_checks_name_queues_without_a_worker(monkeypatch):
+    def workers(queue: Any = None, **_kw: Any) -> list[str]:
+        return [] if queue.name == "media" else ["w"]
+
+    monkeypatch.setattr(queue_manager.Worker, "all", workers)
+    monkeypatch.setattr(queue_manager.CronScheduler, "all", lambda _redis, cleanup: [])
+    assert queue_manager.process_checks(object()) == {  # type: ignore[arg-type]
+        "default_workers": "ok",
+        "background_workers": "ok",
+        "media_workers": "none",
+        "scheduler": "none",
+    }
+
+
+async def test_full_health_is_503_without_workers(monkeypatch):
+    from app import main
+
+    async def connectivity() -> dict[str, str]:
+        return {"database": "ok", "redis": "ok"}
+
+    checks = {"default_workers": "ok", "media_workers": "ok", "scheduler": "ok"}
+    monkeypatch.setattr(main, "_connectivity", connectivity)
+    monkeypatch.setattr(main, "get_sync_redis", lambda: None)
+    monkeypatch.setattr(queue_manager, "process_checks", lambda _redis: dict(checks))
+    assert (await main.full_health_check()).status_code == 200
+    checks["media_workers"] = "none"
+    assert (await main.full_health_check()).status_code == 503
+
+    def broken(_redis: Any) -> dict[str, str]:
+        raise ConnectionError("gone")
+
+    monkeypatch.setattr(queue_manager, "process_checks", broken)
+    response = await main.full_health_check()
+    assert response.status_code == 503 and b"error: ConnectionError" in response.body

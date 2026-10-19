@@ -2,7 +2,8 @@
 never imports the worker-only orchestrator / media modules."""
 
 from redis import Redis
-from rq import Queue
+from rq import Queue, Worker
+from rq.cron import CronScheduler
 from rq.job import Job
 
 from app.core.config import settings
@@ -27,6 +28,18 @@ def waiting_debates(redis: Redis, queue_name: str) -> set[str]:
     ids = Queue(queue_name, connection=redis).get_job_ids()
     jobs = Job.fetch_many(ids, connection=redis) if ids else []
     return {str(job.kwargs["debate_id"]) for job in jobs if job and job.kwargs.get("debate_id")}
+
+
+def process_checks(redis: Redis) -> dict[str, str]:
+    """Whether a worker listens to each queue and the cron scheduler runs ("ok" | "none"). A
+    worker counts while its Redis key lives (RQ: up to ~7 min after its last heartbeat), the
+    scheduler for 2 min."""
+    checks: dict[str, str] = {}
+    for name in (QUEUE_NAME, BACKGROUND_QUEUE_NAME, MEDIA_QUEUE_NAME):
+        workers = Worker.all(queue=Queue(name, connection=redis))
+        checks[f"{name}_workers"] = "ok" if workers else "none"
+    checks["scheduler"] = "ok" if CronScheduler.all(redis, cleanup=False) else "none"
+    return checks
 
 
 def _enqueue(func_path: str, *, queue_name: str, timeout: int, **kwargs: object) -> None:
