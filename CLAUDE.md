@@ -143,7 +143,8 @@ frontend/           React 19 + Vite 8 + Tailwind 4 + TypeScript
                       filters), RecoveryCodes, PasskeysCard, AlertsCard, StatTile, AttentionList;
                       users/ =
                       the account card's actions and sections; debates/ = the debate card's
-                      actions, transcript and panels; system/ = the System page's sections
+                      actions, video (VideoPanel), transcript and panels; system/ = the System
+                      page's sections
                       (useLoad.ts: load + poll); components/admin/charts:
                       LineChart, StackedColumns, ChartCard (legend + table view), palette.ts =
                       validated chart colours)
@@ -755,8 +756,11 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   refunds `money`): the list filters by status (`active` = queued or running), moderation,
   audio, gallery, own key, API token, debater model, owner, period, and searches title / id /
   slug; turns, system-key cost (`provider_usage`) and net charge come from SQL subqueries. The
-  card: transcript with per-turn usage, timing, scenes and fact-checks, verdict and moderation,
-  audio state, Redis state (heartbeats, recovery attempts, stop flag, keys waiting), provider
+  card: the video once audio is ready (the public page's `DebatePlayer` in a lazy `VideoPanel`,
+  16:9 / 9:16; files via `GET /debates/{id}/files/{path}`, rooted at the debate's folder, since
+  `/api/media` is closed on the admin host; the console CSP allows `media-src data:` for the
+  player's audio unlock), transcript with per-turn usage, timing, scenes and fact-checks,
+  verdict and moderation, audio state, Redis state (heartbeats, recovery attempts, stop flag, keys waiting), provider
   calls by purpose, ledger rows, the stored config (key-like fields scrubbed) and its audit
   entries; opening someone's private debate is audited once an hour per admin (`debate.viewed`).
   Changes (reason required, audited): stop, resume (`debates`; system key only, the owner is

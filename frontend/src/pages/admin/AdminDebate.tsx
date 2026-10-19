@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { Suspense, lazy, useEffect, useState, type ReactNode } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ArrowLeft, ArrowUpRight } from 'lucide-react';
 import { getDebateCard } from '../../api/admin/debates';
@@ -14,6 +14,9 @@ import { AuditPanel, LedgerTable, Panel } from '../../components/admin/users/Use
 import { formatTime, formatUsd } from '../../components/admin/helpers';
 import { Card, ErrorBox, ModelIcon, Spinner } from '../../components/ui';
 import { formatDuration, formatTokens, shortModelName } from '../../lib/format';
+
+// The public page's player (Remotion): loaded only for a debate with audio.
+const VideoPanel = lazy(() => import('../../components/admin/debates/VideoPanel'));
 
 const Fact = ({ label, children }: { label: string; children: ReactNode }) => (
   <div className="min-w-0">
@@ -130,9 +133,16 @@ const AdminDebate = () => {
           </Card>
 
           <div className="mt-4 grid items-start gap-4 xl:grid-cols-[2fr_1fr]">
-            <Panel title="Transcript" aside={`${card.turns.length} turns`}>
-              <Transcript turns={card.turns} />
-            </Panel>
+            <div className="grid min-w-0 gap-4">
+              {card.media.status === 'ready' && (
+                <Suspense fallback={<Spinner className="mx-auto my-10 size-6" />}>
+                  <VideoPanel debateId={d.id} builtAt={typeof card.media.finished_at === 'string' ? card.media.finished_at : null} />
+                </Suspense>
+              )}
+              <Panel title="Transcript" aside={`${card.turns.length} turns`}>
+                <Transcript turns={card.turns} />
+              </Panel>
+            </div>
             <div className="grid gap-4">
               <ModerationPanel card={card} />
               <MediaPanel card={card} />

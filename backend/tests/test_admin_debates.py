@@ -478,3 +478,34 @@ async def test_list_parameters_and_roles(api: tuple[FastAPI, list[dict[str, Any]
             json={"reason": "outage", "idempotency_key": str(uuid.uuid4())},
         )
         assert refund.status_code == 403
+
+
+async def test_media_files_for_the_cards_player(
+    api: tuple[FastAPI, list[dict[str, Any]]], monkeypatch: pytest.MonkeyPatch, tmp_path: Any
+) -> None:
+    app, _ = api
+    monkeypatch.setattr(settings, "MEDIA_ROOT", str(tmp_path))
+    did, other = str(uuid.uuid4()), str(uuid.uuid4())
+    (tmp_path / did / "visuals").mkdir(parents=True)
+    (tmp_path / did / "timeline.json").write_text('{"total_ms": 1}')
+    (tmp_path / did / "full.wav").write_bytes(b"0123456789")
+    (tmp_path / did / "visuals" / "a.webp").write_bytes(b"img")
+    (tmp_path / other).mkdir()
+    (tmp_path / other / "full.wav").write_bytes(b"secret")
+    base = f"/api/admin/debates/{did}/files"
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://t") as client:
+        # No console session: nothing.
+        assert (await client.get(f"{base}/timeline.json")).status_code == 401
+        # A moderator reads debates, so the player works for them too.
+        app.dependency_overrides[current_admin] = lambda: _ctx(_admin("moderator"))
+        timeline = await client.get(f"{base}/timeline.json")
+        assert timeline.status_code == 200 and timeline.json() == {"total_ms": 1}
+        assert (await client.get(f"{base}/visuals/a.webp")).content == b"img"
+        # Seeking in the audio: Range requests.
+        part = await client.get(f"{base}/full.wav", headers={"Range": "bytes=2-4"})
+        assert part.status_code == 206 and part.content == b"234"
+        # Rooted at the debate's own folder: no other debate's files, no bad ids.
+        for path in (f"%2E%2E/{other}/full.wav", "missing.json", ""):
+            assert (await client.get(f"{base}/{path}")).status_code == 404, path
+        assert (await client.get("/api/admin/debates/nope/files/full.wav")).status_code == 404

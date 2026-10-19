@@ -6,7 +6,8 @@ opening someone's private debate is written to the audit log (once an hour per a
 debate). Changes name a reason and are audited in the same transaction: stop, resume (system key
 only), a free audio rebuild, recount, delete (sudo) need `debates`; publish / unpublish /
 approve / reject need `moderation`; a refund needs `money` and goes through the ledger with
-`provider_ref = admin:refund:<debate>:<idempotency key>`.
+`provider_ref = admin:refund:<debate>:<idempotency key>`. The card's player reads the media folder
+through `/debates/{id}/files/…` (`debates.read`).
 """
 
 import contextlib
@@ -17,7 +18,7 @@ import uuid
 from decimal import Decimal
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from redis.exceptions import RedisError
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
@@ -28,6 +29,7 @@ from starlette.concurrency import run_in_threadpool
 from app.admin.access import AdminContext, read_only_db, require_admin, sudo_required
 from app.core.config import settings
 from app.core.db import AsyncSessionLocal, get_db
+from app.core.media_static import MediaStaticFiles
 from app.core.redis import get_async_redis, stop_flag_key, tts_key_key
 from app.models.models import CreditTransaction, Debate
 from app.schemas.admin import (
@@ -180,6 +182,20 @@ async def debate_card(
     )
     await _note_private_view(request, ctx, debate)
     return AdminDebateCard.model_validate(card)
+
+
+@router.get("/debates/{debate_id}/files/{path:path}")
+async def debate_file(
+    debate_id: str,
+    path: str,
+    request: Request,
+    _: AdminContext = Depends(require_admin("debates.read")),
+) -> Response:
+    """A file of the debate's media folder (timeline, audio, scene pictures) for the card's
+    player: the site's `/api/media/files` is closed on the admin host. Rooted at the debate's
+    own folder, so a path cannot reach another debate's files; Range requests work."""
+    files = MediaStaticFiles(directory=MediaPaths(str(_uuid(debate_id))).dir, check_dir=False)
+    return await files.get_response(path, request.scope)
 
 
 @router.get("/moderation", response_model=ModerationQueue)
