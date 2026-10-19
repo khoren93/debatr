@@ -33,11 +33,11 @@ from app.core.redis import (
 from app.core.sync_db import get_sync_session
 from app.models.models import Debate, Turn, utcnow
 from app.services import queue_manager
+from app.services.formats import format_of
 from app.services.heartbeat import alive
 from app.services.media.state import set_media_state
 from app.services.orchestrator import fail_debate
 from app.services.resume import discarded, resume_point
-from app.services.scheduler import build_schedule
 
 logger = logging.getLogger(__name__)
 
@@ -127,7 +127,7 @@ def _recover_debate(db: Session, redis: Redis, debate: Debate) -> None:
         logger.warning("Debate %s lost its worker; failing it: %s", debate_id, reason)
         fail_debate(db, debate, f"The server stopped while running this debate ({reason}).")
         return
-    schedule = build_schedule(conf.get("participants", []), int(conf.get("num_rounds") or 1))
+    schedule = format_of(conf).schedule(conf)
     step, from_seq = next_step(debate.status, debate.turns, len(schedule))
     if step in ("turn", "verdict"):
         # A turn the dead worker left half-saved (failed or empty) runs again.

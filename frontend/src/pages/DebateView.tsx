@@ -337,8 +337,9 @@ const DebateView = ({ id, slug }: Props) => {
   // Turns so far as a bar (live, or before the audio exists).
   const overview: BarSegment[] = debate.turns
     .filter((t) => !t.error)
-    .map((t) => ({ key: t.seq_index, flex: Math.max(1, wordCount(t.text) / 20), color: turnColor(t, participants), title: `${speakerTitle(t)} · ${turnTypeLabel(t.turn_type, t.round_id)}`, fill: 1 }));
-  const liveRound = streaming?.round_id || debate.turns.at(-1)?.round_id;
+    .map((t) => ({ key: t.seq_index, flex: Math.max(1, wordCount(t.text) / 20), color: turnColor(t, participants), title: `${speakerTitle(t)} · ${turnTypeLabel(t.turn_type, t.round_id, t.round_label)}`, fill: 1 }));
+  const lastTurn = debate.turns.at(-1);
+  const liveRound = streaming?.round_id ? { id: streaming.round_id, label: streaming.round_label } : lastTurn ? { id: lastTurn.round_id, label: lastTurn.round_label } : null;
   const liveSpeaker = streaming ? (speakerOfTurn(lineup, { ...streaming, speaker_id: undefined }) ?? null) : null;
   if (streaming) {
     overview.push({ key: streaming.seq_index, flex: Math.max(1, wordCount(streaming.text) / 20), color: liveSpeaker?.color ?? '#D9FF3D', title: `${speakerTitle({ ...streaming, speaker_id: undefined })} · writing`, fill: 1, pulse: true });
@@ -455,7 +456,7 @@ const DebateView = ({ id, slug }: Props) => {
             <LiveCard
               status={debate.status === 'queued' ? 'queued' : 'running'}
               topic={topic}
-              roundLabel={liveRound ? roundLabel(liveRound).toUpperCase() : null}
+              roundLabel={liveRound ? roundLabel(liveRound.id, liveRound.label).toUpperCase() : null}
               debaters={debaters}
               speaker={liveSpeaker}
               text={streaming?.text ?? ''}

@@ -41,7 +41,7 @@ export const LabelChip = ({ label, u, color = HOST }: { label: string; u: number
 );
 
 /** "ROUND 1" / "VERDICT" pill in the top-right corner. */
-export const RoundChip = ({ roundId, u }: { roundId: string; u: number }) => <LabelChip label={roundLabel(roundId).toUpperCase()} u={u} />;
+export const RoundChip = ({ roundId, label, u }: { roundId: string; label?: string | null; u: number }) => <LabelChip label={roundLabel(roundId, label).toUpperCase()} u={u} />;
 
 /** The long video's opening: the face-off under the brand bar, the question below. Fully drawn
  *  on frame 0 (the player's poster, the MP4's first frame); it fades into the studio at the end.

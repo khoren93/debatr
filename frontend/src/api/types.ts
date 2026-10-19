@@ -17,6 +17,10 @@ export type GalleryCategory = (typeof GALLERY_CATEGORIES)[number];
 export type GallerySort = 'new' | 'trending' | 'top';
 /** none: one card per debate; motion: one card per topic, its best version on the cover. */
 export type GalleryGroup = 'none' | 'motion';
+/** Show formats (backend services/formats). */
+export type FormatId = 'debate';
+/** A debater's side; absent on configs from before sides (the persona carried the stance). */
+export type DebaterSide = 'for' | 'against' | 'own';
 export type GalleryPeriod = 'week' | 'month' | 'year' | 'all';
 
 // --- Models ------------------------------------------------------------------
@@ -84,6 +88,8 @@ export interface TurnVisuals {
 export interface Turn {
   seq_index: number;
   round_id: string;
+  /** The format's name for this part of the show ("Round 2", "Verdict"). */
+  round_label?: string;
   turn_type: string;
   speaker_role: ParticipantRole;
   speaker_id?: string; // "participant_{i}" | "judge"
@@ -105,6 +111,7 @@ export interface Participant {
   router?: string | null;
   voice_name: string | null;
   avatar: string | null;
+  side?: DebaterSide | null;
 }
 
 export interface VerdictFeedback {
@@ -156,6 +163,7 @@ export interface DebateSummary {
 }
 
 export interface DebateSettings {
+  format: string;
   topic: string;
   description: string | null;
   language: string;
@@ -300,6 +308,7 @@ export interface ParticipantConfig {
   voice_name?: string;
   persona_preset?: string;
   persona_custom?: string;
+  side?: DebaterSide;
 }
 
 /** The news story behind a trending topic; its brief goes into every prompt (backend NewsContext). */
@@ -313,6 +322,7 @@ export interface NewsContext {
 }
 
 export interface DebateConfig {
+  format?: FormatId;
   topic: string;
   description?: string;
   /** Ground the debate in the news story the topic came from (trending topics). */
@@ -524,6 +534,7 @@ export interface Usage {
 export interface GalleryItem {
   id: string;
   slug: string;
+  format: string;
   title: string | null;
   topic: string;
   language: string;
@@ -588,6 +599,7 @@ export interface TurnStartedEvent {
   speaker_role: ParticipantRole;
   turn_type: string;
   round_id: string;
+  round_label?: string;
 }
 
 export interface TurnDeltaEvent {

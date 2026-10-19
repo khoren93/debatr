@@ -34,13 +34,13 @@ from app.core.redis import debate_beat_key, free_models_window_key, media_beat_k
 from app.models.models import Debate, ProviderUsage, Turn, User
 from app.services import runtime_settings
 from app.services.fair_share import REFUSALS_KEY, REFUSALS_SECONDS
+from app.services.formats import format_of
 from app.services.queue_manager import (
     BACKGROUND_QUEUE_NAME,
     MEDIA_QUEUE_NAME,
     QUEUE_NAME,
     waiting_debates,
 )
-from app.services.scheduler import build_schedule
 
 QUEUES = (QUEUE_NAME, BACKGROUND_QUEUE_NAME, MEDIA_QUEUE_NAME)
 ACTIVE = ("queued", "running")
@@ -213,7 +213,7 @@ def failed_job_action_sync(conn: Redis, job_id: str, action: str) -> dict[str, A
 def debate_step(config: dict[str, Any], turns_saved: int, status: str) -> str:
     if status == "queued":
         return "waiting to start" if turns_saved == 0 else f"waiting, {turns_saved} turns saved"
-    schedule = build_schedule(config.get("participants") or [], int(config.get("num_rounds") or 1))
+    schedule = format_of(config).schedule(config)
     total = len(schedule) + 1  # the verdict
     current = min(turns_saved + 1, total)
     return "verdict" if current == total else f"turn {current} of {total}"

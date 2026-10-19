@@ -39,7 +39,9 @@ backend/            FastAPI API + RQ worker (Python 3.12+, managed with uv)
                       presets, topics (trending), stream (SSE), media, status (`GET /api/status`:
                       sign-ups / maintenance for the site); serializers.py builds the shared
                       response models
-  app/services/       orchestrator (RQ jobs), scheduler (turn order), prompt_builder,
+  app/services/       orchestrator (RQ jobs), formats/ (show formats: seats, limits, turn order,
+                      prompts, verdict, round labels; `debate` today), scheduler (the debate's turn
+                      order), prompt_builder (the debate's prompts),
                       api_tokens (token budget, private-by-default, device flow in Redis),
                       openrouter_client, free_router (pins a Free Router participant's model),
                       events (pub/sub), queue_manager, credits (ledger),
@@ -261,11 +263,23 @@ docker compose exec api python -m app.manage credits user@example.com 5 --reason
    (`NullPool`, safe across RQ forks). With visual scenes on, every saved turn first goes
    through `studio.design_turn` (scenes, sketches, fact-checks; see "Visual scenes") before the
    next turn is queued.
-3. `scheduler.build_schedule()` is the single source of truth for turn order:
+3. The debate's format (`services/formats`, `DebateConfig.format`, `format_of(conf)`: none or
+   unknown → `debate`) is the single source of truth for turn order (`Format.schedule`), the
+   prompts (`host_messages` / `debater_messages` / `verdict_messages`), the verdict's word budget
+   (`verdict_words`, also used by the estimate), the round labels (`round_label` → `TurnOut`,
+   `turn_started`, timeline segments) and its limits (`problems`, checked by `DebateConfig`).
+   The orchestrator, the estimate, the recovery and the console never branch on a format id.
+   `debate` (the only format so far) wraps `scheduler.build_schedule()` and `prompt_builder`:
    each round = moderator (intro / transition) + every debater; debater turn types are
    `opening` / `rebuttal` / `closing` (or `argument` for single-round debates). The verdict
    (`turn_type=verdict`, `round_id=verdict`) is appended after the last scheduled turn; its word
-   budget follows the length preset (`prompt_builder.verdict_words`, also used by the estimate).
+   budget follows the length preset. A config without sides gets byte for byte the prompts of
+   before formats (`tests/fixtures/debate_prompts_v1.json`). Sides (`ParticipantConfig.side`:
+   `for | against | own`, unset = the persona carries the stance) add a "Your side" line, mark the
+   participants list and the judge's prompt; the wizard always sets them (old personas' default
+   stance sentences are turned into sides: `sideFromPersona`). Formats with fixed seats
+   (`Seat(label, side)` by speaking position) refuse sides from the user. The leaderboard ranks
+   within a format (`format=debate` by default); the gallery has a `format` filter.
 4. `openrouter_client.stream_chat_completion()` streams deltas and returns usage
    (tokens + cost). On HTTP 400 with a system prompt it retries once with the system prompt
    merged into the user message. Mid-stream `{"error": ...}` chunks raise `OpenRouterError`.

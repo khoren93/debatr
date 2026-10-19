@@ -1,0 +1,883 @@
+{
+ "two_markdown_3_rounds": {
+  "config": {
+   "topic": "Is remote work better than the office?",
+   "language": "English",
+   "num_rounds": 3,
+   "length_preset": "medium",
+   "intensity": 5,
+   "output_style": "markdown",
+   "participants": [
+    {
+     "role": "moderator",
+     "model_id": "m/host",
+     "display_name": "The Host",
+     "persona_custom": "You are an impartial debate moderator."
+    },
+    {
+     "role": "debater",
+     "model_id": "m/0",
+     "display_name": "Claude",
+     "persona_custom": "You are a skilled debater. Argue in favor of the topic."
+    },
+    {
+     "role": "debater",
+     "model_id": "m/1",
+     "display_name": "GPT",
+     "persona_custom": null
+    }
+   ]
+  },
+  "turns": [
+   {
+    "seq": 0,
+    "round": 1,
+    "type": "moderator_intro",
+    "speaker": 0,
+    "round_id": "round_1",
+    "messages": [
+     {
+      "role": "system",
+      "content": "You are the moderator of a structured debate. Your name is The Host.\nYou are an impartial debate moderator.\nYou never argue for a side and never give your own opinion on the topic.\nIMPORTANT: Write your response in English.\nLength: about 120 words. Stay within this limit.\nFORMATTING: Use Markdown (bold, italics, short lists) to make your text readable.\nDo NOT prefix your response with your own name or role. Speak in first person."
+     },
+     {
+      "role": "user",
+      "content": "Debate topic: Is remote work better than the office?\n\nParticipants:\n- The Host (moderator)\n- Claude (debater)\n- GPT (debater)\n\nDebate so far:\n(No statements yet — the debate is just beginning.)\n\nYour task: Open the debate: welcome the audience, introduce the topic in one or two sentences, introduce each debater by name, briefly explain the format (3 round(s)), and invite Claude to begin."
+     }
+    ]
+   },
+   {
+    "seq": 1,
+    "round": 1,
+    "type": "opening",
+    "speaker": 1,
+    "round_id": "round_1",
+    "messages": [
+     {
+      "role": "system",
+      "content": "You are a participant in a structured debate. Your name is Claude.\nPersona and stance: You are a skilled debater. Argue in favor of the topic.\nStyle: Be firm, engaging, and persuasive.\nIMPORTANT: Write your response in English.\nLength: about 250 words. Stay within this limit.\nFORMATTING: Use Markdown (bold, italics, short lists) to make your text readable.\nDo NOT prefix your response with your own name or role. Speak in first person."
+     },
+     {
+      "role": "user",
+      "content": "Debate topic: Is remote work better than the office?\n\nParticipants:\n- The Host (moderator)\n- Claude (debater)\n- GPT (debater)\n\nDebate so far:\nThe Host: Welcome to the debate.\n\nRound 1 of 3. This is your OPENING statement. Clearly state your position and lay out your two or three strongest arguments.\nIt is now your turn, Claude."
+     }
+    ]
+   },
+   {
+    "seq": 2,
+    "round": 1,
+    "type": "opening",
+    "speaker": 2,
+    "round_id": "round_1",
+    "messages": [
+     {
+      "role": "system",
+      "content": "You are a participant in a structured debate. Your name is GPT.\nPersona and stance: You are a skilled, well-informed debater.\nStyle: Be firm, engaging, and persuasive.\nIMPORTANT: Write your response in English.\nLength: about 250 words. Stay within this limit.\nFORMATTING: Use Markdown (bold, italics, short lists) to make your text readable.\nDo NOT prefix your response with your own name or role. Speak in first person."
+     },
+     {
+      "role": "user",
+      "content": "Debate topic: Is remote work better than the office?\n\nParticipants:\n- The Host (moderator)\n- Claude (debater)\n- GPT (debater)\n\nDebate so far:\nThe Host: Welcome to the debate.\n\nClaude: Remote work wins on focus.\n\nRound 1 of 3. This is your OPENING statement. Clearly state your position and lay out your two or three strongest arguments.\nIt is now your turn, GPT."
+     }
+    ]
+   },
+   {
+    "seq": 3,
+    "round": 2,
+    "type": "moderator_transition",
+    "speaker": 0,
+    "round_id": "round_2",
+    "messages": [
+     {
+      "role": "system",
+      "content": "You are the moderator of a structured debate. Your name is The Host.\nYou are an impartial debate moderator.\nYou never argue for a side and never give your own opinion on the topic.\nIMPORTANT: Write your response in English.\nLength: about 120 words. Stay within this limit.\nFORMATTING: Use Markdown (bold, italics, short lists) to make your text readable.\nDo NOT prefix your response with your own name or role. Speak in first person."
+     },
+     {
+      "role": "user",
+      "content": "Debate topic: Is remote work better than the office?\n\nParticipants:\n- The Host (moderator)\n- Claude (debater)\n- GPT (debater)\n\nDebate so far:\nThe Host: Welcome to the debate.\n\nClaude: Remote work wins on focus.\n\nGPT: Offices win on mentoring.\n\nYour task: Round 1 has just ended. In a few sentences, neutrally summarize the key points made so far, then open round 2 of 3 and hand over to Claude."
+     }
+    ]
+   },
+   {
+    "seq": 4,
+    "round": 2,
+    "type": "rebuttal",
+    "speaker": 1,
+    "round_id": "round_2",
+    "messages": [
+     {
+      "role": "system",
+      "content": "You are a participant in a structured debate. Your name is Claude.\nPersona and stance: You are a skilled debater. Argue in favor of the topic.\nStyle: Be firm, engaging, and persuasive.\nIMPORTANT: Write your response in English.\nLength: about 250 words. Stay within this limit.\nFORMATTING: Use Markdown (bold, italics, short lists) to make your text readable.\nDo NOT prefix your response with your own name or role. Speak in first person."
+     },
+     {
+      "role": "user",
+      "content": "Debate topic: Is remote work better than the office?\n\nParticipants:\n- The Host (moderator)\n- Claude (debater)\n- GPT (debater)\n\nDebate so far:\n(No statements yet — the debate is just beginning.)\n\nRound 2 of 3. This is a REBUTTAL round. Directly address and counter the strongest points made by your opponents so far, then reinforce your own position.\nIt is now your turn, Claude."
+     }
+    ]
+   },
+   {
+    "seq": 5,
+    "round": 2,
+    "type": "rebuttal",
+    "speaker": 2,
+    "round_id": "round_2",
+    "messages": [
+     {
+      "role": "system",
+      "content": "You are a participant in a structured debate. Your name is GPT.\nPersona and stance: You are a skilled, well-informed debater.\nStyle: Be firm, engaging, and persuasive.\nIMPORTANT: Write your response in English.\nLength: about 250 words. Stay within this limit.\nFORMATTING: Use Markdown (bold, italics, short lists) to make your text readable.\nDo NOT prefix your response with your own name or role. Speak in first person."
+     },
+     {
+      "role": "user",
+      "content": "Debate topic: Is remote work better than the office?\n\nParticipants:\n- The Host (moderator)\n- Claude (debater)\n- GPT (debater)\n\nDebate so far:\nThe Host: Welcome to the debate.\n\nRound 2 of 3. This is a REBUTTAL round. Directly address and counter the strongest points made by your opponents so far, then reinforce your own position.\nIt is now your turn, GPT."
+     }
+    ]
+   },
+   {
+    "seq": 6,
+    "round": 3,
+    "type": "moderator_transition",
+    "speaker": 0,
+    "round_id": "round_3",
+    "messages": [
+     {
+      "role": "system",
+      "content": "You are the moderator of a structured debate. Your name is The Host.\nYou are an impartial debate moderator.\nYou never argue for a side and never give your own opinion on the topic.\nIMPORTANT: Write your response in English.\nLength: about 120 words. Stay within this limit.\nFORMATTING: Use Markdown (bold, italics, short lists) to make your text readable.\nDo NOT prefix your response with your own name or role. Speak in first person."
+     },
+     {
+      "role": "user",
+      "content": "Debate topic: Is remote work better than the office?\n\nParticipants:\n- The Host (moderator)\n- Claude (debater)\n- GPT (debater)\n\nDebate so far:\nThe Host: Welcome to the debate.\n\nClaude: Remote work wins on focus.\n\nYour task: Round 2 has just ended. In a few sentences, neutrally summarize the key points made so far, then open round 3 of 3 and hand over to Claude."
+     }
+    ]
+   },
+   {
+    "seq": 7,
+    "round": 3,
+    "type": "closing",
+    "speaker": 1,
+    "round_id": "round_3",
+    "messages": [
+     {
+      "role": "system",
+      "content": "You are a participant in a structured debate. Your name is Claude.\nPersona and stance: You are a skilled debater. Argue in favor of the topic.\nStyle: Be firm, engaging, and persuasive.\nIMPORTANT: Write your response in English.\nLength: about 250 words. Stay within this limit.\nFORMATTING: Use Markdown (bold, italics, short lists) to make your text readable.\nDo NOT prefix your response with your own name or role. Speak in first person."
+     },
+     {
+      "role": "user",
+      "content": "Debate topic: Is remote work better than the office?\n\nParticipants:\n- The Host (moderator)\n- Claude (debater)\n- GPT (debater)\n\nDebate so far:\nThe Host: Welcome to the debate.\n\nClaude: Remote work wins on focus.\n\nGPT: Offices win on mentoring.\n\nRound 3 of 3. This is your CLOSING statement. Summarize why your position prevails, address the key objections raised, and finish with a memorable conclusion. Do not introduce new arguments.\nIt is now your turn, Claude."
+     }
+    ]
+   },
+   {
+    "seq": 8,
+    "round": 3,
+    "type": "closing",
+    "speaker": 2,
+    "round_id": "round_3",
+    "messages": [
+     {
+      "role": "system",
+      "content": "You are a participant in a structured debate. Your name is GPT.\nPersona and stance: You are a skilled, well-informed debater.\nStyle: Be firm, engaging, and persuasive.\nIMPORTANT: Write your response in English.\nLength: about 250 words. Stay within this limit.\nFORMATTING: Use Markdown (bold, italics, short lists) to make your text readable.\nDo NOT prefix your response with your own name or role. Speak in first person."
+     },
+     {
+      "role": "user",
+      "content": "Debate topic: Is remote work better than the office?\n\nParticipants:\n- The Host (moderator)\n- Claude (debater)\n- GPT (debater)\n\nDebate so far:\n(No statements yet — the debate is just beginning.)\n\nRound 3 of 3. This is your CLOSING statement. Summarize why your position prevails, address the key objections raised, and finish with a memorable conclusion. Do not introduce new arguments.\nIt is now your turn, GPT."
+     }
+    ]
+   }
+  ],
+  "verdict": [
+   {
+    "role": "system",
+    "content": "You are an expert, impartial debate judge.\nAnalyze the full debate transcript provided by the user and deliver a verdict. Decide on argument strength, logic and persuasiveness.\nUse exactly this structure and nothing else:\n**Winner: <name>** (or **Draw**), then one sentence on what decided it.\nThen one short paragraph per debater, starting with their name in bold: their strongest point and their main weakness (name a logical fallacy only if there was one).\n\nLength: about 170 words in total. This is a hard limit: the audience has just heard the debate, so judge it, do not retell it.\nWrite in English. Style: objective, professional, analytical."
+   },
+   {
+    "role": "user",
+    "content": "Debate topic: Is remote work better than the office?\n\nFull transcript:\nThe Host: Welcome to the debate.\n\nClaude: Remote work wins on focus.\n\nGPT: Offices win on mentoring.\n\nPlease deliver your final verdict now."
+   }
+  ],
+  "verdict_with_evidence": [
+   {
+    "role": "system",
+    "content": "You are an expert, impartial debate judge.\nAnalyze the full debate transcript provided by the user and deliver a verdict. Decide on argument strength, logic and persuasiveness.\nUse exactly this structure and nothing else:\n**Winner: <name>** (or **Draw**), then one sentence on what decided it.\nThen one short paragraph per debater, starting with their name in bold: their strongest point and their main weakness (name a logical fallacy only if there was one).\n\nLength: about 170 words in total. This is a hard limit: the audience has just heard the debate, so judge it, do not retell it.\nWrite in English. Style: objective, professional, analytical."
+   },
+   {
+    "role": "user",
+    "content": "Debate topic: Is remote work better than the office?\n\nFull transcript:\nThe Host: Welcome to the debate.\n\nClaude: Remote work wins on focus.\n\nGPT: Offices win on mentoring.\n\nFact-check: 1 claim refuted.\nWeigh accuracy: figures the fact-check refuted weaken a debater's case, a well-founded challenge strengthens it. Mention it briefly where it matters.\n\nPlease deliver your final verdict now."
+   }
+  ],
+  "verdict_words": 170
+ },
+ "spoken_visuals_news_1_round": {
+  "config": {
+   "topic": "Should cities ban cars?",
+   "language": "Russian",
+   "num_rounds": 1,
+   "length_preset": "very_short",
+   "intensity": 9,
+   "output_style": "spoken",
+   "description": "Focus on Europe.",
+   "news": {
+    "brief": "Paris banned cars.",
+    "outlet": "BBC",
+    "title": "Paris bans cars"
+   },
+   "media_plan": {
+    "visuals": true
+   },
+   "participants": [
+    {
+     "role": "moderator",
+     "model_id": "m/host",
+     "display_name": "The Host",
+     "persona_custom": "You are an impartial debate moderator."
+    },
+    {
+     "role": "debater",
+     "model_id": "m/0",
+     "display_name": "Claude",
+     "persona_custom": "You are a skilled debater. Argue in favor of the topic."
+    },
+    {
+     "role": "debater",
+     "model_id": "m/1",
+     "display_name": "GPT",
+     "persona_custom": null
+    }
+   ]
+  },
+  "turns": [
+   {
+    "seq": 0,
+    "round": 1,
+    "type": "moderator_intro",
+    "speaker": 0,
+    "round_id": "round_1",
+    "messages": [
+     {
+      "role": "system",
+      "content": "You are the moderator of a structured debate. Your name is The Host.\nYou are an impartial debate moderator.\nYou never argue for a side and never give your own opinion on the topic.\nIMPORTANT: Write your response in Russian.\nLength: about 50 words. Stay within this limit.\nFORMATTING: This is a SPOKEN debate: your words will be voiced by text-to-speech and turned into a video. Write plain spoken prose only: no Markdown, no headers, no bullet or numbered lists, no emojis, no stage directions. Use short, punchy, quotable sentences and address your opponents by name. You may add at most one emotion cue per paragraph, in square brackets at the start of a sentence, chosen only from: [sarcastic] [laughs] [serious] [calm] [confident] [firm] [pause] [excited] [sighs].\nDo NOT prefix your response with your own name or role. Speak in first person."
+     },
+     {
+      "role": "user",
+      "content": "Debate topic: Should cities ban cars?\nNews background (BBC, \"Paris bans cars\"): Paris banned cars.\nContext: Focus on Europe.\n\nParticipants:\n- The Host (moderator)\n- Claude (debater)\n- GPT (debater)\n\nDebate so far:\n(No statements yet — the debate is just beginning.)\n\nYour task: Open the debate: welcome the audience, introduce the topic in one or two sentences, introduce each debater by name, briefly explain the format (1 round(s)), and invite Claude to begin."
+     }
+    ]
+   },
+   {
+    "seq": 1,
+    "round": 1,
+    "type": "argument",
+    "speaker": 1,
+    "round_id": "round_1",
+    "messages": [
+     {
+      "role": "system",
+      "content": "You are a participant in a structured debate. Your name is Claude.\nPersona and stance: You are a skilled debater. Argue in favor of the topic.\nStyle: Be very passionate, dramatic, and intense, but respectful.\nIMPORTANT: Write your response in Russian.\nLength: about 50 words. Stay within this limit.\nFORMATTING: This is a SPOKEN debate: your words will be voiced by text-to-speech and turned into a video. Write plain spoken prose only: no Markdown, no headers, no bullet or numbered lists, no emojis, no stage directions. Use short, punchy, quotable sentences and address your opponents by name. You may add at most one emotion cue per paragraph, in square brackets at the start of a sentence, chosen only from: [sarcastic] [laughs] [serious] [calm] [confident] [firm] [pause] [excited] [sighs].\nDo NOT prefix your response with your own name or role. Speak in first person.\nVISUALS: While you speak, the show draws charts, numbers and sketches on screen. You may request up to two visuals by writing [visual: what to show, with the exact figures or items] right after the sentence it illustrates, e.g. [visual: bar chart - wind power share: Denmark 50%, Germany 30%]. Requests are not read aloud. Only show facts you also state in your speech, and never invent figures."
+     },
+     {
+      "role": "user",
+      "content": "Debate topic: Should cities ban cars?\nNews background (BBC, \"Paris bans cars\"): Paris banned cars.\nContext: Focus on Europe.\n\nParticipants:\n- The Host (moderator)\n- Claude (debater)\n- GPT (debater)\n\nDebate so far:\nThe Host: Welcome to the debate.\n\nVisuals your opponents have put on screen (with the studio's web fact-check where available):\n1. bars by GPT\nIf one of these visuals is wrong or misleading — above all one the fact-check disputed — challenge it: say why in your speech and write [dispute <number>: <short reason>] right there (at most one per turn); the challenge is stamped on screen. Challenge only what you can explain.\n\nRound 1 of 1. Present your full position on the topic with your strongest arguments.\nIt is now your turn, Claude."
+     }
+    ]
+   },
+   {
+    "seq": 2,
+    "round": 1,
+    "type": "argument",
+    "speaker": 2,
+    "round_id": "round_1",
+    "messages": [
+     {
+      "role": "system",
+      "content": "You are a participant in a structured debate. Your name is GPT.\nPersona and stance: You are a skilled, well-informed debater.\nStyle: Be very passionate, dramatic, and intense, but respectful.\nIMPORTANT: Write your response in Russian.\nLength: about 50 words. Stay within this limit.\nFORMATTING: This is a SPOKEN debate: your words will be voiced by text-to-speech and turned into a video. Write plain spoken prose only: no Markdown, no headers, no bullet or numbered lists, no emojis, no stage directions. Use short, punchy, quotable sentences and address your opponents by name. You may add at most one emotion cue per paragraph, in square brackets at the start of a sentence, chosen only from: [sarcastic] [laughs] [serious] [calm] [confident] [firm] [pause] [excited] [sighs].\nDo NOT prefix your response with your own name or role. Speak in first person.\nVISUALS: While you speak, the show draws charts, numbers and sketches on screen. You may request up to two visuals by writing [visual: what to show, with the exact figures or items] right after the sentence it illustrates, e.g. [visual: bar chart - wind power share: Denmark 50%, Germany 30%]. Requests are not read aloud. Only show facts you also state in your speech, and never invent figures."
+     },
+     {
+      "role": "user",
+      "content": "Debate topic: Should cities ban cars?\nNews background (BBC, \"Paris bans cars\"): Paris banned cars.\nContext: Focus on Europe.\n\nParticipants:\n- The Host (moderator)\n- Claude (debater)\n- GPT (debater)\n\nDebate so far:\nThe Host: Welcome to the debate.\n\nClaude: Remote work wins on focus.\n\nVisuals your opponents have put on screen (with the studio's web fact-check where available):\n1. bars by GPT\nIf one of these visuals is wrong or misleading — above all one the fact-check disputed — challenge it: say why in your speech and write [dispute <number>: <short reason>] right there (at most one per turn); the challenge is stamped on screen. Challenge only what you can explain.\n\nRound 1 of 1. Present your full position on the topic with your strongest arguments.\nIt is now your turn, GPT."
+     }
+    ]
+   }
+  ],
+  "verdict": [
+   {
+    "role": "system",
+    "content": "You are an expert, impartial debate judge.\nAnalyze the full debate transcript provided by the user and deliver a verdict. Decide on argument strength, logic and persuasiveness.\nYou are speaking on camera: name the winner (or declare a draw) in your FIRST sentence and say in one sentence what decided it. Then give each debater, by name, one or two sentences: their strongest point and their main weakness. Plain spoken prose only: no Markdown, no headers, no lists, no emojis.\n\nLength: about 70 words in total. This is a hard limit: the audience has just heard the debate, so judge it, do not retell it.\nWrite in Russian. Style: objective, professional, analytical."
+   },
+   {
+    "role": "user",
+    "content": "Debate topic: Should cities ban cars?\nNews background (BBC, \"Paris bans cars\"): Paris banned cars.\nContext: Focus on Europe.\n\nFull transcript:\nThe Host: Welcome to the debate.\n\nClaude: Remote work wins on focus.\n\nGPT: Offices win on mentoring.\n\nPlease deliver your final verdict now."
+   }
+  ],
+  "verdict_with_evidence": [
+   {
+    "role": "system",
+    "content": "You are an expert, impartial debate judge.\nAnalyze the full debate transcript provided by the user and deliver a verdict. Decide on argument strength, logic and persuasiveness.\nYou are speaking on camera: name the winner (or declare a draw) in your FIRST sentence and say in one sentence what decided it. Then give each debater, by name, one or two sentences: their strongest point and their main weakness. Plain spoken prose only: no Markdown, no headers, no lists, no emojis.\n\nLength: about 70 words in total. This is a hard limit: the audience has just heard the debate, so judge it, do not retell it.\nWrite in Russian. Style: objective, professional, analytical."
+   },
+   {
+    "role": "user",
+    "content": "Debate topic: Should cities ban cars?\nNews background (BBC, \"Paris bans cars\"): Paris banned cars.\nContext: Focus on Europe.\n\nFull transcript:\nThe Host: Welcome to the debate.\n\nClaude: Remote work wins on focus.\n\nGPT: Offices win on mentoring.\n\nFact-check: 1 claim refuted.\nWeigh accuracy: figures the fact-check refuted weaken a debater's case, a well-founded challenge strengthens it. Mention it briefly where it matters.\n\nPlease deliver your final verdict now."
+   }
+  ],
+  "verdict_words": 70
+ },
+ "three_no_host_2_rounds": {
+  "config": {
+   "topic": "Tabs or spaces?",
+   "language": "English",
+   "num_rounds": 2,
+   "length_preset": "long",
+   "intensity": 2,
+   "output_style": "markdown",
+   "participants": [
+    {
+     "role": "debater",
+     "model_id": "m/0",
+     "display_name": "Claude",
+     "persona_custom": "You are a skilled debater. Argue in favor of the topic."
+    },
+    {
+     "role": "debater",
+     "model_id": "m/1",
+     "display_name": "GPT",
+     "persona_custom": null
+    },
+    {
+     "role": "debater",
+     "model_id": "m/2",
+     "display_name": "Gemini",
+     "persona_custom": null
+    }
+   ]
+  },
+  "turns": [
+   {
+    "seq": 0,
+    "round": 1,
+    "type": "opening",
+    "speaker": 0,
+    "round_id": "round_1",
+    "messages": [
+     {
+      "role": "system",
+      "content": "You are a participant in a structured debate. Your name is Claude.\nPersona and stance: You are a skilled debater. Argue in favor of the topic.\nStyle: Be extremely polite, calm, and academic.\nIMPORTANT: Write your response in English.\nLength: about 500 words. Stay within this limit.\nFORMATTING: Use Markdown (bold, italics, short lists) to make your text readable.\nDo NOT prefix your response with your own name or role. Speak in first person."
+     },
+     {
+      "role": "user",
+      "content": "Debate topic: Tabs or spaces?\n\nParticipants:\n- Claude (debater)\n- GPT (debater)\n- Gemini (debater)\n\nDebate so far:\n(No statements yet — the debate is just beginning.)\n\nRound 1 of 2. This is your OPENING statement. Clearly state your position and lay out your two or three strongest arguments.\nIt is now your turn, Claude."
+     }
+    ]
+   },
+   {
+    "seq": 1,
+    "round": 1,
+    "type": "opening",
+    "speaker": 1,
+    "round_id": "round_1",
+    "messages": [
+     {
+      "role": "system",
+      "content": "You are a participant in a structured debate. Your name is GPT.\nPersona and stance: You are a skilled, well-informed debater.\nStyle: Be extremely polite, calm, and academic.\nIMPORTANT: Write your response in English.\nLength: about 500 words. Stay within this limit.\nFORMATTING: Use Markdown (bold, italics, short lists) to make your text readable.\nDo NOT prefix your response with your own name or role. Speak in first person."
+     },
+     {
+      "role": "user",
+      "content": "Debate topic: Tabs or spaces?\n\nParticipants:\n- Claude (debater)\n- GPT (debater)\n- Gemini (debater)\n\nDebate so far:\nThe Host: Welcome to the debate.\n\nRound 1 of 2. This is your OPENING statement. Clearly state your position and lay out your two or three strongest arguments.\nIt is now your turn, GPT."
+     }
+    ]
+   },
+   {
+    "seq": 2,
+    "round": 1,
+    "type": "opening",
+    "speaker": 2,
+    "round_id": "round_1",
+    "messages": [
+     {
+      "role": "system",
+      "content": "You are a participant in a structured debate. Your name is Gemini.\nPersona and stance: You are a skilled, well-informed debater.\nStyle: Be extremely polite, calm, and academic.\nIMPORTANT: Write your response in English.\nLength: about 500 words. Stay within this limit.\nFORMATTING: Use Markdown (bold, italics, short lists) to make your text readable.\nDo NOT prefix your response with your own name or role. Speak in first person."
+     },
+     {
+      "role": "user",
+      "content": "Debate topic: Tabs or spaces?\n\nParticipants:\n- Claude (debater)\n- GPT (debater)\n- Gemini (debater)\n\nDebate so far:\nThe Host: Welcome to the debate.\n\nClaude: Remote work wins on focus.\n\nRound 1 of 2. This is your OPENING statement. Clearly state your position and lay out your two or three strongest arguments.\nIt is now your turn, Gemini."
+     }
+    ]
+   },
+   {
+    "seq": 3,
+    "round": 2,
+    "type": "closing",
+    "speaker": 0,
+    "round_id": "round_2",
+    "messages": [
+     {
+      "role": "system",
+      "content": "You are a participant in a structured debate. Your name is Claude.\nPersona and stance: You are a skilled debater. Argue in favor of the topic.\nStyle: Be extremely polite, calm, and academic.\nIMPORTANT: Write your response in English.\nLength: about 500 words. Stay within this limit.\nFORMATTING: Use Markdown (bold, italics, short lists) to make your text readable.\nDo NOT prefix your response with your own name or role. Speak in first person."
+     },
+     {
+      "role": "user",
+      "content": "Debate topic: Tabs or spaces?\n\nParticipants:\n- Claude (debater)\n- GPT (debater)\n- Gemini (debater)\n\nDebate so far:\nThe Host: Welcome to the debate.\n\nClaude: Remote work wins on focus.\n\nGPT: Offices win on mentoring.\n\nRound 2 of 2. This is your CLOSING statement. Summarize why your position prevails, address the key objections raised, and finish with a memorable conclusion. Do not introduce new arguments.\nIt is now your turn, Claude."
+     }
+    ]
+   },
+   {
+    "seq": 4,
+    "round": 2,
+    "type": "closing",
+    "speaker": 1,
+    "round_id": "round_2",
+    "messages": [
+     {
+      "role": "system",
+      "content": "You are a participant in a structured debate. Your name is GPT.\nPersona and stance: You are a skilled, well-informed debater.\nStyle: Be extremely polite, calm, and academic.\nIMPORTANT: Write your response in English.\nLength: about 500 words. Stay within this limit.\nFORMATTING: Use Markdown (bold, italics, short lists) to make your text readable.\nDo NOT prefix your response with your own name or role. Speak in first person."
+     },
+     {
+      "role": "user",
+      "content": "Debate topic: Tabs or spaces?\n\nParticipants:\n- Claude (debater)\n- GPT (debater)\n- Gemini (debater)\n\nDebate so far:\n(No statements yet — the debate is just beginning.)\n\nRound 2 of 2. This is your CLOSING statement. Summarize why your position prevails, address the key objections raised, and finish with a memorable conclusion. Do not introduce new arguments.\nIt is now your turn, GPT."
+     }
+    ]
+   },
+   {
+    "seq": 5,
+    "round": 2,
+    "type": "closing",
+    "speaker": 2,
+    "round_id": "round_2",
+    "messages": [
+     {
+      "role": "system",
+      "content": "You are a participant in a structured debate. Your name is Gemini.\nPersona and stance: You are a skilled, well-informed debater.\nStyle: Be extremely polite, calm, and academic.\nIMPORTANT: Write your response in English.\nLength: about 500 words. Stay within this limit.\nFORMATTING: Use Markdown (bold, italics, short lists) to make your text readable.\nDo NOT prefix your response with your own name or role. Speak in first person."
+     },
+     {
+      "role": "user",
+      "content": "Debate topic: Tabs or spaces?\n\nParticipants:\n- Claude (debater)\n- GPT (debater)\n- Gemini (debater)\n\nDebate so far:\nThe Host: Welcome to the debate.\n\nRound 2 of 2. This is your CLOSING statement. Summarize why your position prevails, address the key objections raised, and finish with a memorable conclusion. Do not introduce new arguments.\nIt is now your turn, Gemini."
+     }
+    ]
+   }
+  ],
+  "verdict": [
+   {
+    "role": "system",
+    "content": "You are an expert, impartial debate judge.\nAnalyze the full debate transcript provided by the user and deliver a verdict. Decide on argument strength, logic and persuasiveness.\nUse exactly this structure and nothing else:\n**Winner: <name>** (or **Draw**), then one sentence on what decided it.\nThen one short paragraph per debater, starting with their name in bold: their strongest point and their main weakness (name a logical fallacy only if there was one).\n\nLength: about 285 words in total. This is a hard limit: the audience has just heard the debate, so judge it, do not retell it.\nWrite in English. Style: objective, professional, analytical."
+   },
+   {
+    "role": "user",
+    "content": "Debate topic: Tabs or spaces?\n\nFull transcript:\nThe Host: Welcome to the debate.\n\nClaude: Remote work wins on focus.\n\nGPT: Offices win on mentoring.\n\nPlease deliver your final verdict now."
+   }
+  ],
+  "verdict_with_evidence": [
+   {
+    "role": "system",
+    "content": "You are an expert, impartial debate judge.\nAnalyze the full debate transcript provided by the user and deliver a verdict. Decide on argument strength, logic and persuasiveness.\nUse exactly this structure and nothing else:\n**Winner: <name>** (or **Draw**), then one sentence on what decided it.\nThen one short paragraph per debater, starting with their name in bold: their strongest point and their main weakness (name a logical fallacy only if there was one).\n\nLength: about 285 words in total. This is a hard limit: the audience has just heard the debate, so judge it, do not retell it.\nWrite in English. Style: objective, professional, analytical."
+   },
+   {
+    "role": "user",
+    "content": "Debate topic: Tabs or spaces?\n\nFull transcript:\nThe Host: Welcome to the debate.\n\nClaude: Remote work wins on focus.\n\nGPT: Offices win on mentoring.\n\nFact-check: 1 claim refuted.\nWeigh accuracy: figures the fact-check refuted weaken a debater's case, a well-founded challenge strengthens it. Mention it briefly where it matters.\n\nPlease deliver your final verdict now."
+   }
+  ],
+  "verdict_words": 285
+ },
+ "four_host_4_rounds": {
+  "config": {
+   "topic": "Is AI dangerous?",
+   "language": "English",
+   "num_rounds": 4,
+   "length_preset": "short",
+   "output_style": "spoken",
+   "media_plan": {
+    "visuals": false
+   },
+   "participants": [
+    {
+     "role": "moderator",
+     "model_id": "m/host",
+     "display_name": "The Host",
+     "persona_custom": "You are an impartial debate moderator."
+    },
+    {
+     "role": "debater",
+     "model_id": "m/0",
+     "display_name": "Claude",
+     "persona_custom": "You are a skilled debater. Argue in favor of the topic."
+    },
+    {
+     "role": "debater",
+     "model_id": "m/1",
+     "display_name": "GPT",
+     "persona_custom": null
+    },
+    {
+     "role": "debater",
+     "model_id": "m/2",
+     "display_name": "Gemini",
+     "persona_custom": null
+    },
+    {
+     "role": "debater",
+     "model_id": "m/3",
+     "display_name": "Grok",
+     "persona_custom": null
+    }
+   ]
+  },
+  "turns": [
+   {
+    "seq": 0,
+    "round": 1,
+    "type": "moderator_intro",
+    "speaker": 0,
+    "round_id": "round_1",
+    "messages": [
+     {
+      "role": "system",
+      "content": "You are the moderator of a structured debate. Your name is The Host.\nYou are an impartial debate moderator.\nYou never argue for a side and never give your own opinion on the topic.\nIMPORTANT: Write your response in English.\nLength: about 100 words. Stay within this limit.\nFORMATTING: This is a SPOKEN debate: your words will be voiced by text-to-speech and turned into a video. Write plain spoken prose only: no Markdown, no headers, no bullet or numbered lists, no emojis, no stage directions. Use short, punchy, quotable sentences and address your opponents by name. You may add at most one emotion cue per paragraph, in square brackets at the start of a sentence, chosen only from: [sarcastic] [laughs] [serious] [calm] [confident] [firm] [pause] [excited] [sighs].\nDo NOT prefix your response with your own name or role. Speak in first person."
+     },
+     {
+      "role": "user",
+      "content": "Debate topic: Is AI dangerous?\n\nParticipants:\n- The Host (moderator)\n- Claude (debater)\n- GPT (debater)\n- Gemini (debater)\n- Grok (debater)\n\nDebate so far:\n(No statements yet — the debate is just beginning.)\n\nYour task: Open the debate: welcome the audience, introduce the topic in one or two sentences, introduce each debater by name, briefly explain the format (4 round(s)), and invite Claude to begin."
+     }
+    ]
+   },
+   {
+    "seq": 1,
+    "round": 1,
+    "type": "opening",
+    "speaker": 1,
+    "round_id": "round_1",
+    "messages": [
+     {
+      "role": "system",
+      "content": "You are a participant in a structured debate. Your name is Claude.\nPersona and stance: You are a skilled debater. Argue in favor of the topic.\nStyle: Be firm, engaging, and persuasive.\nIMPORTANT: Write your response in English.\nLength: about 100 words. Stay within this limit.\nFORMATTING: This is a SPOKEN debate: your words will be voiced by text-to-speech and turned into a video. Write plain spoken prose only: no Markdown, no headers, no bullet or numbered lists, no emojis, no stage directions. Use short, punchy, quotable sentences and address your opponents by name. You may add at most one emotion cue per paragraph, in square brackets at the start of a sentence, chosen only from: [sarcastic] [laughs] [serious] [calm] [confident] [firm] [pause] [excited] [sighs].\nDo NOT prefix your response with your own name or role. Speak in first person."
+     },
+     {
+      "role": "user",
+      "content": "Debate topic: Is AI dangerous?\n\nParticipants:\n- The Host (moderator)\n- Claude (debater)\n- GPT (debater)\n- Gemini (debater)\n- Grok (debater)\n\nDebate so far:\nThe Host: Welcome to the debate.\n\nRound 1 of 4. This is your OPENING statement. Clearly state your position and lay out your two or three strongest arguments.\nIt is now your turn, Claude."
+     }
+    ]
+   },
+   {
+    "seq": 2,
+    "round": 1,
+    "type": "opening",
+    "speaker": 2,
+    "round_id": "round_1",
+    "messages": [
+     {
+      "role": "system",
+      "content": "You are a participant in a structured debate. Your name is GPT.\nPersona and stance: You are a skilled, well-informed debater.\nStyle: Be firm, engaging, and persuasive.\nIMPORTANT: Write your response in English.\nLength: about 100 words. Stay within this limit.\nFORMATTING: This is a SPOKEN debate: your words will be voiced by text-to-speech and turned into a video. Write plain spoken prose only: no Markdown, no headers, no bullet or numbered lists, no emojis, no stage directions. Use short, punchy, quotable sentences and address your opponents by name. You may add at most one emotion cue per paragraph, in square brackets at the start of a sentence, chosen only from: [sarcastic] [laughs] [serious] [calm] [confident] [firm] [pause] [excited] [sighs].\nDo NOT prefix your response with your own name or role. Speak in first person."
+     },
+     {
+      "role": "user",
+      "content": "Debate topic: Is AI dangerous?\n\nParticipants:\n- The Host (moderator)\n- Claude (debater)\n- GPT (debater)\n- Gemini (debater)\n- Grok (debater)\n\nDebate so far:\nThe Host: Welcome to the debate.\n\nClaude: Remote work wins on focus.\n\nRound 1 of 4. This is your OPENING statement. Clearly state your position and lay out your two or three strongest arguments.\nIt is now your turn, GPT."
+     }
+    ]
+   },
+   {
+    "seq": 3,
+    "round": 1,
+    "type": "opening",
+    "speaker": 3,
+    "round_id": "round_1",
+    "messages": [
+     {
+      "role": "system",
+      "content": "You are a participant in a structured debate. Your name is Gemini.\nPersona and stance: You are a skilled, well-informed debater.\nStyle: Be firm, engaging, and persuasive.\nIMPORTANT: Write your response in English.\nLength: about 100 words. Stay within this limit.\nFORMATTING: This is a SPOKEN debate: your words will be voiced by text-to-speech and turned into a video. Write plain spoken prose only: no Markdown, no headers, no bullet or numbered lists, no emojis, no stage directions. Use short, punchy, quotable sentences and address your opponents by name. You may add at most one emotion cue per paragraph, in square brackets at the start of a sentence, chosen only from: [sarcastic] [laughs] [serious] [calm] [confident] [firm] [pause] [excited] [sighs].\nDo NOT prefix your response with your own name or role. Speak in first person."
+     },
+     {
+      "role": "user",
+      "content": "Debate topic: Is AI dangerous?\n\nParticipants:\n- The Host (moderator)\n- Claude (debater)\n- GPT (debater)\n- Gemini (debater)\n- Grok (debater)\n\nDebate so far:\nThe Host: Welcome to the debate.\n\nClaude: Remote work wins on focus.\n\nGPT: Offices win on mentoring.\n\nRound 1 of 4. This is your OPENING statement. Clearly state your position and lay out your two or three strongest arguments.\nIt is now your turn, Gemini."
+     }
+    ]
+   },
+   {
+    "seq": 4,
+    "round": 1,
+    "type": "opening",
+    "speaker": 4,
+    "round_id": "round_1",
+    "messages": [
+     {
+      "role": "system",
+      "content": "You are a participant in a structured debate. Your name is Grok.\nPersona and stance: You are a skilled, well-informed debater.\nStyle: Be firm, engaging, and persuasive.\nIMPORTANT: Write your response in English.\nLength: about 100 words. Stay within this limit.\nFORMATTING: This is a SPOKEN debate: your words will be voiced by text-to-speech and turned into a video. Write plain spoken prose only: no Markdown, no headers, no bullet or numbered lists, no emojis, no stage directions. Use short, punchy, quotable sentences and address your opponents by name. You may add at most one emotion cue per paragraph, in square brackets at the start of a sentence, chosen only from: [sarcastic] [laughs] [serious] [calm] [confident] [firm] [pause] [excited] [sighs].\nDo NOT prefix your response with your own name or role. Speak in first person."
+     },
+     {
+      "role": "user",
+      "content": "Debate topic: Is AI dangerous?\n\nParticipants:\n- The Host (moderator)\n- Claude (debater)\n- GPT (debater)\n- Gemini (debater)\n- Grok (debater)\n\nDebate so far:\n(No statements yet — the debate is just beginning.)\n\nRound 1 of 4. This is your OPENING statement. Clearly state your position and lay out your two or three strongest arguments.\nIt is now your turn, Grok."
+     }
+    ]
+   },
+   {
+    "seq": 5,
+    "round": 2,
+    "type": "moderator_transition",
+    "speaker": 0,
+    "round_id": "round_2",
+    "messages": [
+     {
+      "role": "system",
+      "content": "You are the moderator of a structured debate. Your name is The Host.\nYou are an impartial debate moderator.\nYou never argue for a side and never give your own opinion on the topic.\nIMPORTANT: Write your response in English.\nLength: about 100 words. Stay within this limit.\nFORMATTING: This is a SPOKEN debate: your words will be voiced by text-to-speech and turned into a video. Write plain spoken prose only: no Markdown, no headers, no bullet or numbered lists, no emojis, no stage directions. Use short, punchy, quotable sentences and address your opponents by name. You may add at most one emotion cue per paragraph, in square brackets at the start of a sentence, chosen only from: [sarcastic] [laughs] [serious] [calm] [confident] [firm] [pause] [excited] [sighs].\nDo NOT prefix your response with your own name or role. Speak in first person."
+     },
+     {
+      "role": "user",
+      "content": "Debate topic: Is AI dangerous?\n\nParticipants:\n- The Host (moderator)\n- Claude (debater)\n- GPT (debater)\n- Gemini (debater)\n- Grok (debater)\n\nDebate so far:\nThe Host: Welcome to the debate.\n\nYour task: Round 1 has just ended. In a few sentences, neutrally summarize the key points made so far, then open round 2 of 4 and hand over to Claude."
+     }
+    ]
+   },
+   {
+    "seq": 6,
+    "round": 2,
+    "type": "rebuttal",
+    "speaker": 1,
+    "round_id": "round_2",
+    "messages": [
+     {
+      "role": "system",
+      "content": "You are a participant in a structured debate. Your name is Claude.\nPersona and stance: You are a skilled debater. Argue in favor of the topic.\nStyle: Be firm, engaging, and persuasive.\nIMPORTANT: Write your response in English.\nLength: about 100 words. Stay within this limit.\nFORMATTING: This is a SPOKEN debate: your words will be voiced by text-to-speech and turned into a video. Write plain spoken prose only: no Markdown, no headers, no bullet or numbered lists, no emojis, no stage directions. Use short, punchy, quotable sentences and address your opponents by name. You may add at most one emotion cue per paragraph, in square brackets at the start of a sentence, chosen only from: [sarcastic] [laughs] [serious] [calm] [confident] [firm] [pause] [excited] [sighs].\nDo NOT prefix your response with your own name or role. Speak in first person."
+     },
+     {
+      "role": "user",
+      "content": "Debate topic: Is AI dangerous?\n\nParticipants:\n- The Host (moderator)\n- Claude (debater)\n- GPT (debater)\n- Gemini (debater)\n- Grok (debater)\n\nDebate so far:\nThe Host: Welcome to the debate.\n\nClaude: Remote work wins on focus.\n\nRound 2 of 4. This is a REBUTTAL round. Directly address and counter the strongest points made by your opponents so far, then reinforce your own position.\nIt is now your turn, Claude."
+     }
+    ]
+   },
+   {
+    "seq": 7,
+    "round": 2,
+    "type": "rebuttal",
+    "speaker": 2,
+    "round_id": "round_2",
+    "messages": [
+     {
+      "role": "system",
+      "content": "You are a participant in a structured debate. Your name is GPT.\nPersona and stance: You are a skilled, well-informed debater.\nStyle: Be firm, engaging, and persuasive.\nIMPORTANT: Write your response in English.\nLength: about 100 words. Stay within this limit.\nFORMATTING: This is a SPOKEN debate: your words will be voiced by text-to-speech and turned into a video. Write plain spoken prose only: no Markdown, no headers, no bullet or numbered lists, no emojis, no stage directions. Use short, punchy, quotable sentences and address your opponents by name. You may add at most one emotion cue per paragraph, in square brackets at the start of a sentence, chosen only from: [sarcastic] [laughs] [serious] [calm] [confident] [firm] [pause] [excited] [sighs].\nDo NOT prefix your response with your own name or role. Speak in first person."
+     },
+     {
+      "role": "user",
+      "content": "Debate topic: Is AI dangerous?\n\nParticipants:\n- The Host (moderator)\n- Claude (debater)\n- GPT (debater)\n- Gemini (debater)\n- Grok (debater)\n\nDebate so far:\nThe Host: Welcome to the debate.\n\nClaude: Remote work wins on focus.\n\nGPT: Offices win on mentoring.\n\nRound 2 of 4. This is a REBUTTAL round. Directly address and counter the strongest points made by your opponents so far, then reinforce your own position.\nIt is now your turn, GPT."
+     }
+    ]
+   },
+   {
+    "seq": 8,
+    "round": 2,
+    "type": "rebuttal",
+    "speaker": 3,
+    "round_id": "round_2",
+    "messages": [
+     {
+      "role": "system",
+      "content": "You are a participant in a structured debate. Your name is Gemini.\nPersona and stance: You are a skilled, well-informed debater.\nStyle: Be firm, engaging, and persuasive.\nIMPORTANT: Write your response in English.\nLength: about 100 words. Stay within this limit.\nFORMATTING: This is a SPOKEN debate: your words will be voiced by text-to-speech and turned into a video. Write plain spoken prose only: no Markdown, no headers, no bullet or numbered lists, no emojis, no stage directions. Use short, punchy, quotable sentences and address your opponents by name. You may add at most one emotion cue per paragraph, in square brackets at the start of a sentence, chosen only from: [sarcastic] [laughs] [serious] [calm] [confident] [firm] [pause] [excited] [sighs].\nDo NOT prefix your response with your own name or role. Speak in first person."
+     },
+     {
+      "role": "user",
+      "content": "Debate topic: Is AI dangerous?\n\nParticipants:\n- The Host (moderator)\n- Claude (debater)\n- GPT (debater)\n- Gemini (debater)\n- Grok (debater)\n\nDebate so far:\n(No statements yet — the debate is just beginning.)\n\nRound 2 of 4. This is a REBUTTAL round. Directly address and counter the strongest points made by your opponents so far, then reinforce your own position.\nIt is now your turn, Gemini."
+     }
+    ]
+   },
+   {
+    "seq": 9,
+    "round": 2,
+    "type": "rebuttal",
+    "speaker": 4,
+    "round_id": "round_2",
+    "messages": [
+     {
+      "role": "system",
+      "content": "You are a participant in a structured debate. Your name is Grok.\nPersona and stance: You are a skilled, well-informed debater.\nStyle: Be firm, engaging, and persuasive.\nIMPORTANT: Write your response in English.\nLength: about 100 words. Stay within this limit.\nFORMATTING: This is a SPOKEN debate: your words will be voiced by text-to-speech and turned into a video. Write plain spoken prose only: no Markdown, no headers, no bullet or numbered lists, no emojis, no stage directions. Use short, punchy, quotable sentences and address your opponents by name. You may add at most one emotion cue per paragraph, in square brackets at the start of a sentence, chosen only from: [sarcastic] [laughs] [serious] [calm] [confident] [firm] [pause] [excited] [sighs].\nDo NOT prefix your response with your own name or role. Speak in first person."
+     },
+     {
+      "role": "user",
+      "content": "Debate topic: Is AI dangerous?\n\nParticipants:\n- The Host (moderator)\n- Claude (debater)\n- GPT (debater)\n- Gemini (debater)\n- Grok (debater)\n\nDebate so far:\nThe Host: Welcome to the debate.\n\nRound 2 of 4. This is a REBUTTAL round. Directly address and counter the strongest points made by your opponents so far, then reinforce your own position.\nIt is now your turn, Grok."
+     }
+    ]
+   },
+   {
+    "seq": 10,
+    "round": 3,
+    "type": "moderator_transition",
+    "speaker": 0,
+    "round_id": "round_3",
+    "messages": [
+     {
+      "role": "system",
+      "content": "You are the moderator of a structured debate. Your name is The Host.\nYou are an impartial debate moderator.\nYou never argue for a side and never give your own opinion on the topic.\nIMPORTANT: Write your response in English.\nLength: about 100 words. Stay within this limit.\nFORMATTING: This is a SPOKEN debate: your words will be voiced by text-to-speech and turned into a video. Write plain spoken prose only: no Markdown, no headers, no bullet or numbered lists, no emojis, no stage directions. Use short, punchy, quotable sentences and address your opponents by name. You may add at most one emotion cue per paragraph, in square brackets at the start of a sentence, chosen only from: [sarcastic] [laughs] [serious] [calm] [confident] [firm] [pause] [excited] [sighs].\nDo NOT prefix your response with your own name or role. Speak in first person."
+     },
+     {
+      "role": "user",
+      "content": "Debate topic: Is AI dangerous?\n\nParticipants:\n- The Host (moderator)\n- Claude (debater)\n- GPT (debater)\n- Gemini (debater)\n- Grok (debater)\n\nDebate so far:\nThe Host: Welcome to the debate.\n\nClaude: Remote work wins on focus.\n\nYour task: Round 2 has just ended. In a few sentences, neutrally summarize the key points made so far, then open round 3 of 4 and hand over to Claude."
+     }
+    ]
+   },
+   {
+    "seq": 11,
+    "round": 3,
+    "type": "rebuttal",
+    "speaker": 1,
+    "round_id": "round_3",
+    "messages": [
+     {
+      "role": "system",
+      "content": "You are a participant in a structured debate. Your name is Claude.\nPersona and stance: You are a skilled debater. Argue in favor of the topic.\nStyle: Be firm, engaging, and persuasive.\nIMPORTANT: Write your response in English.\nLength: about 100 words. Stay within this limit.\nFORMATTING: This is a SPOKEN debate: your words will be voiced by text-to-speech and turned into a video. Write plain spoken prose only: no Markdown, no headers, no bullet or numbered lists, no emojis, no stage directions. Use short, punchy, quotable sentences and address your opponents by name. You may add at most one emotion cue per paragraph, in square brackets at the start of a sentence, chosen only from: [sarcastic] [laughs] [serious] [calm] [confident] [firm] [pause] [excited] [sighs].\nDo NOT prefix your response with your own name or role. Speak in first person."
+     },
+     {
+      "role": "user",
+      "content": "Debate topic: Is AI dangerous?\n\nParticipants:\n- The Host (moderator)\n- Claude (debater)\n- GPT (debater)\n- Gemini (debater)\n- Grok (debater)\n\nDebate so far:\nThe Host: Welcome to the debate.\n\nClaude: Remote work wins on focus.\n\nGPT: Offices win on mentoring.\n\nRound 3 of 4. This is a REBUTTAL round. Directly address and counter the strongest points made by your opponents so far, then reinforce your own position.\nIt is now your turn, Claude."
+     }
+    ]
+   },
+   {
+    "seq": 12,
+    "round": 3,
+    "type": "rebuttal",
+    "speaker": 2,
+    "round_id": "round_3",
+    "messages": [
+     {
+      "role": "system",
+      "content": "You are a participant in a structured debate. Your name is GPT.\nPersona and stance: You are a skilled, well-informed debater.\nStyle: Be firm, engaging, and persuasive.\nIMPORTANT: Write your response in English.\nLength: about 100 words. Stay within this limit.\nFORMATTING: This is a SPOKEN debate: your words will be voiced by text-to-speech and turned into a video. Write plain spoken prose only: no Markdown, no headers, no bullet or numbered lists, no emojis, no stage directions. Use short, punchy, quotable sentences and address your opponents by name. You may add at most one emotion cue per paragraph, in square brackets at the start of a sentence, chosen only from: [sarcastic] [laughs] [serious] [calm] [confident] [firm] [pause] [excited] [sighs].\nDo NOT prefix your response with your own name or role. Speak in first person."
+     },
+     {
+      "role": "user",
+      "content": "Debate topic: Is AI dangerous?\n\nParticipants:\n- The Host (moderator)\n- Claude (debater)\n- GPT (debater)\n- Gemini (debater)\n- Grok (debater)\n\nDebate so far:\n(No statements yet — the debate is just beginning.)\n\nRound 3 of 4. This is a REBUTTAL round. Directly address and counter the strongest points made by your opponents so far, then reinforce your own position.\nIt is now your turn, GPT."
+     }
+    ]
+   },
+   {
+    "seq": 13,
+    "round": 3,
+    "type": "rebuttal",
+    "speaker": 3,
+    "round_id": "round_3",
+    "messages": [
+     {
+      "role": "system",
+      "content": "You are a participant in a structured debate. Your name is Gemini.\nPersona and stance: You are a skilled, well-informed debater.\nStyle: Be firm, engaging, and persuasive.\nIMPORTANT: Write your response in English.\nLength: about 100 words. Stay within this limit.\nFORMATTING: This is a SPOKEN debate: your words will be voiced by text-to-speech and turned into a video. Write plain spoken prose only: no Markdown, no headers, no bullet or numbered lists, no emojis, no stage directions. Use short, punchy, quotable sentences and address your opponents by name. You may add at most one emotion cue per paragraph, in square brackets at the start of a sentence, chosen only from: [sarcastic] [laughs] [serious] [calm] [confident] [firm] [pause] [excited] [sighs].\nDo NOT prefix your response with your own name or role. Speak in first person."
+     },
+     {
+      "role": "user",
+      "content": "Debate topic: Is AI dangerous?\n\nParticipants:\n- The Host (moderator)\n- Claude (debater)\n- GPT (debater)\n- Gemini (debater)\n- Grok (debater)\n\nDebate so far:\nThe Host: Welcome to the debate.\n\nRound 3 of 4. This is a REBUTTAL round. Directly address and counter the strongest points made by your opponents so far, then reinforce your own position.\nIt is now your turn, Gemini."
+     }
+    ]
+   },
+   {
+    "seq": 14,
+    "round": 3,
+    "type": "rebuttal",
+    "speaker": 4,
+    "round_id": "round_3",
+    "messages": [
+     {
+      "role": "system",
+      "content": "You are a participant in a structured debate. Your name is Grok.\nPersona and stance: You are a skilled, well-informed debater.\nStyle: Be firm, engaging, and persuasive.\nIMPORTANT: Write your response in English.\nLength: about 100 words. Stay within this limit.\nFORMATTING: This is a SPOKEN debate: your words will be voiced by text-to-speech and turned into a video. Write plain spoken prose only: no Markdown, no headers, no bullet or numbered lists, no emojis, no stage directions. Use short, punchy, quotable sentences and address your opponents by name. You may add at most one emotion cue per paragraph, in square brackets at the start of a sentence, chosen only from: [sarcastic] [laughs] [serious] [calm] [confident] [firm] [pause] [excited] [sighs].\nDo NOT prefix your response with your own name or role. Speak in first person."
+     },
+     {
+      "role": "user",
+      "content": "Debate topic: Is AI dangerous?\n\nParticipants:\n- The Host (moderator)\n- Claude (debater)\n- GPT (debater)\n- Gemini (debater)\n- Grok (debater)\n\nDebate so far:\nThe Host: Welcome to the debate.\n\nClaude: Remote work wins on focus.\n\nRound 3 of 4. This is a REBUTTAL round. Directly address and counter the strongest points made by your opponents so far, then reinforce your own position.\nIt is now your turn, Grok."
+     }
+    ]
+   },
+   {
+    "seq": 15,
+    "round": 4,
+    "type": "moderator_transition",
+    "speaker": 0,
+    "round_id": "round_4",
+    "messages": [
+     {
+      "role": "system",
+      "content": "You are the moderator of a structured debate. Your name is The Host.\nYou are an impartial debate moderator.\nYou never argue for a side and never give your own opinion on the topic.\nIMPORTANT: Write your response in English.\nLength: about 100 words. Stay within this limit.\nFORMATTING: This is a SPOKEN debate: your words will be voiced by text-to-speech and turned into a video. Write plain spoken prose only: no Markdown, no headers, no bullet or numbered lists, no emojis, no stage directions. Use short, punchy, quotable sentences and address your opponents by name. You may add at most one emotion cue per paragraph, in square brackets at the start of a sentence, chosen only from: [sarcastic] [laughs] [serious] [calm] [confident] [firm] [pause] [excited] [sighs].\nDo NOT prefix your response with your own name or role. Speak in first person."
+     },
+     {
+      "role": "user",
+      "content": "Debate topic: Is AI dangerous?\n\nParticipants:\n- The Host (moderator)\n- Claude (debater)\n- GPT (debater)\n- Gemini (debater)\n- Grok (debater)\n\nDebate so far:\nThe Host: Welcome to the debate.\n\nClaude: Remote work wins on focus.\n\nGPT: Offices win on mentoring.\n\nYour task: Round 3 has just ended. In a few sentences, neutrally summarize the key points made so far, then open round 4 of 4 and hand over to Claude."
+     }
+    ]
+   },
+   {
+    "seq": 16,
+    "round": 4,
+    "type": "closing",
+    "speaker": 1,
+    "round_id": "round_4",
+    "messages": [
+     {
+      "role": "system",
+      "content": "You are a participant in a structured debate. Your name is Claude.\nPersona and stance: You are a skilled debater. Argue in favor of the topic.\nStyle: Be firm, engaging, and persuasive.\nIMPORTANT: Write your response in English.\nLength: about 100 words. Stay within this limit.\nFORMATTING: This is a SPOKEN debate: your words will be voiced by text-to-speech and turned into a video. Write plain spoken prose only: no Markdown, no headers, no bullet or numbered lists, no emojis, no stage directions. Use short, punchy, quotable sentences and address your opponents by name. You may add at most one emotion cue per paragraph, in square brackets at the start of a sentence, chosen only from: [sarcastic] [laughs] [serious] [calm] [confident] [firm] [pause] [excited] [sighs].\nDo NOT prefix your response with your own name or role. Speak in first person."
+     },
+     {
+      "role": "user",
+      "content": "Debate topic: Is AI dangerous?\n\nParticipants:\n- The Host (moderator)\n- Claude (debater)\n- GPT (debater)\n- Gemini (debater)\n- Grok (debater)\n\nDebate so far:\n(No statements yet — the debate is just beginning.)\n\nRound 4 of 4. This is your CLOSING statement. Summarize why your position prevails, address the key objections raised, and finish with a memorable conclusion. Do not introduce new arguments.\nIt is now your turn, Claude."
+     }
+    ]
+   },
+   {
+    "seq": 17,
+    "round": 4,
+    "type": "closing",
+    "speaker": 2,
+    "round_id": "round_4",
+    "messages": [
+     {
+      "role": "system",
+      "content": "You are a participant in a structured debate. Your name is GPT.\nPersona and stance: You are a skilled, well-informed debater.\nStyle: Be firm, engaging, and persuasive.\nIMPORTANT: Write your response in English.\nLength: about 100 words. Stay within this limit.\nFORMATTING: This is a SPOKEN debate: your words will be voiced by text-to-speech and turned into a video. Write plain spoken prose only: no Markdown, no headers, no bullet or numbered lists, no emojis, no stage directions. Use short, punchy, quotable sentences and address your opponents by name. You may add at most one emotion cue per paragraph, in square brackets at the start of a sentence, chosen only from: [sarcastic] [laughs] [serious] [calm] [confident] [firm] [pause] [excited] [sighs].\nDo NOT prefix your response with your own name or role. Speak in first person."
+     },
+     {
+      "role": "user",
+      "content": "Debate topic: Is AI dangerous?\n\nParticipants:\n- The Host (moderator)\n- Claude (debater)\n- GPT (debater)\n- Gemini (debater)\n- Grok (debater)\n\nDebate so far:\nThe Host: Welcome to the debate.\n\nRound 4 of 4. This is your CLOSING statement. Summarize why your position prevails, address the key objections raised, and finish with a memorable conclusion. Do not introduce new arguments.\nIt is now your turn, GPT."
+     }
+    ]
+   },
+   {
+    "seq": 18,
+    "round": 4,
+    "type": "closing",
+    "speaker": 3,
+    "round_id": "round_4",
+    "messages": [
+     {
+      "role": "system",
+      "content": "You are a participant in a structured debate. Your name is Gemini.\nPersona and stance: You are a skilled, well-informed debater.\nStyle: Be firm, engaging, and persuasive.\nIMPORTANT: Write your response in English.\nLength: about 100 words. Stay within this limit.\nFORMATTING: This is a SPOKEN debate: your words will be voiced by text-to-speech and turned into a video. Write plain spoken prose only: no Markdown, no headers, no bullet or numbered lists, no emojis, no stage directions. Use short, punchy, quotable sentences and address your opponents by name. You may add at most one emotion cue per paragraph, in square brackets at the start of a sentence, chosen only from: [sarcastic] [laughs] [serious] [calm] [confident] [firm] [pause] [excited] [sighs].\nDo NOT prefix your response with your own name or role. Speak in first person."
+     },
+     {
+      "role": "user",
+      "content": "Debate topic: Is AI dangerous?\n\nParticipants:\n- The Host (moderator)\n- Claude (debater)\n- GPT (debater)\n- Gemini (debater)\n- Grok (debater)\n\nDebate so far:\nThe Host: Welcome to the debate.\n\nClaude: Remote work wins on focus.\n\nRound 4 of 4. This is your CLOSING statement. Summarize why your position prevails, address the key objections raised, and finish with a memorable conclusion. Do not introduce new arguments.\nIt is now your turn, Gemini."
+     }
+    ]
+   },
+   {
+    "seq": 19,
+    "round": 4,
+    "type": "closing",
+    "speaker": 4,
+    "round_id": "round_4",
+    "messages": [
+     {
+      "role": "system",
+      "content": "You are a participant in a structured debate. Your name is Grok.\nPersona and stance: You are a skilled, well-informed debater.\nStyle: Be firm, engaging, and persuasive.\nIMPORTANT: Write your response in English.\nLength: about 100 words. Stay within this limit.\nFORMATTING: This is a SPOKEN debate: your words will be voiced by text-to-speech and turned into a video. Write plain spoken prose only: no Markdown, no headers, no bullet or numbered lists, no emojis, no stage directions. Use short, punchy, quotable sentences and address your opponents by name. You may add at most one emotion cue per paragraph, in square brackets at the start of a sentence, chosen only from: [sarcastic] [laughs] [serious] [calm] [confident] [firm] [pause] [excited] [sighs].\nDo NOT prefix your response with your own name or role. Speak in first person."
+     },
+     {
+      "role": "user",
+      "content": "Debate topic: Is AI dangerous?\n\nParticipants:\n- The Host (moderator)\n- Claude (debater)\n- GPT (debater)\n- Gemini (debater)\n- Grok (debater)\n\nDebate so far:\nThe Host: Welcome to the debate.\n\nClaude: Remote work wins on focus.\n\nGPT: Offices win on mentoring.\n\nRound 4 of 4. This is your CLOSING statement. Summarize why your position prevails, address the key objections raised, and finish with a memorable conclusion. Do not introduce new arguments.\nIt is now your turn, Grok."
+     }
+    ]
+   }
+  ],
+  "verdict": [
+   {
+    "role": "system",
+    "content": "You are an expert, impartial debate judge.\nAnalyze the full debate transcript provided by the user and deliver a verdict. Decide on argument strength, logic and persuasiveness.\nYou are speaking on camera: name the winner (or declare a draw) in your FIRST sentence and say in one sentence what decided it. Then give each debater, by name, one or two sentences: their strongest point and their main weakness. Plain spoken prose only: no Markdown, no headers, no lists, no emojis.\n\nLength: about 160 words in total. This is a hard limit: the audience has just heard the debate, so judge it, do not retell it.\nWrite in English. Style: objective, professional, analytical."
+   },
+   {
+    "role": "user",
+    "content": "Debate topic: Is AI dangerous?\n\nFull transcript:\nThe Host: Welcome to the debate.\n\nClaude: Remote work wins on focus.\n\nGPT: Offices win on mentoring.\n\nPlease deliver your final verdict now."
+   }
+  ],
+  "verdict_with_evidence": [
+   {
+    "role": "system",
+    "content": "You are an expert, impartial debate judge.\nAnalyze the full debate transcript provided by the user and deliver a verdict. Decide on argument strength, logic and persuasiveness.\nYou are speaking on camera: name the winner (or declare a draw) in your FIRST sentence and say in one sentence what decided it. Then give each debater, by name, one or two sentences: their strongest point and their main weakness. Plain spoken prose only: no Markdown, no headers, no lists, no emojis.\n\nLength: about 160 words in total. This is a hard limit: the audience has just heard the debate, so judge it, do not retell it.\nWrite in English. Style: objective, professional, analytical."
+   },
+   {
+    "role": "user",
+    "content": "Debate topic: Is AI dangerous?\n\nFull transcript:\nThe Host: Welcome to the debate.\n\nClaude: Remote work wins on focus.\n\nGPT: Offices win on mentoring.\n\nFact-check: 1 claim refuted.\nWeigh accuracy: figures the fact-check refuted weaken a debater's case, a well-founded challenge strengthens it. Mention it briefly where it matters.\n\nPlease deliver your final verdict now."
+   }
+  ],
+  "verdict_words": 160
+ }
+}

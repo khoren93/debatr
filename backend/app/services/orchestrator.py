@@ -35,6 +35,7 @@ from app.services import queue_manager, runtime_settings
 from app.services import usage as usage_log
 from app.services.credits import charge_debate_sync, charge_images_sync, debate_prices
 from app.services.events import publish_event
+from app.services.formats import Format, format_of
 from app.services.free_quota import is_free_model, wait_for_slot
 from app.services.free_router import (
     FREE_ROUTER_ID,
@@ -57,12 +58,7 @@ from app.services.moderation import (
     should_auto_publish,
 )
 from app.services.openrouter_client import OpenRouterClient, OpenRouterError
-from app.services.prompt_builder import (
-    build_debater_messages,
-    build_moderator_messages,
-    build_verdict_messages,
-)
-from app.services.scheduler import ScheduledTurn, build_schedule, speaker_role_for
+from app.services.scheduler import ScheduledTurn, speaker_role_for
 from app.services.studio import (
     claims_prompt,
     claims_summary,
@@ -120,11 +116,12 @@ def _normalize_usage(raw: dict[str, Any] | None) -> dict[str, Any]:
     }
 
 
-def _serialize_turn(turn: Turn) -> dict[str, Any]:
+def _serialize_turn(turn: Turn, fmt: Format) -> dict[str, Any]:
     visuals = turn_visuals_out(turn)
     return {
         "seq_index": turn.seq_index,
         "round_id": turn.round_id,
+        "round_label": fmt.round_label(turn.round_id, turn.turn_type),
         "turn_type": turn.turn_type,
         "speaker_role": speaker_role_for(turn.turn_type),
         "speaker_id": turn.speaker_id,
@@ -539,7 +536,7 @@ def _save_turn(
     db.add(turn)
     db.commit()
     db.refresh(turn)
-    payload = _serialize_turn(turn)
+    payload = _serialize_turn(turn, format_of(debate.config_json or {}))
     publish_event(str(debate.id), "turn_error" if result.error else "turn_completed", payload)
     if result.error:
         logger.warning("Turn %s of debate %s failed: %s", seq_index, debate.id, result.error)
@@ -744,7 +741,8 @@ def process_turn_job(debate_id: str, seq_index: int) -> None:
         try:
             conf: dict[str, Any] = debate.config_json or {}
             participants: list[dict[str, Any]] = conf.get("participants", [])
-            schedule = build_schedule(participants, int(conf.get("num_rounds") or 1))
+            fmt = format_of(conf)
+            schedule = fmt.schedule(conf)
 
             if seq_index >= len(schedule):
                 queue_manager.enqueue_verdict(debate_id, seq_index)
@@ -763,9 +761,9 @@ def process_turn_job(debate_id: str, seq_index: int) -> None:
                 else []
             )
             if turn.is_moderator:
-                messages = build_moderator_messages(conf, speaker, turn, history)
+                messages = fmt.host_messages(conf, speaker, turn, history)
             else:
-                messages = build_debater_messages(
+                messages = fmt.debater_messages(
                     conf, speaker, turn, history, visual_claims=claims_prompt(claims)
                 )
 
@@ -775,6 +773,7 @@ def process_turn_job(debate_id: str, seq_index: int) -> None:
                 "speaker_role": speaker_role_for(turn.turn_type),
                 "turn_type": turn.turn_type,
                 "round_id": turn.round_id,
+                "round_label": fmt.round_label(turn.round_id, turn.turn_type),
             }
             publish_event(debate_id, "turn_started", started)
 
@@ -846,6 +845,7 @@ def conduct_verdict_job(debate_id: str, seq_index: int) -> None:
         try:
             conf: dict[str, Any] = debate.config_json or {}
             participants: list[dict[str, Any]] = conf.get("participants", [])
+            fmt = format_of(conf)
             moderator_index = next(
                 (i for i, p in enumerate(participants) if p.get("role") == "moderator"), -1
             )
@@ -858,10 +858,11 @@ def conduct_verdict_job(debate_id: str, seq_index: int) -> None:
                 "speaker_role": "moderator",
                 "turn_type": "verdict",
                 "round_id": "verdict",
+                "round_label": fmt.round_label("verdict", "verdict"),
             }
             publish_event(debate_id, "turn_started", started)
             evidence = verdict_evidence(_turns(db, debate.id))
-            messages = build_verdict_messages(conf, _history(db, debate.id), evidence)
+            messages = fmt.verdict_messages(conf, _history(db, debate.id), evidence)
             deadline = time.monotonic() + settings.LLM_TURN_TIMEOUT
             result, model_id = _generate_as(
                 debate,

@@ -180,7 +180,7 @@ const Spotlight = ({ timeline, seg, w, k, align }: { timeline: Timeline; seg: Ti
   const topicFs = fitFont(timeline.topic, w * 0.86, 3, 72 * k, 40 * k);
   return (
     <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: align === 'end' ? 'flex-end' : 'center', gap: 24 * k, padding: `0 ${w * 0.07}px ${align === 'end' ? 30 * k : 0}px`, textAlign: 'center' }}>
-      {seg && <div style={{ fontFamily: MONO_FONT, fontSize: 23 * k, letterSpacing: 0.3 * 23 * k, color: '#FFC46B' }}>{roundLabel(seg.round_id).toUpperCase()}</div>}
+      {seg && <div style={{ fontFamily: MONO_FONT, fontSize: 23 * k, letterSpacing: 0.3 * 23 * k, color: '#FFC46B' }}>{roundLabel(seg.round_id, seg.round_label).toUpperCase()}</div>}
       <div style={{ fontFamily: DISPLAY_FONT, fontSize: topicFs, fontWeight: 800, lineHeight: 1.08, letterSpacing: -0.03 * topicFs, color: INK }}>{timeline.topic}</div>
     </div>
   );

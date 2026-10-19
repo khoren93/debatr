@@ -1,6 +1,7 @@
 import type {
   DebateConfig,
   DebateDetail,
+  DebaterSide,
   FreeDebates,
   ImageSource,
   LengthPreset,
@@ -42,6 +43,8 @@ export interface Speaker {
   /** Empty string = "use the default free model" (resolved when the catalogue loads). */
   model_id: string;
   prompt: string;
+  /** Debaters: for / against the topic or a view of their own (null for the host). */
+  side: DebaterSide | null;
 }
 
 /** A trending topic's news story; `topic_id` (trending topic) only highlights its card. */
@@ -187,10 +190,32 @@ export const MODERATOR_PROMPT =
   'You are an impartial debate moderator. Introduce the topic, keep speakers on time, summarize each round.';
 const DEBATER_BASE = 'You are a skilled debater.';
 
-export const debaterPrompt = (debaterIndex: number) => {
-  if (debaterIndex === 0) return `${DEBATER_BASE} Argue in favor of the topic.`;
-  if (debaterIndex === 1) return `${DEBATER_BASE} Argue against the topic.`;
-  return `${DEBATER_BASE} Provide a unique perspective (Position ${debaterIndex + 1}).`;
+/** The side goes to the models on its own line (backend prompt_builder), not in the persona. */
+export const debaterPrompt = () => DEBATER_BASE;
+
+/** First for, second against, the rest a view of their own. */
+export const defaultSide = (debaterIndex: number): DebaterSide => (debaterIndex === 0 ? 'for' : debaterIndex === 1 ? 'against' : 'own');
+
+export const SIDE_OPTIONS: { value: DebaterSide; label: string; hint: string; tag: string }[] = [
+  { value: 'for', label: 'For', hint: 'Argues for the topic', tag: 'PRO' },
+  { value: 'against', label: 'Against', hint: 'Argues against it', tag: 'CON' },
+  { value: 'own', label: 'Own view', hint: 'A position of its own', tag: 'OWN VIEW' },
+];
+
+// Before sides, the stance was a sentence of the persona (the old wizard, the CLI's defaults).
+const STANCE_SENTENCES: [RegExp, DebaterSide][] = [
+  [/\s*Argue in favou?r of the topic\./i, 'for'],
+  [/\s*Argue against the topic\./i, 'against'],
+  [/\s*Provide a unique perspective \(Position \d+\)\./i, 'own'],
+];
+
+/** A persona from before sides: the default stance sentence becomes the side (custom stances
+ *  stay in the text and the side stays unset, so the models get exactly what was written). */
+export const sideFromPersona = (prompt: string): { prompt: string; side: DebaterSide | null } => {
+  for (const [re, side] of STANCE_SENTENCES) {
+    if (re.test(prompt)) return { prompt: prompt.replace(re, '').trim(), side };
+  }
+  return { prompt, side: null };
 };
 
 const styleById = (id: string): PersonaStyle => STYLE_PRESETS.find((s) => s.id === id) ?? STYLE_PRESETS[0];
@@ -202,13 +227,15 @@ export const defaultModerator = (): Speaker => ({
   role: 'moderator',
   model_id: '',
   prompt: MODERATOR_PROMPT,
+  side: null,
 });
 
 export const defaultDebater = (debaterIndex: number): Speaker => ({
   key: speakerKey(),
   role: 'debater',
   model_id: '',
-  prompt: applyStyle(debaterPrompt(debaterIndex), styleById(debaterIndex === 1 ? 'aggressive' : 'neutral')),
+  prompt: applyStyle(debaterPrompt(), styleById(debaterIndex === 1 ? 'aggressive' : 'neutral')),
+  side: defaultSide(debaterIndex),
 });
 
 export const initialState = (): WizardState => ({
@@ -244,9 +271,11 @@ const debaterIndexOf = (speakers: Speaker[], index: number) => countDebaters(spe
 export const speakerColorOf = (speakers: Speaker[], index: number) =>
   speakers[index].role === 'moderator' ? HOST_COLOR : debaterColor(debaterIndexOf(speakers, index));
 
-/** HOST / PRO / CON / SIDE 3 … */
+/** HOST / PRO / CON / OWN VIEW (by side; positional for a debater without one) */
 export const speakerTagOf = (speakers: Speaker[], index: number) => {
   if (speakers[index].role === 'moderator') return 'HOST';
+  const side = SIDE_OPTIONS.find((o) => o.value === speakers[index].side);
+  if (side) return side.tag;
   const i = debaterIndexOf(speakers, index);
   if (i === 0) return 'PRO';
   if (i === 1) return 'CON';
@@ -336,6 +365,7 @@ export const buildConfig = (state: WizardState, opts: BuildOptions): DebateConfi
       display_name: names[i],
       persona_custom: s.prompt.trim() || undefined,
       voice_name: opts.voices[speakerId(i)],
+      side: s.role === 'debater' ? (s.side ?? undefined) : undefined,
     })),
     media_plan: {
       provider: opts.provider,
@@ -365,12 +395,20 @@ export const stateFromConfig = (config: DebateConfig, base: WizardState): Wizard
   const speakers: Speaker[] = moderator ? [] : [defaultModerator()];
   const voices: Record<string, string> = {};
   for (const entry of [...(moderator ? [moderator] : []), ...debaters]) {
-    const fallbackPrompt = entry.p.role === 'moderator' ? MODERATOR_PROMPT : debaterPrompt(countDebaters(speakers));
+    const debater = entry.p.role === 'debater';
+    const persona = entry.p.persona_custom;
+    const fallbackPrompt = debater ? debaterPrompt() : MODERATOR_PROMPT;
+    // Configs from before sides: the default stance sentence of the persona becomes the side; a
+    // stance of one's own stays in the text, without a side. No persona (a remix of someone
+    // else's debate): the default side.
+    const legacy = sideFromPersona(persona ?? fallbackPrompt);
+    const side = entry.p.side ?? (persona === undefined ? defaultSide(countDebaters(speakers)) : legacy.side);
     speakers.push({
       key: speakerKey(),
       role: entry.p.role,
       model_id: entry.p.model_id,
-      prompt: entry.p.persona_custom ?? fallbackPrompt,
+      prompt: entry.p.side ? (persona ?? fallbackPrompt) : legacy.prompt,
+      side: debater ? side : null,
     });
     // Voices in the stored plan are keyed by the *original* participant index.
     const voice = entry.p.voice_name || plan?.voices[speakerId(entry.index)];
@@ -425,6 +463,7 @@ export const configFromDebate = (debate: DebateDetail): DebateConfig => {
         model_id: p.router || p.model, // a remix asks the Free Router again
         display_name: p.name?.trim() || (p.role === 'moderator' ? 'The Host' : 'Debater'),
         voice_name: p.voice_name ?? undefined,
+        side: p.role === 'debater' ? (p.side ?? undefined) : undefined,
       })),
     media_plan: debate.media_plan ?? undefined,
   };
@@ -467,12 +506,14 @@ const oneOf = <T extends string>(v: unknown, allowed: readonly T[], fallback: T)
 
 const sanitizeSpeakers = (raw: unknown): Speaker[] => {
   const list = Array.isArray(raw) ? raw.filter(isRecord) : [];
-  const toSpeaker = (s: Record<string, unknown>, role: ParticipantRole): Speaker => ({
-    key: str(s.key) || speakerKey(),
-    role,
-    model_id: str(s.model_id),
-    prompt: str(s.prompt),
-  });
+  const toSpeaker = (s: Record<string, unknown>, role: ParticipantRole): Speaker => {
+    const base = { key: str(s.key) || speakerKey(), role, model_id: str(s.model_id) };
+    if (role !== 'debater') return { ...base, prompt: str(s.prompt), side: null };
+    if (typeof s.side === 'string') return { ...base, prompt: str(s.prompt), side: oneOf(s.side, ['for', 'against', 'own'] as const, 'own') };
+    // Stored before sides (or a stance of one's own): the default stance sentence becomes the side.
+    const legacy = sideFromPersona(str(s.prompt));
+    return { ...base, prompt: legacy.prompt, side: legacy.side };
+  };
   const moderator = list.find((s) => s.role === 'moderator');
   const debaters = list.filter((s) => s.role === 'debater').slice(0, MAX_DEBATERS);
   const out = [moderator ? toSpeaker(moderator, 'moderator') : defaultModerator(), ...debaters.map((d) => toSpeaker(d, 'debater'))];

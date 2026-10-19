@@ -83,8 +83,28 @@ def _context_block(conf: dict[str, Any]) -> str:
     return lines
 
 
+# A debater's side (`ParticipantConfig.side`). Without one the persona text carries the stance,
+# as in configs from before sides existed: nothing below is added then.
+SIDE_LINES: dict[str, str] = {
+    "for": "Your side: you argue FOR the topic.",
+    "against": "Your side: you argue AGAINST the topic.",
+    "own": "Your side: you take a position of your own, not simply for or against the topic.",
+}
+SIDE_NAMES: dict[str, str] = {"for": "for", "against": "against", "own": "own position"}
+
+
+def _side(participant: dict[str, Any]) -> str | None:
+    side = participant.get("side")
+    return side if participant.get("role") == "debater" and side in SIDE_LINES else None
+
+
 def _participants_block(participants: list[dict[str, Any]]) -> str:
-    return "\n".join(f"- {p.get('display_name')} ({p.get('role')})" for p in participants)
+    lines = []
+    for p in participants:
+        side = _side(p)
+        role = f"{p.get('role')}, {SIDE_NAMES[side]}" if side else p.get("role")
+        lines.append(f"- {p.get('display_name')} ({role})")
+    return "\n".join(lines)
 
 
 SPOKEN_TAGS = "[sarcastic] [laughs] [serious] [calm] [confident] [firm] [pause] [excited] [sighs]"
@@ -146,10 +166,12 @@ def build_debater_messages(
     persona = speaker.get("persona_custom") or "You are a skilled, well-informed debater."
     visuals = visuals_on(conf)
 
+    side = _side(speaker)
     system = (
         f"You are a participant in a structured debate. Your name is {speaker['display_name']}.\n"
         f"Persona and stance: {persona}\n"
-        f"Style: {intensity_description(int(conf.get('intensity', 5)))}"
+        + (f"{SIDE_LINES[side]}\n" if side else "")
+        + f"Style: {intensity_description(int(conf.get('intensity', 5)))}"
         + _common_rules(language, words, conf.get("output_style", "markdown"))
         + (VISUAL_RULES if visuals else "")
     )
@@ -194,10 +216,11 @@ def build_moderator_messages(
         + _common_rules(language, words, conf.get("output_style", "markdown"))
     )
 
+    who = "by name and side" if any(_side(p) for p in debaters) else "by name"
     if turn.turn_type == "moderator_intro":
         task = (
             "Open the debate: welcome the audience, introduce the topic in one or two sentences, "
-            "introduce each debater by name, briefly explain the format "
+            f"introduce each debater {who}, briefly explain the format "
             f"({num_rounds} round(s)), and invite {debaters[0]['display_name']} to begin."
             if debaters
             else "Open the debate and introduce the topic."
@@ -257,9 +280,15 @@ def build_verdict_messages(
         if evidence.strip()
         else ""
     )
+    sides = [
+        f"{p.get('display_name')} ({SIDE_NAMES[side]})"
+        for p in conf.get("participants") or []
+        if (side := _side(p))
+    ]
     user = (
         f"Debate topic: {conf.get('topic')}\n"
         + _context_block(conf)
+        + (f"Sides: {', '.join(sides)}\n" if sides else "")
         + f"\nFull transcript:\n{_history_block(history)}\n"
         + evidence_block
         + "\nPlease deliver your final verdict now."

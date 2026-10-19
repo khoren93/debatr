@@ -285,9 +285,10 @@ export const StepSpeakers = ({
       </div>
 
       <div className="grid gap-2.5">
-        <SectionHead title="Debaters" count={`${debaters} / ${maxDebaters}`} hint={debaters === 2 ? 'Two debaters argue Pro and Con.' : `${debaters} debaters take turns each round.`} />
+        <SectionHead title="Debaters" count={`${debaters} / ${maxDebaters}`} hint={debaters === 2 ? 'Two debaters argue for and against the topic.' : `${debaters} debaters take turns each round.`} />
         <div className={`hidden gap-3 px-[15px] font-mono text-[10px] tracking-[0.1em] text-dim min-[1100px]:grid ${ROW_COLUMNS}`} aria-hidden="true">
           <span>MODEL</span>
+          <span>SIDE</span>
           <span>VOICE</span>
           <span>PERSONA</span>
           <span />

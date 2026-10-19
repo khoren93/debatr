@@ -64,7 +64,7 @@ export const DebateLong = ({ timeline, mediaBase }: DebateProps) => {
         <div style={{ position: 'absolute', inset: 0, opacity: showVerdict ? 0.05 : 1 }}>
           <div style={{ position: 'absolute', top: 2.2 * U, left: 2.4 * U, right: 2.4 * U, height: barHeight(U), display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <BrandMark u={U} />
-            <div>{current && <RoundChip roundId={current.round_id} u={U} />}</div>
+            <div>{current && <RoundChip roundId={current.round_id} label={current.round_label} u={U} />}</div>
           </div>
           {speaker && (
             <div style={{ position: 'absolute', top: 2.2 * U, left: 0, right: 0, height: barHeight(U), display: 'flex', alignItems: 'center', justifyContent: 'center' }}>

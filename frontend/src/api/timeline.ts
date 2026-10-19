@@ -29,6 +29,8 @@ export interface TimelineSegment {
   speaker_id: string;
   speaker_name: string;
   round_id: string;
+  /** The format's name for this part of the show; absent in timelines built before formats. */
+  round_label?: string | null;
   turn_type: string;
   start_ms: number; // absolute on the full track
   end_ms: number;

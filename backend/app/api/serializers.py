@@ -30,6 +30,7 @@ from app.schemas.schemas import (
     VerdictOut,
 )
 from app.services import motions
+from app.services.formats import SIDES, Format, format_of
 from app.services.free_router import is_free_router
 from app.services.media.languages import language_code
 from app.services.motions import MotionInfo
@@ -61,10 +62,11 @@ def totals_out(debate: Debate) -> DebateTotals:
     return DebateTotals.model_validate(debate.totals_json or {})
 
 
-def turn_out(turn: Turn) -> TurnOut:
+def turn_out(turn: Turn, fmt: Format) -> TurnOut:
     return TurnOut(
         seq_index=turn.seq_index,
         round_id=turn.round_id,
+        round_label=fmt.round_label(turn.round_id, turn.turn_type),
         turn_type=turn.turn_type,
         speaker_role=speaker_role_for(turn.turn_type),  # type: ignore[arg-type]
         speaker_id=turn.speaker_id,
@@ -147,9 +149,16 @@ def participants_out(debate: Debate) -> list[ParticipantOut]:
             router=router_of(configured[i] if i < len(configured) else {}, p.model_id),
             voice_name=p.voice_name,
             avatar=p.avatar_url,
+            side=side_of(configured[i] if i < len(configured) else {}),
         )
         for i, p in enumerate(debate.participants)
     ]
+
+
+def side_of(configured: dict[str, Any]) -> Any:
+    """A debater's side as configured (None: not set, the persona carried the stance)."""
+    side = configured.get("side")
+    return side if configured.get("role") == "debater" and side in SIDES else None
 
 
 def router_of(configured: dict[str, Any], model_id: str) -> str | None:
@@ -247,6 +256,7 @@ def detail_out(
         started_at=debate.started_at,
         ended_at=debate.ended_at,
         settings=DebateSettingsOut(
+            format=format_of(conf).id,
             topic=conf.get("topic", ""),
             description=conf.get("description"),
             language=conf.get("language", "English"),
@@ -259,7 +269,7 @@ def detail_out(
         ),
         totals=totals_out(debate),
         participants=participants_out(debate),
-        turns=[turn_out(t) for t in debate.turns],
+        turns=[turn_out(t, format_of(conf)) for t in debate.turns],
         user_id=str(debate.user_id) if debate.user_id else None,
         author_name=author,
         is_owner=owner,
@@ -352,6 +362,7 @@ def gallery_item_out(debate: Debate, motion: MotionInfo | None = None) -> Galler
     return GalleryItem(
         id=str(debate.id),
         slug=debate.slug or "",
+        format=format_of(conf).id,
         title=debate.title,
         topic=topic_of(debate),
         language=str(conf.get("language") or "English"),

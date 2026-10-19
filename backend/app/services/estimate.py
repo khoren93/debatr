@@ -7,10 +7,10 @@ from collections.abc import Iterable
 from dataclasses import asdict, dataclass
 from typing import Any
 
+from app.services.formats import format_of
 from app.services.free_router import FREE_ROUTER_ID, FREE_SUFFIX
 from app.services.media.languages import language_code
-from app.services.prompt_builder import length_words, verdict_words
-from app.services.scheduler import build_schedule
+from app.services.prompt_builder import length_words
 
 # Rough tokens per word for OpenRouter-style tokenizers, by language code.
 TOKENS_PER_WORD: dict[str, float] = {
@@ -119,7 +119,6 @@ def estimate_debate(
     turns; the minimum was quoted with the first run); the media build comes after the run, so
     it stays."""
     participants: list[dict[str, Any]] = list(conf.get("participants") or [])
-    num_rounds = int(conf.get("num_rounds") or 1)
     words_per_turn = length_words(str(conf.get("length_preset") or "medium"))
     factor = TOKENS_PER_WORD.get(language_code(conf.get("language")), DEFAULT_TOKENS_PER_WORD)
     context_text = f"{conf.get('topic') or ''} {conf.get('description') or ''}"
@@ -134,13 +133,14 @@ def estimate_debate(
     debater_turns = 0
     checked_turns = 0  # debater turns still to run (fact-checks)
     planned: list[tuple[str, int]] = []  # (model id, words)
-    for index, turn in enumerate(build_schedule(participants, num_rounds)):
+    fmt = format_of(conf)
+    for index, turn in enumerate(fmt.schedule(conf)):
         debater_turns += 0 if turn.is_moderator else 1
         checked_turns += 0 if turn.is_moderator or index < from_turn else 1
         speaker = participants[turn.speaker_index]
         words = min(words_per_turn, MODERATOR_MAX_WORDS) if turn.is_moderator else words_per_turn
         planned.append((str(speaker.get("model_id") or default_model), words))
-    planned.append((judge_model, verdict_words(conf)))
+    planned.append((judge_model, fmt.verdict_words(conf)))
 
     history_tokens = 0.0
     tokens_in = 0.0

@@ -34,6 +34,7 @@ from app.schemas.timeline import (
 from app.schemas.visuals import ImageScene, SketchScene, TimelineVisual
 from app.services import free_quota, runtime_settings
 from app.services.credits import charge_images_sync, charge_media_sync, has_balance, prices_of
+from app.services.formats import format_of
 from app.services.free_router import resolved_participants
 from app.services.heartbeat import beating
 from app.services.media import ffmpeg
@@ -709,6 +710,7 @@ def _build(
     offsets = ffmpeg.concat_offsets([a.duration_ms for a in ordered], settings.MEDIA_GAP_MS)
     total_ms = ffmpeg.probe_duration_ms(paths.full_wav)
 
+    fmt = format_of(conf)
     segments: list[TimelineSegment] = []
     for task, audio, offset in zip(tasks, ordered, offsets, strict=True):
         segments.append(
@@ -717,6 +719,7 @@ def _build(
                 speaker_id=task.speaker.id,
                 speaker_name=task.speaker.name,
                 round_id=task.round_id,
+                round_label=fmt.round_label(task.round_id, task.turn_type),
                 turn_type=task.turn_type,
                 start_ms=offset,
                 end_ms=offset + audio.duration_ms,

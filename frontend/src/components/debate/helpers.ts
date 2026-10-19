@@ -44,7 +44,7 @@ export const isJudgeTurn = (turn: Pick<Turn, 'speaker_id' | 'turn_type'>) => tur
 /** Name shown for a turn's speaker ("⚖️ Verdict" turns read as the judge). */
 export const speakerTitle = (turn: Pick<Turn, 'speaker_id' | 'turn_type' | 'speaker_name'>) => (isJudgeTurn(turn) ? 'The Judge' : turn.speaker_name);
 
-export const turnTypeLabel = (turnType: string, roundId: string) => TURN_TYPE_LABELS[turnType] ?? roundLabel(roundId);
+export const turnTypeLabel = (turnType: string, roundId: string, label?: string | null) => TURN_TYPE_LABELS[turnType] ?? roundLabel(roundId, label);
 
 export const msLabel = (ms: number) => {
   const s = Math.floor(Math.max(0, ms) / 1000);
@@ -151,7 +151,7 @@ export const videoChapters = (timeline: Timeline, format: VideoFormat, highlight
       endMs: next ? offset + next.start_ms : totalMs,
       color: colorOf(seg.speaker_id),
       speaker: seg.speaker_id === 'judge' ? 'The Judge' : seg.speaker_name,
-      label: turnTypeLabel(seg.turn_type, seg.round_id),
+      label: turnTypeLabel(seg.turn_type, seg.round_id, seg.round_label),
     };
   });
   return { chapters, totalMs };

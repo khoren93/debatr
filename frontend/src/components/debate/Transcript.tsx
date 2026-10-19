@@ -128,14 +128,14 @@ export const Transcript = ({ turns, streaming, participants, lineup, timeline, m
   };
   const rows: ReactNode[] = [];
   let lastRound: string | null = null;
-  const heading = (roundId: string, turnType: string) => (
+  const heading = (roundId: string, turnType: string, label?: string) => (
     <div key={`h-${roundId}-${turnType}`} className="px-3.5 pt-3.5 pb-1.5 font-mono text-[11px] tracking-[0.12em] text-dim">
-      {roundHeading(roundId, turnType)}
+      {roundHeading(roundId, turnType, label)}
     </div>
   );
   for (const turn of turns) {
     if (turn.round_id !== lastRound) {
-      rows.push(heading(turn.round_id, turn.turn_type));
+      rows.push(heading(turn.round_id, turn.turn_type, turn.round_label));
       lastRound = turn.round_id;
     }
     if (hideVerdict && turn.turn_type === 'verdict') {
@@ -150,7 +150,7 @@ export const Transcript = ({ turns, streaming, participants, lineup, timeline, m
     rows.push(<Row key={turn.seq_index} turn={turn} participants={participants} lineup={lineup} time={timeFor(turn.seq_index)} markdown={markdown} active={activeSeq === turn.seq_index} onSeek={seekable} board={board(turn)} />);
   }
   if (streaming) {
-    if (streaming.round_id && streaming.round_id !== lastRound) rows.push(heading(streaming.round_id, streaming.turn_type));
+    if (streaming.round_id && streaming.round_id !== lastRound) rows.push(heading(streaming.round_id, streaming.turn_type, streaming.round_label));
     rows.push(<Row key={`s-${streaming.seq_index}`} turn={{ ...streaming, speaker_id: undefined }} participants={participants} lineup={lineup} time="now" markdown={false} streaming />);
   }
   return <div className="mt-3.5 grid gap-1">{rows}</div>;

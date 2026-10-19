@@ -19,6 +19,7 @@ from app.models.models import Debate, DebateParticipant, DebateVote, User, utcno
 from app.schemas.schemas import (
     GALLERY_CATEGORIES,
     DebateDetail,
+    FormatId,
     GalleryGroup,
     GalleryPeriod,
     GalleryResponse,
@@ -28,6 +29,7 @@ from app.schemas.schemas import (
 )
 from app.services import motions, ranking
 from app.services.engagement import engagement_out
+from app.services.formats import DEFAULT_FORMAT
 from app.services.free_router import is_free_router
 from app.services.openrouter_client import openrouter_client
 from app.services.views import count_view
@@ -66,6 +68,11 @@ def trending_sql() -> ColumnElement[Any]:
     return engagement / func.power(
         func.greatest(age_hours, 0) + ranking.TRENDING_OFFSET_HOURS, ranking.TRENDING_GRAVITY
     )
+
+
+def format_sql() -> ColumnElement[str]:
+    """A debate's show format (configs from before formats are debates)."""
+    return func.coalesce(Debate.config_json["format"].as_string(), DEFAULT_FORMAT)
 
 
 def _public() -> list[ColumnElement[bool]]:
@@ -149,6 +156,7 @@ async def list_gallery(
     q: str | None = Query(None, max_length=200),
     model: str | None = Query(None, max_length=200, description="Debates this model argued in"),
     premium_voices: bool = Query(False, description="Only debates voiced by ElevenLabs"),
+    format: FormatId | None = Query(None, description="Only debates of this show format"),
     sort: GallerySort = Query("new"),
     group: GalleryGroup = Query("none", description="motion: one card per topic"),
     period: GalleryPeriod = Query("all", description="Publication window for sort=top"),
@@ -172,6 +180,8 @@ async def list_gallery(
         )
     if premium_voices:
         conditions.append(premium_voices_sql())
+    if format:
+        conditions.append(format_sql() == format)
     if sort == "top" and period in PERIODS:
         conditions.append(_published_at() >= utcnow() - PERIODS[period])
 
@@ -219,10 +229,14 @@ async def list_gallery(
 
 
 @router.get("/leaderboard", response_model=LeaderboardOut)
-async def leaderboard(db: AsyncSession = Depends(get_db)) -> LeaderboardOut:
+async def leaderboard(
+    format: FormatId = Query(DEFAULT_FORMAT, description="Rank models within this show format"),
+    db: AsyncSession = Depends(get_db),
+) -> LeaderboardOut:
     """Models ranked by audience votes across public debates (only models that argued in at
-    least one public, finished debate are listed)."""
-    finished = [*_public(), Debate.status == "completed"]
+    least one public, finished debate are listed). Formats rank apart: a rap battle measures
+    something else than a debate."""
+    finished = [*_public(), Debate.status == "completed", format_sql() == format]
     debates = (
         (
             await db.execute(

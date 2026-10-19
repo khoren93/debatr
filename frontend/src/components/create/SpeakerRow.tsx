@@ -2,16 +2,16 @@ import { PenLine, Trash2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { ModelInfo, VoiceInfo } from '../../api/types';
 import { applyStyle, clearStyle, detectStyle } from '../../data/styles';
-import { Hint } from '../ui';
+import { Dropdown, Hint } from '../ui';
 import { ModelPicker } from './ModelPicker';
 import { PersonaPicker } from './PersonaPicker';
 import { useVoicePreview } from './useVoicePreview';
 import { VoicePicker } from './VoicePicker';
 import { VoicePreviewButton } from './VoicePreviewButton';
-import type { Speaker } from './wizardState';
+import { SIDE_OPTIONS, type Speaker } from './wizardState';
 
 /** Columns of the wide layout; the header row above the debaters uses the same template. */
-export const ROW_COLUMNS = 'min-[1100px]:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1.15fr)_126px]';
+export const ROW_COLUMNS = 'min-[1100px]:grid-cols-[minmax(0,1.3fr)_118px_minmax(0,1fr)_minmax(0,1.15fr)_126px]';
 
 interface SpeakerRowProps {
   speaker: Speaker;
@@ -109,6 +109,19 @@ export const SpeakerRow = ({
         />
         {showErrors && !modelId && !modelsLoading && <Hint tone="danger">Pick a model for this speaker.</Hint>}
       </div>
+      {speaker.role === 'debater' ? (
+        <Dropdown
+          aria-label={`Side of ${name}`}
+          value={speaker.side ?? ''}
+          placeholder="In prompt"
+          onChange={(side) => side && onChange({ side })}
+          menuWidth={200}
+          options={SIDE_OPTIONS.map((o) => ({ value: o.value, label: o.label, hint: o.hint }))}
+        />
+      ) : (
+        // The host takes no side: an empty cell keeps the columns aligned.
+        <span className="hidden text-center font-mono text-[11px] text-dim min-[1100px]:block">neutral</span>
+      )}
       <VoicePicker
         value={voiceId}
         voices={voices}

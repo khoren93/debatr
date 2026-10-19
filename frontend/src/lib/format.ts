@@ -167,7 +167,10 @@ export const turnErrorMessage = (turn: Pick<Turn, 'error' | 'text'>) => {
   return legacy.replace(/^\[Error(?: generating response)?:?\s*/, '').replace(/\]$/, '');
 };
 
-export const roundLabel = (roundId: string) => {
+/** The format's own name for a part of the show when the server sent one ("Round 2"),
+ *  else derived from the round id (turns and timelines from before formats). */
+export const roundLabel = (roundId: string, label?: string | null) => {
+  if (label) return label;
   if (roundId === 'verdict') return 'Verdict';
   const match = roundId.match(/^round_(\d+)$/);
   return match ? `Round ${match[1]}` : roundId;
@@ -185,8 +188,8 @@ export const TURN_TYPE_LABELS: Record<string, string> = {
 };
 
 /** "ROUND 1 · OPENING" */
-export const roundHeading = (roundId: string, turnType: string) => {
-  const round = roundLabel(roundId).toUpperCase();
+export const roundHeading = (roundId: string, turnType: string, label?: string | null) => {
+  const round = roundLabel(roundId, label).toUpperCase();
   const type = TURN_TYPE_LABELS[turnType];
   return roundId === 'verdict' || !type || turnType.startsWith('moderator') ? round : `${round} · ${type.toUpperCase()}`;
 };
@@ -230,9 +233,12 @@ export const speakerColorByName = (name: string, participants: Participant[]) =>
   return speakerColor(participants[idx].id ?? `participant_${idx}`, participants);
 };
 
-/** Short role tag: HOST / PRO / CON / 3RD… */
+const SIDE_TAGS: Record<string, string> = { for: 'PRO', against: 'CON', own: 'OWN VIEW' };
+
+/** Short role tag: HOST / PRO / CON / OWN VIEW by side; positional for debates before sides. */
 export const roleTag = (participant: Participant, participants: Participant[]) => {
   if (participant.role === 'moderator') return 'HOST';
+  if (participant.side && SIDE_TAGS[participant.side]) return SIDE_TAGS[participant.side];
   const debaters = participants.filter((p) => p.role !== 'moderator');
   const i = debaters.indexOf(participant);
   if (debaters.length <= 2) return i === 0 ? 'PRO' : 'CON';

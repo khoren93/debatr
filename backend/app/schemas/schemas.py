@@ -1,12 +1,23 @@
 from datetime import datetime
 from typing import Any, Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationInfo,
+    field_validator,
+    model_validator,
+)
 
 from app.schemas.visuals import Scene, SceneCheck
 
 LengthPreset = Literal["very_short", "short", "medium", "long"]
 ParticipantRole = Literal["moderator", "debater"]
+# Show formats (services/formats); a new one is added to this list and to the registry.
+FormatId = Literal["debate"]
+# A debater's side; unset = the persona text carries the stance (configs from before sides).
+DebaterSide = Literal["for", "against", "own"]
 # "spoken" asks the models for plain spoken prose (no Markdown) suited for TTS and video.
 OutputStyle = Literal["markdown", "spoken"]
 DebateStatus = Literal["draft", "queued", "running", "completed", "error", "stopped"]
@@ -87,6 +98,7 @@ class ParticipantConfig(BaseModel):
     voice_name: str | None = Field(default=None, max_length=200)
     persona_preset: str | None = None
     persona_custom: str | None = Field(default=None, max_length=4000)
+    side: DebaterSide | None = None  # debaters only; formats with fixed seats set it themselves
 
 
 class MediaPlan(BaseModel):
@@ -129,6 +141,7 @@ STORED_TOPIC_MAX_LENGTH = 500
 
 
 class DebateConfig(BaseModel):
+    format: FormatId = "debate"
     topic: str = Field(
         min_length=1,
         max_length=STORED_TOPIC_MAX_LENGTH,
@@ -182,6 +195,17 @@ class DebateConfig(BaseModel):
         if len(moderators) > 1:
             raise ValueError("At most one moderator is allowed")
         return value
+
+    @model_validator(mode="after")
+    def _fits_the_format(self) -> Self:
+        from app.services.formats import format_of  # the registry imports no schemas
+
+        problems = format_of({"format": self.format}).problems(
+            [p.model_dump() for p in self.participants], self.num_rounds
+        )
+        if problems:
+            raise ValueError("; ".join(problems))
+        return self
 
     def persisted(self) -> dict[str, Any]:
         """The part of the config that is stored on the debate row."""
@@ -317,6 +341,7 @@ class TurnVisualsOut(BaseModel):
 class TurnOut(BaseModel):
     seq_index: int
     round_id: str
+    round_label: str = ""  # the format's name for this part of the show ("Round 2", "Verdict")
     turn_type: str
     speaker_role: ParticipantRole
     speaker_id: str = ""  # "participant_{i}" (index into config participants) or "judge"
@@ -338,6 +363,7 @@ class ParticipantOut(BaseModel):
     router: str | None = None
     voice_name: str | None = None
     avatar: str | None = None
+    side: DebaterSide | None = None
 
 
 class VerdictFeedback(BaseModel):
@@ -381,6 +407,7 @@ class DebateSummary(BaseModel):
 
 
 class DebateSettingsOut(BaseModel):
+    format: str = "debate"
     topic: str
     description: str | None = None
     language: str
@@ -508,6 +535,7 @@ class StopDebateResponse(BaseModel):
 class GalleryItem(BaseModel):
     id: str
     slug: str
+    format: str = "debate"
     title: str | None
     topic: str
     language: str
@@ -547,6 +575,29 @@ class MotionSuggestions(BaseModel):
 
     match: MotionRef | None = None
     similar: list[MotionRef] = Field(default_factory=list)
+
+
+# --- Formats (services/formats) ---
+class FormatSeat(BaseModel):
+    label: str
+    side: DebaterSide | None = None  # fixed by the format; null: the debater picks
+
+
+class FormatOut(BaseModel):
+    """A show format as the wizard, the CLI and agents see it (`GET /api/formats`)."""
+
+    id: str
+    name: str
+    tagline: str
+    host_label: str
+    host_required: bool
+    seats: list[FormatSeat]  # debater seats in speaking order; the last one repeats
+    min_debaters: int
+    max_debaters: int
+    min_rounds: int
+    max_rounds: int
+    sides: bool  # debaters pick their own side
+    visuals: bool  # charts and sketches may accompany the speeches
 
 
 # --- Model leaderboard ---

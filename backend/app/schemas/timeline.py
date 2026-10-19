@@ -36,6 +36,8 @@ class TimelineSegment(BaseModel):
     speaker_id: str
     speaker_name: str
     round_id: str
+    # The format's name for this part of the show ("Round 2"); older timelines have none.
+    round_label: str | None = None
     turn_type: str
     start_ms: int  # absolute on the full track
     end_ms: int
