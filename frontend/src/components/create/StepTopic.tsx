@@ -3,10 +3,28 @@ import type { TrendingTopic } from '../../api/types';
 import { formatAge } from '../../lib/format';
 import { Dropdown, Hint } from '../ui';
 import { Favicon, TrendingBrowser } from './TrendingBrowser';
-import { LANGUAGES, LENGTH_OPTIONS, MAX_ROUNDS, MIN_ROUNDS, MIN_TOPIC_LENGTH, TOPIC_MAX_LENGTH, lengthOption, roundsHint, topicValid, type NewsPick, type WizardState } from './wizardState';
+import {
+  LANGUAGES,
+  LENGTH_OPTIONS,
+  MAX_ROUNDS,
+  MIN_ROUNDS,
+  MIN_TOPIC_LENGTH,
+  TOPIC_MAX_LENGTH,
+  freeLimitsText,
+  lengthAllowed,
+  lengthOption,
+  roundsAllowed,
+  roundsHint,
+  topicValid,
+  type FreeLimits,
+  type NewsPick,
+  type WizardState,
+} from './wizardState';
 
 interface StepTopicProps {
   state: WizardState;
+  /** Limits of free debates (no credits, no own key): longer options are locked. */
+  free: FreeLimits;
   patch: (patch: Partial<WizardState>) => void;
   showErrors: boolean;
   /** "~4 min episode · ~$0.02 estimated", null while unknown. */
@@ -44,7 +62,9 @@ const LinkedStory = ({ news, onRemove }: { news: NewsPick; onRemove: () => void 
 );
 
 /** Step 1: trending topics on the left, the debate's topic and format in a sticky panel. */
-export const StepTopic = ({ state, patch, showErrors, estimateLine, onContinue }: StepTopicProps) => {
+const LOCKED_HINT = 'Credits or your own OpenRouter key';
+
+export const StepTopic = ({ state, free, patch, showErrors, estimateLine, onContinue }: StepTopicProps) => {
   const valid = topicValid(state);
   const knownLanguage = LANGUAGES.some((l) => l.value === state.language);
   const news = state.news;
@@ -142,7 +162,10 @@ export const StepTopic = ({ state, patch, showErrors, estimateLine, onContinue }
                   value={state.num_rounds}
                   onChange={(num_rounds) => patch({ num_rounds })}
                   menuWidth={230}
-                  options={ROUND_OPTIONS.map((n) => ({ value: n, label: `${n} ${n === 1 ? 'round' : 'rounds'}`, hint: roundsHint(n) }))}
+                  options={ROUND_OPTIONS.map((n) => {
+                    const allowed = roundsAllowed(free, n);
+                    return { value: n, label: `${n} ${n === 1 ? 'round' : 'rounds'}`, hint: allowed ? roundsHint(n) : LOCKED_HINT, disabled: !allowed };
+                  })}
                 />
               </div>
               <div className="grid min-w-0 gap-2">
@@ -153,13 +176,21 @@ export const StepTopic = ({ state, patch, showErrors, estimateLine, onContinue }
                   value={state.length_preset}
                   onChange={(length_preset) => patch({ length_preset })}
                   menuWidth={230}
-                  options={LENGTH_OPTIONS.map((o) => ({ value: o.value, label: o.label, hint: o.hint }))}
+                  options={LENGTH_OPTIONS.map((o) => {
+                    const allowed = lengthAllowed(free, o.value);
+                    return { value: o.value, label: o.label, hint: allowed ? o.hint : LOCKED_HINT, disabled: !allowed };
+                  })}
                 />
               </div>
             </div>
             <div className="mt-2.5 font-mono text-[11px] text-dim">
               {roundsHint(state.num_rounds)} · {lengthOption(state.length_preset).hint}
             </div>
+            {free && freeLimitsText(free) && (
+              <div className="mt-1 text-[11px] text-dim">
+                Debates on free models: {freeLimitsText(free)}. More with credits or your own OpenRouter key.
+              </div>
+            )}
           </div>
 
           <div className="grid gap-2">

@@ -537,6 +537,15 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   `MAX_ACTIVE_MEDIA_PER_USER` (`POST /media`) answer 429; the user row is locked until commit.
   Both, `FREE_MODELS_PER_MINUTE` and `SIGNUP_BONUS_USD` are only defaults: the console's levers
   (`services/runtime_settings`, see "Admin console") override them without a deploy.
+- Free debates (`services/free_limits`): a run on the system key whose models are all free, by an
+  account without credits, uses the site's shared `:free` quota, so the levers
+  `free_debates_per_day` (5 in any 24 h; Redis sorted set `free-runs:{user}`, so deleting a
+  debate gives nothing back; 429), `free_max_rounds` (3), `free_max_debaters` (4) and
+  `free_lengths` (very_short, short; 402) limit it at create / draft start (resumes are not new
+  runs; env `FREE_*`; 0 / empty = no limit). Credits or an own OpenRouter key lift them all.
+  `POST /debates/estimate` answers `free_runs` (the day's allowance) and `free_limit` (why it
+  would be refused); `GET /api/status` carries `free_debates`, so the wizard locks longer
+  options when `paidLocked` and shows / sends the clamped rounds and length (`withinFreeLimits`).
 - Passing provider failures (429, 5xx, dropped connection, empty answer; `RETRY_STATUSES`) are
   tried again after `RETRY_PAUSES` (3 s, 10 s) within the turn's deadline, only before any text
   was streamed, since a failed turn stops the debate.
@@ -676,7 +685,8 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   classifier's, a pinned one gives way to the router, and it is never a fallback),
   `signup_bonus_usd`, `free_models_per_minute`, `max_active_debates_per_user`,
   `max_active_media_per_user`, `muted_alerts` (see Alerts), `free_verdict_model` (verdict + gallery
-  check of free debates). Only the fields of `Levers` exist (pydantic limits); without a row
+  check of free debates), `free_debates_per_day`, `free_max_rounds`, `free_max_debaters`,
+  `free_lengths` (see "Workers and queues"). Only the fields of `Levers` exist (pydantic limits); without a row
   the env setting applies; a broken row is ignored. `PUT /settings/{key}` / `POST
   /settings/{key}/reset` need sudo and a reason and write the row + audit entry in one
   transaction; processes read through a 5 s cache (`CACHE_SECONDS`), so a change lands within

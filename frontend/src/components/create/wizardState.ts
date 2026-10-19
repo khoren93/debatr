@@ -1,6 +1,7 @@
 import type {
   DebateConfig,
   DebateDetail,
+  FreeDebates,
   ImageSource,
   LengthPreset,
   MediaOutput,
@@ -126,6 +127,34 @@ export const LENGTH_OPTIONS: { value: LengthPreset; label: string; hint: string 
 const LENGTH_VALUES = LENGTH_OPTIONS.map((o) => o.value);
 
 export const lengthOption = (value: LengthPreset) => LENGTH_OPTIONS.find((o) => o.value === value) ?? LENGTH_OPTIONS[2];
+
+/** Limits of debates on free models (accounts without credits or an own key); null: none. */
+export type FreeLimits = FreeDebates | null;
+
+export const roundsAllowed = (free: FreeLimits, rounds: number) => !free?.max_rounds || rounds <= free.max_rounds;
+export const lengthAllowed = (free: FreeLimits, length: LengthPreset) => !free?.lengths.length || free.lengths.includes(length);
+export const maxDebatersFor = (free: FreeLimits) => (free?.max_debaters ? Math.min(MAX_DEBATERS, free.max_debaters) : MAX_DEBATERS);
+
+/** Rounds and reply length within the limits: what the wizard shows and sends. The choice
+ * stays in the state, so credits or an own key bring it back. */
+export const withinFreeLimits = (state: WizardState, free: FreeLimits): WizardState => {
+  if (!free) return state;
+  const num_rounds = roundsAllowed(free, state.num_rounds) ? state.num_rounds : free.max_rounds;
+  const length_preset = lengthAllowed(free, state.length_preset) ? state.length_preset : free.lengths[free.lengths.length - 1];
+  return { ...state, num_rounds, length_preset };
+};
+
+/** "up to 3 rounds · very short or short replies · 5 a day" */
+export const freeLimitsText = (free: FreeDebates) => {
+  const lengths = free.lengths.map((l) => lengthOption(l).label.toLowerCase());
+  return [
+    free.max_rounds ? `up to ${free.max_rounds} ${free.max_rounds === 1 ? 'round' : 'rounds'}` : '',
+    lengths.length ? `${lengths.length > 1 ? `${lengths.slice(0, -1).join(', ')} or ${lengths[lengths.length - 1]}` : lengths[0]} replies` : '',
+    free.per_day ? `${free.per_day} a day` : '',
+  ]
+    .filter(Boolean)
+    .join(' · ');
+};
 
 export const OUTPUT_OPTIONS: { value: MediaOutput; label: string; text: string; icon: { w: number; h: number; color: string } }[] = [
   { value: 'audio', label: 'Audio', text: 'MP3 · mixed track', icon: { w: 20, h: 20, color: '#FFC46B' } },

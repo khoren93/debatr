@@ -42,6 +42,13 @@ class Settings(BaseSettings):
     # Fair share: debates (queued + running) and audio builds one user may have at a time, so
     # nobody holds every worker. 0 = no limit.
     MAX_ACTIVE_DEBATES_PER_USER: int = 2
+    # Free debates (system key, every model free, no balance; services/free_limits): a day's
+    # allowance per account (rolling 24 h) and their size. 0 / empty = no limit. Credits or an
+    # own OpenRouter key lift them. Levers of the admin console override these.
+    FREE_DEBATES_PER_DAY: int = 5
+    FREE_MAX_ROUNDS: int = 3
+    FREE_MAX_DEBATERS: int = 4
+    FREE_LENGTHS: str = "very_short,short"
     MAX_ACTIVE_MEDIA_PER_USER: int = 2
     # `:free` model requests a minute on the system key, for all users together: OpenRouter
     # allows 20 per account (keys do not add up). Turns wait for a slot. 0 = no limit.

@@ -1,10 +1,10 @@
 """`GET /api/status`: what the site shows from the admin console's levers (sign-ups closed,
-maintenance mode with its message). Public and cheap: the levers are cached per process."""
+maintenance mode with its message, limits of free debates). Public and cheap: the levers are cached per process."""
 
 from fastapi import APIRouter
 
 from app.schemas.schemas import SiteStatusOut
-from app.services import runtime_settings
+from app.services import free_limits, runtime_settings
 
 router = APIRouter()
 
@@ -16,4 +16,5 @@ async def site_status() -> SiteStatusOut:
         registration_open=levers.registration_open,
         maintenance=levers.maintenance,
         maintenance_message=levers.notice() if levers.maintenance else None,
+        free_debates=free_limits.site_limits(levers),
     )

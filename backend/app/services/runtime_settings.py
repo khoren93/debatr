@@ -12,7 +12,7 @@ warning instead of failing requests.
 import logging
 import re
 import time
-from typing import Any
+from typing import Any, get_args
 
 from fastapi import HTTPException, status
 from pydantic import BaseModel, Field, ValidationError, field_validator
@@ -23,12 +23,14 @@ from app.core.config import settings
 from app.core.db import AsyncSessionLocal
 from app.core.sync_db import get_sync_session
 from app.models.models import RuntimeSetting
+from app.schemas.schemas import LengthPreset
 from app.services.alert_events import KINDS as ALERT_KINDS
 from app.services.free_router import FREE_SUFFIX
 
 logger = logging.getLogger(__name__)
 
 CACHE_SECONDS = 5.0
+LENGTHS: tuple[str, ...] = get_args(LengthPreset)
 MODEL_ID = re.compile(r"^[\w.\-:/]{1,120}$")
 MAX_DISABLED_MODELS = 200
 DEFAULT_MAINTENANCE_MESSAGE = (
@@ -58,6 +60,12 @@ class Levers(BaseModel):
     # (orchestrator._verdict_model); `:free` only, so such a debate never costs us. Empty: the
     # paid VERDICT_MODEL does it.
     free_verdict_model: str = Field(default="", max_length=120)
+    # Free debates (services/free_limits): a day's allowance per account and their size;
+    # 0 / an empty list = no limit.
+    free_debates_per_day: int = Field(default=5, ge=0, le=100)
+    free_max_rounds: int = Field(default=3, ge=0, le=10)
+    free_max_debaters: int = Field(default=4, ge=0, le=7)
+    free_lengths: list[LengthPreset] = Field(default_factory=lambda: ["very_short", "short"])
 
     @field_validator("maintenance_message")
     @classmethod
@@ -84,6 +92,11 @@ class Levers(BaseModel):
             raise ValueError(f"not a free (:free) model: {value[:40]!r}")
         return model_id
 
+    @field_validator("free_lengths")
+    @classmethod
+    def _lengths(cls, value: list[str]) -> list[str]:
+        return [length for length in LENGTHS if length in value]  # shortest first, no repeats
+
     @field_validator("muted_alerts")
     @classmethod
     def _alerts(cls, value: list[str]) -> list[str]:
@@ -109,6 +122,12 @@ def defaults() -> dict[str, Any]:
         "max_active_debates_per_user": max(0, min(20, settings.MAX_ACTIVE_DEBATES_PER_USER)),
         "max_active_media_per_user": max(0, min(20, settings.MAX_ACTIVE_MEDIA_PER_USER)),
         "free_verdict_model": _env_free_model(),
+        "free_debates_per_day": max(0, min(100, settings.FREE_DEBATES_PER_DAY)),
+        "free_max_rounds": max(0, min(10, settings.FREE_MAX_ROUNDS)),
+        "free_max_debaters": max(0, min(7, settings.FREE_MAX_DEBATERS)),
+        "free_lengths": [
+            p for p in LENGTHS if p in settings.FREE_LENGTHS.replace(" ", "").split(",")
+        ],
     }
 
 

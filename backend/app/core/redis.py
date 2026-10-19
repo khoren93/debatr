@@ -72,6 +72,11 @@ def free_models_window_key(minute: int) -> str:
     return f"ratelimit:free-models:{minute}"
 
 
+def free_runs_key(user_id: str) -> str:
+    """Sorted set of the account's free debates (score = start time): the daily allowance."""
+    return f"free-runs:{user_id}"
+
+
 def rate_limit_key(bucket: str, client_id: str) -> str:
     return f"ratelimit:{bucket}:{client_id}"
 

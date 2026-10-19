@@ -185,8 +185,11 @@ export const StepLaunch = ({
         ? 'free models + voices'
         : 'model + voice cost';
   const insufficient = Boolean(estimate && !estimate.sufficient);
+  // A debate on free models over their limits (too big, or none left today).
+  const freeLimit = estimate?.free_limit ?? null;
+  const freeRuns = shown?.free_runs ?? null;
   const paused = site.maintenance;
-  const canStart = ready && Boolean(estimate) && !insufficient && !starting && !paused && state.topic.trim().length > 0;
+  const canStart = ready && Boolean(estimate) && !insufficient && !freeLimit && !starting && !paused && state.topic.trim().length > 0;
   const after = shown?.credits_after ?? null;
 
   const meta = [
@@ -468,6 +471,22 @@ export const StepLaunch = ({
               {after !== null ? `${after < 0 ? '−' : ''}$${Math.abs(after).toFixed(2)}` : estimating ? '…' : '—'}
             </span>
           </div>
+          {freeRuns && (
+            <div className="flex items-center justify-between text-[13px] text-text-3">
+              <span>Free debates, last 24 h</span>
+              <span className={`font-mono ${freeRuns.left > 0 ? 'text-accent' : 'text-con'}`}>
+                {freeRuns.left} of {freeRuns.per_day} left
+              </span>
+            </div>
+          )}
+          {freeLimit && (
+            <div className="flex items-center justify-between gap-2.5 rounded-[10px] border border-con/25 bg-con/8 px-3 py-2.5 text-xs text-[#ffb3a6]">
+              <span>{freeLimit}</span>
+              <Link to={accountPath('keys')} className="shrink-0 font-bold text-con hover:text-text">
+                Add a key
+              </Link>
+            </div>
+          )}
           {insufficient && estimate && (
             <div className="flex items-center justify-between gap-2.5 rounded-[10px] border border-con/25 bg-con/8 px-3 py-2.5 text-xs text-[#ffb3a6]">
               <span>

@@ -2,7 +2,12 @@ import { useEffect, useState } from 'react';
 import { getSiteStatus } from '../api/status';
 import type { SiteStatus } from '../api/types';
 
-const OPEN: SiteStatus = { registration_open: true, maintenance: false, maintenance_message: null };
+const OPEN: SiteStatus = {
+  registration_open: true,
+  maintenance: false,
+  maintenance_message: null,
+  free_debates: { per_day: 0, max_rounds: 0, max_debaters: 0, lengths: [] },
+};
 // Shared by every component; asked again when older than this (an admin may flip a lever).
 const FRESH_MS = 60_000;
 let cached: { at: number; status: SiteStatus } | null = null;

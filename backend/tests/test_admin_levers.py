@@ -246,6 +246,12 @@ async def test_site_status(levers: dict) -> None:
         "registration_open": True,
         "maintenance": False,
         "maintenance_message": None,
+        "free_debates": {
+            "per_day": 5,
+            "max_rounds": 3,
+            "max_debaters": 4,
+            "lengths": ["very_short", "short"],
+        },
     }
     levers.update(registration_open=False, maintenance=True)
     out = await site_status()

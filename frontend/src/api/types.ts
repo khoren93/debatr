@@ -298,6 +298,10 @@ export interface Estimate {
   /** What the API token making the request may still spend (null in the browser). */
   token_budget_usd: number | null;
   sufficient: boolean;
+  /** A debate on free models without credits or an own key: the day's allowance… */
+  free_runs: FreeRuns | null;
+  /** …and why it would be refused (too big, or none left today). */
+  free_limit: string | null;
 }
 
 export interface PublishResponse {
@@ -362,6 +366,24 @@ export interface SiteStatus {
   /** New debates and audio builds are paused; running ones finish. */
   maintenance: boolean;
   maintenance_message: string | null;
+  free_debates: FreeDebates;
+}
+
+/** Limits of debates on free models for accounts without credits or an own OpenRouter key
+ * (services/free_limits; 0 or an empty list: none). */
+export interface FreeDebates {
+  per_day: number;
+  max_rounds: number;
+  max_debaters: number;
+  lengths: LengthPreset[];
+}
+
+export interface FreeRuns {
+  per_day: number;
+  used: number;
+  left: number;
+  /** When a run leaves the 24-hour window, once none is left. */
+  next_at: string | null;
 }
 
 export type PaymentsMode = 'stripe' | 'dev' | 'disabled';

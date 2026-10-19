@@ -24,6 +24,13 @@ const COPY: Record<LeverKey, { label: string; hint: string }> = {
   max_active_debates_per_user: { label: 'Debates at a time, per user', hint: 'Queued and running; more answer “wait”. 0: no limit.' },
   max_active_media_per_user: { label: 'Audio builds at a time, per user', hint: '0: no limit.' },
   muted_alerts: { label: 'Telegram notifications', hint: 'Events that are not sent to the chat.' },
+  free_debates_per_day: {
+    label: 'Free debates a day, per account',
+    hint: 'Accounts without credits or an own OpenRouter key, on free models (they share OpenRouter’s 1000 free requests a day; a debate takes about a dozen). Rolling 24 hours; deleting a debate does not give it back. 0: no limit.',
+  },
+  free_max_rounds: { label: 'Rounds of a free debate', hint: 'More need credits or an own OpenRouter key. 0: no limit.' },
+  free_max_debaters: { label: 'Debaters of a free debate', hint: 'The wizard offers up to 4; the CLI and MCP up to 7. 0: no limit.' },
+  free_lengths: { label: 'Reply lengths of a free debate', hint: 'The others need credits or an own OpenRouter key. None picked: no limit.' },
   free_verdict_model: {
     label: 'Verdict model of free debates',
     hint: 'Structures the verdict and answers the gallery check when every participant argues on a free model, so such a debate costs nothing. Free models only; off: the paid VERDICT_MODEL. A model that stops answering sends those debates to the moderation queue.',
@@ -38,6 +45,8 @@ const show = (lever: Lever, value: LeverValue, events: AlertEvent[] = []): strin
   }
   if (lever.kind === 'models') return Array.isArray(value) && value.length ? value.join(', ') : 'none';
   if (lever.kind === 'model') return String(value) || 'off (paid model)';
+  if (lever.kind === 'lengths') return Array.isArray(value) && value.length ? value.map((v) => LENGTH_LABELS[v] ?? v).join(', ') : 'all';
+  if (lever.kind === 'int' && lever.key.startsWith('free_') && Number(value) === 0) return 'no limit';
   if (lever.key === 'signup_bonus_usd') return formatUsd(Number(value));
   if (lever.kind === 'text') return String(value) || '(standard text)';
   return String(value);
@@ -50,6 +59,8 @@ interface Pending {
 }
 
 const loadSettings = () => getSettings();
+
+const LENGTH_LABELS: Record<string, string> = { very_short: 'very short', short: 'short', medium: 'medium', long: 'long' };
 
 // Text and model lists take the row's whole width under the description.
 const Row = ({ lever, onReset, children }: { lever: Lever; onReset: () => void; children: ReactNode }) => (
@@ -202,6 +213,29 @@ const ModelsField = ({ lever, catalogue, onChange }: { lever: Lever; catalogue: 
   );
 };
 
+// Reply lengths a free debate may use: a toggle each (none on = every length).
+const LengthsField = ({ lever, onChange }: { lever: Lever; onChange: (value: string[]) => void }) => {
+  const on = Array.isArray(lever.value) ? (lever.value as string[]) : [];
+  return (
+    <div className="flex flex-wrap gap-1.5" role="group" aria-label={COPY[lever.key].label}>
+      {Object.entries(LENGTH_LABELS).map(([value, label]) => {
+        const active = on.includes(value);
+        return (
+          <button
+            key={value}
+            type="button"
+            aria-pressed={active}
+            onClick={() => onChange(active ? on.filter((v) => v !== value) : [...on, value])}
+            className={`cursor-pointer rounded-full border px-3 py-1 text-xs transition-colors ${active ? 'border-accent/50 bg-accent/10 text-text' : 'border-line-2 text-muted hover:text-text'}`}
+          >
+            {label}
+          </button>
+        );
+      })}
+    </div>
+  );
+};
+
 // One free model, or none: the catalogue's `:free` models (and the current one if it left).
 const FreeModelField = ({ lever, catalogue, onChange }: { lever: Lever; catalogue: SettingsOut['models']; onChange: (value: string) => void }) => {
   const current = String(lever.value);
@@ -280,6 +314,18 @@ const AdminSettings = () => {
               <div className="mt-2 divide-y divide-line">
                 {row('disabled_models', (lever) => (
                   <ModelsField lever={lever} catalogue={settings.models} onChange={(value) => ask(lever, value)} />
+                ))}
+              </div>
+            </Card>
+            <Card>
+              <SectionLabel>Free debates</SectionLabel>
+              <p className="mt-1 text-xs text-muted">On free models, by accounts without credits or an own OpenRouter key.</p>
+              <div className="mt-2 divide-y divide-line">
+                {row('free_debates_per_day', number)}
+                {row('free_max_rounds', number)}
+                {row('free_max_debaters', number)}
+                {row('free_lengths', (lever) => (
+                  <LengthsField lever={lever} onChange={(value) => ask(lever, value)} />
                 ))}
                 {row('free_verdict_model', (lever) => (
                   <FreeModelField lever={lever} catalogue={settings.models} onChange={(value) => ask(lever, value)} />

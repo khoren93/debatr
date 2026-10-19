@@ -43,7 +43,7 @@ from app.schemas.schemas import (
     StartDebateRequest,
     StopDebateResponse,
 )
-from app.services import alerts, api_tokens, runtime_settings
+from app.services import alerts, api_tokens, free_limits, runtime_settings
 from app.services.debate_control import ACTIVE_STATUSES
 from app.services.debate_control import stop_debate as stop_debate_run
 from app.services.engagement import engagement_out
@@ -325,7 +325,10 @@ async def estimate(
     await _require_runnable(config, starting=False)
     _key, own_key = _resolve_provider_key(user, config.user_provider_key)
     own_tts_key = _tts_key(config, config.user_tts_key) is not None
-    return await _estimate(config, user, own_key, own_tts_key, await _token_budget(db, request))
+    out = await _estimate(config, user, own_key, own_tts_key, await _token_budget(db, request))
+    runs, out.free_limit = await free_limits.check(user, config, own_key=own_key)
+    out.free_runs = runs.out() if runs else None
+    return out
 
 
 @router.get("", response_model=list[DebateSummary])
@@ -381,6 +384,7 @@ async def create_debate(
         )
         _require_sufficient(est)
         await require_debate_slot(db, user.id)
+        await free_limits.take(db, user, config, own_key=own_key)
 
     debate = Debate(
         user_id=user.id,
@@ -443,6 +447,7 @@ async def start_draft(
     )
     _require_sufficient(est)
     await require_debate_slot(db, user.id)
+    await free_limits.take(db, user, config, own_key=own_key)
     debate.config_json = {**config.persisted(), "billing": _billing(own_key, est)}
     # Whoever starts the run answers for it: its charges count against this token's limit.
     token = request_api_token(request)

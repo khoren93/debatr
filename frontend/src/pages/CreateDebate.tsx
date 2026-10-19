@@ -25,12 +25,14 @@ import {
   speakerNamesOf,
   stateFromConfig,
   stepValid,
+  withinFreeLimits,
   type WizardState,
   type WizardStep,
 } from '../components/create/wizardState';
 import { useBillingConfig } from '../hooks/useBillingConfig';
 import { estimateCost, useEstimate } from '../hooks/useEstimate';
 import { useModels } from '../hooks/useModels';
+import { useSiteStatus } from '../hooks/useSiteStatus';
 import { useVoices } from '../hooks/useVoices';
 import { useLocalKey } from '../lib/localKeys';
 import { ttsKeyUsable, useElevenLabsKeyStatus } from '../hooks/useElevenLabsKeyStatus';
@@ -132,9 +134,14 @@ const CreateDebate = () => {
   const validation = { defaultModelId, modelsLoading };
   const ownKey = openrouterKey.length > 0 || Boolean(user?.openrouter_key_masked);
   const paidLocked = !ownKey && (user?.credits_usd ?? 0) <= 0;
+  // Without credits or an own key every model is free, so the limits of free debates apply:
+  // rounds and reply length are shown and sent within them (the choice stays in the state).
+  const site = useSiteStatus();
+  const free = paidLocked ? site.free_debates : null;
+  const limited = withinFreeLimits(state, free);
   // Locked options (no balance) are sent as off even if the stored wizard state has them on.
   const effective: WizardState = {
-    ...state,
+    ...limited,
     images: state.images === 'ai' && (user?.credits_usd ?? 0) <= 0 ? 'off' : state.images,
     fact_check: state.fact_check && !paidLocked,
   };
@@ -243,7 +250,7 @@ const CreateDebate = () => {
 
       <WizardProgress step={state.step} maxStep={maxStep} onSelect={goTo} />
 
-      {state.step === 1 && <StepTopic state={state} patch={patch} showErrors={showErrors} estimateLine={estimateLine} onContinue={next} />}
+      {state.step === 1 && <StepTopic state={limited} free={free} patch={patch} showErrors={showErrors} estimateLine={estimateLine} onContinue={next} />}
       {state.step === 2 && (
         <StepSpeakers
           state={state}
@@ -260,12 +267,13 @@ const CreateDebate = () => {
           ttsKeyError={ttsKeyCheck.status === 'invalid' ? ttsKeyCheck.error : null}
           premiumLocked={premiumLocked}
           paidLocked={paidLocked}
+          free={free}
           showErrors={showErrors}
         />
       )}
       {state.step === 3 && (
         <StepLaunch
-          state={state}
+          state={limited}
           patch={patch}
           config={config}
           ready={ready}

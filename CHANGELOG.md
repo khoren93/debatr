@@ -15,6 +15,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Limits of free debates**: an account without credits or an own OpenRouter key may start 5
+  debates on free models in any 24 hours, of up to 3 rounds and 4 debaters with very short or
+  short replies (they share OpenRouter's daily free-model quota). The wizard locks the longer
+  options and shows how many are left; the API answers 402 / 429 with what to do. Credits or
+  an own key lift the limits; the console's Settings page changes them.
 - **Short-video highlights are picked by the debate's host model** (a Free Router host: the free
   model it pinned) instead of a fixed one: free debates cost nothing for it. The picks are kept
   per transcript, so rebuilding the audio with other voices asks the model nothing.

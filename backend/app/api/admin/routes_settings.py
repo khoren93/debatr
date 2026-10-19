@@ -50,6 +50,10 @@ KINDS: dict[str, LeverKind] = {
     "max_active_media_per_user": "int",
     "muted_alerts": "alerts",
     "free_verdict_model": "model",
+    "free_debates_per_day": "int",
+    "free_max_rounds": "int",
+    "free_max_debaters": "int",
+    "free_lengths": "lengths",
 }
 
 

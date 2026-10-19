@@ -192,6 +192,13 @@ class DebateResponse(BaseModel):
     message: str
 
 
+class FreeRunsOut(BaseModel):
+    per_day: int
+    used: int
+    left: int
+    next_at: datetime | None = None  # when a run leaves the 24-hour window, once none is left
+
+
 class EstimateOut(BaseModel):
     turns: int
     words: int
@@ -213,6 +220,10 @@ class EstimateOut(BaseModel):
     # What the API token making the request may still spend (null: browser or no limit).
     token_budget_usd: float | None = None
     sufficient: bool = True
+    # A free debate (system key, free models, no balance; services/free_limits): the day's
+    # allowance, and why it would be refused (too big, or none left today), else null.
+    free_runs: FreeRunsOut | None = None
+    free_limit: str | None = None
 
 
 class ResumeEstimateOut(EstimateOut):
@@ -524,9 +535,20 @@ class TrendingTopicsOut(BaseModel):
     categories: list[TrendingCategory]  # every category in display order, with its topic count
 
 
+class FreeDebatesOut(BaseModel):
+    """Limits of debates on free models for accounts without credits or an own key (0 or an
+    empty list: none)."""
+
+    per_day: int
+    max_rounds: int
+    max_debaters: int
+    lengths: list[LengthPreset]
+
+
 class SiteStatusOut(BaseModel):
     """`GET /api/status`: levers of the admin console the site reacts to."""
 
     registration_open: bool
     maintenance: bool  # new debates and audio builds are paused
     maintenance_message: str | None = None
+    free_debates: FreeDebatesOut

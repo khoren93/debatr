@@ -7,7 +7,7 @@ import { accountPath, type AccountTab } from '../account/tabs';
 import { ErrorBox, Hint, Spinner } from '../ui';
 import { ROW_COLUMNS, SpeakerRow } from './SpeakerRow';
 import {
-  MAX_DEBATERS,
+  maxDebatersFor,
   MIN_DEBATERS,
   countDebaters,
   defaultDebater,
@@ -16,6 +16,7 @@ import {
   speakerId,
   speakerNamesOf,
   speakerTagOf,
+  type FreeLimits,
   type Speaker,
   type WizardState,
 } from './wizardState';
@@ -40,6 +41,8 @@ interface StepSpeakersProps {
   /** Empty balance and no own ElevenLabs key, so premium voices cannot be picked. */
   premiumLocked: boolean;
   paidLocked: boolean;
+  /** Limits of free debates (no credits, no own key): fewer debater slots. */
+  free: FreeLimits;
   showErrors: boolean;
 }
 
@@ -108,9 +111,11 @@ export const StepSpeakers = ({
   ttsKeyError,
   premiumLocked,
   paidLocked,
+  free,
   showErrors,
 }: StepSpeakersProps) => {
   const debaters = countDebaters(state.speakers);
+  const maxDebaters = maxDebatersFor(free);
   const names = speakerNamesOf(state.speakers, models, defaultModelId);
   // Speaker whose system prompt editor is open.
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -147,7 +152,7 @@ export const StepSpeakers = ({
   const setVoice = (index: number, voiceId: string) => patch({ voices: { ...state.voices, [speakerId(index)]: voiceId } });
 
   const addSpeaker = () => {
-    if (debaters >= MAX_DEBATERS) return;
+    if (debaters >= maxDebaters) return;
     patch({ speakers: [...state.speakers, defaultDebater(debaters)] });
   };
 
@@ -187,7 +192,7 @@ export const StepSpeakers = ({
       />
     );
   };
-  const slotsLeft = MAX_DEBATERS - debaters;
+  const slotsLeft = maxDebaters - debaters;
 
   return (
     <div className="mt-7 grid gap-[22px] animate-rise">
@@ -280,7 +285,7 @@ export const StepSpeakers = ({
       </div>
 
       <div className="grid gap-2.5">
-        <SectionHead title="Debaters" count={`${debaters} / ${MAX_DEBATERS}`} hint={debaters === 2 ? 'Two debaters argue Pro and Con.' : `${debaters} debaters take turns each round.`} />
+        <SectionHead title="Debaters" count={`${debaters} / ${maxDebaters}`} hint={debaters === 2 ? 'Two debaters argue Pro and Con.' : `${debaters} debaters take turns each round.`} />
         <div className={`hidden gap-3 px-[15px] font-mono text-[10px] tracking-[0.1em] text-dim min-[1100px]:grid ${ROW_COLUMNS}`} aria-hidden="true">
           <span>MODEL</span>
           <span>VOICE</span>
