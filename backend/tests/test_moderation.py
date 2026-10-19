@@ -170,3 +170,64 @@ def test_should_auto_publish_needs_approval_wish_and_clean_run():
     assert not should_auto_publish(no_verdict)
     already = _debate(moderation_status="approved", turns=_turns(), is_public=True)
     assert not should_auto_publish(already)
+
+
+class _Db:
+    def commit(self) -> None: ...
+
+    def rollback(self) -> None: ...
+
+
+def _free_debate(*models: str) -> Debate:
+    conf = {
+        **CONF,
+        "participants": [
+            {**part, "model_id": model}
+            for part, model in zip(CONF["participants"], models, strict=True)
+        ],
+    }
+    return _debate(config_json=conf)
+
+
+def test_the_free_verdict_lever_takes_free_models_only(levers: dict) -> None:
+    from app.services import runtime_settings
+
+    good = "nvidia/nemotron-3-super-120b-a12b:free"
+    assert runtime_settings.validate_value("free_verdict_model", f" {good} ") == good
+    assert runtime_settings.validate_value("free_verdict_model", "") == ""
+    for paid in ("openai/gpt-4o-mini", "openrouter/free", "bad id:free"):
+        with pytest.raises(ValueError, match="free"):
+            runtime_settings.validate_value("free_verdict_model", paid)
+
+
+def test_free_debates_get_the_free_verdict_model(levers: dict) -> None:
+    from app.core.config import settings
+    from app.services import orchestrator
+
+    levers["free_verdict_model"] = "vendor/judge:free"
+    free = _free_debate("openrouter/free", "a/one:free", "openrouter/free")
+    assert orchestrator._verdict_model(free) == "vendor/judge:free"
+    mixed = _free_debate("openrouter/free", "a/one:free", "openai/gpt-5.5")
+    assert orchestrator._verdict_model(mixed) == settings.VERDICT_MODEL
+    levers["free_verdict_model"] = ""  # the lever off: the paid model for everyone
+    assert orchestrator._verdict_model(free) == settings.VERDICT_MODEL
+
+
+def test_without_a_free_slot_nothing_is_asked(monkeypatch: pytest.MonkeyPatch, levers: dict):
+    from app.services import orchestrator
+
+    def complete(*_a: Any, **_kw: Any) -> tuple[str, dict[str, Any]]:
+        raise AssertionError("must not be asked")
+
+    monkeypatch.setattr(llm, "complete", complete)
+    monkeypatch.setattr(orchestrator, "publish_event", lambda *_a: None)
+    monkeypatch.setattr(orchestrator, "wait_for_slot", lambda _deadline: False)
+    levers["free_verdict_model"] = "vendor/judge:free"
+    debate = _free_debate("openrouter/free", "a/one:free", "a/two:free")
+    orchestrator._store_verdict(_Db(), debate, "Winner: Alice.", None)  # type: ignore[arg-type]
+    assert debate.verdict_json["winner_name"] == "Alice"
+    assert debate.verdict_json["source"] == "fallback"
+    orchestrator._ensure_moderated(_Db(), debate, None)  # type: ignore[arg-type]
+    assert debate.moderation_status == "flagged"  # fails closed: a human looks at it
+    # An own key has its account's own limit: no slot is needed.
+    assert orchestrator._service_slot("vendor/judge:free", "sk-or-own")

@@ -876,7 +876,7 @@ export interface SecuritySummary {
 
 // --- levers and alerts ---------------------------------------------------------------------------
 
-export type LeverKind = 'bool' | 'int' | 'float' | 'text' | 'models' | 'alerts';
+export type LeverKind = 'bool' | 'int' | 'float' | 'text' | 'models' | 'model' | 'alerts';
 
 export type LeverKey =
   | 'registration_open'
@@ -887,7 +887,8 @@ export type LeverKey =
   | 'free_models_per_minute'
   | 'max_active_debates_per_user'
   | 'max_active_media_per_user'
-  | 'muted_alerts';
+  | 'muted_alerts'
+  | 'free_verdict_model';
 
 export type LeverValue = boolean | number | string | string[];
 

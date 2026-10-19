@@ -64,7 +64,7 @@ backend/            FastAPI API + RQ worker (Python 3.12+, managed with uv)
                       system (RQ / cron snapshot, runs in flight, limits, health, media scan),
                       finance (money per day / week / month, Stripe reconciliation, model rows)
   app/services/media/ audio pipeline: script (markdown→speech), tts/ (elevenlabs, edge),
-                      ffmpeg, highlights (LLM picks shorts), visuals (LLM visual director),
+                      ffmpeg, highlights (the host model picks shorts), visuals (LLM director),
                       sketch (SVG line art → sanitized path data), images (Commons photos / AI
                       pictures + vision check), jobs (build_media_job), timeline
   app/schemas/timeline.py  Timeline contract shared with frontend/src/api/timeline.ts;
@@ -283,7 +283,12 @@ docker compose exec api python -m app.manage credits user@example.com 5 --reason
 5. The worker publishes events to Redis channel `debate:{id}`; `GET /api/debates/{id}/stream`
    relays them as SSE and closes on a terminal event (or immediately if the debate is already
    finished). After the verdict turn `services/verdict.py` structures it with the cheap
-   `MEDIA_HIGHLIGHTS_MODEL` (regex fallback) into `debates.verdict_json`
+   `VERDICT_MODEL` (old name `MEDIA_HIGHLIGHTS_MODEL` still read; a fixed model, since the
+   author picks the host; regex fallback) into `debates.verdict_json`; when every participant
+   argues on a free model it is the lever `free_verdict_model` instead (`:free` only, env
+   `FREE_VERDICT_MODEL`, `orchestrator._verdict_model`; on the system key it takes a free-quota
+   slot, none in 60 s → regex verdict and the check fails closed), so a free debate costs us
+   nothing but its visual scenes
    (`winner_id`, `headline`, `feedback`). At the terminal state `services/credits.py` charges the
    owner (`cost × CREDIT_MARKUP`, skipped with an own key; minus what earlier runs of the debate
    were charged, so repeats and resumed runs are safe: `charge_due`, refs `…:llm`, `…:llm:2`;
@@ -372,7 +377,10 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
    (`elevenlabs` with word timestamps / forced-alignment fallback, or the free `edge` voices),
    normalizes loudness with ffmpeg, caches per-turn WAV+JSON by content hash under
    `MEDIA_ROOT/{debate_id}/turns/`, mixes `full.wav`/`full.mp3`, designs the visual scenes
-   (below, when `MediaOptions.visuals`), asks a cheap LLM for short-video highlights and writes
+   (below, when `MediaOptions.visuals`), asks the host's model (pinned for a Free Router; system
+   key, not billed; a free one takes a free-quota slot, a turned-off one gives the deterministic
+   fallback) for short-video highlights, kept in `highlights.json` per transcript
+   (`jobs.highlights_key`: a rebuild with new voices asks nothing), and writes
    `timeline.json` (`app/schemas/timeline.py`).
    Progress lives in `media_json` (polled by `GET /api/debates/{id}/media`); `media_status`
    is `none | queued | running | ready | error`.
@@ -667,7 +675,8 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   400 on estimate / create / start / resume; the Free Router drops such a pick like a
   classifier's, a pinned one gives way to the router, and it is never a fallback),
   `signup_bonus_usd`, `free_models_per_minute`, `max_active_debates_per_user`,
-  `max_active_media_per_user`, `muted_alerts` (see Alerts). Only the fields of `Levers` exist (pydantic limits); without a row
+  `max_active_media_per_user`, `muted_alerts` (see Alerts), `free_verdict_model` (verdict + gallery
+  check of free debates). Only the fields of `Levers` exist (pydantic limits); without a row
   the env setting applies; a broken row is ignored. `PUT /settings/{key}` / `POST
   /settings/{key}/reset` need sudo and a reason and write the row + audit entry in one
   transaction; processes read through a 5 s cache (`CACHE_SECONDS`), so a change lands within

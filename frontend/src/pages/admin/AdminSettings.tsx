@@ -9,7 +9,7 @@ import { AlertsCard } from '../../components/admin/AlertsCard';
 import { mutedSummary, mutesSecurity } from '../../components/admin/alertEvents';
 import { formatTime, formatUsd } from '../../components/admin/helpers';
 import { useLoad } from '../../components/admin/useLoad';
-import { Button, Card, ErrorBox, Input, SectionLabel, Spinner, SwitchTrack, Textarea, useToast } from '../../components/ui';
+import { Button, Card, Dropdown, ErrorBox, Input, SectionLabel, Spinner, SwitchTrack, Textarea, useToast } from '../../components/ui';
 
 const COPY: Record<LeverKey, { label: string; hint: string }> = {
   registration_open: { label: 'Sign-ups', hint: 'New accounts. Accounts that exist keep signing in.' },
@@ -24,6 +24,10 @@ const COPY: Record<LeverKey, { label: string; hint: string }> = {
   max_active_debates_per_user: { label: 'Debates at a time, per user', hint: 'Queued and running; more answer “wait”. 0: no limit.' },
   max_active_media_per_user: { label: 'Audio builds at a time, per user', hint: '0: no limit.' },
   muted_alerts: { label: 'Telegram notifications', hint: 'Events that are not sent to the chat.' },
+  free_verdict_model: {
+    label: 'Verdict model of free debates',
+    hint: 'Structures the verdict and answers the gallery check when every participant argues on a free model, so such a debate costs nothing. Free models only; off: the paid VERDICT_MODEL. A model that stops answering sends those debates to the moderation queue.',
+  },
 };
 
 const show = (lever: Lever, value: LeverValue, events: AlertEvent[] = []): string => {
@@ -33,6 +37,7 @@ const show = (lever: Lever, value: LeverValue, events: AlertEvent[] = []): strin
     return value ? 'on' : 'off';
   }
   if (lever.kind === 'models') return Array.isArray(value) && value.length ? value.join(', ') : 'none';
+  if (lever.kind === 'model') return String(value) || 'off (paid model)';
   if (lever.key === 'signup_bonus_usd') return formatUsd(Number(value));
   if (lever.kind === 'text') return String(value) || '(standard text)';
   return String(value);
@@ -197,6 +202,18 @@ const ModelsField = ({ lever, catalogue, onChange }: { lever: Lever; catalogue: 
   );
 };
 
+// One free model, or none: the catalogue's `:free` models (and the current one if it left).
+const FreeModelField = ({ lever, catalogue, onChange }: { lever: Lever; catalogue: SettingsOut['models']; onChange: (value: string) => void }) => {
+  const current = String(lever.value);
+  const free = catalogue.filter((m) => m.id.endsWith(':free'));
+  const options = [
+    { value: '', label: 'Off: the paid model' },
+    ...(current && !free.some((m) => m.id === current) ? [{ value: current, label: current, hint: 'Not in the OpenRouter catalogue any more' }] : []),
+    ...free.map((m) => ({ value: m.id, label: m.name, hint: m.id })),
+  ];
+  return <Dropdown value={current} options={options} onChange={onChange} aria-label={COPY[lever.key].label} className="w-full md:w-72" menuWidth={360} />;
+};
+
 const AdminSettings = () => {
   const toast = useToast();
   const { data, error } = useLoad(loadSettings);
@@ -263,6 +280,9 @@ const AdminSettings = () => {
               <div className="mt-2 divide-y divide-line">
                 {row('disabled_models', (lever) => (
                   <ModelsField lever={lever} catalogue={settings.models} onChange={(value) => ask(lever, value)} />
+                ))}
+                {row('free_verdict_model', (lever) => (
+                  <FreeModelField lever={lever} catalogue={settings.models} onChange={(value) => ask(lever, value)} />
                 ))}
               </div>
             </Card>

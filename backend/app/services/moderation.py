@@ -39,6 +39,7 @@ MODERATION_JSON_SPEC = (
 )
 
 FALLBACK_REASON = "The automatic check could not run."
+MODERATION_MAX_TOKENS = 2000  # room for reasoning models before the short JSON answer
 
 
 def _now() -> str:
@@ -88,7 +89,11 @@ def check_debate(
             verdict_text=verdict_text,
         )
         text, usage = complete(
-            model, messages, purpose="moderation", api_key=api_key, max_tokens=200
+            model,
+            messages,
+            purpose="moderation",
+            api_key=api_key,
+            max_tokens=MODERATION_MAX_TOKENS,
         )
         parsed = parse_moderation(extract_json(text))
         if parsed is None:

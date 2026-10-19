@@ -15,6 +15,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Short-video highlights are picked by the debate's host model** (a Free Router host: the free
+  model it pinned) instead of a fixed one: free debates cost nothing for it. The picks are kept
+  per transcript, so rebuilding the audio with other voices asks the model nothing.
+- **Free debates cost the operator nothing but their visual scenes**: when every participant
+  argues on a free model, the verdict is structured and the gallery check answered by a free
+  model (`FREE_VERDICT_MODEL`, a lever on the console's Settings page; `:free` models only), on
+  the shared free-model quota like the turns. If it gives no answer, the regex verdict is used
+  and the debate waits in the moderation queue.
+- **`MEDIA_HIGHLIGHTS_MODEL` is now `VERDICT_MODEL`**: it only structures the judge's verdict and
+  answers the hidden gallery check, which stay on a fixed model since the debate's author picks
+  the host. The old name is still read.
 - **CLI 0.2.1**: `debatr run` and the MCP tools refuse topics over 150 characters before asking
   the server (it draws the topic on the video); the leaderboard (`debatr leaderboard`, MCP
   `get_leaderboard`) shows models without audience votes as "no votes" instead of a 1000 rating;

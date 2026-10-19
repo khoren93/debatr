@@ -11,6 +11,8 @@ from app.services.moderation import MODERATION_JSON_SPEC, MODERATION_RULES, pars
 
 logger = logging.getLogger(__name__)
 
+# Room for reasoning models (the free verdict model thinks before its ~300-token answer).
+VERDICT_MAX_TOKENS = 4000
 DRAW_MARKERS = ("draw", "tie", "no clear winner", "no winner", "ничья", "ничьей", "вничью")
 
 
@@ -161,7 +163,11 @@ def structure_verdict(
             description=conf.get("description"),
         )
         text, usage = complete(
-            model, messages, purpose="verdict_structure", api_key=api_key, max_tokens=800
+            model,
+            messages,
+            purpose="verdict_structure",
+            api_key=api_key,
+            max_tokens=VERDICT_MAX_TOKENS,
         )
         payload = extract_json(text)
         moderation = parse_moderation(

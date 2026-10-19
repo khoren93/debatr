@@ -49,7 +49,13 @@ from app.services.free_router import (
 from app.services.heartbeat import beating
 from app.services.markers import extract_markers, has_markers
 from app.services.media.tts.elevenlabs import system_key_status
-from app.services.moderation import apply_check, check_debate, publish_sync, should_auto_publish
+from app.services.moderation import (
+    apply_check,
+    check_debate,
+    fallback_result,
+    publish_sync,
+    should_auto_publish,
+)
 from app.services.openrouter_client import OpenRouterClient, OpenRouterError
 from app.services.prompt_builder import (
     build_debater_messages,
@@ -69,7 +75,7 @@ from app.services.studio import (
     visual_claims,
     visuals_enabled,
 )
-from app.services.verdict import structure_verdict
+from app.services.verdict import debaters_from_config, fallback_verdict, structure_verdict
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +86,7 @@ STOP_CHECK_EVERY_N_CHUNKS = 10
 RETRY_PAUSES = (3.0, 10.0)
 RETRY_STATUSES = {408, 425, 429, 500, 502, 503, 504}
 ROUTER_TRIES = 3  # Free Router answers too short for a turn are asked again, this many in all
+SERVICE_SLOT_WAIT = 60.0  # seconds the free verdict model waits for a free-model slot
 
 get_session = get_sync_session
 
@@ -536,12 +543,40 @@ def _save_turn(
     return turn
 
 
+def _verdict_model(debate: Debate) -> str:
+    """Who structures the verdict and answers the gallery check: the console's free model when
+    every participant argued on a free model, so a free debate costs nothing, else VERDICT_MODEL.
+    Never one of the debate's own models: its author picked those."""
+    free = runtime_settings.current_sync().free_verdict_model
+    participants = (debate.config_json or {}).get("participants") or []
+    models = [str(p.get("model_id") or "") for p in participants]
+    if free and models and all(is_free_model(m) for m in models):
+        return free
+    return settings.VERDICT_MODEL
+
+
+def _service_slot(model: str, api_key: str | None) -> bool:
+    """A free model on the system key waits for a slot of the shared free-model quota, as turns
+    do (own keys have their account's own limit)."""
+    if api_key is not None or not is_free_model(model):
+        return True
+    return wait_for_slot(time.monotonic() + SERVICE_SLOT_WAIT)
+
+
 def _store_verdict(db: Session, debate: Debate, verdict_text: str, api_key: str | None) -> None:
     """Structure the judge's text (winner, headline, feedback) for the UI and the video."""
     conf: dict[str, Any] = debate.config_json or {}
-    verdict, moderation, usage = structure_verdict(
-        conf, verdict_text, model=settings.MEDIA_HIGHLIGHTS_MODEL, api_key=api_key
-    )
+    model = _verdict_model(debate)
+    if _service_slot(model, api_key):
+        verdict, moderation, usage = structure_verdict(
+            conf, verdict_text, model=model, api_key=api_key
+        )
+    else:  # no slot: the regex verdict, and the stand-alone check tries once more
+        verdict, moderation, usage = (
+            fallback_verdict(verdict_text, debaters_from_config(conf)),
+            None,
+            {},
+        )
     debate.verdict_json = verdict
     if moderation is not None:
         apply_check(debate, moderation)
@@ -568,12 +603,16 @@ def _ensure_moderated(db: Session, debate: Debate, api_key: str | None) -> None:
         return
     try:
         verdict = next((t for t in debate.turns if t.turn_type == "verdict"), None)
-        result, usage = check_debate(
-            debate.config_json or {},
-            model=settings.MEDIA_HIGHLIGHTS_MODEL,
-            api_key=api_key,
-            verdict_text=verdict.text if verdict and not verdict.error else "",
-        )
+        model = _verdict_model(debate)
+        if _service_slot(model, api_key):
+            result, usage = check_debate(
+                debate.config_json or {},
+                model=model,
+                api_key=api_key,
+                verdict_text=verdict.text if verdict and not verdict.error else "",
+            )
+        else:  # fails closed: a human looks at it
+            result, usage = fallback_result(), {}
         apply_check(debate, result)
         _add_service_cost(debate, usage)
         db.commit()

@@ -10,7 +10,7 @@ import logging
 import time
 import uuid
 from concurrent.futures import as_completed
-from dataclasses import dataclass, replace
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -32,12 +32,14 @@ from app.schemas.timeline import (
     TimelineWord,
 )
 from app.schemas.visuals import ImageScene, SketchScene, TimelineVisual
+from app.services import free_quota, runtime_settings
 from app.services.credits import charge_images_sync, charge_media_sync, has_balance
 from app.services.free_router import resolved_participants
 from app.services.heartbeat import beating
 from app.services.media import ffmpeg
 from app.services.media.alignment import WordTiming, clamp_words, merge_chunks
 from app.services.media.highlights import (
+    HighlightPick,
     build_highlights_messages,
     extract_winner,
     fallback_highlights,
@@ -80,6 +82,10 @@ from app.services.usage import record as record_usage
 logger = logging.getLogger(__name__)
 
 LEVELS_HZ = 20
+# The host's model picks the Short moments. Reasoning models think within `max_tokens`, so it
+# leaves room beyond the ~300 tokens of the answer; a free host waits this long for a slot.
+HIGHLIGHTS_MAX_TOKENS = 4000
+HIGHLIGHTS_SLOT_WAIT = 90.0
 
 
 @dataclass(frozen=True)
@@ -268,25 +274,75 @@ def _synthesize_turn(
     )
 
 
+def highlights_key(model: str, topic: str, language: str, segments: list[TimelineSegment]) -> str:
+    """What the picks depend on: the model and the transcript, not the spoken durations (new
+    voices change those, not the moments)."""
+    lines = [model, topic, language]
+    lines += [f"{s.seq_index}|{s.speaker_name}|{s.turn_type}|{s.text}" for s in segments]
+    return hashlib.sha256("\n".join(lines).encode()).hexdigest()
+
+
+def _cached_picks(path: Path, key: str) -> tuple[str | None, list[HighlightPick]] | None:
+    try:
+        data = json.loads(path.read_text())
+        if data.get("key") != key:
+            return None
+        return data.get("winner_name"), [HighlightPick(**p) for p in data["picks"]]
+    except (OSError, ValueError, TypeError, KeyError, AttributeError):
+        return None
+
+
+def _host_picks(
+    model: str,
+    paths: MediaPaths,
+    *,
+    topic: str,
+    language: str,
+    segments: list[TimelineSegment],
+    speakers: list[TimelineSpeaker],
+) -> tuple[str | None, list[HighlightPick]]:
+    """The host model's picks, asked once per transcript: a rebuild reads them from
+    `highlights.json`, so a paid host costs one call per debate run, not one per audio build.
+    Raises when the model is turned off, no free-model slot comes or the answer fails."""
+    key = highlights_key(model, topic, language, segments)
+    cached = _cached_picks(paths.highlights, key)
+    if cached is not None:
+        return cached
+    if model in runtime_settings.current_sync().disabled_models:
+        raise RuntimeError(f"{model} is turned off")
+    if free_quota.is_free_model(model) and not free_quota.wait_for_slot(
+        time.monotonic() + HIGHLIGHTS_SLOT_WAIT
+    ):
+        raise RuntimeError("no free-model slot")
+    messages = build_highlights_messages(
+        topic=topic, language=language, segments=segments, speakers=speakers
+    )
+    text, _usage = complete(model, messages, purpose="highlights", max_tokens=HIGHLIGHTS_MAX_TOKENS)
+    winner_name, picks = parse_highlights(extract_json(text))
+    if picks:  # a bad answer (a router's odd pick) is asked again by the next build
+        body = {"key": key, "model": model, "winner_name": winner_name}
+        paths.highlights.write_text(json.dumps(body | {"picks": [asdict(p) for p in picks]}))
+    return winner_name, picks
+
+
 def _pick_highlights(
     *,
+    model: str,
+    paths: MediaPaths,
     topic: str,
     language: str,
     segments: list[TimelineSegment],
     speakers: list[TimelineSpeaker],
     total_ms: int,
 ) -> tuple[list[TimelineHighlight], str | None]:
-    """LLM-selected moments with a deterministic fallback. Returns (highlights, winner_name)."""
+    """Moments picked by the host's model (the one that ran the debate) with a deterministic
+    fallback. Returns (highlights, winner_name)."""
     if not settings.OPENROUTER_API_KEY:
         return fallback_highlights(segments, total_ms), None
     try:
-        messages = build_highlights_messages(
-            topic=topic, language=language, segments=segments, speakers=speakers
+        winner_name, picks = _host_picks(
+            model, paths, topic=topic, language=language, segments=segments, speakers=speakers
         )
-        text, _usage = complete(
-            settings.MEDIA_HIGHLIGHTS_MODEL, messages, purpose="highlights", max_tokens=900
-        )
-        winner_name, picks = parse_highlights(extract_json(text))
         highlights = [
             hl
             for i, pick in enumerate(picks)
@@ -425,7 +481,7 @@ def _plan_visuals(
     words. A failing turn only loses its scenes."""
     if not settings.OPENROUTER_API_KEY:
         return VisualsResult([], None, None)
-    model = settings.MEDIA_VISUALS_MODEL or settings.MEDIA_HIGHLIGHTS_MODEL
+    model = settings.MEDIA_VISUALS_MODEL or settings.VERDICT_MODEL
     images = options.images != "off"
     roles = {s.id: s.role for s in speakers_by_id.values()}
     turns_by_seq = {t.seq_index: t for t in turns}
@@ -700,6 +756,8 @@ def _build(
 
     set_media_state(db, debate, step="highlights", message="Picking highlights for shorts…")
     highlights, winner_name = _pick_highlights(
+        model=judge_model,
+        paths=paths,
         topic=str(conf.get("topic") or ""),
         language=language,
         segments=segments,

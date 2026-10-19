@@ -49,6 +49,11 @@ class MediaPaths:
         return self.dir / "timeline.json"
 
     @property
+    def highlights(self) -> Path:
+        """The host model's Short picks for the current transcript (`jobs.highlights_key`)."""
+        return self.dir / "highlights.json"
+
+    @property
     def full_wav(self) -> Path:
         return self.dir / "full.wav"
 

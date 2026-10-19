@@ -3,6 +3,7 @@ from ipaddress import IPv4Network, IPv6Network, ip_network
 from pathlib import Path
 from typing import Literal
 
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 TERMINAL_DEBATE_STATUSES = frozenset({"completed", "error", "stopped"})
@@ -69,10 +70,19 @@ class Settings(BaseSettings):
     TTS_DEFAULT_MODEL_ID: str = "eleven_v3"
     TTS_MAX_CHARS_PER_REQUEST: int = 2500
     TTS_CONCURRENCY: int = 2
-    # Cheap model used to pick short-video highlights and the winner from the transcript.
-    MEDIA_HIGHLIGHTS_MODEL: str = "openai/gpt-4o-mini"
-    # Model that designs the visual scenes (charts, drawn schemes) per turn; empty = the
-    # highlights model. Runs on the system key and is not billed to the user (~$0.01/debate).
+    # Structures the judge's verdict (winner, headline) and answers the hidden gallery check
+    # (services/verdict.py, services/moderation.py) on the debate's key, not billed. A fixed
+    # model on purpose: the debate's author picks the host, so the host must not moderate its
+    # own debate. MEDIA_HIGHLIGHTS_MODEL is its old name (Short highlights now ask the host).
+    VERDICT_MODEL: str = Field(
+        default="openai/gpt-4o-mini",
+        validation_alias=AliasChoices("VERDICT_MODEL", "MEDIA_HIGHLIGHTS_MODEL"),
+    )
+    # The same job for a debate whose participants all argue on free models, so it costs
+    # nothing: a `:free` model (empty = VERDICT_MODEL). The console's lever overrides it.
+    FREE_VERDICT_MODEL: str = "nvidia/nemotron-3-super-120b-a12b:free"
+    # Model that designs the visual scenes (charts, drawn schemes) per turn; empty =
+    # VERDICT_MODEL. Runs on the system key and is not billed to the user (~$0.01/debate).
     MEDIA_VISUALS_MODEL: str = "google/gemini-2.5-flash"
     MEDIA_VISUALS_CONCURRENCY: int = 4
     # Illustrator of "sketch" scenes (SVG line art, sanitized), system key, not billed; empty =

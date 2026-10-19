@@ -24,6 +24,7 @@ from app.core.db import AsyncSessionLocal
 from app.core.sync_db import get_sync_session
 from app.models.models import RuntimeSetting
 from app.services.alert_events import KINDS as ALERT_KINDS
+from app.services.free_router import FREE_SUFFIX
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +54,10 @@ class Levers(BaseModel):
     max_active_media_per_user: int = Field(default=2, ge=0, le=20)
     # Telegram alerts that are not sent (kinds of services/alert_events; the rest go out).
     muted_alerts: list[str] = Field(default_factory=list, max_length=len(ALERT_KINDS))
+    # Structures the verdict and answers the gallery check of debates on free models only
+    # (orchestrator._verdict_model); `:free` only, so such a debate never costs us. Empty: the
+    # paid VERDICT_MODEL does it.
+    free_verdict_model: str = Field(default="", max_length=120)
 
     @field_validator("maintenance_message")
     @classmethod
@@ -70,6 +75,14 @@ class Levers(BaseModel):
             if model_id not in cleaned:
                 cleaned.append(model_id)
         return cleaned
+
+    @field_validator("free_verdict_model")
+    @classmethod
+    def _free_model(cls, value: str) -> str:
+        model_id = value.strip()
+        if model_id and not (MODEL_ID.match(model_id) and model_id.endswith(FREE_SUFFIX)):
+            raise ValueError(f"not a free (:free) model: {value[:40]!r}")
+        return model_id
 
     @field_validator("muted_alerts")
     @classmethod
@@ -95,7 +108,16 @@ def defaults() -> dict[str, Any]:
         "free_models_per_minute": max(0, min(20, settings.FREE_MODELS_PER_MINUTE)),
         "max_active_debates_per_user": max(0, min(20, settings.MAX_ACTIVE_DEBATES_PER_USER)),
         "max_active_media_per_user": max(0, min(20, settings.MAX_ACTIVE_MEDIA_PER_USER)),
+        "free_verdict_model": _env_free_model(),
     }
+
+
+def _env_free_model() -> str:
+    try:
+        return Levers(free_verdict_model=settings.FREE_VERDICT_MODEL).free_verdict_model
+    except ValidationError:
+        logger.warning("FREE_VERDICT_MODEL is not a :free model, ignoring it")
+        return ""
 
 
 def validate_value(key: str, value: Any) -> Any:

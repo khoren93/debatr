@@ -327,7 +327,7 @@ def _design(
 
     topic = str(conf.get("topic") or "")
     language = str(conf.get("language") or "English")
-    model = settings.MEDIA_VISUALS_MODEL or settings.MEDIA_HIGHLIGHTS_MODEL
+    model = settings.MEDIA_VISUALS_MODEL or settings.VERDICT_MODEL
     scenes, design_usd = plan_scenes(
         brief, topic=topic, language=language, model=model, budget=budget
     )

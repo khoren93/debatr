@@ -201,7 +201,7 @@ class ImageStudio:
         self.paths = paths
         self.mode = mode  # stock | ai
         self.allow_ai = allow_ai and mode == "ai"
-        self.check_model = settings.MEDIA_VISUALS_MODEL or settings.MEDIA_HIGHLIGHTS_MODEL
+        self.check_model = settings.MEDIA_VISUALS_MODEL or settings.VERDICT_MODEL
         self.ai_usd = 0.0  # provider cost of pictures generated in this build
         self.ai_count = 0
         self.check_usd = 0.0  # vision checks and other system-key calls (not billed)
