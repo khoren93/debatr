@@ -3,9 +3,11 @@
 Pure and deterministic so it can be unit-tested and shown in the create wizard.
 """
 
+from collections.abc import Iterable
 from dataclasses import asdict, dataclass
 from typing import Any
 
+from app.services.free_router import FREE_ROUTER_ID, FREE_SUFFIX
 from app.services.media.languages import language_code
 from app.services.prompt_builder import length_words, verdict_words
 from app.services.scheduler import build_schedule
@@ -75,6 +77,23 @@ def pricing_from_models(models: list[dict[str, Any]]) -> Pricing:
         except (TypeError, ValueError):
             continue
     return out
+
+
+def unpriced_models(model_ids: Iterable[str], pricing: Pricing) -> list[str]:
+    """Models a run on the system key has no price for: missing from the catalogue (a variant
+    such as `:nitro`, a model OpenRouter dropped) or with a variable price (routers list -1).
+    The estimate would put them at $0 or less, so they would pass any balance. Free models need
+    no price: they pass while the catalogue is unavailable (empty)."""
+    out: set[str] = set()
+    for model_id in model_ids:
+        price = pricing.get(model_id)
+        if price is None:
+            free = model_id == FREE_ROUTER_ID or model_id.endswith(FREE_SUFFIX)
+            if pricing or not free:
+                out.add(model_id)
+        elif min(price) < 0:
+            out.add(model_id)
+    return sorted(out)
 
 
 def estimate_debate(

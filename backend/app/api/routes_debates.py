@@ -47,7 +47,7 @@ from app.services import alerts, api_tokens, runtime_settings
 from app.services.debate_control import ACTIVE_STATUSES
 from app.services.debate_control import stop_debate as stop_debate_run
 from app.services.engagement import engagement_out
-from app.services.estimate import Pricing, estimate_debate, pricing_from_models
+from app.services.estimate import Pricing, estimate_debate, pricing_from_models, unpriced_models
 from app.services.fair_share import require_debate_slot
 from app.services.media.paths import MediaPaths
 from app.services.media.tts.elevenlabs import system_key_status
@@ -124,6 +124,27 @@ def _paid_models(config: DebateConfig, pricing: Pricing) -> list[str]:
     return sorted(paid)
 
 
+def _require_priced(config: DebateConfig, pricing: Pricing) -> None:
+    """A run on the system key needs a price for every model, or a free account could run paid
+    models on it (own keys pay OpenRouter themselves and may use any model id)."""
+    missing = unpriced_models((p.model_id for p in config.participants), pricing)
+    if not missing:
+        return
+    if not pricing:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="The model list is unavailable right now, so paid models cannot be priced: "
+            "try again in a minute",
+        )
+    one = len(missing) == 1
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail=f"{', '.join(missing)} {'is' if one else 'are'} not in the OpenRouter model "
+        f"list or {'has' if one else 'have'} no fixed price: pick another model, or run "
+        "it on your own OpenRouter key",
+    )
+
+
 async def _estimate(
     config: DebateConfig,
     user: User | None,
@@ -135,6 +156,8 @@ async def _estimate(
     """`budget`: what the API token making the request may still spend (None = no limit);
     `from_turn`: a resumed run, which pays only the turns from there on."""
     pricing = pricing_from_models(await openrouter_client.get_models())
+    if not own_key:
+        _require_priced(config, pricing)
     est = estimate_debate(
         config.persisted(),
         pricing,

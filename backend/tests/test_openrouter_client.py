@@ -229,6 +229,8 @@ async def test_get_models_filters_non_text_and_caches():
                         "pricing": {},
                         "architecture": {"output_modalities": ["image"]},
                     },
+                    {"id": "openrouter/auto", "pricing": {"prompt": "-1", "completion": "-1"}},
+                    {"id": "d/odd", "pricing": {"prompt": "n/a", "completion": "0"}},
                 ]
             },
         )

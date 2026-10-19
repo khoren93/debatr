@@ -1,4 +1,12 @@
-from app.services.estimate import Estimate, estimate_debate, pricing_from_models
+from typing import Any
+
+import pytest
+from fastapi import HTTPException
+
+from app.api import routes_debates
+from app.schemas.schemas import DebateConfig
+from app.services.estimate import Estimate, estimate_debate, pricing_from_models, unpriced_models
+from app.services.openrouter_client import openrouter_client
 
 MOD = {"role": "moderator", "model_id": "m/mod", "display_name": "Host"}
 PRO = {"role": "debater", "model_id": "m/pro", "display_name": "Alice"}
@@ -158,3 +166,52 @@ def test_resumed_run_fact_checks_only_new_debater_turns():
     rest = _estimate(conf, fact_check_price=0.005, from_turn=4)  # the two closing turns
     assert full.factcheck_cost_usd == 4 * 0.005
     assert rest.factcheck_cost_usd == 2 * 0.005
+
+
+def test_models_without_a_price_are_named():
+    pricing = {"m/paid": (1e-6, 2e-6), "m/free:free": (0.0, 0.0), "openrouter/auto": (-1.0, -1.0)}
+    assert unpriced_models(["m/paid", "m/free:free"], pricing) == []
+    # A variant OpenRouter accepts but does not list, a dropped free model, a variable price.
+    assert unpriced_models(
+        ["m/paid:nitro", "gone/model:free", "openrouter/auto", "m/paid"], pricing
+    ) == ["gone/model:free", "m/paid:nitro", "openrouter/auto"]
+    # Without a catalogue only free models can run on the system key.
+    assert unpriced_models(["openrouter/free", "a/b:free", "m/paid"], {}) == ["m/paid"]
+
+
+def _debate(*models: str) -> DebateConfig:
+    return DebateConfig.model_validate(
+        {
+            "topic": "Tabs or spaces?",
+            "participants": [
+                {"role": "debater", "model_id": m, "display_name": f"D{i}"}
+                for i, m in enumerate(models)
+            ],
+        }
+    )
+
+
+async def test_system_key_runs_need_a_price_for_every_model(monkeypatch: pytest.MonkeyPatch):
+    catalogue: list[dict[str, Any]] = [
+        {"id": "m/paid", "pricing": {"prompt": "0.000001", "completion": "0.000002"}},
+        {"id": "m/free:free", "pricing": {"prompt": "0", "completion": "0"}},
+    ]
+
+    async def get_models() -> list[dict[str, Any]]:
+        return catalogue
+
+    monkeypatch.setattr(openrouter_client, "get_models", get_models)
+    est = await routes_debates._estimate(_debate("m/paid", "m/free:free"), None, own_key=False)
+    assert est.credits_cost_usd > 0 and not est.sufficient  # signed out: no balance
+    with pytest.raises(HTTPException) as caught:
+        await routes_debates._estimate(_debate("m/paid:nitro", "m/free:free"), None, own_key=False)
+    assert caught.value.status_code == 400 and "m/paid:nitro is not" in str(caught.value.detail)
+    # An own key pays OpenRouter itself: any model id goes.
+    await routes_debates._estimate(_debate("m/paid:nitro", "openrouter/auto"), None, own_key=True)
+
+    catalogue.clear()  # OpenRouter unreachable and nothing cached
+    with pytest.raises(HTTPException) as caught:
+        await routes_debates._estimate(_debate("m/paid"), None, own_key=False)
+    assert caught.value.status_code == 503
+    free = await routes_debates._estimate(_debate("m/free:free"), None, own_key=False)
+    assert free.credits_cost_usd == 0 and free.sufficient

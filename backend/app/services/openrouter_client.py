@@ -368,8 +368,13 @@ class OpenRouterClient:
             if isinstance(outputs, list) and outputs and "text" not in outputs:
                 continue  # image/audio-only models cannot debate
             pricing = model.get("pricing") or {}
-            prompt_price = float(pricing.get("prompt") or 0)
-            completion_price = float(pricing.get("completion") or 0)
+            try:
+                prompt_price = float(pricing.get("prompt") or 0)
+                completion_price = float(pricing.get("completion") or 0)
+            except (TypeError, ValueError):
+                continue
+            if prompt_price < 0 or completion_price < 0:
+                continue  # routers such as openrouter/auto: a variable price we cannot estimate
             processed.append(
                 {
                     "id": str(model.get("id")),

@@ -240,7 +240,10 @@ docker compose exec api python -m app.manage credits user@example.com 5 --reason
    `TOPIC_MAX_LENGTH` = 150: it is drawn on the video; configs saved before the limit hold up to
    500 and are re-read with `DebateConfig.stored`; the wizard, CLI and trending topics keep to
    it), estimates the run
-   (`services/estimate.py`) and rejects with 402 when credits are insufficient, stores the debate
+   (`services/estimate.py`) and rejects with 402 when credits are insufficient (on the system
+   key every model needs a catalogue price, `estimate.unpriced_models`: unlisted ids such as
+   `:nitro` variants or dropped models → 400, no catalogue → only free models; routers with a
+   variable price, e.g. `openrouter/auto`, are left out of the catalogue), stores the debate
    (`status=queued`, or `draft` when `draft=true`) with `user_id` and `config_json.billing.own_key`,
    puts the OpenRouter key to use in Redis (`debate:{id}:provider_key`, TTL) — the request key or
    the account's encrypted key, never in Postgres — and enqueues `start_debate_job`.
