@@ -20,6 +20,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   models: 'Model tokens',
   voices: 'Premium voices',
   pictures: 'AI pictures',
+  music: 'Battle music',
   topup: 'Top-up',
   bonus: 'Bonus',
   refund: 'Refund',
@@ -57,10 +58,10 @@ export const StatsGrid = ({ stats }: { stats: UserPeriodStats }) => {
 
 /** Charges per UTC day for the last 30 days, stacked by what they paid for. */
 export const SpendChart = ({ days }: { days: AdminUserCard['spend_days'] }) => {
-  const total = days.reduce((sum, d) => sum + d.models + d.voices + d.pictures, 0);
+  const total = days.reduce((sum, d) => sum + d.models + d.voices + d.pictures + d.music, 0);
   const labels = days.map((d) => new Date(d.day).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' }));
   const axisLabels = days.map((d) => bucketLabel(d.day, 'day'));
-  const series = (['models', 'voices', 'pictures'] as const).map((key) => ({
+  const series = (['models', 'voices', 'pictures', 'music'] as const).map((key) => ({
     key,
     label: CATEGORY_LABELS[key],
     color: SPEND_COLORS[key],

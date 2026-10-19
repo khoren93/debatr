@@ -19,6 +19,7 @@ CATEGORY_LABELS = {
     "models": "Model tokens",
     "voices": "Premium voices",
     "pictures": "AI pictures",
+    "music": "Battle music",
     "topup": "Top-up",
     "bonus": "Bonus",
     "refund": "Refund",
@@ -26,7 +27,7 @@ CATEGORY_LABELS = {
 }
 
 # Description prefixes written by services/credits.py (kept for rows of deleted debates).
-_PREFIXES = {"voices": "Premium voices: ", "pictures": "AI pictures: "}
+_PREFIXES = {"voices": "Premium voices: ", "pictures": "AI pictures: ", "music": "Music: "}
 
 # Characters that make spreadsheets treat a cell as a formula (CSV injection).
 _FORMULA_START = ("=", "+", "-", "@", "\t", "\r")
@@ -39,6 +40,8 @@ def category(tx: CreditTransaction) -> str:
         ref = tx.provider_ref or ""
         if ":images:" in ref or (tx.description or "").startswith(_PREFIXES["pictures"]):
             return "pictures"
+        if ":music:" in ref or (tx.description or "").startswith(_PREFIXES["music"]):
+            return "music"
         return "voices"
     return tx.kind
 

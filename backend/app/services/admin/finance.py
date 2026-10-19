@@ -51,8 +51,8 @@ MODEL_PERIODS: dict[str, timedelta | None] = {
 }
 # provider_usage purposes whose cost the owner pays (through `totals.cost`, the TTS and the
 # picture charges); everything else on the system key is ours alone.
-BILLED_PURPOSES = frozenset({"turn", "verdict", "factcheck", "image", "tts"})
-CHARGE_CATEGORIES = ("models", "voices", "pictures")
+BILLED_PURPOSES = frozenset({"turn", "verdict", "factcheck", "image", "tts", "music"})
+CHARGE_CATEGORIES = ("models", "voices", "pictures", "music")
 TOP_ROWS = 10
 
 
@@ -116,6 +116,7 @@ class Money:
     charged_models: float = 0.0
     charged_voices: float = 0.0
     charged_pictures: float = 0.0
+    charged_music: float = 0.0
     cost_billed: float = 0.0  # system-key cost of what we charge for
     cost_unbilled: float = 0.0  # system-key cost nobody pays us for
     cost_openrouter: float = 0.0
@@ -123,7 +124,10 @@ class Money:
 
     @property
     def charged(self) -> float:
-        return round(self.charged_models + self.charged_voices + self.charged_pictures, 6)
+        return round(
+            self.charged_models + self.charged_voices + self.charged_pictures + self.charged_music,
+            6,
+        )
 
     @property
     def cost(self) -> float:
@@ -189,6 +193,7 @@ def finance_csv(rows: list[dict[str, Any]]) -> str:
         "charged_models",
         "charged_voices",
         "charged_pictures",
+        "charged_music",
         "charged",
         "cost_billed",
         "cost_unbilled",

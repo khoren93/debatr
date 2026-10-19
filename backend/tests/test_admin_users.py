@@ -162,7 +162,7 @@ def test_period_stats_all_time() -> None:
     assert (out["tokens_in"], out["tokens_out"]) == (400, 200)
     assert out["topped_up"] == 10.0
     assert out["credited"] == 1.35  # bonus + refund + the positive adjustment
-    assert out["spent_by"] == {"models": 0.6, "voices": 0.3, "pictures": 0.05}
+    assert out["spent_by"] == {"models": 0.6, "voices": 0.3, "pictures": 0.05, "music": 0.0}
     assert out["spent"] == 0.95  # adjustments are not spending
     assert out["avg_debate_cost"] == 0.15  # model tokens per finished debate
     assert out["cost_system"] == 0.123
@@ -221,6 +221,7 @@ def _row(**fields: Any) -> dict[str, Any]:
             "spent_models": 1.5,
             "spent_voices": 0.5,
             "spent_pictures": 0,
+            "spent_music": 0,
             "debates": 3,
             "failed": 1,
             "public": 2,

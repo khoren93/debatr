@@ -57,8 +57,9 @@ from app.services.debate_control import stop_debate as stop_debate_run
 from app.services.engagement import engagement_out
 from app.services.estimate import Pricing, estimate_debate, pricing_from_models, unpriced_models
 from app.services.fair_share import require_debate_slot
+from app.services.formats import format_of
 from app.services.media.paths import MediaPaths
-from app.services.media.tts.elevenlabs import system_key_status
+from app.services.media.tts.elevenlabs import music_allowed, system_key_status
 from app.services.moderation import publish_async
 from app.services.openrouter_client import openrouter_client
 from app.services.queue_manager import enqueue_debate_start
@@ -136,6 +137,29 @@ async def _effective_tts_provider(config: DebateConfig, own_tts_key: bool) -> st
     return plan.provider
 
 
+async def _require_battle_audio(config: DebateConfig, tts_key: str | None) -> None:
+    """A format voiced with premium voices only has no Edge fallback: its audio needs a working
+    system key, or an own key on a paid plan when it generates music."""
+    fmt = format_of(config.persisted())
+    plan = config.media_plan
+    if fmt.voices != "elevenlabs" or plan is None or "audio" not in plan.outputs:
+        return
+    if tts_key:
+        if fmt.soundtrack == "music" and not await run_in_threadpool(music_allowed, tts_key):
+            raise HTTPException(
+                status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                detail="Battle music needs a paid ElevenLabs plan on your key (the Music API "
+                "is not on the free plan).",
+            )
+        return
+    ok, reason = await run_in_threadpool(system_key_status)
+    if not ok:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Premium voices are unavailable right now: {reason}",
+        )
+
+
 def _paid_models(config: DebateConfig, pricing: Pricing) -> list[str]:
     paid: set[str] = set()
     for p in config.participants:
@@ -196,6 +220,7 @@ async def _estimate(
         image_price=settings.MEDIA_IMAGE_PRICE_USD,
         max_images=settings.MEDIA_MAX_IMAGES,
         from_turn=from_turn,
+        music_price_per_min=prices.music_per_min,
     )
     out = EstimateOut(
         **est.as_dict(),
@@ -250,7 +275,7 @@ def _billing(
     are what the run is charged with (services/credits.Prices), whatever the levers say later."""
     billing: dict[str, Any] = {"own_key": own_key}
     if est is not None and prices is not None:
-        media = (0.0 if est.own_tts_key else est.tts_cost_usd) + (
+        media = (0.0 if est.own_tts_key else est.tts_cost_usd + est.music_cost_usd) + (
             est.images_cost_usd * prices.markup
         )
         billing["estimate_usd"] = est.credits_cost_usd
@@ -417,6 +442,7 @@ async def create_debate(
     prices = await _current_prices()
     if not config.draft:
         await _require_runnable(config)
+        await _require_battle_audio(config, tts_key)
         est = await _estimate(
             config,
             user,
@@ -497,6 +523,7 @@ async def start_draft(
     await _require_runnable(config)
     provider_key, own_key = _resolve_provider_key(user, body.user_provider_key if body else None)
     tts_key = _tts_key(config, body.user_tts_key if body else None)
+    await _require_battle_audio(config, tts_key)
     prices = await _current_prices()
     est = await _estimate(
         config, user, own_key, tts_key is not None, await _token_budget(db, request), prices=prices

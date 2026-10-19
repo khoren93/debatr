@@ -147,10 +147,12 @@ class Settings(BaseSettings):
     # with, services/credits.Prices). The provider cost of models, fact-checks and AI pictures
     # is charged times CREDIT_MARKUP; a completed paid debate costs at least
     # MIN_DEBATE_CHARGE_USD; premium (ElevenLabs) voices on the system key cost
-    # TTS_CREDIT_PRICE_PER_1K_CHARS per 1000 characters.
+    # TTS_CREDIT_PRICE_PER_1K_CHARS per 1000 characters; a rap battle's generated music on the
+    # system key costs MUSIC_CREDIT_PRICE_PER_MIN a minute (ElevenLabs: $0.15).
     CREDIT_MARKUP: float = 1.2
     MIN_DEBATE_CHARGE_USD: float = 0.0
     TTS_CREDIT_PRICE_PER_1K_CHARS: float = 0.15
+    MUSIC_CREDIT_PRICE_PER_MIN: float = 0.30
     TOPUP_AMOUNTS_USD: str = "5,10,25"
     STRIPE_SECRET_KEY: str | None = None
     STRIPE_WEBHOOK_SECRET: str | None = None

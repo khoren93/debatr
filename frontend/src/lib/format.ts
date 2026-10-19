@@ -184,6 +184,7 @@ export const TURN_TYPE_LABELS: Record<string, string> = {
   rebuttal: 'Rebuttal',
   closing: 'Closing',
   argument: 'Argument',
+  verse: 'Verse',
   verdict: 'Verdict',
 };
 

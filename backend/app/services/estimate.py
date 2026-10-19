@@ -59,6 +59,8 @@ class Estimate:
     credits_cost_usd: float
     duration_ms: int
     render_ms: int
+    music_ms: int = 0  # a rap battle's generated track
+    music_cost_usd: float = 0.0  # in credits, like tts_cost_usd
 
     def as_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -111,6 +113,7 @@ def estimate_debate(
     image_price: float = 0.0,
     max_images: int = 0,
     from_turn: int = 0,
+    music_price_per_min: float = 0.0,
 ) -> Estimate:
     """Provider costs and credits of a run. Fact-checks (one per debater turn on average) run
     on the debate's key; AI pictures always on the system key, so they are charged even with an
@@ -132,6 +135,7 @@ def estimate_debate(
     visuals = bool(plan) and bool(plan.get("visuals", True))
     debater_turns = 0
     checked_turns = 0  # debater turns still to run (fact-checks)
+    host_words = 0
     planned: list[tuple[str, int]] = []  # (model id, words)
     fmt = format_of(conf)
     for index, turn in enumerate(fmt.schedule(conf)):
@@ -139,6 +143,7 @@ def estimate_debate(
         checked_turns += 0 if turn.is_moderator or index < from_turn else 1
         speaker = participants[turn.speaker_index]
         words = min(words_per_turn, MODERATOR_MAX_WORDS) if turn.is_moderator else words_per_turn
+        host_words += words if turn.is_moderator else 0
         planned.append((str(speaker.get("model_id") or default_model), words))
     planned.append((judge_model, fmt.verdict_words(conf)))
 
@@ -163,7 +168,15 @@ def estimate_debate(
         total_words / WORDS_PER_MINUTE * 60_000 + GAP_MS * (len(planned) - 1) + INTRO_OUTRO_MS
     )
     tts_chars = int(total_words * CHARS_PER_WORD)
+    music_ms = 0
+    if fmt.soundtrack == "music":
+        # One generated track carries the debaters; only the host and the judge are voiced.
+        tts_chars = int((host_words + fmt.verdict_words(conf)) * CHARS_PER_WORD)
+        if tts_provider == "elevenlabs":
+            music_ms = fmt.track_ms(conf, WORDS_PER_MINUTE)
+            duration_ms = music_ms + INTRO_OUTRO_MS
     tts_cost = tts_chars / 1000 * tts_price_per_1k if tts_provider == "elevenlabs" else 0.0
+    music_cost = music_ms / 60_000 * music_price_per_min
     checks = checked_turns if visuals and conf.get("fact_check") else 0
     factcheck_cost = checks * fact_check_price
     wants_images = visuals and plan.get("images") == "ai" and "audio" in (plan.get("outputs") or [])
@@ -173,7 +186,7 @@ def estimate_debate(
         llm_credits = max(llm_credits, min_charge)
     credits = (
         (0.0 if own_key else llm_credits)
-        + (0.0 if own_tts_key else tts_cost)
+        + (0.0 if own_tts_key else tts_cost + music_cost)
         + images_cost * markup
     )
     return Estimate(
@@ -189,4 +202,6 @@ def estimate_debate(
         credits_cost_usd=round(credits, 6),
         duration_ms=duration_ms,
         render_ms=int(duration_ms * RENDER_SPEED),
+        music_ms=music_ms,
+        music_cost_usd=round(music_cost, 6),
     )

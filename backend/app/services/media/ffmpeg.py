@@ -221,6 +221,85 @@ def concat_with_gaps(files: list[Path], gap_ms: int, dst_wav: Path, dst_mp3: Pat
     ffmpeg(["-i", str(dst_wav), "-c:a", "libmp3lame", "-b:a", "160k", str(dst_mp3)], timeout_s=900)
 
 
+# --- the rap battle's track --------------------------------------------------------------------
+
+
+def normalize_music(src: Path, dst: Path, *, target_lufs: float | None = None) -> None:
+    """Loudness-normalize a generated track into 44.1 kHz stereo WAV (no silence trimming: the
+    sections' timing is the timeline)."""
+    lufs = settings.MEDIA_LOUDNESS_LUFS if target_lufs is None else target_lufs
+    ffmpeg(
+        [
+            "-i",
+            str(src),
+            "-af",
+            _loudnorm_filter(lufs),
+            "-ar",
+            "44100",
+            "-ac",
+            "2",
+            "-c:a",
+            "pcm_s16le",
+            str(dst),
+        ],
+        timeout_s=900,
+    )
+
+
+def duck_filter(voices: list[tuple[int, int]], duck: float) -> str:
+    """`volume` that lowers the music while a voice talks (start, end in ms; pure)."""
+    if not voices:
+        return "anull"
+    spans = "+".join(f"between(t,{s / 1000:.3f},{e / 1000:.3f})" for s, e in voices)
+    return f"volume={duck}:enable='{spans}'"
+
+
+def mix_over(
+    music: Path,
+    voices: list[tuple[Path, int, int]],
+    dst_wav: Path,
+    dst_mp3: Path,
+    *,
+    duck: float = 0.3,
+) -> None:
+    """Put the voices (wav, start ms, length ms) on the music, which ducks under them, into
+    stereo full.wav and full.mp3 as long as the music."""
+    args = ["-i", str(music)]
+    filters = [
+        "[0:a]aformat=sample_rates=44100:channel_layouts=stereo,"
+        f"{duck_filter([(s, s + d) for _, s, d in voices], duck)}[m]"
+    ]
+    labels = ["[m]"]
+    for i, (wav, start, _length) in enumerate(voices, start=1):
+        args += ["-i", str(wav)]
+        filters.append(
+            f"[{i}:a]aformat=sample_rates=44100:channel_layouts=stereo,adelay={start}|{start}[v{i}]"
+        )
+        labels.append(f"[v{i}]")
+    filters.append(
+        f"{''.join(labels)}amix=inputs={len(labels)}:duration=first:normalize=0,"
+        "alimiter=limit=0.95[out]"
+    )
+    ffmpeg(
+        [
+            *args,
+            "-filter_complex",
+            ";".join(filters),
+            "-map",
+            "[out]",
+            "-ar",
+            "44100",
+            "-ac",
+            "2",
+            "-c:a",
+            "pcm_s16le",
+            str(dst_wav),
+        ],
+        timeout_s=900,
+    )
+    ffmpeg(["-i", str(dst_wav), "-c:a", "libmp3lame", "-b:a", "192k", str(dst_mp3)], timeout_s=900)
+
+
 # --- pictures for the visual scenes ------------------------------------------------------
 
 

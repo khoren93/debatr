@@ -39,6 +39,7 @@ class Format(ABC):
 
     id: str
     name: str
+    show: str = "debate"  # what the show is called in a sentence ("Alice wins the battle")
     tagline: str  # one line for the format's card
     host_label: str = "Host"
     # Debater seats in speaking order; the last one repeats up to `max_debaters`.
@@ -50,6 +51,17 @@ class Format(ABC):
     max_rounds: int = 10
     sides: bool = False  # debaters pick their own side (seats without a fixed one)
     visuals: bool = True  # charts and sketches may accompany the speeches
+    # "elevenlabs": the show is voiced with premium voices only (no Edge); audio stays optional.
+    voices: Literal["any", "elevenlabs"] = "any"
+    # "speech": every turn voiced by TTS; "music": one generated track carries the debaters'
+    # turns (media/music.py), the host and the judge talk over it.
+    soundtrack: Literal["speech", "music"] = "speech"
+    # The texts are written for one style whatever the config says (None: the config's).
+    output_style: Literal["markdown", "spoken"] | None = None
+    # The judge scores every round; the verdict structuring keeps the scores (verdict_json.rounds).
+    verdict_scores: bool = False
+    # Added to the gallery check's rules (what is fine in this format).
+    moderation_note: str = ""
 
     # --- seats ----------------------------------------------------------------------------------
 
@@ -67,8 +79,10 @@ class Format(ABC):
         side = speaker.get("side")
         return side if self.sides and side in SIDES else None
 
-    def problems(self, participants: Sequence[Mapping[str, Any]], num_rounds: int) -> list[str]:
+    def problems(self, conf: Mapping[str, Any]) -> list[str]:
         """Why a configuration does not fit this format (empty when it does)."""
+        participants: Sequence[Mapping[str, Any]] = conf.get("participants") or []
+        num_rounds = int(conf.get("num_rounds") or 1)
         out: list[str] = []
         debaters = len(debaters_of(participants))
         if debaters < self.min_debaters or debaters > self.max_debaters:
@@ -84,6 +98,10 @@ class Format(ABC):
             out.append(f"{self.name} runs {self.min_rounds} to {self.max_rounds} rounds")
         if not self.sides and any(p.get("side") for p in participants):
             out.append(f"{self.name} sets the sides itself")
+        plan: Mapping[str, Any] = conf.get("media_plan") or {}
+        audio = "audio" in (plan.get("outputs") or [])
+        if self.voices == "elevenlabs" and audio and plan.get("provider") != "elevenlabs":
+            out.append(f"{self.name} is voiced with premium voices only")
         return out
 
     # --- running ---------------------------------------------------------------------------------
@@ -120,6 +138,14 @@ class Format(ABC):
     def verdict_words(self, conf: Mapping[str, Any]) -> int:
         """Word budget of the verdict (the estimate prices it too)."""
 
+    def track_ms(self, conf: Mapping[str, Any], words_per_minute: int) -> int:
+        """Length of the generated track of a `soundtrack="music"` format (the estimate)."""
+        return 0
+
+    def finish_text(self, conf: Mapping[str, Any], turn: ScheduledTurn, text: str) -> str:
+        """A debater's answer as it is saved (a format may tidy it up, e.g. verse lines)."""
+        return text
+
     def round_label(self, round_id: str, turn_type: str) -> str:
         """What the transcript, the live card and the video call this part of the show."""
         if round_id == "verdict":
@@ -142,4 +168,7 @@ class Format(ABC):
             "max_rounds": self.max_rounds,
             "sides": self.sides,
             "visuals": self.visuals,
+            "voices": self.voices,
+            "soundtrack": self.soundtrack,
+            "verdict_scores": self.verdict_scores,
         }

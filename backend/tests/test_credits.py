@@ -12,7 +12,7 @@ from app.services.credits import (
     uses_own_key,
 )
 
-PRICES = {"markup": 3.0, "min_charge": 0.05, "voices_per_1k": 0.25}
+PRICES = {"markup": 3.0, "min_charge": 0.05, "voices_per_1k": 0.25, "music_per_min": 0.4}
 
 
 def _debate(
@@ -56,7 +56,12 @@ def test_prices_come_from_the_snapshot_then_the_levers(levers: dict) -> None:
     assert prices_of({"prices": {"markup": "2.5"}}).markup == 2.5
     assert prices_of({"prices": {"markup": "junk"}}).markup == settings.CREDIT_MARKUP
     assert prices_of(None).voices_per_1k == settings.TTS_CREDIT_PRICE_PER_1K_CHARS
-    levers.update(credit_markup=3, min_debate_charge_usd=0.05, tts_price_per_1k_chars=0.25)
+    levers.update(
+        credit_markup=3,
+        min_debate_charge_usd=0.05,
+        tts_price_per_1k_chars=0.25,
+        music_price_per_min=0.4,
+    )
     assert lever_prices(runtime_settings.current_sync()).as_dict() == PRICES
     for key, bad in (("credit_markup", 0.5), ("min_debate_charge_usd", 9), ("credit_markup", 11)):
         try:

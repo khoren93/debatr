@@ -44,15 +44,17 @@ from app.schemas.media import (
     VoicesResponse,
 )
 from app.services import runtime_settings
-from app.services.credits import lever_prices, tts_charge_usd
+from app.services.credits import lever_prices, music_charge_usd, tts_charge_usd
+from app.services.estimate import WORDS_PER_MINUTE
 from app.services.fair_share import require_media_slot
+from app.services.formats import format_of
 from app.services.media.ffmpeg import ffmpeg_available
 from app.services.media.languages import language_code
 from app.services.media.paths import MediaPaths, public_url
 from app.services.media.script import clean_markdown
 from app.services.media.tts import PROVIDER_NAMES, SpeakerRef, TTSError, get_provider
 from app.services.media.tts.elevenlabs import MODELS as ELEVENLABS_MODELS
-from app.services.media.tts.elevenlabs import system_key_status
+from app.services.media.tts.elevenlabs import music_allowed, system_key_status
 from app.services.queue_manager import enqueue_media_build
 
 logger = logging.getLogger(__name__)
@@ -256,6 +258,13 @@ async def generate_debate_media(
         raise HTTPException(status_code=409, detail="A media build is already in progress")
     if body.provider not in PROVIDER_NAMES:
         raise HTTPException(status_code=400, detail="Unknown provider")
+    fmt = format_of(debate.config_json or {})
+    if fmt.voices == "elevenlabs" and body.provider != "elevenlabs":
+        raise HTTPException(
+            status_code=400, detail=f"A {fmt.name.lower()} is voiced with premium voices only"
+        )
+    if not fmt.visuals:
+        body = body.model_copy(update={"visuals": False, "images": "off"})
     levers = await runtime_settings.current()
     runtime_settings.require_runs_open(levers)
     prices = lever_prices(levers)  # the build is charged at today's prices
@@ -273,6 +282,12 @@ async def generate_debate_media(
             "use the free voices and photos, your own ElevenLabs key, or the website.",
         )
     if body.provider == "elevenlabs":
+        own_music = own_tts_key and fmt.soundtrack == "music" and body.user_tts_key
+        if own_music and not await run_in_threadpool(music_allowed, body.user_tts_key or ""):
+            raise HTTPException(
+                status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                detail="Battle music needs a paid ElevenLabs plan on your key.",
+            )
         if not own_tts_key:
             ok, reason = await run_in_threadpool(system_key_status)
             if not ok:
@@ -291,6 +306,11 @@ async def generate_debate_media(
                 )
             chars = await _spoken_chars(db, debate)
             needed = float(tts_charge_usd(chars, prices.voices_per_1k))
+            if fmt.soundtrack == "music":
+                conf = debate.config_json or {}
+                needed += float(
+                    music_charge_usd(fmt.track_ms(conf, WORDS_PER_MINUTE), prices.music_per_min)
+                )
             if needed > float(user.credits_usd or 0):
                 raise HTTPException(
                     status_code=status.HTTP_402_PAYMENT_REQUIRED,
@@ -312,6 +332,7 @@ async def generate_debate_media(
         voices=body.voices,
         visuals=body.visuals,
         images=body.images,
+        flows=body.flows,
     )
     state = dict(debate.media_json or {})
     state.update(

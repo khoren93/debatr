@@ -45,6 +45,16 @@ class MediaPaths:
         return self.dir / "visuals"
 
     @property
+    def music_dir(self) -> Path:
+        """Generated battle tracks (`music/<plan hash>.mp3` + `.json` with the word times)."""
+        return self.dir / "music"
+
+    @property
+    def music_wav(self) -> Path:
+        """The battle's track, loudness-normalized, before the MC and the judge go on it."""
+        return self.dir / "music.wav"
+
+    @property
     def timeline(self) -> Path:
         return self.dir / "timeline.json"
 

@@ -663,7 +663,13 @@ def _auto_media(db: Session, debate: Debate) -> None:
             return
     voices: dict[str, str] = dict(plan.get("voices") or {})
     own_tts_key = provider == "elevenlabs" and _has_tts_key(str(debate.id))
+    fmt = format_of(conf)
     if provider == "elevenlabs" and not own_tts_key and not system_key_status()[0]:
+        if fmt.voices == "elevenlabs":
+            # No Edge fallback for a format voiced with premium voices only: the owner builds the
+            # audio from the debate page once the key works again.
+            logger.warning("Premium voices unavailable for %s (%s): no audio", debate.id, fmt.id)
+            return
         logger.warning("Premium voices unavailable for %s, falling back to Edge", debate.id)
         provider, voices = "edge", {}  # voice ids are provider-specific
     state = dict(debate.media_json or {})
@@ -673,8 +679,9 @@ def _auto_media(db: Session, debate: Debate) -> None:
                 "provider": provider,
                 "model_id": str(plan.get("model_id") or settings.TTS_DEFAULT_MODEL_ID),
                 "voices": voices,
-                "visuals": bool(plan.get("visuals", True)),
-                "images": str(plan.get("images") or "off"),
+                "visuals": fmt.visuals and bool(plan.get("visuals", True)),
+                "images": str(plan.get("images") or "off") if fmt.visuals else "off",
+                "flows": dict(plan.get("flows") or {}),
             },
             "force": False,
             "own_tts_key": own_tts_key,
@@ -797,6 +804,8 @@ def process_turn_job(debate_id: str, seq_index: int) -> None:
                 # [visual: …] / [dispute N: …] are for the studio, not the transcript or voice.
                 result.text, hints, marks = extract_markers(result.text)
                 visuals = initial_visuals(hints, resolve_disputes(marks, claims))
+            if not result.error and not turn.is_moderator:
+                result.text = fmt.finish_text(conf, turn, result.text)
             saved = _save_turn(
                 db,
                 debate,

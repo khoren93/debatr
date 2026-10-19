@@ -96,8 +96,8 @@ def test_sides_reach_the_prompts() -> None:
     schedule = fmt.schedule(conf)
     by_speaker = {t.speaker_index: t for t in schedule if t.round_number == 1}
     lines = {
-        1: "Your side: you argue FOR the topic.",
-        2: "Your side: you argue AGAINST the topic.",
+        1: "Your side: you argue FOR the topic (if it asks 'A or B?', you back A).",
+        2: "Your side: you argue AGAINST the topic (if it asks 'A or B?', you back B).",
         3: "Your side: you take a position of your own, not simply for or against the topic.",
     }
     for index, line in lines.items():
@@ -208,11 +208,19 @@ def _people(debaters: int, host: bool = True, side: str | None = None) -> list[d
 def test_a_fixed_seat_format() -> None:
     battle = Battle()
     people = _people(2)
-    assert battle.problems(people, 3) == []
-    assert battle.problems(_people(3), 1) == ["Battle takes 2 debaters, not 3"]
-    assert battle.problems(_people(2, host=False), 1) == ["Battle needs a mc"]
-    assert battle.problems(people, 4) == ["Battle runs 1 to 3 rounds"]
-    assert battle.problems(_people(2, side="for"), 1) == ["Battle sets the sides itself"]
+    assert battle.problems({"participants": people, "num_rounds": 3}) == []
+    assert battle.problems({"participants": _people(3), "num_rounds": 1}) == [
+        "Battle takes 2 debaters, not 3"
+    ]
+    assert battle.problems({"participants": _people(2, host=False), "num_rounds": 1}) == [
+        "Battle needs a mc"
+    ]
+    assert battle.problems({"participants": people, "num_rounds": 4}) == [
+        "Battle runs 1 to 3 rounds"
+    ]
+    assert battle.problems({"participants": _people(2, side="for"), "num_rounds": 1}) == [
+        "Battle sets the sides itself"
+    ]
     # Seats fix the sides, by speaking position.
     assert [battle.side_of(people, i) for i in range(3)] == [None, "for", "against"]
     assert battle.seat(5).label == "Rapper Two"
@@ -230,10 +238,12 @@ def test_a_fixed_seat_format() -> None:
 
 def test_the_debate_format_limits_stay_as_they_were() -> None:
     debate = FORMATS["debate"]
-    assert debate.problems(_people(1, host=False), 1) == []
-    assert debate.problems(_people(7), 10) == []
-    assert debate.problems(_people(2, side="own"), 3) == []
-    assert debate.problems(_people(0), 1) == ["Debate takes 1 to 8 debaters, not 0"]
+    assert debate.problems({"participants": _people(1, host=False), "num_rounds": 1}) == []
+    assert debate.problems({"participants": _people(7), "num_rounds": 10}) == []
+    assert debate.problems({"participants": _people(2, side="own"), "num_rounds": 3}) == []
+    assert debate.problems({"participants": _people(0), "num_rounds": 1}) == [
+        "Debate takes 1 to 8 debaters, not 0"
+    ]
 
 
 # --- API --------------------------------------------------------------------------------------
@@ -241,7 +251,7 @@ def test_the_debate_format_limits_stay_as_they_were() -> None:
 
 async def test_the_format_catalogue() -> None:
     formats = await routes_formats.list_formats()
-    assert [f.id for f in formats] == ["debate"]
+    assert [f.id for f in formats] == ["debate", "rap_battle"]
     debate = formats[0]
     assert debate.sides and debate.visuals and debate.host_label == "Host"
     assert debate.seats[0].label == "Debater" and debate.seats[0].side is None

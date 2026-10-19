@@ -18,7 +18,7 @@ export type GallerySort = 'new' | 'trending' | 'top';
 /** none: one card per debate; motion: one card per topic, its best version on the cover. */
 export type GalleryGroup = 'none' | 'motion';
 /** Show formats (backend services/formats). */
-export type FormatId = 'debate';
+export type FormatId = 'debate' | 'rap_battle';
 /** A debater's side; absent on configs from before sides (the persona carried the stance). */
 export type DebaterSide = 'for' | 'against' | 'own';
 export type GalleryPeriod = 'week' | 'month' | 'year' | 'all';
@@ -471,6 +471,8 @@ export interface BillingConfig {
   signup_bonus_usd: number;
   tts_price_per_1k_chars: number;
   tts_price_per_min: number;
+  /** A rap battle's generated music on the system key, per minute of track. */
+  music_price_per_min: number;
   elevenlabs_available: boolean;
   /** Why premium voices are unavailable (key missing or rejected). */
   elevenlabs_error: string | null;
@@ -488,7 +490,7 @@ export interface ConfirmResponse {
 }
 
 /** What a ledger row paid for (backend services/ledger.py). */
-export type TransactionCategory = 'models' | 'voices' | 'pictures' | 'topup' | 'bonus' | 'refund' | 'adjustment';
+export type TransactionCategory = 'models' | 'voices' | 'pictures' | 'music' | 'topup' | 'bonus' | 'refund' | 'adjustment';
 
 export interface Transaction {
   id: string;

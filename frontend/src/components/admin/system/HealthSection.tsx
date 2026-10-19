@@ -74,6 +74,7 @@ export const ProvidersSection = () => {
                 ['Markup', `× ${data.payments.credit_markup}`],
                 ['Minimum per paid debate', formatUsd(data.payments.min_debate_charge_usd)],
                 ['Premium voices', `${formatUsd(data.payments.tts_price_per_1k_chars)} per 1K characters`],
+                ['Battle music', `${formatUsd(data.payments.music_price_per_min)} per minute`],
               ]}
             />
           </Panel>

@@ -1,4 +1,4 @@
-"""Show formats (`DebateConfig.format`): the classic debate today; rap battle and court next.
+"""Show formats (`DebateConfig.format`): the classic debate and the rap battle; court next.
 
 `format_of(conf)` is how the worker, the estimate and the recovery find the rules of a stored
 debate: a config without a format, or with one this server no longer knows, runs as a debate.
@@ -9,10 +9,11 @@ from typing import Any
 
 from app.services.formats.base import SIDES, Format, Seat, Side
 from app.services.formats.debate import DebateFormat
+from app.services.formats.rap_battle import RapBattleFormat
 
 DEFAULT_FORMAT = "debate"
 
-FORMATS: dict[str, Format] = {f.id: f for f in (DebateFormat(),)}
+FORMATS: dict[str, Format] = {f.id: f for f in (DebateFormat(), RapBattleFormat())}
 
 
 def get_format(format_id: str) -> Format | None:

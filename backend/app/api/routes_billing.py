@@ -78,6 +78,7 @@ async def billing_config() -> BillingConfigOut:
         signup_bonus_usd=levers.signup_bonus_usd,
         tts_price_per_1k_chars=levers.tts_price_per_1k_chars,
         tts_price_per_min=round(levers.tts_price_per_1k_chars, 4),
+        music_price_per_min=levers.music_price_per_min,
         elevenlabs_available=elevenlabs_ok,
         elevenlabs_error=elevenlabs_reason,
     )

@@ -68,9 +68,9 @@ const accountColumns: Column<TopAccount>[] = [
 const Charts = ({ data }: { data: FinanceOut }) => {
   const labels = data.series.map((p) => label(p.t, data.bucket, true));
   const axisLabels = data.series.map((p) => label(p.t, data.bucket, false));
-  const charged = (['models', 'voices', 'pictures'] as const).map((key) => ({
+  const charged = (['models', 'voices', 'pictures', 'music'] as const).map((key) => ({
     key,
-    label: { models: 'Model tokens', voices: 'Premium voices', pictures: 'AI pictures' }[key],
+    label: { models: 'Model tokens', voices: 'Premium voices', pictures: 'AI pictures', music: 'Battle music' }[key],
     color: SPEND_COLORS[key],
     values: data.series.map((p) => p[`charged_${key}`]),
   }));
@@ -166,7 +166,7 @@ const AdminFinance = () => {
           <section className="mt-6">
             <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
               <StatTile label="Top-ups" value={formatUsd(t.topups)} hint={`+${formatUsd(t.bonuses)} bonuses · ${formatUsd(t.refunds)} refunds`} />
-              <StatTile label="Charged" value={formatUsd(t.charged)} hint={`models ${formatUsd(t.charged_models)} · voices ${formatUsd(t.charged_voices)} · pictures ${formatUsd(t.charged_pictures)}`} />
+              <StatTile label="Charged" value={formatUsd(t.charged)} hint={`models ${formatUsd(t.charged_models)} · voices ${formatUsd(t.charged_voices)} · pictures ${formatUsd(t.charged_pictures)} · music ${formatUsd(t.charged_music)}`} />
               <StatTile label="Provider cost" value={formatUsd(t.cost)} hint={`OpenRouter ${formatUsd(t.cost_openrouter)} · ElevenLabs ${formatUsd(t.cost_elevenlabs)}`} />
               <StatTile label="Margin" value={formatUsd(t.margin)} hint="charged − refunds − provider cost" />
               <StatTile label="Effective markup" value={t.markup === null ? '—' : `× ${t.markup}`} hint={`charged ÷ cost of what we bill (${formatUsd(t.cost_billed)})`} />

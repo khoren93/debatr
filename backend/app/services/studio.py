@@ -42,6 +42,7 @@ from app.schemas.visuals import (
 from app.services.credits import has_balance
 from app.services.events import publish_event
 from app.services.factcheck import check_scene
+from app.services.formats import format_of
 from app.services.markers import DisputeMark, Hint
 from app.services.media.images import ImageStudio
 from app.services.media.llm import complete, extract_json
@@ -74,9 +75,10 @@ def _plan(conf: dict[str, Any]) -> dict[str, Any]:
 
 
 def visuals_enabled(conf: dict[str, Any]) -> bool:
-    """Scenes are designed live when the wizard's media plan has visual scenes on."""
+    """Scenes are designed live when the wizard's media plan has visual scenes on (and the
+    format has scenes at all: a rap battle has none)."""
     plan = _plan(conf)
-    return bool(plan) and bool(plan.get("visuals", True))
+    return bool(plan) and bool(plan.get("visuals", True)) and format_of(conf).visuals
 
 
 def images_mode(conf: dict[str, Any]) -> str:

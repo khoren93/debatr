@@ -68,10 +68,12 @@ class Levers(BaseModel):
     free_lengths: list[LengthPreset] = Field(default_factory=lambda: ["very_short", "short"])
     # Prices (services/credits.Prices; a run keeps the ones it started with): provider cost x
     # credit_markup for models, fact-checks and AI pictures, at least min_debate_charge_usd for
-    # a completed paid debate, tts_price_per_1k_chars for premium voices on the system key.
+    # a completed paid debate, tts_price_per_1k_chars for premium voices on the system key,
+    # music_price_per_min for a rap battle's generated track on the system key.
     credit_markup: float = Field(default=1.2, ge=1, le=10)
     min_debate_charge_usd: float = Field(default=0.0, ge=0, le=5)
     tts_price_per_1k_chars: float = Field(default=0.15, ge=0, le=2)
+    music_price_per_min: float = Field(default=0.30, ge=0, le=5)
 
     @field_validator("maintenance_message")
     @classmethod
@@ -137,6 +139,7 @@ def defaults() -> dict[str, Any]:
         "credit_markup": max(1.0, min(10.0, settings.CREDIT_MARKUP)),
         "min_debate_charge_usd": max(0.0, min(5.0, settings.MIN_DEBATE_CHARGE_USD)),
         "tts_price_per_1k_chars": max(0.0, min(2.0, settings.TTS_CREDIT_PRICE_PER_1K_CHARS)),
+        "music_price_per_min": max(0.0, min(5.0, settings.MUSIC_CREDIT_PRICE_PER_MIN)),
     }
 
 

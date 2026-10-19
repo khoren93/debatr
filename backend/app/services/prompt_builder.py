@@ -86,8 +86,8 @@ def _context_block(conf: dict[str, Any]) -> str:
 # A debater's side (`ParticipantConfig.side`). Without one the persona text carries the stance,
 # as in configs from before sides existed: nothing below is added then.
 SIDE_LINES: dict[str, str] = {
-    "for": "Your side: you argue FOR the topic.",
-    "against": "Your side: you argue AGAINST the topic.",
+    "for": "Your side: you argue FOR the topic (if it asks 'A or B?', you back A).",
+    "against": "Your side: you argue AGAINST the topic (if it asks 'A or B?', you back B).",
     "own": "Your side: you take a position of your own, not simply for or against the topic.",
 }
 SIDE_NAMES: dict[str, str] = {"for": "for", "against": "against", "own": "own position"}

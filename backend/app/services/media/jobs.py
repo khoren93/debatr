@@ -33,11 +33,17 @@ from app.schemas.timeline import (
 )
 from app.schemas.visuals import ImageScene, SketchScene, TimelineVisual
 from app.services import free_quota, runtime_settings
-from app.services.credits import charge_images_sync, charge_media_sync, has_balance, prices_of
+from app.services.credits import (
+    charge_images_sync,
+    charge_media_sync,
+    charge_music_sync,
+    has_balance,
+    prices_of,
+)
 from app.services.formats import format_of
 from app.services.free_router import resolved_participants
 from app.services.heartbeat import beating
-from app.services.media import ffmpeg
+from app.services.media import ffmpeg, music
 from app.services.media.alignment import WordTiming, clamp_words, merge_chunks
 from app.services.media.highlights import (
     HighlightPick,
@@ -587,12 +593,18 @@ def _add_scoreboard(
     return make_room(visuals, board)
 
 
-def _build(
-    db: Session, debate: Debate, options: MediaOptions, force: bool
-) -> tuple[int, ImageStudio | None]:
-    """Voice, mix and write the timeline. Returns the characters actually synthesized
-    (cached turns excluded), which is what premium voices are billed on, and the picture
-    studio (what AI pictures cost)."""
+@dataclass
+class BuildResult:
+    """What a build is billed on: the characters actually synthesized (cached turns excluded),
+    the picture studio (AI pictures) and the music actually generated (a cached track: 0)."""
+
+    chars: int
+    images: ImageStudio | None = None
+    music_ms: int = 0
+
+
+def _build(db: Session, debate: Debate, options: MediaOptions, force: bool) -> BuildResult:
+    """Voice, mix and write the timeline."""
     debate_id = str(debate.id)
     conf: dict[str, Any] = debate.config_json or {}
     # The video shows the models that actually spoke (a Free Router's pinned model).
@@ -648,6 +660,24 @@ def _build(
             text = strip_audio_tags(text)
         if text:
             cleaned.append((t, _speaker_for(t, speakers_by_id), text))
+    fmt = format_of(conf)
+    if fmt.soundtrack == "music":
+        return _build_battle(
+            db,
+            debate,
+            paths,
+            turns=turns,
+            cleaned=cleaned,
+            speakers=speakers,
+            provider=provider,
+            options=options,
+            force=force,
+            code=code,
+            tts_key=tts_key,
+            music_key=user_key,
+            judge_model=judge_model,
+        )
+
     tasks: list[TurnTask] = []
     for i, (t, speaker, text) in enumerate(cleaned):
         voice_id = options.voices.get(speaker.id)
@@ -710,7 +740,6 @@ def _build(
     offsets = ffmpeg.concat_offsets([a.duration_ms for a in ordered], settings.MEDIA_GAP_MS)
     total_ms = ffmpeg.probe_duration_ms(paths.full_wav)
 
-    fmt = format_of(conf)
     segments: list[TimelineSegment] = []
     for task, audio, offset in zip(tasks, ordered, offsets, strict=True):
         segments.append(
@@ -757,6 +786,282 @@ def _build(
             db.rollback()
             visuals = []
 
+    chars = sum(len(strip_audio_tags(task.text)) for task in tasks)
+    char_cost = sum(a.char_cost for a in ordered if not a.cached)
+    stats = TimelineStats(
+        chars=chars,
+        tts_ms=tts_ms,
+        estimated_usd=estimate_usd(options.model_id, char_cost)
+        if provider.name == "elevenlabs"
+        else None,
+        cached_turns=sum(1 for a in ordered if a.cached),
+        visuals_usd=visuals_usd,
+        images_usd=round(image_studio.ai_usd, 6) if image_studio else None,
+    )
+    _finish(
+        db,
+        debate,
+        paths,
+        turns=turns,
+        segments=segments,
+        speakers=speakers,
+        visuals=visuals,
+        judge_model=judge_model,
+        total_ms=total_ms,
+        gap_ms=settings.MEDIA_GAP_MS,
+        provider=provider.name,
+        options=options,
+        stats=stats,
+        steps=total,
+    )
+    return BuildResult(chars=char_cost, images=image_studio)
+
+
+VOICED_TURNS = frozenset({"moderator_intro", "verdict"})
+
+
+def _book_music(
+    sections: list[music.Section],
+    key: KeyOwner,
+    *,
+    started: float,
+    error: Exception | None = None,
+) -> None:
+    """The battle's track in `provider_usage` (ElevenLabs bills music by the minute; the cost is
+    an estimate from its price list)."""
+    ms = music.track_ms(sections)
+    record_usage(
+        "music",
+        provider="elevenlabs",
+        model=music.MUSIC_MODEL,
+        key=key,
+        cost_usd=music.music_usd(ms) if error is None else 0.0,
+        ok=error is None,
+        error_kind="other" if error is not None else None,
+        duration_ms=int((time.monotonic() - started) * 1000),
+        meta={"music_ms": ms, "sections": len(sections), "estimated": True}
+        | ({"error": str(error)[:300]} if error is not None else {}),
+    )
+
+
+def _build_battle(
+    db: Session,
+    debate: Debate,
+    paths: MediaPaths,
+    *,
+    turns: list[Turn],
+    cleaned: list[tuple[Turn, TimelineSpeaker, str]],
+    speakers: list[TimelineSpeaker],
+    provider: TTSProvider,
+    options: MediaOptions,
+    force: bool,
+    code: str,
+    tts_key: KeyOwner,
+    music_key: str | None,
+    judge_model: str,
+) -> BuildResult:
+    """A soundtrack of one generated track (rap battle): the MC and the judge are voiced by TTS
+    and talk over the track's intro and outro, the verses are rapped in the track itself."""
+    voiced: dict[int, TurnAudio] = {}
+    tasks: list[TurnTask] = []
+    for t, speaker, text in cleaned:
+        if t.turn_type not in VOICED_TURNS:
+            continue
+        voice_id = options.voices.get(speaker.id)
+        if not voice_id:
+            raise RuntimeError(f"No voice selected for {speaker.name}")
+        tasks.append(
+            TurnTask(t.seq_index, speaker, t.round_id, t.turn_type, text, None, None, voice_id)
+        )
+    set_media_state(
+        db,
+        debate,
+        step="tts",
+        current=0,
+        total=len(tasks) + 1,
+        message="Voicing the MC and the judge…",
+        extra={"options": options.model_dump()},
+    )
+    tts_started = time.monotonic()
+    for task in tasks:
+        voiced[task.seq_index] = _synthesize_turn(
+            provider, paths, task, options, force, code, tts_key
+        )
+    tts_ms = round((time.monotonic() - tts_started) * 1000)
+    intro = next((t for t in tasks if t.turn_type == "moderator_intro"), None)
+    verdict = next((t for t in tasks if t.turn_type == "verdict"), None)
+
+    rappers = [s.id for s in speakers if s.role == "debater"]
+    verses = [
+        music.Verse(
+            seq_index=t.seq_index,
+            round_number=_round_number(t.round_id),
+            lyrics=_lyrics(t.text),
+            flow=music.flow_for(
+                options.flows, speaker.id, rappers.index(speaker.id) if speaker.id in rappers else 0
+            ),
+        )
+        for t, speaker, _text in cleaned
+        if t.turn_type not in VOICED_TURNS and speaker.role == "debater"
+    ]
+    if not verses:
+        raise RuntimeError("The battle has no verses")
+    sections = music.build_plan(
+        voiced[intro.seq_index].duration_ms if intro else 0,
+        verses,
+        voiced[verdict.seq_index].duration_ms if verdict else 0,
+    )
+    key = music.plan_key(sections)
+    track = None if force else music.cached(paths.music_dir, key)
+    billed_ms = 0
+    if track is None:
+        seconds = music.track_ms(sections) // 1000
+        set_media_state(
+            db,
+            debate,
+            step="music",
+            current=len(tasks),
+            total=len(tasks) + 1,
+            message=f"Composing {seconds // 60}:{seconds % 60:02d} of beat and verses…",
+        )
+        started = time.monotonic()
+        owner: KeyOwner = "user" if music_key else "system"
+        try:
+            track = music.compose(sections, api_key=music_key)
+        except music.MusicError as e:
+            _book_music(sections, owner, started=started, error=e)
+            raise RuntimeError(str(e)) from e
+        _book_music(sections, owner, started=started)
+        music.store(paths.music_dir, key, track)
+        billed_ms = music.track_ms(sections)
+
+    set_media_state(db, debate, step="mix", message="Mixing the MC and the judge over the beat…")
+    ffmpeg.normalize_music(paths.music_dir / f"{key}.mp3", paths.music_wav)
+    wins = music.windows(sections)
+    starts: dict[int, int] = {}
+    if intro:
+        starts[intro.seq_index] = wins[0][0] + music.VOICE_LEAD_MS
+    if verdict:
+        starts[verdict.seq_index] = wins[-1][0] + music.VOICE_LEAD_MS
+    ffmpeg.mix_over(
+        paths.music_wav,
+        [(voiced[seq].wav, start, voiced[seq].duration_ms) for seq, start in starts.items()],
+        paths.full_wav,
+        paths.full_mp3,
+    )
+    total_ms = ffmpeg.probe_duration_ms(paths.full_wav)
+    track_levels = ffmpeg.envelope(paths.music_wav, window_ms=1000 // LEVELS_HZ)
+    per_level = 1000 // LEVELS_HZ
+    by_verse = {
+        sec.seq_index: win
+        for sec, win in zip(sections, wins, strict=True)
+        if sec.kind == "verse" and sec.seq_index is not None
+    }
+
+    fmt = format_of(debate.config_json or {})
+    segments: list[TimelineSegment] = []
+    for t, speaker, text in cleaned:
+        if t.seq_index in voiced:
+            audio = voiced[t.seq_index]
+            start, end = starts[t.seq_index], starts[t.seq_index] + audio.duration_ms
+            words, levels, path = audio.words, audio.levels, paths.rel(audio.wav)
+            spoken = strip_audio_tags(text)
+        elif t.seq_index in by_verse:
+            start, end = by_verse[t.seq_index]
+            spoken = _lyrics(t.text)
+            words = music.words_between(track.words, start, end) or [
+                TimelineWord.model_validate(w) for w in even_words(spoken, end - start)
+            ]
+            levels = track_levels[start // per_level : end // per_level]
+            path = paths.rel(paths.music_wav)
+        else:
+            continue
+        segments.append(
+            TimelineSegment(
+                seq_index=t.seq_index,
+                speaker_id=speaker.id,
+                speaker_name=speaker.name,
+                round_id=t.round_id,
+                round_label=fmt.round_label(t.round_id, t.turn_type),
+                turn_type=t.turn_type,
+                start_ms=start,
+                end_ms=end,
+                audio=path,
+                text=spoken,
+                words=words,
+                levels=levels,
+                levels_hz=LEVELS_HZ,
+            )
+        )
+    segments.sort(key=lambda seg: seg.start_ms)
+
+    char_cost = sum(a.char_cost for a in voiced.values() if not a.cached)
+    music_ms = music.track_ms(sections)
+    stats = TimelineStats(
+        chars=sum(len(strip_audio_tags(t.text)) for t in tasks),
+        tts_ms=tts_ms,
+        estimated_usd=(estimate_usd(options.model_id, char_cost) or 0.0)
+        + music.music_usd(billed_ms),
+        cached_turns=sum(1 for a in voiced.values() if a.cached),
+        music_ms=music_ms,
+        music_usd=music.music_usd(billed_ms),
+        music_cached=billed_ms == 0,
+    )
+    _finish(
+        db,
+        debate,
+        paths,
+        turns=turns,
+        segments=segments,
+        speakers=speakers,
+        visuals=[],
+        judge_model=judge_model,
+        total_ms=total_ms,
+        gap_ms=0,
+        provider=provider.name,
+        options=options,
+        stats=stats,
+        steps=len(tasks) + 1,
+    )
+    return BuildResult(chars=char_cost, music_ms=billed_ms)
+
+
+def _lyrics(text: str) -> str:
+    """A verse line by line (strip_audio_tags joins lines; a bar is a line)."""
+    lines = (strip_audio_tags(line).strip() for line in text.splitlines())
+    return "\n".join(line for line in lines if line)
+
+
+def _round_number(round_id: str) -> int:
+    try:
+        return int(round_id.removeprefix("round_"))
+    except ValueError:
+        return 1
+
+
+def _finish(
+    db: Session,
+    debate: Debate,
+    paths: MediaPaths,
+    *,
+    turns: list[Turn],
+    segments: list[TimelineSegment],
+    speakers: list[TimelineSpeaker],
+    visuals: list[TimelineVisual],
+    judge_model: str,
+    total_ms: int,
+    gap_ms: int,
+    provider: str,
+    options: MediaOptions,
+    stats: TimelineStats,
+    steps: int,
+) -> None:
+    """Shared by every soundtrack: the Short picks, the verdict, timeline.json and the ready
+    state."""
+    debate_id = str(debate.id)
+    conf: dict[str, Any] = debate.config_json or {}
+    language = str(conf.get("language") or "English")
+    speakers_by_id = {s.id: s for s in speakers}
     set_media_state(db, debate, step="highlights", message="Picking highlights for shorts…")
     highlights, winner_name = _pick_highlights(
         model=judge_model,
@@ -785,30 +1090,18 @@ def _build(
         if options.visuals:
             visuals = _add_scoreboard(visuals, segments, speakers, verdict, debate.verdict_json)
 
-    chars = sum(len(strip_audio_tags(task.text)) for task in tasks)
-    char_cost = sum(a.char_cost for a in ordered if not a.cached)
-    stats = TimelineStats(
-        chars=chars,
-        tts_ms=tts_ms,
-        estimated_usd=estimate_usd(options.model_id, char_cost)
-        if provider.name == "elevenlabs"
-        else None,
-        cached_turns=sum(1 for a in ordered if a.cached),
-        visuals_usd=visuals_usd,
-        images_usd=round(image_studio.ai_usd, 6) if image_studio else None,
-    )
     timeline = Timeline(
         debate_id=debate_id,
         title=str(debate.title or conf.get("topic") or "Debate"),
         topic=str(conf.get("topic") or ""),
         language=language,
-        language_code=code,
+        language_code=language_code(conf.get("language")),
         created_at=debate.created_at,
-        provider=provider.name,
+        provider=provider,
         model_id=options.model_id,
         speakers=speakers,
         segments=segments,
-        gap_ms=settings.MEDIA_GAP_MS,
+        gap_ms=gap_ms,
         total_ms=total_ms,
         verdict=verdict,
         highlights=highlights,
@@ -822,8 +1115,8 @@ def _build(
         debate,
         status="ready",
         step="done",
-        current=total,
-        total=total,
+        current=steps,
+        total=steps,
         message="Ready",
         finished=True,
         extra={
@@ -832,7 +1125,6 @@ def _build(
             "assets": {"timeline": "timeline.json", "full_mp3": "full.mp3", "full_wav": "full.wav"},
         },
     )
-    return char_cost, image_studio
 
 
 def _charge_build(
@@ -840,18 +1132,29 @@ def _charge_build(
     debate: Debate,
     state: dict[str, Any],
     options: MediaOptions,
-    billed_chars: int,
-    images: ImageStudio | None,
+    built: BuildResult,
     build_ref: str,
 ) -> None:
-    """Charge the owner for premium voices and AI pictures of a finished build, at the prices
-    it was queued with (`media_json.prices`)."""
+    """Charge the owner for premium voices, music and AI pictures of a finished build, at the
+    prices it was queued with (`media_json.prices`)."""
     debate_id = str(debate.id)
     prices = prices_of(state)
+    images = built.images
+    if built.music_ms:
+        tx = charge_music_sync(
+            db,
+            debate,
+            ms=built.music_ms,
+            own_key=bool(state.get("own_tts_key")),
+            build_ref=build_ref,
+            price_per_min=prices.music_per_min,
+        )
+        if tx is not None:
+            logger.info("Charged %s credits for music of %s", -tx.amount_usd, debate_id)
     tx = charge_media_sync(
         db,
         debate,
-        chars=billed_chars,
+        chars=built.chars,
         provider=options.provider,
         own_key=bool(state.get("own_tts_key")),
         build_ref=build_ref,
@@ -895,14 +1198,14 @@ def build_media_job(debate_id: str) -> None:
             started=True,
         )
         try:
-            billed_chars, images = _build(db, debate, options, force)
+            built = _build(db, debate, options, force)
             build_ref = str((debate.media_json or {}).get("finished_at") or int(time.time()))
             try:
                 if state.get("free"):
                     # Queued by an admin from the console: the owner pays nothing.
                     logger.info("Free media build of %s: nothing charged", debate_id)
                 else:
-                    _charge_build(db, debate, state, options, billed_chars, images, build_ref)
+                    _charge_build(db, debate, state, options, built, build_ref)
             except Exception:
                 logger.exception("Failed to charge credits for media of %s", debate_id)
                 db.rollback()

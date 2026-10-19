@@ -250,13 +250,18 @@ def _estimate(**fields: Any) -> EstimateOut:
 
 
 def test_billing_stores_the_estimate_its_media_part_and_the_prices():
-    prices = Prices(markup=3.0, min_charge=0.05, voices_per_1k=0.25)
+    prices = Prices(markup=3.0, min_charge=0.05, voices_per_1k=0.25, music_per_min=0.3)
     assert _billing(False, None) == {"own_key": False}
     billing = _billing(True, _estimate(), prices)
     assert billing["own_key"] is True
     assert billing["estimate_usd"] == 0.93
     assert billing["media_estimate_usd"] == pytest.approx(0.75 + 0.05 * 3.0)
-    assert billing["prices"] == {"markup": 3.0, "min_charge": 0.05, "voices_per_1k": 0.25}
+    assert billing["prices"] == {
+        "markup": 3.0,
+        "min_charge": 0.05,
+        "voices_per_1k": 0.25,
+        "music_per_min": 0.3,
+    }
     own_tts = _billing(False, _estimate(own_tts_key=True), prices)
     assert own_tts["media_estimate_usd"] == pytest.approx(0.05 * 3.0)
 

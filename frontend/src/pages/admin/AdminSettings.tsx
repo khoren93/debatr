@@ -43,6 +43,10 @@ const COPY: Record<LeverKey, { label: string; hint: string }> = {
     label: 'Premium voices, per 1K characters',
     hint: 'ElevenLabs on the system key (its API costs about $0.10 per 1K characters). About 1K characters is a minute of speech.',
   },
+  music_price_per_min: {
+    label: 'Battle music, per minute',
+    hint: 'A rap battle’s generated track on the system key (ElevenLabs Music costs $0.15 a minute). A battle is 2–6 minutes of music; a rebuild with the same lyrics reuses the track and costs nothing.',
+  },
   free_verdict_model: {
     label: 'Verdict model of free debates',
     hint: 'Structures the verdict and answers the gallery check when every participant argues on a free model, so such a debate costs nothing. Free models only; off: the paid VERDICT_MODEL. A model that stops answering sends those debates to the moderation queue.',
@@ -353,6 +357,7 @@ const AdminSettings = () => {
                 {row('credit_markup', number)}
                 {row('min_debate_charge_usd', number)}
                 {row('tts_price_per_1k_chars', number)}
+                {row('music_price_per_min', number)}
               </div>
             </Card>
             <Card>

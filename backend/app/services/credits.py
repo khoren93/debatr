@@ -174,6 +174,7 @@ class Prices:
     markup: float
     min_charge: float
     voices_per_1k: float
+    music_per_min: float
 
     def as_dict(self) -> dict[str, float]:
         return asdict(self)
@@ -184,6 +185,7 @@ def env_prices() -> Prices:
         markup=settings.CREDIT_MARKUP,
         min_charge=settings.MIN_DEBATE_CHARGE_USD,
         voices_per_1k=settings.TTS_CREDIT_PRICE_PER_1K_CHARS,
+        music_per_min=settings.MUSIC_CREDIT_PRICE_PER_MIN,
     )
 
 
@@ -193,6 +195,7 @@ def lever_prices(levers: "Levers") -> Prices:
         markup=levers.credit_markup,
         min_charge=levers.min_debate_charge_usd,
         voices_per_1k=levers.tts_price_per_1k_chars,
+        music_per_min=levers.music_price_per_min,
     )
 
 
@@ -262,6 +265,10 @@ def tts_charge_usd(chars: int, price_per_1k: float) -> Decimal:
     return to_usd(Decimal(max(0, chars)) / Decimal(1000) * Decimal(str(price_per_1k)))
 
 
+def music_charge_usd(ms: int, price_per_min: float) -> Decimal:
+    return to_usd(Decimal(max(0, ms)) / Decimal(60_000) * Decimal(str(price_per_min)))
+
+
 def charge_debate_sync(db: Session, debate: Debate) -> CreditTransaction | None:
     """Charge the owner for a finished/stopped/failed debate: what its usage costs minus what
     earlier runs of it were charged (so repeating a charge, or a resumed run, is safe)."""
@@ -320,6 +327,34 @@ def charge_media_sync(
         provider="system",
         provider_ref=f"debate:{debate.id}:media:{build_ref}",
         meta={"chars": chars, "price_per_1k": price_per_1k},
+    )
+
+
+def charge_music_sync(
+    db: Session,
+    debate: Debate,
+    *,
+    ms: int,
+    own_key: bool,
+    build_ref: str,
+    price_per_min: float,
+) -> CreditTransaction | None:
+    """Charge a rap battle's music generated on the system key (a cached track: nothing)."""
+    if debate.user_id is None or own_key:
+        return None
+    amount = music_charge_usd(ms, price_per_min)
+    if amount <= ZERO:
+        return None
+    return apply_transaction_sync(
+        db,
+        debate.user_id,
+        -amount,
+        "media",
+        description=f"Music: {(debate.title or 'Rap battle')[:250]}",
+        debate_id=debate.id,
+        provider="system",
+        provider_ref=f"debate:{debate.id}:music:{build_ref}",
+        meta={"music_ms": ms, "price_per_min": price_per_min},
     )
 
 

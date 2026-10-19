@@ -71,6 +71,10 @@ class TimelineStats(BaseModel):
     cached_turns: int = 0
     visuals_usd: float | None = None  # director, sketches, picture checks (system key, not billed)
     images_usd: float | None = None  # AI pictures (billed to the owner)
+    # A rap battle's generated track: its length, what generating it cost (0: from the cache).
+    music_ms: int | None = None
+    music_usd: float | None = None
+    music_cached: bool | None = None
 
 
 class Timeline(BaseModel):

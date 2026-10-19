@@ -118,7 +118,7 @@ export interface OverviewMoney {
   bonuses: number;
   refunds: number;
   adjustments: number;
-  charged: Record<'models' | 'voices' | 'pictures', number>;
+  charged: Record<'models' | 'voices' | 'pictures' | 'music', number>;
   charged_total: number;
   cost_system: number;
   cost_user_keys: number;
@@ -221,6 +221,7 @@ export interface SpendByCategory {
   models: number;
   voices: number;
   pictures: number;
+  music: number;
 }
 
 export interface AdminUserRow {
@@ -715,7 +716,7 @@ export interface ProvidersOut {
     key?: { label?: string | null; limit?: number | null; limit_remaining?: number | null; usage?: number | null; usage_daily?: number | null; is_free_tier?: boolean | null };
   };
   elevenlabs: { configured: boolean; ok?: boolean; reason?: string | null; tier?: string; used?: number; limit?: number; resets_at?: number | null };
-  payments: { mode: string; currency: string; topup_amounts: number[]; signup_bonus_usd: number; credit_markup: number; min_debate_charge_usd: number; tts_price_per_1k_chars: number };
+  payments: { mode: string; currency: string; topup_amounts: number[]; signup_bonus_usd: number; credit_markup: number; min_debate_charge_usd: number; tts_price_per_1k_chars: number; music_price_per_min: number };
 }
 
 export interface MediaDir {
@@ -762,6 +763,7 @@ export interface MoneyRow {
   charged_models: number;
   charged_voices: number;
   charged_pictures: number;
+  charged_music: number;
   charged: number;
   /** System-key cost of what users pay for. */
   cost_billed: number;
@@ -908,7 +910,8 @@ export type LeverKey =
   | 'free_lengths'
   | 'credit_markup'
   | 'min_debate_charge_usd'
-  | 'tts_price_per_1k_chars';
+  | 'tts_price_per_1k_chars'
+  | 'music_price_per_min';
 
 export type LeverValue = boolean | number | string | string[];
 

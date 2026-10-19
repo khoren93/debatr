@@ -57,6 +57,7 @@ KINDS: dict[str, LeverKind] = {
     "credit_markup": "factor",
     "min_debate_charge_usd": "float",
     "tts_price_per_1k_chars": "float",
+    "music_price_per_min": "float",
 }
 
 

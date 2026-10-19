@@ -189,7 +189,7 @@ class MoneyOut(BaseModel):
     bonuses: float
     refunds: float
     adjustments: float
-    charged: dict[str, float]  # models / voices / pictures, as positive amounts
+    charged: dict[str, float]  # models / voices / pictures / music, as positive amounts
     charged_total: float
     cost_system: float  # what providers cost us (system keys)
     cost_user_keys: float  # spent on users' own keys (not ours)
@@ -304,6 +304,7 @@ class SpendByCategory(BaseModel):
     models: float = 0.0
     voices: float = 0.0
     pictures: float = 0.0
+    music: float = 0.0
 
 
 class AdminUserRow(BaseModel):
@@ -380,6 +381,7 @@ class SpendDay(BaseModel):
     models: float = 0.0
     voices: float = 0.0
     pictures: float = 0.0
+    music: float = 0.0
 
 
 class ReactionOwner(BaseModel):
@@ -981,6 +983,7 @@ class MoneyRow(BaseModel):
     charged_models: float
     charged_voices: float
     charged_pictures: float
+    charged_music: float = 0.0
     charged: float
     cost_billed: float  # system-key cost of what users pay for
     cost_unbilled: float  # system-key cost nobody pays us for

@@ -40,7 +40,7 @@ backend/            FastAPI API + RQ worker (Python 3.12+, managed with uv)
                       sign-ups / maintenance for the site); serializers.py builds the shared
                       response models
   app/services/       orchestrator (RQ jobs), formats/ (show formats: seats, limits, turn order,
-                      prompts, verdict, round labels; `debate` today), scheduler (the debate's turn
+                      prompts, verdict, round labels; `debate`, `rap_battle`), scheduler (the debate's turn
                       order), prompt_builder (the debate's prompts),
                       api_tokens (token budget, private-by-default, device flow in Redis),
                       openrouter_client, free_router (pins a Free Router participant's model),
@@ -280,6 +280,15 @@ docker compose exec api python -m app.manage credits user@example.com 5 --reason
    stance sentences are turned into sides: `sideFromPersona`). Formats with fixed seats
    (`Seat(label, side)` by speaking position) refuse sides from the user. The leaderboard ranks
    within a format (`format=debate` by default); the gallery has a `format` filter.
+   `rap_battle` (`formats/rap_battle.py`): an MC (required) opens, exactly two rappers trade verses
+   for 1–3 rounds (the second opens round 2), Rapper One for the topic and Rapper Two against
+   (for "A or B?" topics: A / B); a verse is exactly N lines (very_short 4, short 8, medium 12,
+   long 16; `finish_text` tidies the answer into lines); the judge scores every round
+   (`verdict_json.rounds`, from the structuring call or `fallback_round_scores`); no scenes, the
+   output style is always spoken, the gallery check allows trash talk (`moderation_note`). Audio
+   is optional but premium only (`voices="elevenlabs"`: Edge → 400, no Edge fallback in
+   `_auto_media`) and comes from one generated track (`soundtrack="music"`, see the media
+   pipeline).
 4. `openrouter_client.stream_chat_completion()` streams deltas and returns usage
    (tokens + cost). On HTTP 400 with a system prompt it retries once with the system prompt
    merged into the user message. Mid-stream `{"error": ...}` chunks raise `OpenRouterError`.
@@ -452,6 +461,23 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
    it via `GET /media/voices` (502 = rejected) and a rejected key is neither used nor sent.
    `output_style=spoken` in `DebateConfig` asks the models for plain spoken prose with
    optional `[emotion]` tags, which ElevenLabs v3 understands.
+
+- Rap battles (`soundtrack="music"`, `jobs._build_battle`): the MC's intro and the verdict are
+  voiced by ElevenLabs TTS (`_synthesize_turn`, cached per turn); then `media/music.build_plan`
+  makes the composition plan (an instrumental intro as long as the MC's speech + a bar, a
+  section per verse with its rapper's flow — `MediaPlan.flows`, `music.FLOWS`, by default a male
+  and a female voice —, a two-bar break before every new round, an outro under the verdict;
+  92 BPM, a bar per line) and `music.compose` makes one `POST /v1/music/detailed` call
+  (`music_v2_5`, `with_timestamps`, `mp3_44100_128`; a 429/5xx is tried once more, a refusal
+  fails the build with ElevenLabs' message). The track is cached by the plan's hash
+  (`MEDIA_ROOT/{id}/music/<hash>.mp3` + words), so a rebuild with the same lyrics generates and
+  charges nothing. `ffmpeg.normalize_music` + `mix_over` duck the beat under the MC and the judge
+  into a stereo full.wav; verse segments are the sections' windows (v2 keeps their durations)
+  with the rapped words. `provider_usage` purpose `music` (cost estimated at $0.15 a minute);
+  the owner pays `music_price_per_min` (lever, default $0.30) after the build (ledger category
+  `music`, every console summary counts it); the estimate adds the track's minutes
+  (`Format.track_ms`). An own ElevenLabs key needs a paid plan (`elevenlabs.music_allowed`,
+  402). Never run music builds in tests or QA without the owner's go-ahead: each costs money.
 
 ### Visual scenes (charts, drawn schemes, sketches and pictures)
 

@@ -356,6 +356,28 @@ def system_key_status(*, force: bool = False) -> tuple[bool, str | None]:
     return ok, reason
 
 
+_PLAN_TTL = 600.0
+_plan_cache: dict[str, tuple[float, bool]] = {}
+
+
+def music_allowed(api_key: str, *, transport: httpx.BaseTransport | None = None) -> bool:
+    """Whether a user's key may generate music (the Music API is for paid plans only): its plan
+    is a paid one. Unknown (no answer, no "User read" permission) counts as no. Cached by key."""
+    digest = hashlib.sha256(api_key.encode()).hexdigest()[:16]
+    now = time.monotonic()
+    cached = _plan_cache.get(digest)
+    if cached and now - cached[0] < _PLAN_TTL:
+        return cached[1]
+    provider = ElevenLabsProvider(api_key, transport=transport)
+    try:
+        with provider._client() as client:
+            allowed = provider._paid_plan(client)
+    except TTSError:
+        allowed = False
+    _plan_cache[digest] = (now, allowed)
+    return allowed
+
+
 _QUOTA_TTL = 300.0
 _quota_cache: tuple[float, dict[str, Any] | None] | None = None
 

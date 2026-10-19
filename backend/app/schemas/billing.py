@@ -17,6 +17,8 @@ class BillingConfigOut(BaseModel):
     tts_price_per_1k_chars: float
     # ~1000 characters of speech last about a minute at a natural pace.
     tts_price_per_min: float
+    # A rap battle's generated music on the system key, per minute of track.
+    music_price_per_min: float = 0.0
     elevenlabs_available: bool
     elevenlabs_error: str | None = None
 

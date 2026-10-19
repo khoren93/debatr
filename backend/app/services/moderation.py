@@ -64,15 +64,17 @@ def fallback_result() -> dict[str, Any]:
 
 
 def build_moderation_messages(
-    *, topic: str, description: str | None, verdict_text: str = ""
+    *, topic: str, description: str | None, verdict_text: str = "", extra_rules: str = ""
 ) -> list[dict[str, str]]:
+    """`extra_rules`: what the debate's format allows (`Format.moderation_note`)."""
     system = "You are a content moderator. Reply with a single JSON object and nothing else."
     parts = [f"Topic: {topic}"]
     if description:
         parts.append(f"Description: {description}")
     if verdict_text:
         parts.append(f"Judge's verdict:\n{verdict_text[:4000]}")
-    user = "\n".join(parts) + f"\n\n{MODERATION_RULES}\n\nReturn JSON: {MODERATION_JSON_SPEC}"
+    rules = f"{MODERATION_RULES} {extra_rules}" if extra_rules else MODERATION_RULES
+    user = "\n".join(parts) + f"\n\n{rules}\n\nReturn JSON: {MODERATION_JSON_SPEC}"
     return [{"role": "system", "content": system}, {"role": "user", "content": user}]
 
 
@@ -80,6 +82,7 @@ def check_debate(
     conf: dict[str, Any], *, model: str, api_key: str | None = None, verdict_text: str = ""
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Stand-alone check for runs whose verdict step did not moderate. Never raises."""
+    from app.services.formats import format_of
     from app.services.media.llm import complete, extract_json  # worker-side import
 
     try:
@@ -87,6 +90,7 @@ def check_debate(
             topic=str(conf.get("topic") or ""),
             description=conf.get("description"),
             verdict_text=verdict_text,
+            extra_rules=format_of(conf).moderation_note,
         )
         text, usage = complete(
             model,

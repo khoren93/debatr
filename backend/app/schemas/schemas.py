@@ -15,7 +15,7 @@ from app.schemas.visuals import Scene, SceneCheck
 LengthPreset = Literal["very_short", "short", "medium", "long"]
 ParticipantRole = Literal["moderator", "debater"]
 # Show formats (services/formats); a new one is added to this list and to the registry.
-FormatId = Literal["debate"]
+FormatId = Literal["debate", "rap_battle"]
 # A debater's side; unset = the persona text carries the stance (configs from before sides).
 DebaterSide = Literal["for", "against", "own"]
 # "spoken" asks the models for plain spoken prose (no Markdown) suited for TTS and video.
@@ -111,6 +111,8 @@ class MediaPlan(BaseModel):
     quality: VideoQuality = "1080p"
     visuals: bool = True  # charts / drawn scenes, live next to the text and in the video
     images: ImageSource = "off"  # pictures among the scenes
+    # Rap battles: speaker id -> flow preset (media/music.FLOWS), in place of a rapper's voice.
+    flows: dict[str, str] = Field(default_factory=dict, max_length=8)
 
 
 class NewsContext(BaseModel):
@@ -200,11 +202,21 @@ class DebateConfig(BaseModel):
     def _fits_the_format(self) -> Self:
         from app.services.formats import format_of  # the registry imports no schemas
 
-        problems = format_of({"format": self.format}).problems(
-            [p.model_dump() for p in self.participants], self.num_rounds
+        fmt = format_of({"format": self.format})
+        problems = fmt.problems(
+            self.model_dump(include={"participants", "num_rounds", "media_plan"})
         )
         if problems:
             raise ValueError("; ".join(problems))
+        # What the format decides for itself: the style its texts are written in, no scenes.
+        if fmt.output_style is not None:
+            self.output_style = fmt.output_style
+        if not fmt.visuals:
+            self.fact_check = False
+            if self.media_plan is not None:
+                self.media_plan = self.media_plan.model_copy(
+                    update={"visuals": False, "images": "off"}
+                )
         return self
 
     def persisted(self) -> dict[str, Any]:
@@ -243,6 +255,8 @@ class EstimateOut(BaseModel):
     credits_cost_usd: float
     duration_ms: int
     render_ms: int
+    music_ms: int = 0  # a rap battle's generated track
+    music_cost_usd: float = 0.0  # in credits, like tts_cost_usd
     own_key: bool = False
     own_tts_key: bool = False
     paid_models: list[str] = Field(default_factory=list)

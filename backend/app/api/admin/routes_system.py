@@ -233,6 +233,7 @@ async def providers(refresh: bool = False, _ctx: AdminContext = Depends(can_see)
         "credit_markup": levers.credit_markup,
         "min_debate_charge_usd": levers.min_debate_charge_usd,
         "tts_price_per_1k_chars": levers.tts_price_per_1k_chars,
+        "music_price_per_min": levers.music_price_per_min,
     }
     return ProvidersOut(
         checked_at=datetime.now(UTC),

@@ -16,6 +16,8 @@ class MediaOptions(BaseModel):
     visuals: bool = True  # design charts / drawn scenes synced with the speech
     # Pictures among the scenes: free photos (Wikimedia Commons) or AI images (paid).
     images: Literal["off", "stock", "ai"] = "off"
+    # Rap battles: speaker id -> flow preset (media/music.FLOWS), in place of a rapper's voice.
+    flows: dict[str, str] = Field(default_factory=dict, max_length=8)
 
 
 class GenerateMediaRequest(MediaOptions):

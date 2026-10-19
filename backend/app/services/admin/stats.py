@@ -346,6 +346,16 @@ def ledger_category() -> ColumnElement[str]:
             ),
             "pictures",
         ),
+        (
+            and_(
+                CreditTransaction.kind == "media",
+                or_(
+                    CreditTransaction.provider_ref.like("%:music:%"),
+                    CreditTransaction.description.like("Music:%"),
+                ),
+            ),
+            "music",
+        ),
         (CreditTransaction.kind == "media", "voices"),
         else_=CreditTransaction.kind,
     )
@@ -520,7 +530,9 @@ async def money(db: AsyncSession, window: Window) -> dict[str, Any]:
         return {(str(k), str(p)): _usd(total) for k, p, total in rows.all()}
 
     def summary(entries: dict[str, float], spent: dict[tuple[str, str], float]) -> dict[str, Any]:
-        charged = {name: -entries.get(name, 0.0) for name in ("models", "voices", "pictures")}
+        charged = {
+            name: -entries.get(name, 0.0) for name in ("models", "voices", "pictures", "music")
+        }
         charged_total = round(sum(charged.values()), 6)
         system = round(sum(v for (k, _), v in spent.items() if k == "system"), 6)
         return {
