@@ -231,3 +231,14 @@ class RapBattleFormat(Format):
 
     def finish_text(self, conf: Mapping[str, Any], turn: ScheduledTurn, text: str) -> str:
         return tidy_verse(text, verse_lines(conf)) if turn.turn_type == VERSE else text
+
+    def catalogue(self) -> dict[str, Any]:
+        """Plus the flows a rapper may take (`media_plan.flows`, in place of a voice)."""
+        return {
+            **super().catalogue(),
+            "flows": [
+                {"id": f.id, "label": f.label, "hint": f.hint, "voice": f.voice}
+                for f in music.FLOWS.values()
+            ],
+            "default_flows": list(music.DEFAULT_FLOWS),
+        }

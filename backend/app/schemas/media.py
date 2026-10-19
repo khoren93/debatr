@@ -80,6 +80,9 @@ class VoicesResponse(BaseModel):
     language: str = "en"  # ISO code of the debate language (voices[].languages use it)
     voices: list[VoiceOut]
     defaults: dict[str, str]  # speaker_id -> voice id
+    # An own ElevenLabs key (X-TTS-Key): whether its plan is a paid one, which the Music API of
+    # rap battles needs. Null for the system key and Edge.
+    paid_plan: bool | None = None
 
 
 class MediaCapabilities(BaseModel):

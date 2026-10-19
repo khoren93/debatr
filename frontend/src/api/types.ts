@@ -138,6 +138,8 @@ export interface MediaPlan {
   visuals?: boolean;
   /** Pictures among the scenes (default off). */
   images?: ImageSource;
+  /** Rap battles: speaker id -> flow (how the rapper sounds in the track), in place of a voice. */
+  flows?: Record<string, string>;
 }
 
 export interface DebateSummary {
@@ -366,6 +368,9 @@ export interface Estimate {
   credits_cost_usd: number;
   duration_ms: number;
   render_ms: number;
+  /** A rap battle's generated track: its length and price in credits (like tts_cost_usd). */
+  music_ms: number;
+  music_cost_usd: number;
   own_key: boolean;
   own_tts_key: boolean;
   paid_models: string[];
@@ -637,6 +642,8 @@ export interface MediaOptions {
   visuals?: boolean;
   /** Pictures among the scenes (default off). */
   images?: ImageSource;
+  /** Rap battles: speaker id -> flow, in place of the rappers' voices. */
+  flows?: Record<string, string>;
 }
 
 export interface GenerateMediaRequest extends MediaOptions {
@@ -693,6 +700,8 @@ export interface VoicesResponse {
   language: string;
   voices: VoiceInfo[];
   defaults: Record<string, string>;
+  /** Own ElevenLabs key: whether its plan is a paid one (the Music API of rap battles needs it). */
+  paid_plan?: boolean | null;
 }
 
 export interface MediaCapabilities {

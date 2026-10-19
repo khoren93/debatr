@@ -11,6 +11,7 @@ import { StepSpeakers } from '../components/create/StepSpeakers';
 import { StepTopic } from '../components/create/StepTopic';
 import { WizardProgress } from '../components/create/WizardProgress';
 import {
+  applyFormat,
   buildConfig,
   clearWizardState,
   configFromDebate,
@@ -37,6 +38,8 @@ import { useVoices } from '../hooks/useVoices';
 import { useLocalKey } from '../lib/localKeys';
 import { ttsKeyUsable, useElevenLabsKeyStatus } from '../hooks/useElevenLabsKeyStatus';
 import { formatCost, formatMinutes } from '../lib/format';
+import { FORMAT_IDS, FORMATS, formatSpec, type FormatSpec } from '../lib/formats';
+import type { FormatId } from '../api/types';
 
 /**
  * Three-step wizard: topic (trending news or your own, format) → speakers (models, voices,
@@ -51,12 +54,25 @@ const CreateDebate = () => {
   const remixId = draftId ? null : searchParams.get('remix');
   const { user, refresh } = useAuth();
   const { models, loading: modelsLoading, error: modelsError } = useModels();
-  const { config: billing } = useBillingConfig();
+  const { config: billing, loaded: billingLoaded } = useBillingConfig();
   const openrouterKey = useLocalKey('openrouter');
   const storedTtsKey = useLocalKey('elevenlabs');
   const ttsKeyCheck = useElevenLabsKeyStatus(storedTtsKey);
-  // A key ElevenLabs rejected neither unlocks premium voices nor goes to the audio build.
-  const elevenlabsKey = ttsKeyUsable(ttsKeyCheck) ? storedTtsKey : '';
+  const credits = user?.credits_usd ?? 0;
+  // A key ElevenLabs rejected neither unlocks premium voices nor goes to the audio build; a key
+  // on the free plan stays out of a rap battle's (no Music API there: credits pay our key).
+  const keyFor = (spec: FormatSpec) => (ttsKeyUsable(ttsKeyCheck, spec.music) ? storedTtsKey : '');
+  // A format voiced with premium voices only (rap battle) needs a key of one's own or a balance.
+  const formatLock = (spec: FormatSpec): string | null => {
+    if (!spec.premiumOnly || keyFor(spec) || !billingLoaded) return null;
+    const plan = spec.music ? ' on a paid plan' : '';
+    if (!billing.elevenlabs_available) return `${spec.name}s need premium voices, which are unavailable on this server right now: add your own ElevenLabs key${plan} in Account.`;
+    if (credits > 0) return null;
+    if (ttsKeyUsable(ttsKeyCheck) && spec.music)
+      return `Your ElevenLabs key is on the free plan, which makes no music: top up credits to run ${spec.name.toLowerCase()}s on our key, or upgrade the key.`;
+    return `${spec.name}s are voiced by ElevenLabs and paid from your balance: top up credits, or add your own ElevenLabs key${plan} in Account.`;
+  };
+  const formatLocks = Object.fromEntries(FORMAT_IDS.flatMap((id) => (formatLock(FORMATS[id]) ? [[id, formatLock(FORMATS[id])]] : []))) as Partial<Record<FormatId, string>>;
 
   const [state, setState] = useState<WizardState>(() => (draftId ? initialState() : loadWizardState()));
   const [draftLoaded, setDraftLoaded] = useState<string | null>(null);
@@ -119,13 +135,17 @@ const CreateDebate = () => {
   }, [state, draftId, remixId]);
 
   const patch = (changes: Partial<WizardState>) => setState((s) => ({ ...s, ...changes }));
+  const setFormat = (format: FormatId) => setState((s) => applyFormat(s, format));
 
+  const spec = formatSpec(state.format);
+  const elevenlabsKey = keyFor(spec);
   const debaters = countDebaters(state.speakers);
   // Premium voices on the system key are paid from credits: an empty balance locks
   // them unless the user brings an own ElevenLabs key.
-  const premiumLocked = !elevenlabsKey && (user?.credits_usd ?? 0) <= 0;
+  const premiumLocked = !elevenlabsKey && credits <= 0;
   const premiumUsable = elevenlabsKey.length > 0 || (billing.elevenlabs_available && !premiumLocked);
-  const provider = state.provider === 'elevenlabs' && !premiumUsable ? 'edge' : state.provider;
+  // A premium-only format always asks for ElevenLabs (its lock says why it cannot run).
+  const provider = spec.premiumOnly ? 'elevenlabs' : state.provider === 'elevenlabs' && !premiumUsable ? 'edge' : state.provider;
   const catalogue = useVoices(provider, state.language, debaters, state.step >= 2, provider === 'elevenlabs' ? elevenlabsKey : '');
   // Without a catalogue the server picks the voices (the Speakers step says so).
   const resolvedVoices = catalogue.error ? {} : resolveVoices(state, catalogue.voices, catalogue.defaults);
@@ -142,18 +162,18 @@ const CreateDebate = () => {
   // Locked options (no balance) are sent as off even if the stored wizard state has them on.
   const effective: WizardState = {
     ...limited,
-    images: state.images === 'ai' && (user?.credits_usd ?? 0) <= 0 ? 'off' : state.images,
+    images: state.images === 'ai' && credits <= 0 ? 'off' : state.images,
     fact_check: state.fact_check && !paidLocked,
   };
   const config = buildConfig(effective, { defaultModelId, models, voices: resolvedVoices, provider, openrouterKey, elevenlabsKey });
-  const names = speakerNamesOf(state.speakers, models, defaultModelId);
+  const names = speakerNamesOf(state.speakers, models, defaultModelId, spec.id);
   // Drafts are stored on the server: never send the browser keys along with them.
   const draftConfig = { ...config, user_provider_key: undefined, user_tts_key: undefined };
   const ready = !modelsLoading && config.participants.every((p) => p.model_id.length > 0);
   const maxStep = maxReachableStep(state, validation);
   // Step 1 shows a one-line estimate, step 3 the full one; the topic step needs no voices.
   // Before a topic is chosen the estimate uses a stand-in: the topic barely changes it.
-  const estimate = useEstimate(config.topic ? config : { ...config, topic: 'Topic' }, ready, user?.credits_usd ?? 0);
+  const estimate = useEstimate(config.topic ? config : { ...config, topic: 'Topic' }, ready, credits);
   const shownCost = estimate.shown ? estimateCost(estimate.shown) : null;
   const estimateLine = estimate.shown
     ? `~${formatMinutes(estimate.shown.duration_ms)} episode · ${shownCost ? `~${formatCost(shownCost)} estimated` : 'free with these models'}`
@@ -240,7 +260,7 @@ const CreateDebate = () => {
   return (
     <Page>
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="font-display text-[clamp(26px,3vw,38px)] font-extrabold tracking-[-0.03em]">{draftLoaded ? 'Edit draft' : 'New debate'}</h1>
+        <h1 className="font-display text-[clamp(26px,3vw,38px)] font-extrabold tracking-[-0.03em]">{draftLoaded ? 'Edit draft' : `New ${spec.show}`}</h1>
         <button type="button" onClick={saveDraft} disabled={saving || starting} className="text-[13px] text-muted hover:text-text cursor-pointer disabled:opacity-50">
           {saving ? 'Saving…' : 'Save draft & exit'}
         </button>
@@ -250,7 +270,9 @@ const CreateDebate = () => {
 
       <WizardProgress step={state.step} maxStep={maxStep} onSelect={goTo} />
 
-      {state.step === 1 && <StepTopic state={limited} free={free} patch={patch} showErrors={showErrors} estimateLine={estimateLine} onContinue={next} />}
+      {state.step === 1 && (
+        <StepTopic state={limited} free={free} patch={patch} onFormat={setFormat} formatLocks={formatLocks} showErrors={showErrors} estimateLine={estimateLine} onContinue={next} />
+      )}
       {state.step === 2 && (
         <StepSpeakers
           state={state}
@@ -266,6 +288,8 @@ const CreateDebate = () => {
           hasTtsKey={elevenlabsKey.length > 0}
           ttsKeyError={ttsKeyCheck.status === 'invalid' ? ttsKeyCheck.error : null}
           premiumLocked={premiumLocked}
+          formatLock={formatLocks[state.format] ?? null}
+          freePlanKey={spec.music && ttsKeyUsable(ttsKeyCheck) && !elevenlabsKey}
           paidLocked={paidLocked}
           free={free}
           showErrors={showErrors}
@@ -285,7 +309,8 @@ const CreateDebate = () => {
           accountKeyMasked={user?.openrouter_key_masked ?? null}
           openrouterKey={openrouterKey}
           ttsKeyCheck={ttsKeyCheck}
-          aiImagesLocked={(user?.credits_usd ?? 0) <= 0}
+          formatLock={formatLocks[state.format] ?? null}
+          aiImagesLocked={credits <= 0}
           factCheckLocked={paidLocked}
           starting={starting}
           startError={startError}

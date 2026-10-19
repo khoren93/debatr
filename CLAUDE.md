@@ -101,16 +101,21 @@ frontend/           React 19 + Vite 8 + Tailwind 4 + TypeScript
   src/components/cards/    DebateCard (library / gallery / landing; title under the cover, CardStats =
                            likes / views / length), DebateCover (face-off cover: each debater's logo
                            on a half in its speaker colour, slanted seams, VS; markup, never the winner)
-  src/components/create/   three-step wizard + wizardState.ts (state, persistence, config mapping):
-                           StepTopic (TrendingBrowser = today's news topics in rank order with search,
+  src/components/create/   three-step wizard + wizardState.ts (state, persistence, config mapping;
+                           `applyFormat` / `fitFormat`: seats, prompts, rounds follow the format):
+                           StepTopic (format cards on top, a locked one says why; TrendingBrowser =
+                           today's news topics in rank order with search,
                            categories, 10 per page + sticky "Your debate" panel; TopicVersions =
                            remix chip, "joins a published topic", similar topics), StepSpeakers
-                           (SpeakerRow per speaker: model / voice / persona fields + voice preview
-                           when the voice has a sample, prompt editor, remove; no randomizer),
+                           (SpeakerRow per speaker: model / side / voice / persona fields + voice
+                           preview when the voice has a sample, prompt editor, remove; no randomizer;
+                           rap battle: fixed FOR / AGAINST seats, a flow in place of a voice, the
+                           "one track" card in place of the voice engine),
                            StepLaunch (style, outputs, scenes, keys + summary, estimate, start);
                            ModelPicker (searchable OpenRouter list: logos, prices, rank, Latest
                            filter), VoicePicker (voice list with previews, debate-language / all scope),
-                           PersonaPicker (persona presets + Custom), PickerFace, usePickerPopover
+                           PresetPicker (short preset list: PersonaPicker = persona presets + Custom,
+                           rappers' flows), PickerFace, usePickerPopover
   src/components/debate/   DebatePlayer (Remotion Player with own controls: SegmentBar = seek bar
                            by turns, PlayerShell/placeholders), LiveCard (live frame: cast, speaker,
                            streamed captions), DebateActions (16:9 / 9:16 format icons + Like/Share/Remix/Export/… toolbar,
@@ -157,6 +162,9 @@ frontend/           React 19 + Vite 8 + Tailwind 4 + TypeScript
                       LineChart, StackedColumns, ChartCard (legend + table view), palette.ts =
                       validated chart colours)
   src/lib/cli.ts      install / login / MCP setup snippets shown on the Account page
+  src/lib/formats.ts  show formats as the wizard runs them (mirrors backend services/formats:
+                      seats, limits, premium-only, music, length / rounds wording, default
+                      prompts) and the rappers' flows (mirrors media/music.FLOWS)
 cli/                `debatr` package (PyPI): CLI + MCP server, Python 3.10+, uv, only the public API
   src/debatr/cli.py   Typer commands (login, run, watch, resume, show, list, stop, delete, publish, audio,
                       models, gallery, leaderboard, whoami, logout, mcp)
@@ -288,7 +296,15 @@ docker compose exec api python -m app.manage credits user@example.com 5 --reason
    output style is always spoken, the gallery check allows trash talk (`moderation_note`). Audio
    is optional but premium only (`voices="elevenlabs"`: Edge → 400, no Edge fallback in
    `_auto_media`) and comes from one generated track (`soundtrack="music"`, see the media
-   pipeline).
+   pipeline). `GET /api/formats` lists the formats with their flows (`FormatOut.flows`,
+   `default_flows`) for the CLI and agents. The wizard: format cards in step 1 (a switch keeps
+   models and styles, trims seats, swaps default prompts and clamps rounds); a battle always
+   builds its audio on ElevenLabs, sends `media_plan.flows` and voices only for the MC and the
+   judge, no sides, no scenes; it is locked without a balance unless the browser's ElevenLabs
+   key is on a paid plan (`GET /media/voices` answers `paid_plan` for an own key; a free-plan key
+   is left out of a battle, which then runs on our key and credits). The regenerate dialog
+   offers flows for the rappers and says whether the track is reused (same verses and flows) or
+   made again (paid).
 4. `openrouter_client.stream_chat_completion()` streams deltas and returns usage
    (tokens + cost). On HTTP 400 with a system prompt it retries once with the system prompt
    merged into the user message. Mid-stream `{"error": ...}` chunks raise `OpenRouterError`.
@@ -970,7 +986,7 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   handled (`scheduler.MODERATOR_TURN_TYPES`, `lib/format.isErrorTurn`). Debates created before
   accounts have `user_id=NULL`: readable via their link, manageable only in the admin console.
 - Speaker names: the wizard has no name fields. `lib/modelNames.speakerNames` calls the host
-  "The Host" and debaters after their model family ("Claude", "Gemini", "GPT-5.5", "Free
+  "The Host" ("The MC" in a battle: `FormatSpec.hostName`) and debaters after their model family ("Claude", "Gemini", "GPT-5.5", "Free
   Router"); two different models of one family get full titles, the same model twice gets
   letters ("Free Router A/B") — prompts and the judge's "Winner: <name>" need distinct names.
   Drafts and remixes re-derive the names from the models.

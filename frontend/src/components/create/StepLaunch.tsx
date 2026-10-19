@@ -7,6 +7,7 @@ import type { TtsKeyCheck, TtsKeyStatus } from '../../hooks/useElevenLabsKeyStat
 import { estimateCost } from '../../hooks/useEstimate';
 import { useSiteStatus } from '../../hooks/useSiteStatus';
 import { formatAge, formatCost, formatMinutes, shortModelName } from '../../lib/format';
+import { flowById, formatSpec } from '../../lib/formats';
 import { accountPath } from '../account/tabs';
 import { ErrorBox, Hint, ModelIcon, Spinner, SwitchTrack } from '../ui';
 import { Favicon } from './TrendingBrowser';
@@ -30,6 +31,8 @@ interface StepLaunchProps {
   openrouterKey: string;
   /** The browser's ElevenLabs key, as checked against ElevenLabs. */
   ttsKeyCheck: TtsKeyCheck;
+  /** Why the format cannot run (no balance or key for its voices); blocks the start. */
+  formatLock: string | null;
   /** No balance: AI pictures (system key) are locked. */
   aiImagesLocked: boolean;
   /** No balance and no own OpenRouter key: the paid fact-check is locked. */
@@ -150,6 +153,7 @@ export const StepLaunch = ({
   accountKeyMasked,
   openrouterKey,
   ttsKeyCheck,
+  formatLock,
   aiImagesLocked,
   factCheckLocked,
   starting,
@@ -158,7 +162,11 @@ export const StepLaunch = ({
   goTo,
 }: StepLaunchProps) => {
   const site = useSiteStatus();
+  const spec = formatSpec(state.format);
+  // A premium-only format always builds its audio (the wizard locks that output on).
+  const outputLocked = (value: WizardState['outputs'][number]) => spec.premiumOnly && value === 'audio';
   const toggleOutput = (value: WizardState['outputs'][number]) =>
+    !outputLocked(value) &&
     patch({
       outputs: state.outputs.includes(value)
         ? state.outputs.filter((o) => o !== value)
@@ -167,36 +175,41 @@ export const StepLaunch = ({
 
   const withAudio = state.outputs.includes('audio');
   const withVideo = state.outputs.includes('video') || state.outputs.includes('short');
-  const visualsOn = state.visuals;
+  const visualsOn = spec.visuals && state.visuals;
   const images: ImageSource = withAudio && !(state.images === 'ai' && aiImagesLocked) ? state.images : 'off';
   const factCheckOn = visualsOn && state.fact_check && !factCheckLocked;
 
   const { estimate, shown, error: estimateError, estimating } = est;
   const cost = shown ? estimateCost(shown) : null;
   const llmOnKey = Boolean(shown?.own_key || ownKey);
-  const voicesInCredits = Boolean(shown && shown.tts_cost_usd > 0 && !shown.own_tts_key);
+  const music = Boolean(shown && shown.music_ms > 0);
+  const voicesInCredits = Boolean(shown && shown.tts_cost_usd + shown.music_cost_usd > 0 && !shown.own_tts_key);
+  const sound = music ? 'music' : 'voices';
   const costLabel = llmOnKey
     ? voicesInCredits
-      ? 'own key · voices in credits'
+      ? `own key · ${sound} in credits`
       : 'own key · $0 credits'
     : shown?.own_tts_key
-      ? 'models · voices on your key'
+      ? `models · ${sound} on your key`
       : cost === 0
         ? 'free models + voices'
-        : 'model + voice cost';
+        : music
+          ? 'models + music + voices'
+          : 'model + voice cost';
   const insufficient = Boolean(estimate && !estimate.sufficient);
   // A debate on free models over their limits (too big, or none left today).
   const freeLimit = estimate?.free_limit ?? null;
   const freeRuns = shown?.free_runs ?? null;
   const paused = site.maintenance;
-  const canStart = ready && Boolean(estimate) && !insufficient && !freeLimit && !starting && !paused && state.topic.trim().length > 0;
+  const canStart = ready && Boolean(estimate) && !insufficient && !freeLimit && !formatLock && !starting && !paused && state.topic.trim().length > 0;
   const after = shown?.credits_after ?? null;
 
   const meta = [
+    ...(spec.id === 'debate' ? [] : [spec.name.toLowerCase()]),
     languageLabel(state.language),
     `${state.num_rounds} ${state.num_rounds === 1 ? 'round' : 'rounds'}`,
-    `${lengthOption(state.length_preset).label.toLowerCase()} replies`,
-    state.output_style === 'spoken' ? 'spoken' : 'written',
+    spec.music ? spec.lengthHints[state.length_preset] : `${lengthOption(state.length_preset).label.toLowerCase()} replies`,
+    ...(spec.outputStyle ? [] : [state.output_style === 'spoken' ? 'spoken' : 'written']),
     state.outputs.length ? state.outputs.map((o) => OUTPUT_LABELS[o] ?? o).join(' + ') : 'text only',
     ...(config.media_plan?.visuals ? ['scenes'] : []),
     ...(config.media_plan?.visuals && config.media_plan.images === 'stock' ? ['free photos'] : []),
@@ -208,39 +221,42 @@ export const StepLaunch = ({
   return (
     <div className="mt-7 grid items-start gap-[22px] animate-rise min-[1180px]:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
       <div className="grid min-w-0 gap-3.5">
-        <Panel title="Writing style" hint="How the models phrase their turns">
-          <div className="grid gap-2.5 [grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr))]">
-            {(
-              [
-                { value: 'spoken', label: 'Spoken', tag: 'BEST FOR VIDEO', text: 'Short quotable sentences, no lists or headers. Sounds natural in voice.' },
-                { value: 'markdown', label: 'Written', tag: '', text: 'Structured prose with headings. Best for reading and Markdown export.' },
-              ] as const
-            ).map((o) => {
-              const on = state.output_style === o.value;
-              return (
-                <button
-                  key={o.value}
-                  type="button"
-                  role="radio"
-                  aria-checked={on}
-                  onClick={() => patch({ output_style: o.value })}
-                  className={`flex items-start gap-3 rounded-[14px] border px-4 py-3.5 text-left transition-colors cursor-pointer ${on ? 'border-accent bg-accent/5' : 'border-white/8 bg-ink hover:border-line-3'}`}
-                >
-                  <span className={`mt-px grid size-[18px] shrink-0 place-items-center rounded-full border-2 ${on ? 'border-accent' : 'border-[#3a3f4d]'}`}>
-                    <span className={`size-2 rounded-full ${on ? 'bg-accent' : ''}`} />
-                  </span>
-                  <span>
-                    <span className="text-sm font-bold">
-                      {o.label}
-                      {o.tag && <span className="ml-2 font-mono text-[10px] tracking-[0.06em] text-accent">{o.tag}</span>}
+        {/* A format that writes in its own style (the battle's verses) has nothing to choose. */}
+        {!spec.outputStyle && (
+          <Panel title="Writing style" hint="How the models phrase their turns">
+            <div className="grid gap-2.5 [grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr))]">
+              {(
+                [
+                  { value: 'spoken', label: 'Spoken', tag: 'BEST FOR VIDEO', text: 'Short quotable sentences, no lists or headers. Sounds natural in voice.' },
+                  { value: 'markdown', label: 'Written', tag: '', text: 'Structured prose with headings. Best for reading and Markdown export.' },
+                ] as const
+              ).map((o) => {
+                const on = state.output_style === o.value;
+                return (
+                  <button
+                    key={o.value}
+                    type="button"
+                    role="radio"
+                    aria-checked={on}
+                    onClick={() => patch({ output_style: o.value })}
+                    className={`flex items-start gap-3 rounded-[14px] border px-4 py-3.5 text-left transition-colors cursor-pointer ${on ? 'border-accent bg-accent/5' : 'border-white/8 bg-ink hover:border-line-3'}`}
+                  >
+                    <span className={`mt-px grid size-[18px] shrink-0 place-items-center rounded-full border-2 ${on ? 'border-accent' : 'border-[#3a3f4d]'}`}>
+                      <span className={`size-2 rounded-full ${on ? 'bg-accent' : ''}`} />
                     </span>
-                    <span className="mt-[3px] block text-[12.5px] leading-[1.45] text-muted">{o.text}</span>
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </Panel>
+                    <span>
+                      <span className="text-sm font-bold">
+                        {o.label}
+                        {o.tag && <span className="ml-2 font-mono text-[10px] tracking-[0.06em] text-accent">{o.tag}</span>}
+                      </span>
+                      <span className="mt-[3px] block text-[12.5px] leading-[1.45] text-muted">{o.text}</span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </Panel>
+        )}
 
         <Panel
           title="Outputs"
@@ -254,22 +270,28 @@ export const StepLaunch = ({
           <div className="grid gap-2.5 sm:grid-cols-3">
             {OUTPUT_OPTIONS.map((o) => {
               const on = state.outputs.includes(o.value);
+              const locked = outputLocked(o.value);
               const quality = QUALITY_OPTIONS.find((q) => q.value === state.quality)?.label ?? state.quality;
+              const text = o.value === 'video' ? `16:9 · ${quality} · captions` : locked && spec.music ? 'MP3 · beat + verses' : o.text;
               return (
                 <button
                   key={o.value}
                   type="button"
                   role="checkbox"
                   aria-checked={on}
+                  aria-disabled={locked}
+                  title={locked ? `A ${spec.name.toLowerCase()} is always voiced: its audio is the show` : undefined}
                   onClick={() => toggleOutput(o.value)}
-                  className={`flex items-center gap-3 rounded-[14px] border p-3.5 text-left transition-colors cursor-pointer ${on ? 'border-accent/55 bg-accent/5' : 'border-white/8 bg-ink hover:border-line-3'}`}
+                  className={`flex items-center gap-3 rounded-[14px] border p-3.5 text-left transition-colors ${locked ? 'cursor-default' : 'cursor-pointer'} ${
+                    on ? 'border-accent/55 bg-accent/5' : 'border-white/8 bg-ink hover:border-line-3'
+                  }`}
                 >
                   <span className="grid size-10 shrink-0 place-items-center rounded-[11px] bg-surface-2">
                     <span className="rounded-[4px] transition-opacity" style={{ width: o.icon.w, height: o.icon.h, background: o.icon.color, opacity: on ? 1 : 0.35 }} />
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block text-sm font-bold">{o.label}</span>
-                    <span className="mt-0.5 block text-xs text-muted">{o.value === 'video' ? `16:9 · ${quality} · captions` : o.text}</span>
+                    <span className="mt-0.5 block text-xs text-muted">{text}</span>
                   </span>
                   <span className={`grid size-5 shrink-0 place-items-center rounded-md border text-ink ${on ? 'border-accent bg-accent' : 'border-white/20'}`}>{on && <Check className="size-[13px]" strokeWidth={3} />}</span>
                 </button>
@@ -279,59 +301,62 @@ export const StepLaunch = ({
           {state.outputs.length === 0 && <Hint className="mt-0">No outputs selected — the debate runs as text only; you can build audio and video later.</Hint>}
         </Panel>
 
-        <section className="grid rounded-panel border border-line bg-surface px-[clamp(16px,2vw,22px)] py-1.5">
-          <FeatureRow
-            icon={<PenTool className="size-[18px]" />}
-            title="Visual scenes"
-            cost={images === 'ai' ? '~$0.01 / image' : 'FREE'}
-            text="Charts, numbers and sketches appear next to each turn and in the video exactly when they are said. Debaters can ask for visuals and challenge each other's figures."
-            on={visualsOn}
-            onToggle={() => patch({ visuals: !state.visuals })}
-          >
-            {visualsOn && (
-              <div className="flex flex-wrap items-center gap-x-3.5 gap-y-2.5 sm:ml-[52px]">
-                <span className="text-xs text-muted">Pictures</span>
-                <Segment
-                  accent
-                  value={images}
-                  onChange={(value) => patch({ images: value })}
-                  options={[
-                    { value: 'off', label: 'None' },
-                    { value: 'stock', label: 'Free photos', disabled: !withAudio },
-                    { value: 'ai', label: 'AI images', disabled: !withAudio || aiImagesLocked },
-                  ]}
-                />
-                <span className="text-xs text-dim">
-                  {!withAudio
-                    ? 'Pictures are found while the audio is built — select Audio to add them.'
-                    : images === 'ai'
-                      ? 'Generated for scenes that show a real place or thing, from your balance; checked before use.'
-                      : images === 'stock'
-                        ? 'Freely licensed photos from Wikimedia Commons, credited in the frame.'
-                        : aiImagesLocked
-                          ? 'Only charts and drawings. AI images need a balance.'
-                          : 'Only charts and drawings.'}
-                </span>
-              </div>
-            )}
-          </FeatureRow>
-          <FeatureRow
-            icon={<SearchCheck className="size-[18px]" />}
-            title="Fact-check figures"
-            cost="~$0.006 / check"
-            text={
-              !visualsOn
-                ? 'Checks the figures and quotes of the visual scenes — turn the scenes on first.'
-                : factCheckLocked
-                  ? 'A web search checks the figures on screen; it is paid from your balance or your OpenRouter key.'
-                  : 'A web search checks the figures and quotes shown on screen. Opponents and the judge see the results.'
-            }
-            on={factCheckOn}
-            disabled={!visualsOn || factCheckLocked}
-            divider
-            onToggle={() => patch({ fact_check: !state.fact_check })}
-          />
-        </section>
+        {/* Charts, sketches and fact-checks only where the format has scenes. */}
+        {spec.visuals && (
+          <section className="grid rounded-panel border border-line bg-surface px-[clamp(16px,2vw,22px)] py-1.5">
+            <FeatureRow
+              icon={<PenTool className="size-[18px]" />}
+              title="Visual scenes"
+              cost={images === 'ai' ? '~$0.01 / image' : 'FREE'}
+              text="Charts, numbers and sketches appear next to each turn and in the video exactly when they are said. Debaters can ask for visuals and challenge each other's figures."
+              on={visualsOn}
+              onToggle={() => patch({ visuals: !state.visuals })}
+            >
+              {visualsOn && (
+                <div className="flex flex-wrap items-center gap-x-3.5 gap-y-2.5 sm:ml-[52px]">
+                  <span className="text-xs text-muted">Pictures</span>
+                  <Segment
+                    accent
+                    value={images}
+                    onChange={(value) => patch({ images: value })}
+                    options={[
+                      { value: 'off', label: 'None' },
+                      { value: 'stock', label: 'Free photos', disabled: !withAudio },
+                      { value: 'ai', label: 'AI images', disabled: !withAudio || aiImagesLocked },
+                    ]}
+                  />
+                  <span className="text-xs text-dim">
+                    {!withAudio
+                      ? 'Pictures are found while the audio is built — select Audio to add them.'
+                      : images === 'ai'
+                        ? 'Generated for scenes that show a real place or thing, from your balance; checked before use.'
+                        : images === 'stock'
+                          ? 'Freely licensed photos from Wikimedia Commons, credited in the frame.'
+                          : aiImagesLocked
+                            ? 'Only charts and drawings. AI images need a balance.'
+                            : 'Only charts and drawings.'}
+                  </span>
+                </div>
+              )}
+            </FeatureRow>
+            <FeatureRow
+              icon={<SearchCheck className="size-[18px]" />}
+              title="Fact-check figures"
+              cost="~$0.006 / check"
+              text={
+                !visualsOn
+                  ? 'Checks the figures and quotes of the visual scenes — turn the scenes on first.'
+                  : factCheckLocked
+                    ? 'A web search checks the figures on screen; it is paid from your balance or your OpenRouter key.'
+                    : 'A web search checks the figures and quotes shown on screen. Opponents and the judge see the results.'
+              }
+              on={factCheckOn}
+              disabled={!visualsOn || factCheckLocked}
+              divider
+              onToggle={() => patch({ fact_check: !state.fact_check })}
+            />
+          </section>
+        )}
 
         <section className="flex flex-wrap items-center gap-3.5 rounded-panel border border-line bg-surface p-[clamp(16px,2vw,22px)]">
           <span className="grid size-[38px] shrink-0 place-items-center rounded-[11px] bg-surface-2 text-text-3">
@@ -401,6 +426,8 @@ export const StepLaunch = ({
               const modelId = config.participants[index]?.model_id ?? '';
               const voiceId = config.media_plan?.voices[speakerId(index)];
               const voice = voices.find((v) => v.id === voiceId);
+              // Rappers of a generated track take a flow instead of a voice.
+              const flow = flowById(config.media_plan?.flows?.[speakerId(index)]);
               return (
                 <div key={speaker.key} className="flex items-center gap-3 rounded-field bg-ink px-2.5 py-[9px]">
                   <span className="grid size-[34px] shrink-0 place-items-center rounded-[10px] border bg-surface text-text" style={{ borderColor: color }}>
@@ -410,11 +437,11 @@ export const StepLaunch = ({
                     <span className="flex items-center gap-2">
                       <span className="truncate text-sm font-bold">{names[index]}</span>
                       <span className="shrink-0 font-mono text-[10px] tracking-[0.08em]" style={{ color }}>
-                        {speakerTagOf(state.speakers, index)}
+                        {speakerTagOf(state.speakers, index, spec)}
                       </span>
                     </span>
                     <span className="block truncate text-xs text-muted" title={modelId ? shortModelName(modelId) : undefined}>
-                      {voice?.name ?? (voiceId ? voiceId : 'auto voice')} · {detectStyle(speaker.prompt)?.full ?? 'Custom'}
+                      {flow ? flow.label : (voice?.name ?? (voiceId ? voiceId : 'auto voice'))} · {detectStyle(speaker.prompt)?.full ?? 'Custom'}
                     </span>
                   </span>
                 </div>
@@ -452,6 +479,13 @@ export const StepLaunch = ({
             </Hint>
           )}
           {shown && shown.paid_models.length > 0 && !shown.own_key && <Hint className="mt-0">Paid models: {shown.paid_models.map(shortModelName).join(', ')} — billed to your credits.</Hint>}
+          {shown && music && (
+            <Hint className="mt-0">
+              Includes ~{formatMinutes(shown.music_ms)} of music
+              {shown.own_tts_key ? ' on your ElevenLabs key' : ` ~${formatCost(shown.music_cost_usd)} and the ${spec.hostLabel}'s and the judge's voices ~${formatCost(shown.tts_cost_usd)}`}. A
+              rebuild with the same verses reuses the track.
+            </Hint>
+          )}
           {shown && (shown.factcheck_cost_usd > 0 || shown.images_cost_usd > 0) && (
             <Hint className="mt-0">
               Includes{' '}
@@ -487,11 +521,22 @@ export const StepLaunch = ({
               </Link>
             </div>
           )}
-          {insufficient && estimate && (
+          {formatLock && (
+            <div className="flex items-center justify-between gap-2.5 rounded-[10px] border border-con/25 bg-con/8 px-3 py-2.5 text-xs text-[#ffb3a6]">
+              <span>{formatLock}</span>
+              <Link to={accountPath(paymentsMode !== 'disabled' ? 'billing' : 'keys')} className="shrink-0 font-bold text-con hover:text-text">
+                {paymentsMode !== 'disabled' ? 'Top up' : 'Add a key'}
+              </Link>
+            </div>
+          )}
+          {insufficient && estimate && !formatLock && (
             <div className="flex items-center justify-between gap-2.5 rounded-[10px] border border-con/25 bg-con/8 px-3 py-2.5 text-xs text-[#ffb3a6]">
               <span>
                 Not enough credits for these settings — about {formatCost(cost ?? 0)}
-                {estimate.credits_before !== null ? `, you have $${Math.max(0, estimate.credits_before).toFixed(2)}` : ''}. Pick free models or add your own OpenRouter key.
+                {estimate.credits_before !== null ? `, you have $${Math.max(0, estimate.credits_before).toFixed(2)}` : ''}.{' '}
+                {estimate.music_cost_usd > 0
+                  ? 'Pick free models, shorter verses or fewer rounds, or bring your own keys (ElevenLabs on a paid plan).'
+                  : 'Pick free models or add your own OpenRouter key.'}
               </span>
               {paymentsMode !== 'disabled' && (
                 <Link to={accountPath('billing')} className="shrink-0 font-bold text-con hover:text-text">
@@ -534,7 +579,7 @@ export const StepLaunch = ({
             }`}
           >
             {starting && <Spinner className="size-4" />}
-            Start the debate <ArrowRight className="size-4" strokeWidth={2.5} />
+            Start the {spec.show} <ArrowRight className="size-4" strokeWidth={2.5} />
           </button>
           <div className={`text-center text-xs ${paused ? 'text-host' : 'text-dim'}`}>
             {paused ? site.maintenance_message : 'Runs on our servers; the video renders in your browser when you export it.'}

@@ -597,11 +597,21 @@ class FormatSeat(BaseModel):
     side: DebaterSide | None = None  # fixed by the format; null: the debater picks
 
 
+class FormatFlow(BaseModel):
+    """How a rapper sounds in a generated track (media/music.FLOWS), in place of a voice."""
+
+    id: str
+    label: str
+    hint: str
+    voice: Literal["male", "female"]
+
+
 class FormatOut(BaseModel):
     """A show format as the wizard, the CLI and agents see it (`GET /api/formats`)."""
 
     id: str
     name: str
+    show: str = "debate"  # the show in a sentence ("the battle")
     tagline: str
     host_label: str
     host_required: bool
@@ -612,6 +622,14 @@ class FormatOut(BaseModel):
     max_rounds: int
     sides: bool  # debaters pick their own side
     visuals: bool  # charts and sketches may accompany the speeches
+    # "elevenlabs": audio only with premium voices (no Edge); audio itself stays optional.
+    voices: Literal["any", "elevenlabs"] = "any"
+    # "music": one generated track carries the debaters (`media_plan.flows` instead of voices).
+    soundtrack: Literal["speech", "music"] = "speech"
+    verdict_scores: bool = False  # the judge scores every round
+    # `soundtrack="music"`: the flows a debater may take, and each seat's default.
+    flows: list[FormatFlow] = Field(default_factory=list)
+    default_flows: list[str] = Field(default_factory=list)
 
 
 # --- Model leaderboard ---

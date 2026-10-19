@@ -7,7 +7,8 @@ import { deleteMedia, generateMedia, getMediaCapabilities, getVoices } from '../
 import type { DebateDetail, DebateMedia, ImageSource, MediaCapabilities, TTSProviderName, VoiceInfo } from '../../api/types';
 import { useBillingConfig } from '../../hooks/useBillingConfig';
 import { ttsKeyUsable, useElevenLabsKeyStatus } from '../../hooks/useElevenLabsKeyStatus';
-import { formatCost } from '../../lib/format';
+import { formatCost, formatMinutes } from '../../lib/format';
+import { FLOWS, flowOf, formatSpec } from '../../lib/formats';
 import { setLocalKey, useLocalKey } from '../../lib/localKeys';
 import { accountPath } from '../account/tabs';
 import { Button, ConfirmDialog, Dropdown, ErrorBox, Hint, Input, Label, Modal, useToast } from '../ui';
@@ -29,6 +30,8 @@ interface Props {
 interface SpeakerRow {
   id: string;
   name: string;
+  /** A rapper of a generated track: picks a flow, not a voice. */
+  flow: boolean;
 }
 
 /** Choose the voice engine and a voice per speaker, then queue the audio build. */
@@ -48,6 +51,7 @@ export const RegenerateAudioDialog = ({ open, onClose, debate, media, onQueued }
   const [voices, setVoices] = useState<VoiceInfo[]>([]);
   const [voicesError, setVoicesError] = useState<string | null>(null);
   const [chosen, setChosen] = useState<Record<string, string>>({});
+  const [flowChoice, setFlowChoice] = useState<Record<string, string>>({});
   const [force, setForce] = useState(false);
   const [visualsChoice, setVisualsChoice] = useState<boolean | null>(null);
   const [imagesChoice, setImagesChoice] = useState<ImageSource | null>(null);
@@ -69,17 +73,29 @@ export const RegenerateAudioDialog = ({ open, onClose, debate, media, onQueued }
     };
   }, [open]);
 
+  // A rap battle is voiced with premium voices only, and its rappers come from one music track.
+  const spec = formatSpec(debate.settings.format);
   const plannedProvider = debate.media_plan?.provider;
-  const provider: TTSProviderName = providerChoice ?? media?.options?.provider ?? (plannedProvider === 'elevenlabs' && caps?.elevenlabs ? 'elevenlabs' : caps?.default_provider ?? 'edge');
+  const provider: TTSProviderName = spec.premiumOnly
+    ? 'elevenlabs'
+    : (providerChoice ?? media?.options?.provider ?? (plannedProvider === 'elevenlabs' && caps?.elevenlabs ? 'elevenlabs' : (caps?.default_provider ?? 'edge')));
   const modelId = modelChoice ?? media?.options?.model_id ?? debate.media_plan?.model_id ?? caps?.default_model_id ?? 'eleven_v3';
   const rows = useMemo<SpeakerRow[]>(
-    () => [...debate.participants.map((p, i) => ({ id: p.id || `participant_${i}`, name: p.name ?? `Speaker ${i + 1}` })), { id: 'judge', name: 'Judge (verdict)' }],
-    [debate.participants],
+    () => [
+      ...debate.participants.map((p, i) => ({ id: p.id || `participant_${i}`, name: p.name ?? `Speaker ${i + 1}`, flow: spec.music && p.role === 'debater' })),
+      { id: 'judge', name: 'Judge (verdict)', flow: false },
+    ],
+    [debate.participants, spec.music],
   );
+  const savedFlows = media?.options?.flows ?? debate.media_plan?.flows ?? {};
+  const rappers = rows.filter((r) => r.flow);
+  const flows = Object.fromEntries(rappers.map((r, k) => [r.id, flowOf({ ...savedFlows, ...flowChoice }, r.id, k).id]));
+  const flowsChanged = rappers.some((r, k) => flows[r.id] !== flowOf(savedFlows, r.id, k).id);
   // Only a key ElevenLabs accepts unlocks premium voices (typed keys are checked after a pause).
   const keyCheck = useElevenLabsKeyStatus(open && provider === 'elevenlabs' ? ttsKey : '', 500);
-  const keyRejected = keyCheck.status === 'invalid';
-  const ownKeyUsable = ttsKeyUsable(keyCheck);
+  // A key on the free plan makes no music: the track needs our key (and credits) or a paid plan.
+  const keyRejected = keyCheck.status === 'invalid' || (spec.music && keyCheck.paidPlan === false);
+  const ownKeyUsable = ttsKeyUsable(keyCheck, spec.music);
   const keyMissing = provider === 'elevenlabs' && !caps?.elevenlabs && !ownKeyUsable;
   // Empty balance: the system key is locked, only an own key unlocks premium voices.
   const noCredits = (user?.credits_usd ?? 0) <= 0;
@@ -114,19 +130,34 @@ export const RegenerateAudioDialog = ({ open, onClose, debate, media, onQueued }
     };
   }, [open, provider, debate.id, voicesKey, keyMissing, keyRejected, savedKey]);
 
-  const visuals = visualsChoice ?? media?.options?.visuals ?? debate.media_plan?.visuals ?? true;
+  const visuals = spec.visuals && (visualsChoice ?? media?.options?.visuals ?? debate.media_plan?.visuals ?? true);
   const storedImages = imagesChoice ?? media?.options?.images ?? debate.media_plan?.images ?? 'off';
   // AI pictures are paid from the balance; without credits they fall back to free photos.
   const images: ImageSource = storedImages === 'ai' && noCredits ? 'stock' : storedImages;
-  const chars = debate.turns.reduce((acc, t) => acc + (t.error ? 0 : t.text.length), 0);
+  // With a generated track only the host and the judge are voiced by TTS.
+  const chars = debate.turns.reduce((acc, t) => acc + (t.error || (spec.music && t.speaker_role === 'debater') ? 0 : t.text.length), 0);
   const premiumCost = (chars / 1000) * billing.tts_price_per_1k_chars;
+  // The track is cached by its verses and flows: only a new one is generated (and paid).
+  const ready = media?.media_status === 'ready';
+  const newTrack = spec.music && (!ready || force || flowsChanged);
+  const trackMs = media?.stats?.total_ms ?? 0;
+  const musicCost = (trackMs / 60_000) * billing.music_price_per_min;
 
   const submit = async () => {
     setSubmitting(true);
     setSubmitError(null);
     try {
       const userKey = provider === 'elevenlabs' ? ttsKey || undefined : undefined;
-      await generateMedia(debate.id, { provider, model_id: provider === 'elevenlabs' ? modelId : 'edge', voices: chosen, visuals, images: visuals ? images : 'off', force, user_tts_key: userKey });
+      await generateMedia(debate.id, {
+        provider,
+        model_id: provider === 'elevenlabs' ? modelId : 'edge',
+        voices: chosen,
+        visuals,
+        images: visuals ? images : 'off',
+        ...(spec.music ? { flows } : {}),
+        force,
+        user_tts_key: userKey,
+      });
       if (userKey && keyChanged && rememberKey) setLocalKey('elevenlabs', userKey);
       toast.success('Audio build queued');
       onQueued();
@@ -157,8 +188,6 @@ export const RegenerateAudioDialog = ({ open, onClose, debate, media, onQueued }
     if (!voice?.preview_url) return;
     void new Audio(voice.preview_url).play();
   };
-
-  const ready = media?.media_status === 'ready';
 
   return (
     <>
@@ -192,8 +221,9 @@ export const RegenerateAudioDialog = ({ open, onClose, debate, media, onQueued }
                   aria-label="Voice engine"
                   value={provider}
                   onChange={setProviderChoice}
+                  disabled={spec.premiumOnly}
                   options={[
-                    { value: 'edge', label: 'Edge neural', hint: 'Free' },
+                    ...(spec.premiumOnly ? [] : [{ value: 'edge' as const, label: 'Edge neural', hint: 'Free' }]),
                     {
                       value: 'elevenlabs',
                       label: 'Premium neural (ElevenLabs)',
@@ -238,7 +268,8 @@ export const RegenerateAudioDialog = ({ open, onClose, debate, media, onQueued }
               )}
               {keyRejected && (
                 <Hint tone="danger">
-                  ElevenLabs rejected this key: {keyCheck.error}.{caps?.elevenlabs && !noCredits ? ' Fix it or clear the field to pay with credits.' : ''}
+                  {keyCheck.status === 'invalid' ? `ElevenLabs rejected this key: ${keyCheck.error}.` : 'This key is on the free ElevenLabs plan, which makes no music.'}
+                  {caps?.elevenlabs && !noCredits ? ' Fix it or clear the field to pay with credits.' : ''}
                 </Hint>
               )}
               {creditsMissing && !keyRejected && (
@@ -262,6 +293,24 @@ export const RegenerateAudioDialog = ({ open, onClose, debate, media, onQueued }
             <div className="grid gap-2 sm:grid-cols-2">
               {rows.map((row) => {
                 const voice = voices.find((v) => v.id === chosen[row.id]);
+                if (row.flow)
+                  return (
+                    <div key={row.id} className="flex items-center gap-2">
+                      <span className="w-28 shrink-0 truncate text-sm font-medium" title={row.name}>
+                        {row.name}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <Dropdown
+                          aria-label={`Flow of ${row.name}`}
+                          size="sm"
+                          value={flows[row.id]}
+                          onChange={(flowId) => setFlowChoice({ ...flowChoice, [row.id]: flowId })}
+                          menuWidth={320}
+                          options={FLOWS.map((f) => ({ value: f.id, label: f.label, hint: `${f.hint} · ${f.voice}` }))}
+                        />
+                      </div>
+                    </div>
+                  );
                 return (
                   <div key={row.id} className="flex items-center gap-2">
                     <span className="w-28 shrink-0 truncate text-sm font-medium" title={row.name}>
@@ -294,9 +343,22 @@ export const RegenerateAudioDialog = ({ open, onClose, debate, media, onQueued }
               ~{chars.toLocaleString()} characters ·{' '}
               {provider === 'elevenlabs' ? (ttsKey ? 'billed to your ElevenLabs account' : `≈ ${formatCost(premiumCost)} in credits`) : 'free'}
             </span>
-            <label className="flex items-center gap-2" title="Charts, numbers and hand-drawn schemes synced with the speech">
-              <input type="checkbox" checked={visuals} onChange={(e) => setVisualsChoice(e.target.checked)} /> visual scenes
-            </label>
+            {spec.music && (
+              <span>
+                {!newTrack
+                  ? 'music: the same track again (no charge)'
+                  : ttsKey
+                    ? 'a new music track on your ElevenLabs key'
+                    : trackMs > 0
+                      ? `a new music track ≈ ${formatCost(musicCost)} (~${formatMinutes(trackMs)})`
+                      : `music: $${billing.music_price_per_min.toFixed(2)} per minute of track`}
+              </span>
+            )}
+            {spec.visuals && (
+              <label className="flex items-center gap-2" title="Charts, numbers and hand-drawn schemes synced with the speech">
+                <input type="checkbox" checked={visuals} onChange={(e) => setVisualsChoice(e.target.checked)} /> visual scenes
+              </label>
+            )}
             {visuals && (
               <span className="flex items-center gap-2" title="Pictures among the scenes: free photos from Wikimedia Commons, or AI images paid from your balance (about $0.01 each)">
                 pictures
@@ -317,8 +379,8 @@ export const RegenerateAudioDialog = ({ open, onClose, debate, media, onQueued }
               </span>
             )}
             {ready && (
-              <label className="flex items-center gap-2" title="Re-voice every turn and design the scenes again">
-                <input type="checkbox" checked={force} onChange={(e) => setForce(e.target.checked)} /> ignore cached turns
+              <label className="flex items-center gap-2" title={spec.music ? 'Generate the music track again and re-voice the host and the judge (the new track is paid)' : 'Re-voice every turn and design the scenes again'}>
+                <input type="checkbox" checked={force} onChange={(e) => setForce(e.target.checked)} /> {spec.music ? 'make a new track' : 'ignore cached turns'}
               </label>
             )}
           </div>

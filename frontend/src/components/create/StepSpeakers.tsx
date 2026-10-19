@@ -1,16 +1,17 @@
-import { ArrowUpRight, Lock, Plus } from 'lucide-react';
+import { ArrowUpRight, Lock, Music, Plus } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import type { BillingConfig, ModelInfo, TTSProviderName } from '../../api/types';
 import { useLeaderboard } from '../../hooks/useLeaderboard';
 import type { VoiceCatalogue } from '../../hooks/useVoices';
+import { flowOf, formatSpec } from '../../lib/formats';
 import { accountPath, type AccountTab } from '../account/tabs';
 import { ErrorBox, Hint, Spinner } from '../ui';
 import { ROW_COLUMNS, SpeakerRow } from './SpeakerRow';
 import {
   maxDebatersFor,
-  MIN_DEBATERS,
   countDebaters,
   defaultDebater,
+  fixedSideOf,
   reindexVoices,
   speakerColorOf,
   speakerId,
@@ -40,6 +41,10 @@ interface StepSpeakersProps {
   ttsKeyError: string | null;
   /** Empty balance and no own ElevenLabs key, so premium voices cannot be picked. */
   premiumLocked: boolean;
+  /** Why the format cannot run (no balance or key for its voices), null when it can. */
+  formatLock: string | null;
+  /** The browser's ElevenLabs key is on the free plan, so a battle's music cannot use it. */
+  freePlanKey: boolean;
   paidLocked: boolean;
   /** Limits of free debates (no credits, no own key): fewer debater slots. */
   free: FreeLimits;
@@ -110,13 +115,16 @@ export const StepSpeakers = ({
   hasTtsKey,
   ttsKeyError,
   premiumLocked,
+  formatLock,
+  freePlanKey,
   paidLocked,
   free,
   showErrors,
 }: StepSpeakersProps) => {
+  const spec = formatSpec(state.format);
   const debaters = countDebaters(state.speakers);
-  const maxDebaters = maxDebatersFor(free);
-  const names = speakerNamesOf(state.speakers, models, defaultModelId);
+  const maxDebaters = maxDebatersFor(spec, free);
+  const names = speakerNamesOf(state.speakers, models, defaultModelId, spec.id);
   // Speaker whose system prompt editor is open.
   const [expanded, setExpanded] = useState<string | null>(null);
   const premiumAvailable = billing.elevenlabs_available || hasTtsKey;
@@ -126,13 +134,18 @@ export const StepSpeakers = ({
   const setProvider = (next: TTSProviderName) => {
     if (next !== state.provider) patch({ provider: next, voices: {} });
   };
+  // Rappers of a generated track take flows: only the host (and the judge) have voices.
+  const voiced = (i: number) => !spec.music || state.speakers[i].role !== 'debater';
   const takenBy = (index: number) =>
     Object.fromEntries(
       state.speakers.flatMap((_, i) => {
         const voice = resolvedVoices[speakerId(i)];
-        return i !== index && voice ? [[voice, names[i] || speakerTagOf(state.speakers, i)]] : [];
+        return i !== index && voiced(i) && voice ? [[voice, names[i] || speakerTagOf(state.speakers, i, spec)]] : [];
       }),
     );
+  const rappers = state.speakers.flatMap((s, i) => (s.role === 'debater' ? [i] : []));
+  const flows = rappers.map((i, k) => flowOf(state.flows, speakerId(i), k));
+  const sameVoices = spec.music && flows.length > 1 && flows.every((f) => f.voice === flows[0].voice);
   const { data: leaderboard } = useLeaderboard();
   const voiceLanguage = { code: catalogue.language, name: state.language.trim() || 'English' };
   // ElevenLabs lists library voices for the language only on paid plans: say why there are none.
@@ -150,26 +163,28 @@ export const StepSpeakers = ({
     patch({ speakers: state.speakers.map((s, i) => (i === index ? { ...s, ...changes } : s)) });
 
   const setVoice = (index: number, voiceId: string) => patch({ voices: { ...state.voices, [speakerId(index)]: voiceId } });
+  const setFlow = (index: number, flowId: string) => patch({ flows: { ...state.flows, [speakerId(index)]: flowId } });
 
   const addSpeaker = () => {
     if (debaters >= maxDebaters) return;
-    patch({ speakers: [...state.speakers, defaultDebater(debaters)] });
+    patch({ speakers: [...state.speakers, defaultDebater(debaters, spec.id)] });
   };
 
   const removeSpeaker = (index: number) => {
-    if (state.speakers[index].role !== 'debater' || debaters <= MIN_DEBATERS) return;
+    if (state.speakers[index].role !== 'debater' || debaters <= spec.minDebaters) return;
     patch({ speakers: state.speakers.filter((_, i) => i !== index), voices: reindexVoices(state.voices, index) });
   };
 
   const row = (speaker: Speaker) => {
     const index = state.speakers.indexOf(speaker);
+    const rapper = rappers.indexOf(index);
     return (
       <SpeakerRow
         key={speaker.key}
         speaker={speaker}
         name={names[index]}
         color={speakerColorOf(state.speakers, index)}
-        tag={speakerTagOf(state.speakers, index)}
+        tag={speakerTagOf(state.speakers, index, spec)}
         modelId={speaker.model_id || defaultModelId}
         voiceId={resolvedVoices[speakerId(index)] ?? ''}
         models={models}
@@ -182,11 +197,15 @@ export const StepSpeakers = ({
         voicesTakenBy={takenBy(index)}
         showVoiceLanguages={provider === 'elevenlabs'}
         voiceLanguage={voiceLanguage}
+        fixedSide={fixedSideOf(state.speakers, index, spec)}
+        fixedSideHint={`The format seats the sides: ${spec.seats.map((s) => `${s.label} ${s.side === 'for' ? 'for' : 'against'}`).join(', ')}.`}
+        flow={spec.music && rapper >= 0 ? flows[rapper].id : null}
         expanded={expanded === speaker.key}
-        removable={speaker.role === 'debater' && debaters > MIN_DEBATERS}
+        removable={speaker.role === 'debater' && debaters > spec.minDebaters}
         showErrors={showErrors}
         onChange={(changes) => updateSpeaker(index, changes)}
         onVoice={(voiceId) => setVoice(index, voiceId)}
+        onFlow={(flowId) => setFlow(index, flowId)}
         onToggleExpanded={() => setExpanded((key) => (key === speaker.key ? null : speaker.key))}
         onRemove={() => removeSpeaker(index)}
       />
@@ -207,93 +226,170 @@ export const StepSpeakers = ({
         </div>
       )}
 
-      <div className="rounded-card border border-line bg-surface px-3.5 py-3">
-        {/* Phones: label and key link on top, the two engines side by side below. */}
-        <div className="grid gap-2.5 sm:flex sm:flex-wrap sm:items-center sm:gap-x-3.5">
-          <div className="flex items-center justify-between gap-3 px-1 sm:contents">
-            <span className="text-[13px] font-semibold text-text-3 sm:pl-1">Voice engine</span>
-            <span className="text-xs text-muted sm:order-last sm:ml-auto">
+      {spec.premiumOnly ? (
+        <div className="rounded-card border border-line bg-surface px-3.5 py-3">
+          <div className="flex flex-wrap items-center gap-x-3.5 gap-y-2.5">
+            <span className="grid size-[38px] shrink-0 place-items-center rounded-[11px] bg-accent/10 text-accent">
+              <Music className="size-[18px]" />
+            </span>
+            <div className="min-w-0 flex-[1_1_320px]">
+              <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+                <span className="text-sm font-bold">{spec.music ? 'One track by ElevenLabs Music' : 'Premium voices only'}</span>
+                <span className="font-mono text-[11px] text-accent">
+                  {hasTtsKey ? (
+                    'YOUR KEY'
+                  ) : formatLock ? (
+                    <span className="inline-flex items-center gap-1 text-muted">
+                      <Lock className="size-3" /> ${(spec.music ? billing.music_price_per_min : billing.tts_price_per_min).toFixed(2)}/min
+                    </span>
+                  ) : (
+                    `$${(spec.music ? billing.music_price_per_min : billing.tts_price_per_min).toFixed(2)}/min${spec.music ? ' of music' : ''}`
+                  )}
+                </span>
+              </div>
+              <div className="mt-0.5 text-[12.5px] leading-normal text-muted text-pretty">
+                {spec.music
+                  ? `The beat and both rappers' verses are generated together. The ${spec.hostLabel} and the judge talk over it with premium voices.`
+                  : 'This format is voiced by ElevenLabs studio voices.'}
+              </div>
+            </div>
+            <span className="text-xs text-muted">
               Own ElevenLabs key? <AccountLink tab="keys">Account</AccountLink>
             </span>
           </div>
-          <div className="grid grid-cols-2 gap-2 sm:contents">
-            <EngineOption active={provider === 'edge'} onClick={() => setProvider('edge')} title="Edge neural" tag="FREE" tooltip="Good quality, word timestamps, instant." />
-            <EngineOption
-              active={provider === 'elevenlabs'}
-              onClick={() => setProvider('elevenlabs')}
-              disabled={!premiumAvailable || premiumLocked}
-              title="Premium neural"
-              tag={
-                hasTtsKey ? (
-                  'YOUR KEY'
-                ) : premiumLocked ? (
-                  <span className="inline-flex items-center gap-1 text-muted">
-                    <Lock className="size-3" /> ${billing.tts_price_per_min.toFixed(2)}/min
-                  </span>
-                ) : (
-                  `$${billing.tts_price_per_min.toFixed(2)}/min`
-                )
-              }
-              tooltip={
-                !premiumAvailable
-                  ? 'Premium voices are not configured on this server — add your own ElevenLabs key in Account'
-                  : premiumLocked
-                    ? 'Top up credits to unlock premium voices, or add your own ElevenLabs key in Account'
-                    : 'ElevenLabs studio voices with emotion tags.'
-              }
-            />
-          </div>
+          {formatLock && (
+            <Hint>
+              <Lock className="mr-1 inline size-3 align-[-1px]" />
+              {formatLock}
+            </Hint>
+          )}
+          {freePlanKey && !formatLock && <Hint>Your ElevenLabs key is on the free plan, which has no music: the battle runs on our key and is paid from your credits.</Hint>}
+          {ttsKeyError && <Hint tone="danger">ElevenLabs rejected the key saved in this browser ({ttsKeyError}). Replace it in <AccountLink tab="keys">Account</AccountLink>.</Hint>}
+          {hasTtsKey && <Hint tone="accent">The track and the voices are billed to your ElevenLabs account, not to credits.</Hint>}
+          {noNativeVoices && (
+            <Hint>
+              No native {voiceLanguage.name} voices for this ElevenLabs key (Voice Library voices need a paid ElevenLabs plan) — the {spec.hostLabel} and the judge speak {voiceLanguage.name} with an
+              accent.
+            </Hint>
+          )}
+          {catalogue.loading && (
+            <Hint className="flex items-center gap-2">
+              <Spinner className="size-3.5" /> Loading premium voices…
+            </Hint>
+          )}
+          {catalogue.error && !formatLock && (
+            <Hint>
+              Could not load the voice list ({catalogue.error}) — the {spec.hostLabel} and the judge get voices automatically.{' '}
+              <button type="button" onClick={catalogue.reload} className="font-semibold text-accent hover:text-accent-hover cursor-pointer">
+                Retry
+              </button>
+            </Hint>
+          )}
         </div>
-        {ttsKeyError && (
-          <Hint tone="danger">
-            ElevenLabs rejected the key saved in this browser ({ttsKeyError}), so {premiumLocked ? 'premium voices stay locked' : 'premium voices are paid from your credits'}. Replace it in{' '}
-            <AccountLink tab="keys">Account</AccountLink>.
-          </Hint>
-        )}
-        {!premiumAvailable && (
-          <Hint>
-            Premium voices are not available on this server right now{billing.elevenlabs_error ? ` (${billing.elevenlabs_error})` : ''}. Add your own ElevenLabs key in{' '}
-            <AccountLink tab="keys">Account</AccountLink> to use them.
-          </Hint>
-        )}
-        {premiumAvailable && premiumLocked && (
-          <Hint>
-            <Lock className="mr-1 inline size-3 align-[-1px]" />
-            Premium ElevenLabs voices are paid from your balance: <AccountLink>top up credits</AccountLink> to unlock them, or add your own ElevenLabs key there.
-          </Hint>
-        )}
-        {provider === 'elevenlabs' && hasTtsKey && <Hint tone="accent">Voices are billed to your ElevenLabs account, not to credits.</Hint>}
-        {noNativeVoices && (
-          <Hint>
-            No native {voiceLanguage.name} voices for this ElevenLabs key (Voice Library voices need a paid ElevenLabs plan) — the voices below speak{' '}
-            {voiceLanguage.name} with an accent.
-          </Hint>
-        )}
-        {catalogue.loading && (
-          <Hint className="flex items-center gap-2">
-            <Spinner className="size-3.5" /> Loading {provider === 'elevenlabs' ? 'premium' : 'Edge'} voices…
-          </Hint>
-        )}
-        {catalogue.error && (
-          <Hint>
-            Could not load the voice list ({catalogue.error}) — every speaker gets a distinct voice automatically.{' '}
-            <button type="button" onClick={catalogue.reload} className="font-semibold text-accent hover:text-accent-hover cursor-pointer">
-              Retry
-            </button>
-          </Hint>
-        )}
-      </div>
+      ) : (
+        <div className="rounded-card border border-line bg-surface px-3.5 py-3">
+          {/* Phones: label and key link on top, the two engines side by side below. */}
+          <div className="grid gap-2.5 sm:flex sm:flex-wrap sm:items-center sm:gap-x-3.5">
+            <div className="flex items-center justify-between gap-3 px-1 sm:contents">
+              <span className="text-[13px] font-semibold text-text-3 sm:pl-1">Voice engine</span>
+              <span className="text-xs text-muted sm:order-last sm:ml-auto">
+                Own ElevenLabs key? <AccountLink tab="keys">Account</AccountLink>
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-2 sm:contents">
+              <EngineOption active={provider === 'edge'} onClick={() => setProvider('edge')} title="Edge neural" tag="FREE" tooltip="Good quality, word timestamps, instant." />
+              <EngineOption
+                active={provider === 'elevenlabs'}
+                onClick={() => setProvider('elevenlabs')}
+                disabled={!premiumAvailable || premiumLocked}
+                title="Premium neural"
+                tag={
+                  hasTtsKey ? (
+                    'YOUR KEY'
+                  ) : premiumLocked ? (
+                    <span className="inline-flex items-center gap-1 text-muted">
+                      <Lock className="size-3" /> ${billing.tts_price_per_min.toFixed(2)}/min
+                    </span>
+                  ) : (
+                    `$${billing.tts_price_per_min.toFixed(2)}/min`
+                  )
+                }
+                tooltip={
+                  !premiumAvailable
+                    ? 'Premium voices are not configured on this server — add your own ElevenLabs key in Account'
+                    : premiumLocked
+                      ? 'Top up credits to unlock premium voices, or add your own ElevenLabs key in Account'
+                      : 'ElevenLabs studio voices with emotion tags.'
+                }
+              />
+            </div>
+          </div>
+          {ttsKeyError && (
+            <Hint tone="danger">
+              ElevenLabs rejected the key saved in this browser ({ttsKeyError}), so {premiumLocked ? 'premium voices stay locked' : 'premium voices are paid from your credits'}. Replace it in{' '}
+              <AccountLink tab="keys">Account</AccountLink>.
+            </Hint>
+          )}
+          {!premiumAvailable && (
+            <Hint>
+              Premium voices are not available on this server right now{billing.elevenlabs_error ? ` (${billing.elevenlabs_error})` : ''}. Add your own ElevenLabs key in{' '}
+              <AccountLink tab="keys">Account</AccountLink> to use them.
+            </Hint>
+          )}
+          {premiumAvailable && premiumLocked && (
+            <Hint>
+              <Lock className="mr-1 inline size-3 align-[-1px]" />
+              Premium ElevenLabs voices are paid from your balance: <AccountLink>top up credits</AccountLink> to unlock them, or add your own ElevenLabs key there.
+            </Hint>
+          )}
+          {provider === 'elevenlabs' && hasTtsKey && <Hint tone="accent">Voices are billed to your ElevenLabs account, not to credits.</Hint>}
+          {noNativeVoices && (
+            <Hint>
+              No native {voiceLanguage.name} voices for this ElevenLabs key (Voice Library voices need a paid ElevenLabs plan) — the voices below speak{' '}
+              {voiceLanguage.name} with an accent.
+            </Hint>
+          )}
+          {catalogue.loading && (
+            <Hint className="flex items-center gap-2">
+              <Spinner className="size-3.5" /> Loading {provider === 'elevenlabs' ? 'premium' : 'Edge'} voices…
+            </Hint>
+          )}
+          {catalogue.error && (
+            <Hint>
+              Could not load the voice list ({catalogue.error}) — every speaker gets a distinct voice automatically.{' '}
+              <button type="button" onClick={catalogue.reload} className="font-semibold text-accent hover:text-accent-hover cursor-pointer">
+                Retry
+              </button>
+            </Hint>
+          )}
+        </div>
+      )}
 
       <div className="grid gap-2.5">
-        <SectionHead title="Debaters" count={`${debaters} / ${maxDebaters}`} hint={debaters === 2 ? 'Two debaters argue for and against the topic.' : `${debaters} debaters take turns each round.`} />
+        <SectionHead
+          title={spec.music ? 'Rappers' : 'Debaters'}
+          count={`${debaters} / ${maxDebaters}`}
+          hint={
+            spec.music
+              ? 'Trade verses over one beat: the first raps for the topic, the second against it.'
+              : debaters === 2
+                ? 'Two debaters argue for and against the topic.'
+                : `${debaters} debaters take turns each round.`
+          }
+        />
         <div className={`hidden gap-3 px-[15px] font-mono text-[10px] tracking-[0.1em] text-dim min-[1100px]:grid ${ROW_COLUMNS}`} aria-hidden="true">
           <span>MODEL</span>
           <span>SIDE</span>
-          <span>VOICE</span>
+          <span>{spec.music ? 'FLOW' : 'VOICE'}</span>
           <span>PERSONA</span>
           <span />
         </div>
         {state.speakers.filter((s) => s.role === 'debater').map(row)}
+        {sameVoices && (
+          <Hint className="mt-0 px-1">
+            Both flows are {flows[0].voice} voices, which can blend into one rapper on the track: a male and a female flow are the easiest to tell apart.
+          </Hint>
+        )}
         {slotsLeft > 0 && (
           <button
             type="button"
@@ -309,7 +405,10 @@ export const StepSpeakers = ({
       </div>
 
       <div className="grid gap-2.5">
-        <SectionHead title="Host" hint="Moderates the debate and announces the verdict at the end." />
+        <SectionHead
+          title={spec.hostLabel}
+          hint={spec.music ? `Opens the ${spec.show} over the beat's intro; its model also judges every round.` : 'Moderates the debate and announces the verdict at the end.'}
+        />
         {state.speakers.filter((s) => s.role === 'moderator').map(row)}
       </div>
     </div>

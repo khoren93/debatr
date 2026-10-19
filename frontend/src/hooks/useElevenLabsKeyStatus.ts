@@ -12,6 +12,8 @@ export interface TtsKeyCheck {
   status: TtsKeyStatus;
   /** Why the key was rejected (or the check failed). */
   error: string | null;
+  /** Whether the key's plan is a paid one (the Music API of rap battles needs it); null: unknown. */
+  paidPlan: boolean | null;
 }
 
 interface Checked extends TtsKeyCheck {
@@ -21,12 +23,12 @@ interface Checked extends TtsKeyCheck {
 /** Lists the voices with the key (the API calls ElevenLabs with it and caches the list). */
 export const checkElevenLabsKey = (key: string): Promise<TtsKeyCheck> =>
   getVoices('elevenlabs', { language: 'English', participants: 0 }, key)
-    .then((): TtsKeyCheck => ({ status: 'valid', error: null }))
+    .then((res): TtsKeyCheck => ({ status: 'valid', error: null, paidPlan: res.paid_plan ?? null }))
     .catch((err: unknown): TtsKeyCheck => {
       const status = getErrorStatus(err);
       // 502 = ElevenLabs answered with an error; other 4xx are ours, except rate limits.
       const rejected = status === 502 || (status !== null && status >= 400 && status < 500 && status !== 429);
-      return { status: rejected ? 'invalid' : 'unknown', error: getErrorMessage(err) };
+      return { status: rejected ? 'invalid' : 'unknown', error: getErrorMessage(err), paidPlan: null };
     });
 
 /**
@@ -51,9 +53,10 @@ export const useElevenLabsKeyStatus = (key: string, delayMs = 0): TtsKeyCheck =>
     };
   }, [key, delayMs]);
 
-  if (!key) return { status: 'none', error: null };
-  return checked?.key === key ? { status: checked.status, error: checked.error } : { status: 'checking', error: null };
+  if (!key) return { status: 'none', error: null, paidPlan: null };
+  return checked?.key === key ? { status: checked.status, error: checked.error, paidPlan: checked.paidPlan } : { status: 'checking', error: null, paidPlan: null };
 };
 
-/** A key is set and ElevenLabs has not rejected it. */
-export const ttsKeyUsable = (check: TtsKeyCheck) => check.status !== 'none' && check.status !== 'invalid';
+/** A key is set and ElevenLabs has not rejected it. `music`: the key also makes a rap battle's
+ *  track, which a free plan cannot (an unknown plan gets the benefit of the doubt, as above). */
+export const ttsKeyUsable = (check: TtsKeyCheck, music = false) => check.status !== 'none' && check.status !== 'invalid' && !(music && check.paidPlan === false);

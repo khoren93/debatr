@@ -431,3 +431,37 @@ def test_the_battle_build(
     )
     assert len(composed) == 1 and again.music_ms == 0
     assert finished["stats"].music_cached is True
+
+
+async def test_the_voice_list_says_whether_an_own_key_may_make_music(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.api import routes_media
+
+    class Voices:
+        def available(self) -> bool:
+            return True
+
+        def list_voices(self, code: str) -> list[Any]:
+            return []
+
+    monkeypatch.setattr(routes_media, "get_provider", lambda name, api_key=None: Voices())
+    monkeypatch.setattr(routes_media, "music_allowed", lambda key: key == "paid-key")
+    monkeypatch.setattr(routes_media, "system_key_status", lambda: (True, None))
+
+    async def voices(provider: str, key: str | None) -> bool | None:
+        out = await routes_media.media_voices(
+            provider=provider,
+            language="English",
+            debate_id=None,
+            participants=0,
+            x_tts_key=key,
+            db=None,  # type: ignore[arg-type]
+        )
+        return out.paid_plan
+
+    assert await voices("elevenlabs", "paid-key") is True
+    assert await voices("elevenlabs", "free-key") is False
+    # The system key (ours, paid) and Edge are not asked.
+    assert await voices("elevenlabs", None) is None
+    assert await voices("edge", None) is None

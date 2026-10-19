@@ -2,6 +2,7 @@ import type {
   DebateConfig,
   DebateDetail,
   DebaterSide,
+  FormatId,
   FreeDebates,
   ImageSource,
   LengthPreset,
@@ -16,6 +17,7 @@ import type {
 } from '../../api/types';
 import { STYLE_PRESETS, applyStyle, type PersonaStyle } from '../../data/styles';
 import { HOST_COLOR, debaterColor } from '../../lib/format';
+import { FLOWS, FORMAT_IDS, FORMATS, flowOf, formatSpec, type FormatSpec } from '../../lib/formats';
 import { getLocalKey, setLocalKey } from '../../lib/localKeys';
 import { FREE_ROUTER_ID, speakerNames } from '../../lib/modelNames';
 
@@ -25,6 +27,7 @@ export type WizardStep = 1 | 2 | 3;
 export const STEP_LABELS: readonly string[] = ['Topic', 'Speakers', 'Review'];
 export const LAST_STEP: WizardStep = 3;
 
+/** The widest ranges of any format (stored states are clamped to them, then to their format). */
 export const MIN_ROUNDS = 1;
 export const MAX_ROUNDS = 5;
 export const MIN_DEBATERS = 2;
@@ -35,7 +38,7 @@ export const MIN_TOPIC_LENGTH = 4;
 export const TOPIC_MAX_LENGTH = 150;
 const clipTopic = (topic: string) => (topic.length > TOPIC_MAX_LENGTH ? topic.slice(0, TOPIC_MAX_LENGTH).trimEnd() : topic);
 
-/** Speakers have no name fields: the host is "The Host", debaters are named after their models. */
+/** Speakers have no name fields: the host is "The Host" ("The MC"), debaters are named after their models. */
 export interface Speaker {
   /** Stable React key (survives reordering / removal). */
   key: string;
@@ -58,6 +61,8 @@ export interface RemixPick {
 
 export interface WizardState {
   step: WizardStep;
+  /** Show format (lib/formats): seats, limits, how it is voiced. */
+  format: FormatId;
   topic: string;
   /** The user's angle for the models (optional). */
   description: string;
@@ -80,6 +85,8 @@ export interface WizardState {
    * provider defaults — see {@link resolveVoices}.
    */
   voices: Record<string, string>;
+  /** Formats with a generated track (rap battle): flow per debater id, in place of a voice. */
+  flows: Record<string, string>;
   outputs: MediaOutput[];
   quality: VideoQuality;
   /** Charts / drawn scenes, designed live after every turn and shown in the video. */
@@ -126,15 +133,12 @@ const normalizeLanguage = (value: string, fallback: string) => {
   return LANGUAGES.find((l) => l.value.toLowerCase() === key || l.label.toLowerCase() === key)?.value ?? value.trim();
 };
 
-/** What the rounds consist of (services/scheduler.build_schedule). */
-export const roundsHint = (rounds: number) =>
-  rounds === 1 ? 'one argument each' : `opening · ${rounds > 2 ? `${rounds > 3 ? `${rounds - 2}× ` : ''}rebuttal · ` : ''}closing`;
-
-export const LENGTH_OPTIONS: { value: LengthPreset; label: string; hint: string }[] = [
-  { value: 'very_short', label: 'Very short', hint: '~50 words · best for Shorts' },
-  { value: 'short', label: 'Short', hint: '~100 words · snappy' },
-  { value: 'medium', label: 'Medium', hint: '~250 words · balanced' },
-  { value: 'long', label: 'Long', hint: '~500 words · deep dive' },
+/** Reply length presets; what each one means depends on the format (`FormatSpec.lengthHints`). */
+export const LENGTH_OPTIONS: { value: LengthPreset; label: string }[] = [
+  { value: 'very_short', label: 'Very short' },
+  { value: 'short', label: 'Short' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'long', label: 'Long' },
 ];
 const LENGTH_VALUES = LENGTH_OPTIONS.map((o) => o.value);
 
@@ -145,7 +149,7 @@ export type FreeLimits = FreeDebates | null;
 
 export const roundsAllowed = (free: FreeLimits, rounds: number) => !free?.max_rounds || rounds <= free.max_rounds;
 export const lengthAllowed = (free: FreeLimits, length: LengthPreset) => !free?.lengths.length || free.lengths.includes(length);
-export const maxDebatersFor = (free: FreeLimits) => (free?.max_debaters ? Math.min(MAX_DEBATERS, free.max_debaters) : MAX_DEBATERS);
+export const maxDebatersFor = (spec: FormatSpec, free: FreeLimits) => (free?.max_debaters ? Math.min(spec.maxDebaters, free.max_debaters) : spec.maxDebaters);
 
 /** Rounds and reply length within the limits: what the wizard shows and sends. The choice
  * stays in the state, so credits or an own key bring it back. */
@@ -186,14 +190,8 @@ export const QUALITY_OPTIONS: { value: VideoQuality; label: string }[] = [
 let keySeq = 0;
 export const speakerKey = () => `s${Date.now().toString(36)}${(keySeq++).toString(36)}`;
 
-export const MODERATOR_PROMPT =
-  'You are an impartial debate moderator. Introduce the topic, keep speakers on time, summarize each round.';
-const DEBATER_BASE = 'You are a skilled debater.';
-
-/** The side goes to the models on its own line (backend prompt_builder), not in the persona. */
-export const debaterPrompt = () => DEBATER_BASE;
-
-/** First for, second against, the rest a view of their own. */
+/** First for, second against, the rest a view of their own. The side goes to the models on its
+ *  own line (backend prompt_builder), not in the persona. */
 export const defaultSide = (debaterIndex: number): DebaterSide => (debaterIndex === 0 ? 'for' : debaterIndex === 1 ? 'against' : 'own');
 
 export const SIDE_OPTIONS: { value: DebaterSide; label: string; hint: string; tag: string }[] = [
@@ -220,26 +218,25 @@ export const sideFromPersona = (prompt: string): { prompt: string; side: Debater
 
 const styleById = (id: string): PersonaStyle => STYLE_PRESETS.find((s) => s.id === id) ?? STYLE_PRESETS[0];
 
-export const HOST_NAME = 'The Host';
-
-export const defaultModerator = (): Speaker => ({
+export const defaultModerator = (format: FormatId = 'debate'): Speaker => ({
   key: speakerKey(),
   role: 'moderator',
   model_id: '',
-  prompt: MODERATOR_PROMPT,
+  prompt: FORMATS[format].hostPrompt,
   side: null,
 });
 
-export const defaultDebater = (debaterIndex: number): Speaker => ({
+export const defaultDebater = (debaterIndex: number, format: FormatId = 'debate'): Speaker => ({
   key: speakerKey(),
   role: 'debater',
   model_id: '',
-  prompt: applyStyle(debaterPrompt(), styleById(debaterIndex === 1 ? 'aggressive' : 'neutral')),
+  prompt: applyStyle(FORMATS[format].debaterPrompt, styleById(debaterIndex === 1 ? 'aggressive' : 'neutral')),
   side: defaultSide(debaterIndex),
 });
 
 export const initialState = (): WizardState => ({
   step: 1,
+  format: 'debate',
   topic: '',
   description: '',
   news: null,
@@ -250,6 +247,7 @@ export const initialState = (): WizardState => ({
   speakers: [defaultModerator(), defaultDebater(0), defaultDebater(1)],
   provider: 'edge',
   voices: {},
+  flows: {},
   outputs: ['audio', 'video', 'short'],
   quality: '1080p',
   visuals: true,
@@ -271,9 +269,19 @@ const debaterIndexOf = (speakers: Speaker[], index: number) => countDebaters(spe
 export const speakerColorOf = (speakers: Speaker[], index: number) =>
   speakers[index].role === 'moderator' ? HOST_COLOR : debaterColor(debaterIndexOf(speakers, index));
 
-/** HOST / PRO / CON / OWN VIEW (by side; positional for a debater without one) */
-export const speakerTagOf = (speakers: Speaker[], index: number) => {
-  if (speakers[index].role === 'moderator') return 'HOST';
+/** The format's seat of the n-th debater (the last seat repeats). */
+export const seatOf = (spec: FormatSpec, debaterIndex: number) => spec.seats[Math.min(debaterIndex, spec.seats.length - 1)];
+
+/** Side fixed by the format's seat (rap battle: FOR / AGAINST), null where debaters pick. */
+export const fixedSideOf = (speakers: Speaker[], index: number, spec: FormatSpec) =>
+  speakers[index].role === 'debater' ? seatOf(spec, debaterIndexOf(speakers, index)).side : null;
+
+/** HOST / MC, PRO / CON / OWN VIEW by side (positional for a debater without one), FOR / AGAINST
+ *  on fixed seats. */
+export const speakerTagOf = (speakers: Speaker[], index: number, spec: FormatSpec = FORMATS.debate) => {
+  if (speakers[index].role === 'moderator') return spec.hostLabel.toUpperCase();
+  const fixed = fixedSideOf(speakers, index, spec);
+  if (fixed) return fixed === 'for' ? 'FOR' : 'AGAINST';
   const side = SIDE_OPTIONS.find((o) => o.value === speakers[index].side);
   if (side) return side.tag;
   const i = debaterIndexOf(speakers, index);
@@ -282,12 +290,50 @@ export const speakerTagOf = (speakers: Speaker[], index: number) => {
   return `SIDE ${i + 1}`;
 };
 
+/** Index of each debater among the debaters (rapper one, two…) by speaker index. */
+const rapperIndexes = (speakers: Speaker[]) => speakers.flatMap((s, i) => (s.role === 'debater' ? [i] : []));
+
+/** The flow of every debater of a format with a generated track, by speaker id. */
+export const flowsOf = (state: WizardState) =>
+  Object.fromEntries(rapperIndexes(state.speakers).map((index, k) => [speakerId(index), flowOf(state.flows, speakerId(index), k).id]));
+
+// --- Formats -----------------------------------------------------------------
+
+/** A default prompt of another format becomes this format's (its style line stays); a prompt of
+ *  the user's own stays as it is. */
+const promptFor = (prompt: string, role: ParticipantRole, spec: FormatSpec) => {
+  const target = role === 'moderator' ? spec.hostPrompt : spec.debaterPrompt;
+  for (const other of Object.values(FORMATS)) {
+    const base = role === 'moderator' ? other.hostPrompt : other.debaterPrompt;
+    if (prompt.startsWith(base)) return target + prompt.slice(base.length);
+  }
+  return prompt;
+};
+
+/** Speakers, rounds and outputs within the format: extra debaters go, missing ones come, the
+ *  rounds are clamped, and a format voiced with premium voices only always gets its audio. */
+export const fitFormat = (state: WizardState): WizardState => {
+  const spec = formatSpec(state.format);
+  let kept = 0;
+  const speakers = state.speakers.filter((s) => s.role !== 'debater' || kept++ < spec.maxDebaters);
+  while (countDebaters(speakers) < spec.minDebaters) speakers.push(defaultDebater(countDebaters(speakers), spec.id));
+  const outputs = spec.premiumOnly && !state.outputs.includes('audio') ? OUTPUT_VALUES.filter((o) => o === 'audio' || state.outputs.includes(o)) : state.outputs;
+  return { ...state, format: spec.id, speakers, num_rounds: clamp(state.num_rounds, spec.minRounds, spec.maxRounds), outputs };
+};
+
+/** Switch the format: default prompts follow it; models, styles and the topic stay. */
+export const applyFormat = (state: WizardState, format: FormatId): WizardState => {
+  if (format === state.format) return state;
+  const spec = FORMATS[format];
+  return fitFormat({ ...state, format, speakers: state.speakers.map((s) => ({ ...s, prompt: promptFor(s.prompt, s.role, spec) })) });
+};
+
 /** On-stage name of every speaker (see lib/modelNames.speakerNames). */
-export const speakerNamesOf = (speakers: Speaker[], models: ModelInfo[], defaultModelId: string) =>
+export const speakerNamesOf = (speakers: Speaker[], models: ModelInfo[], defaultModelId: string, format: FormatId = 'debate') =>
   speakerNames(
     speakers.map((s) => ({ role: s.role, modelId: s.model_id || defaultModelId })),
     models,
-    HOST_NAME,
+    FORMATS[format].hostName,
   );
 
 /** Shift `participant_i` keys down after removing the speaker at `removed`. */
@@ -349,34 +395,46 @@ const newsOf = (state: WizardState): NewsContext | undefined => {
 };
 
 export const buildConfig = (state: WizardState, opts: BuildOptions): DebateConfig => {
-  const names = speakerNamesOf(state.speakers, opts.models, opts.defaultModelId);
+  const spec = formatSpec(state.format);
+  const names = speakerNamesOf(state.speakers, opts.models, opts.defaultModelId, spec.id);
+  // A generated track carries the debaters of a music format: only the host and the judge get voices.
+  const voiced = (index: number) => !spec.music || state.speakers[index]?.role !== 'debater';
+  const voices = Object.fromEntries(
+    Object.entries(opts.voices).filter(([id]) => {
+      const match = id.match(/^participant_(\d+)$/);
+      return !match || voiced(Number(match[1]));
+    }),
+  );
+  const visuals = spec.visuals && state.visuals;
   return {
+    format: spec.id,
     topic: state.topic.trim(),
     description: state.description.trim() || undefined,
     news: newsOf(state),
     language: state.language,
     num_rounds: state.num_rounds,
     length_preset: state.length_preset,
-    output_style: state.output_style,
+    output_style: spec.outputStyle ?? state.output_style,
     debate_preset_id: 'custom',
     participants: state.speakers.map((s, i) => ({
       role: s.role,
       model_id: s.model_id || opts.defaultModelId,
       display_name: names[i],
       persona_custom: s.prompt.trim() || undefined,
-      voice_name: opts.voices[speakerId(i)],
-      side: s.role === 'debater' ? (s.side ?? undefined) : undefined,
+      voice_name: voiced(i) ? opts.voices[speakerId(i)] : undefined,
+      side: s.role === 'debater' && spec.sides ? (s.side ?? undefined) : undefined,
     })),
     media_plan: {
       provider: opts.provider,
       model_id: 'eleven_v3',
-      voices: opts.voices,
+      voices,
       outputs: state.outputs,
       quality: state.quality,
-      visuals: state.visuals,
-      images: state.visuals && state.outputs.includes('audio') ? state.images : 'off',
+      visuals,
+      images: visuals && state.outputs.includes('audio') ? state.images : 'off',
+      ...(spec.music ? { flows: flowsOf(state) } : {}),
     },
-    fact_check: state.visuals && state.fact_check,
+    fact_check: visuals && state.fact_check,
     auto_publish: state.auto_publish,
     remix_of: state.remix?.id,
     user_provider_key: opts.openrouterKey?.trim() || undefined,
@@ -388,54 +446,65 @@ const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(mi
 
 /** Re-open a saved configuration (draft) in the wizard. */
 export const stateFromConfig = (config: DebateConfig, base: WizardState): WizardState => {
+  const spec = formatSpec(config.format);
   const plan = config.media_plan ?? null;
   const entries = config.participants.map((p, index) => ({ p, index }));
   const moderator = entries.find((e) => e.p.role === 'moderator');
-  const debaters = entries.filter((e) => e.p.role === 'debater').slice(0, MAX_DEBATERS);
-  const speakers: Speaker[] = moderator ? [] : [defaultModerator()];
+  const debaters = entries.filter((e) => e.p.role === 'debater').slice(0, spec.maxDebaters);
+  const speakers: Speaker[] = moderator ? [] : [defaultModerator(spec.id)];
   const voices: Record<string, string> = {};
+  const flows: Record<string, string> = {};
   for (const entry of [...(moderator ? [moderator] : []), ...debaters]) {
     const debater = entry.p.role === 'debater';
     const persona = entry.p.persona_custom;
-    const fallbackPrompt = debater ? debaterPrompt() : MODERATOR_PROMPT;
+    const fallbackPrompt = debater ? spec.debaterPrompt : spec.hostPrompt;
     // Configs from before sides: the default stance sentence of the persona becomes the side; a
     // stance of one's own stays in the text, without a side. No persona (a remix of someone
-    // else's debate): the default side.
+    // else's debate) or a format that seats the sides itself: the default side (for a switch to
+    // a debate).
     const legacy = sideFromPersona(persona ?? fallbackPrompt);
-    const side = entry.p.side ?? (persona === undefined ? defaultSide(countDebaters(speakers)) : legacy.side);
+    const seated = !spec.sides || persona === undefined;
+    const side = (spec.sides ? entry.p.side : undefined) ?? (seated ? defaultSide(countDebaters(speakers)) : legacy.side);
     speakers.push({
       key: speakerKey(),
       role: entry.p.role,
       model_id: entry.p.model_id,
-      prompt: entry.p.side ? (persona ?? fallbackPrompt) : legacy.prompt,
+      prompt: entry.p.side || !spec.sides ? (persona ?? fallbackPrompt) : legacy.prompt,
       side: debater ? side : null,
     });
-    // Voices in the stored plan are keyed by the *original* participant index.
+    // Voices and flows in the stored plan are keyed by the *original* participant index.
     const voice = entry.p.voice_name || plan?.voices[speakerId(entry.index)];
     if (voice) voices[speakerId(speakers.length - 1)] = voice;
+    const flow = plan?.flows?.[speakerId(entry.index)];
+    if (flow && FLOWS.some((f) => f.id === flow)) flows[speakerId(speakers.length - 1)] = flow;
   }
-  while (countDebaters(speakers) < MIN_DEBATERS) speakers.push(defaultDebater(countDebaters(speakers)));
+  while (countDebaters(speakers) < spec.minDebaters) speakers.push(defaultDebater(countDebaters(speakers), spec.id));
   if (plan?.voices.judge) voices.judge = plan.voices.judge;
-  return {
+  return fitFormat({
     ...base,
     step: 1,
+    format: spec.id,
     topic: clipTopic(config.topic),
     description: config.description ?? '',
     news: config.news?.brief ? { ...config.news } : null,
     language: normalizeLanguage(config.language, base.language),
     num_rounds: clamp(config.num_rounds, MIN_ROUNDS, MAX_ROUNDS),
     length_preset: LENGTH_VALUES.includes(config.length_preset) ? config.length_preset : base.length_preset,
-    output_style: config.output_style ?? 'spoken',
+    // A format that writes in its own style says nothing about the wizard's choice.
+    output_style: spec.outputStyle ? base.output_style : (config.output_style ?? 'spoken'),
     speakers,
-    provider: plan?.provider ?? 'edge',
+    // The format picks the engine of a premium-only show: keep the wizard's for a switch back.
+    provider: spec.premiumOnly ? base.provider : (plan?.provider ?? 'edge'),
     voices,
+    flows,
     outputs: plan?.outputs ?? base.outputs,
     quality: plan?.quality ?? base.quality,
-    visuals: plan?.visuals ?? base.visuals,
-    images: plan?.images ?? base.images,
-    fact_check: config.fact_check ?? base.fact_check,
+    // Formats without scenes store them off: keep the default for a switch to a debate.
+    visuals: spec.visuals ? (plan?.visuals ?? base.visuals) : base.visuals,
+    images: spec.visuals ? (plan?.images ?? base.images) : base.images,
+    fact_check: spec.visuals ? (config.fact_check ?? base.fact_check) : base.fact_check,
     auto_publish: config.auto_publish ?? base.auto_publish,
-  };
+  });
 };
 
 const isRole = (role: string): role is ParticipantRole => role === 'moderator' || role === 'debater';
@@ -448,6 +517,7 @@ export const configFromDebate = (debate: DebateDetail): DebateConfig => {
   if (debate.config) return debate.config;
   const { settings } = debate;
   return {
+    format: formatSpec(settings.format).id,
     topic: settings.topic || debate.title || '',
     description: settings.description ?? undefined,
     news: settings.news ?? undefined,
@@ -504,7 +574,7 @@ const str = (v: unknown, fallback = '') => (typeof v === 'string' ? v : fallback
 const oneOf = <T extends string>(v: unknown, allowed: readonly T[], fallback: T): T =>
   typeof v === 'string' && (allowed as readonly string[]).includes(v) ? (v as T) : fallback;
 
-const sanitizeSpeakers = (raw: unknown): Speaker[] => {
+const sanitizeSpeakers = (raw: unknown, format: FormatId): Speaker[] => {
   const list = Array.isArray(raw) ? raw.filter(isRecord) : [];
   const toSpeaker = (s: Record<string, unknown>, role: ParticipantRole): Speaker => {
     const base = { key: str(s.key) || speakerKey(), role, model_id: str(s.model_id) };
@@ -516,9 +586,14 @@ const sanitizeSpeakers = (raw: unknown): Speaker[] => {
   };
   const moderator = list.find((s) => s.role === 'moderator');
   const debaters = list.filter((s) => s.role === 'debater').slice(0, MAX_DEBATERS);
-  const out = [moderator ? toSpeaker(moderator, 'moderator') : defaultModerator(), ...debaters.map((d) => toSpeaker(d, 'debater'))];
-  while (countDebaters(out) < MIN_DEBATERS) out.push(defaultDebater(countDebaters(out)));
+  const out = [moderator ? toSpeaker(moderator, 'moderator') : defaultModerator(format), ...debaters.map((d) => toSpeaker(d, 'debater'))];
+  while (countDebaters(out) < MIN_DEBATERS) out.push(defaultDebater(countDebaters(out), format));
   return out;
+};
+
+const sanitizeFlows = (raw: unknown): Record<string, string> => {
+  if (!isRecord(raw)) return {};
+  return Object.fromEntries(Object.entries(raw).filter((e): e is [string, string] => typeof e[1] === 'string' && FLOWS.some((f) => f.id === e[1])));
 };
 
 const sanitizeVoices = (raw: unknown): Record<string, string> => {
@@ -554,9 +629,11 @@ export const sanitizeState = (raw: unknown): WizardState => {
   if (!isRecord(raw)) return base;
   const step = Number(raw.step);
   const rounds = Number(raw.num_rounds);
-  return {
+  const format = oneOf(raw.format, FORMAT_IDS, base.format);
+  return fitFormat({
     // Older four-step states: "Format" and "Review" are now one step.
     step: step >= 1 ? (Math.min(LAST_STEP, Math.floor(step)) as WizardStep) : 1,
+    format,
     topic: clipTopic(str(raw.topic)),
     description: str(raw.description),
     // Older states could switch the story off ("ground"): a linked topic now always sends it.
@@ -565,9 +642,10 @@ export const sanitizeState = (raw: unknown): WizardState => {
     num_rounds: Number.isFinite(rounds) ? clamp(Math.round(rounds), MIN_ROUNDS, MAX_ROUNDS) : base.num_rounds,
     length_preset: oneOf(raw.length_preset, LENGTH_VALUES, base.length_preset),
     output_style: oneOf(raw.output_style, ['spoken', 'markdown'] as const, base.output_style),
-    speakers: sanitizeSpeakers(raw.speakers),
+    speakers: sanitizeSpeakers(raw.speakers, format),
     provider: oneOf(raw.provider, ['edge', 'elevenlabs'] as const, base.provider),
     voices: sanitizeVoices(raw.voices),
+    flows: sanitizeFlows(raw.flows),
     outputs: sanitizeOutputs(raw.outputs, base.outputs),
     quality: oneOf(raw.quality, ['720p', '1080p', '4k'] as const, base.quality),
     visuals: typeof raw.visuals === 'boolean' ? raw.visuals : base.visuals,
@@ -575,7 +653,7 @@ export const sanitizeState = (raw: unknown): WizardState => {
     fact_check: typeof raw.fact_check === 'boolean' ? raw.fact_check : base.fact_check,
     auto_publish: typeof raw.auto_publish === 'boolean' ? raw.auto_publish : base.auto_publish,
     remix: sanitizeRemix(raw.remix),
-  };
+  });
 };
 
 export const loadWizardState = (): WizardState => {

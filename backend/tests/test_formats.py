@@ -16,6 +16,7 @@ from app.models.models import Debate, DebateParticipant, Turn
 from app.schemas.schemas import DebateConfig
 from app.services.formats import FORMATS, Format, Seat, format_of, get_format
 from app.services.formats.base import Messages
+from app.services.media import music
 from app.services.scheduler import ScheduledTurn
 
 SNAPSHOT = Path(__file__).parent / "fixtures" / "debate_prompts_v1.json"
@@ -255,6 +256,15 @@ async def test_the_format_catalogue() -> None:
     debate = formats[0]
     assert debate.sides and debate.visuals and debate.host_label == "Host"
     assert debate.seats[0].label == "Debater" and debate.seats[0].side is None
+    assert debate.voices == "any" and debate.soundtrack == "speech" and debate.flows == []
+    battle = formats[1]
+    assert battle.show == "battle" and battle.host_label == "MC" and not battle.visuals
+    assert battle.voices == "elevenlabs" and battle.soundtrack == "music"
+    assert battle.verdict_scores and [s.side for s in battle.seats] == ["for", "against"]
+    # The wizard and the CLI offer these in place of the rappers' voices.
+    assert {f.id for f in battle.flows} == set(music.FLOWS)
+    assert battle.default_flows == list(music.DEFAULT_FLOWS)
+    assert {f.voice for f in battle.flows if f.id in battle.default_flows} == {"male", "female"}
 
 
 def test_formats_filter_the_gallery_and_rank_apart() -> None:

@@ -158,6 +158,7 @@ class Format(ABC):
         return {
             "id": self.id,
             "name": self.name,
+            "show": self.show,
             "tagline": self.tagline,
             "host_label": self.host_label,
             "host_required": self.host_required,

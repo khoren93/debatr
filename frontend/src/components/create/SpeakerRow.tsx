@@ -1,10 +1,12 @@
-import { PenLine, Trash2 } from 'lucide-react';
+import { AudioLines, Lock, PenLine, Trash2 } from 'lucide-react';
 import type { ReactNode } from 'react';
-import type { ModelInfo, VoiceInfo } from '../../api/types';
+import type { DebaterSide, ModelInfo, VoiceInfo } from '../../api/types';
 import { applyStyle, clearStyle, detectStyle } from '../../data/styles';
+import { FLOWS } from '../../lib/formats';
 import { Dropdown, Hint } from '../ui';
 import { ModelPicker } from './ModelPicker';
 import { PersonaPicker } from './PersonaPicker';
+import { PresetPicker } from './PresetPicker';
 import { useVoicePreview } from './useVoicePreview';
 import { VoicePicker } from './VoicePicker';
 import { VoicePreviewButton } from './VoicePreviewButton';
@@ -38,15 +40,24 @@ interface SpeakerRowProps {
   showVoiceLanguages: boolean;
   /** Debate language for the voice list: ISO code + display name. */
   voiceLanguage: { code: string; name: string };
+  /** Side the format's seat fixes (rap battle), shown instead of the side picker. */
+  fixedSide: DebaterSide | null;
+  /** Rappers of a generated track take a flow instead of a voice (null: a voice). */
+  flow: string | null;
+  /** Why the format seats the sides (tooltip of a fixed side). */
+  fixedSideHint?: string;
   /** System prompt editor open. */
   expanded: boolean;
   removable: boolean;
   showErrors: boolean;
   onChange: (patch: Partial<Speaker>) => void;
   onVoice: (voiceId: string) => void;
+  onFlow: (flowId: string) => void;
   onToggleExpanded: () => void;
   onRemove: () => void;
 }
+
+const FLOW_OPTIONS = FLOWS.map((f) => ({ id: f.id, full: f.label, short: f.hint, badge: f.voice.toUpperCase() }));
 
 const RowAction = ({ title, onClick, active, color, children }: { title: string; onClick: () => void; active?: boolean; color?: string; children: ReactNode }) => (
   <button
@@ -80,17 +91,22 @@ export const SpeakerRow = ({
   voicesTakenBy,
   showVoiceLanguages,
   voiceLanguage,
+  fixedSide,
+  flow,
+  fixedSideHint,
   expanded,
   removable,
   showErrors,
   onChange,
   onVoice,
+  onFlow,
   onToggleExpanded,
   onRemove,
 }: SpeakerRowProps) => {
   const style = detectStyle(speaker.prompt);
   const preview = useVoicePreview();
-  const sample = voicesAuto ? null : (voices.find((v) => v.id === voiceId)?.preview_url ?? null);
+  const sample = voicesAuto || flow !== null ? null : (voices.find((v) => v.id === voiceId)?.preview_url ?? null);
+  const fixedLabel = SIDE_OPTIONS.find((o) => o.value === fixedSide)?.label;
 
   return (
     // An open picker lifts its row above the rows below it.
@@ -109,7 +125,12 @@ export const SpeakerRow = ({
         />
         {showErrors && !modelId && !modelsLoading && <Hint tone="danger">Pick a model for this speaker.</Hint>}
       </div>
-      {speaker.role === 'debater' ? (
+      {fixedLabel ? (
+        <div title={fixedSideHint} className="flex h-11 items-center gap-2 rounded-field border border-white/6 bg-ink/60 px-3 text-sm font-medium text-text-3">
+          <Lock className="size-3.5 shrink-0 text-dim" />
+          {fixedLabel}
+        </div>
+      ) : speaker.role === 'debater' ? (
         <Dropdown
           aria-label={`Side of ${name}`}
           value={speaker.side ?? ''}
@@ -122,17 +143,21 @@ export const SpeakerRow = ({
         // The host takes no side: an empty cell keeps the columns aligned.
         <span className="hidden text-center font-mono text-[11px] text-dim min-[1100px]:block">neutral</span>
       )}
-      <VoicePicker
-        value={voiceId}
-        voices={voices}
-        loading={voicesLoading}
-        auto={voicesAuto}
-        takenBy={voicesTakenBy}
-        showLanguages={showVoiceLanguages}
-        language={voiceLanguage}
-        color={color}
-        onChange={onVoice}
-      />
+      {flow !== null ? (
+        <PresetPicker value={flow} options={FLOW_OPTIONS} icon={<AudioLines className="size-4" />} color={color} label={`Flow of ${name}`} onPick={onFlow} />
+      ) : (
+        <VoicePicker
+          value={voiceId}
+          voices={voices}
+          loading={voicesLoading}
+          auto={voicesAuto}
+          takenBy={voicesTakenBy}
+          showLanguages={showVoiceLanguages}
+          language={voiceLanguage}
+          color={color}
+          onChange={onVoice}
+        />
+      )}
       {/* Narrow rows: the actions sit next to the persona instead of on a line of their own. */}
       <div className="flex items-center gap-1.5 min-[1100px]:contents">
         <div className="min-w-0 flex-1">

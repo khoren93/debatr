@@ -197,9 +197,11 @@ async def media_voices(
         defaults = await run_in_threadpool(tts.default_voices, code, refs) if refs else {}
     except TTSError as e:
         raise HTTPException(status_code=502, detail=str(e)) from e
+    own_key = provider == "elevenlabs" and bool(x_tts_key)
     return VoicesResponse(
         provider=provider,  # type: ignore[arg-type]
         language=code,
+        paid_plan=await run_in_threadpool(music_allowed, x_tts_key or "") if own_key else None,
         voices=[
             VoiceOut(
                 id=v.id,

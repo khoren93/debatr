@@ -1,21 +1,19 @@
-import { ArrowRight, ArrowUpRight, X } from 'lucide-react';
-import type { TrendingTopic } from '../../api/types';
+import { ArrowRight, ArrowUpRight, Lock, MessagesSquare, MicVocal, X } from 'lucide-react';
+import type { ReactNode } from 'react';
+import type { FormatId, TrendingTopic } from '../../api/types';
 import { formatAge } from '../../lib/format';
+import { FORMAT_IDS, FORMATS, formatSpec } from '../../lib/formats';
 import { Dropdown, Hint } from '../ui';
 import { TopicVersions } from './TopicVersions';
 import { Favicon, TrendingBrowser } from './TrendingBrowser';
 import {
   LANGUAGES,
   LENGTH_OPTIONS,
-  MAX_ROUNDS,
-  MIN_ROUNDS,
   MIN_TOPIC_LENGTH,
   TOPIC_MAX_LENGTH,
   freeLimitsText,
   lengthAllowed,
-  lengthOption,
   roundsAllowed,
-  roundsHint,
   topicValid,
   type FreeLimits,
   type NewsPick,
@@ -27,13 +25,56 @@ interface StepTopicProps {
   /** Limits of free debates (no credits, no own key): longer options are locked. */
   free: FreeLimits;
   patch: (patch: Partial<WizardState>) => void;
+  /** Switch the show format (seats, prompts and limits follow it). */
+  onFormat: (format: FormatId) => void;
+  /** Why a format cannot be picked (no balance or key for its voices), per format. */
+  formatLocks: Partial<Record<FormatId, string>>;
   showErrors: boolean;
   /** "~4 min episode · ~$0.02 estimated", null while unknown. */
   estimateLine: string | null;
   onContinue: () => void;
 }
 
-const ROUND_OPTIONS = Array.from({ length: MAX_ROUNDS - MIN_ROUNDS + 1 }, (_, i) => MIN_ROUNDS + i);
+const FORMAT_ICONS: Record<FormatId, ReactNode> = {
+  debate: <MessagesSquare className="size-5" />,
+  rap_battle: <MicVocal className="size-5" />,
+};
+const FORMAT_TAGS: Record<FormatId, string> = { debate: '2–4 DEBATERS', rap_battle: 'MC + 2 RAPPERS' };
+
+/** One show format to pick: icon, name, seats, tagline (or why it is locked). */
+const FormatCard = ({ format, on, lock, onPick }: { format: FormatId; on: boolean; lock: string | undefined; onPick: () => void }) => {
+  const spec = FORMATS[format];
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={on}
+      aria-disabled={Boolean(lock) && !on}
+      onClick={() => !lock && onPick()}
+      className={`flex items-center gap-3.5 rounded-panel border px-4 py-3.5 text-left transition-colors ${on ? 'border-accent bg-accent/5' : 'border-line bg-surface'} ${
+        lock ? (on ? 'cursor-default' : 'cursor-not-allowed') : on ? 'cursor-default' : 'cursor-pointer hover:border-line-3'
+      }`}
+    >
+      <span className={`grid size-11 shrink-0 place-items-center rounded-[12px] transition-colors ${on ? 'bg-accent text-ink' : 'bg-surface-2 text-text-3'} ${lock && !on ? 'opacity-60' : ''}`}>
+        {FORMAT_ICONS[format]}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+          <span className="font-display text-base font-bold tracking-[-0.01em]">{spec.name}</span>
+          <span className="rounded-[5px] bg-surface-2 px-[7px] py-0.5 font-mono text-[10px] tracking-[0.04em] text-text-3">{FORMAT_TAGS[format]}</span>
+        </span>
+        <span className={`mt-1 block text-[12.5px] leading-snug text-pretty ${lock ? 'text-host' : 'text-muted'}`}>{lock ?? spec.tagline}</span>
+      </span>
+      {lock ? (
+        <Lock className="size-4 shrink-0 text-muted" aria-label="Locked" />
+      ) : (
+        <span className={`grid size-[18px] shrink-0 place-items-center rounded-full border-2 ${on ? 'border-accent' : 'border-[#3a3f4d]'}`} aria-hidden="true">
+          <span className={`size-2 rounded-full ${on ? 'bg-accent' : ''}`} />
+        </span>
+      )}
+    </button>
+  );
+};
 
 /** The linked trending story under the question: source, brief and a way to drop it. */
 const LinkedStory = ({ news, onRemove }: { news: NewsPick; onRemove: () => void }) => (
@@ -65,7 +106,9 @@ const LinkedStory = ({ news, onRemove }: { news: NewsPick; onRemove: () => void 
 /** Step 1: trending topics on the left, the debate's topic and format in a sticky panel. */
 const LOCKED_HINT = 'Credits or your own OpenRouter key';
 
-export const StepTopic = ({ state, free, patch, showErrors, estimateLine, onContinue }: StepTopicProps) => {
+export const StepTopic = ({ state, free, patch, onFormat, formatLocks, showErrors, estimateLine, onContinue }: StepTopicProps) => {
+  const spec = formatSpec(state.format);
+  const roundOptions = Array.from({ length: spec.maxRounds - spec.minRounds + 1 }, (_, i) => spec.minRounds + i);
   const valid = topicValid(state);
   const knownLanguage = LANGUAGES.some((l) => l.value === state.language);
   const news = state.news;
@@ -89,12 +132,18 @@ export const StepTopic = ({ state, free, patch, showErrors, estimateLine, onCont
 
   return (
     <>
-      <div className="mt-7 grid items-start gap-[22px] animate-rise min-[1180px]:grid-cols-2">
+      <div className="mt-7 grid gap-2.5 animate-rise sm:grid-cols-2" role="radiogroup" aria-label="Format">
+        {FORMAT_IDS.map((id) => (
+          <FormatCard key={id} format={id} on={state.format === id} lock={formatLocks[id]} onPick={() => onFormat(id)} />
+        ))}
+      </div>
+
+      <div className="mt-[18px] grid items-start gap-[22px] animate-rise min-[1180px]:grid-cols-2">
         <TrendingBrowser isPicked={isPicked} onPick={pick} onUnpick={unpick} onUseQuery={(q) => patch({ topic: q.replace(/\??$/, '?'), news: null })} />
 
         <aside className="grid min-w-0 gap-[18px] rounded-panel border border-line bg-surface p-5 min-[1180px]:sticky min-[1180px]:top-5">
           <div className="flex items-center justify-between">
-            <h2 className="font-display text-[19px] font-bold tracking-[-0.02em]">Your debate</h2>
+            <h2 className="font-display text-[19px] font-bold tracking-[-0.02em]">Your {spec.show}</h2>
             <span className="font-mono text-[10px] tracking-[0.08em] text-dim">STEP 1 OF 3</span>
           </div>
 
@@ -164,29 +213,29 @@ export const StepTopic = ({ state, free, patch, showErrors, estimateLine, onCont
                   value={state.num_rounds}
                   onChange={(num_rounds) => patch({ num_rounds })}
                   menuWidth={230}
-                  options={ROUND_OPTIONS.map((n) => {
+                  options={roundOptions.map((n) => {
                     const allowed = roundsAllowed(free, n);
-                    return { value: n, label: `${n} ${n === 1 ? 'round' : 'rounds'}`, hint: allowed ? roundsHint(n) : LOCKED_HINT, disabled: !allowed };
+                    return { value: n, label: `${n} ${n === 1 ? 'round' : 'rounds'}`, hint: allowed ? spec.roundsHint(n) : LOCKED_HINT, disabled: !allowed };
                   })}
                 />
               </div>
               <div className="grid min-w-0 gap-2">
-                <span className="text-[13px] font-semibold text-text-3">Reply length</span>
+                <span className="text-[13px] font-semibold text-text-3">{spec.lengthLabel}</span>
                 <Dropdown
-                  aria-label="Reply length"
+                  aria-label={spec.lengthLabel}
                   className="max-sm:gap-1.5 max-sm:px-2.5 max-sm:text-[13px]"
                   value={state.length_preset}
                   onChange={(length_preset) => patch({ length_preset })}
                   menuWidth={230}
                   options={LENGTH_OPTIONS.map((o) => {
                     const allowed = lengthAllowed(free, o.value);
-                    return { value: o.value, label: o.label, hint: allowed ? o.hint : LOCKED_HINT, disabled: !allowed };
+                    return { value: o.value, label: o.label, hint: allowed ? spec.lengthHints[o.value] : LOCKED_HINT, disabled: !allowed };
                   })}
                 />
               </div>
             </div>
             <div className="mt-2.5 font-mono text-[11px] text-dim">
-              {roundsHint(state.num_rounds)} · {lengthOption(state.length_preset).hint}
+              {spec.roundsHint(state.num_rounds)} · {spec.lengthHints[state.length_preset]}
             </div>
             {free && freeLimitsText(free) && (
               <div className="mt-1 text-[11px] text-dim">
