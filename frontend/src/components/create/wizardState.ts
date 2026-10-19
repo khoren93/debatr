@@ -47,6 +47,12 @@ export interface Speaker {
 /** A trending topic's news story; `topic_id` (trending topic) only highlights its card. */
 export type NewsPick = NewsContext & { topic_id?: string };
 
+/** The debate this one remixes: sent as `remix_of`, so a translation stays in its topic. */
+export interface RemixPick {
+  id: string;
+  topic: string;
+}
+
 export interface WizardState {
   step: WizardStep;
   topic: string;
@@ -81,6 +87,9 @@ export interface WizardState {
   fact_check: boolean;
   /** Publish to the gallery once finished and approved by the AI check. */
   auto_publish: boolean;
+  /** Set by "Remix"; the topic is a version of this debate's topic while the question (or its
+   *  translation) stays the same (backend services/motions). */
+  remix: RemixPick | null;
 }
 
 // --- Static option lists -----------------------------------------------------
@@ -220,6 +229,7 @@ export const initialState = (): WizardState => ({
   images: 'off',
   fact_check: false,
   auto_publish: true,
+  remix: null,
 });
 
 // --- Speaker helpers ---------------------------------------------------------
@@ -338,6 +348,7 @@ export const buildConfig = (state: WizardState, opts: BuildOptions): DebateConfi
     },
     fact_check: state.visuals && state.fact_check,
     auto_publish: state.auto_publish,
+    remix_of: state.remix?.id,
     user_provider_key: opts.openrouterKey?.trim() || undefined,
     user_tts_key: (opts.provider === 'elevenlabs' && state.outputs.includes('audio') && opts.elevenlabsKey?.trim()) || undefined,
   };
@@ -401,6 +412,7 @@ export const configFromDebate = (debate: DebateDetail): DebateConfig => {
   return {
     topic: settings.topic || debate.title || '',
     description: settings.description ?? undefined,
+    news: settings.news ?? undefined,
     language: settings.language,
     num_rounds: settings.num_rounds,
     length_preset: LENGTH_VALUES.includes(settings.length_preset as LengthPreset) ? (settings.length_preset as LengthPreset) : 'medium',
@@ -488,6 +500,8 @@ const sanitizeNews = (raw: unknown): NewsPick | null => {
   };
 };
 
+const sanitizeRemix = (raw: unknown): RemixPick | null => (isRecord(raw) && str(raw.id) ? { id: str(raw.id), topic: str(raw.topic) } : null);
+
 const sanitizeOutputs = (raw: unknown, fallback: MediaOutput[]): MediaOutput[] => {
   if (!Array.isArray(raw)) return fallback;
   return OUTPUT_VALUES.filter((o) => raw.includes(o));
@@ -519,6 +533,7 @@ export const sanitizeState = (raw: unknown): WizardState => {
     images: oneOf(raw.images, ['off', 'stock', 'ai'] as const, base.images),
     fact_check: typeof raw.fact_check === 'boolean' ? raw.fact_check : base.fact_check,
     auto_publish: typeof raw.auto_publish === 'boolean' ? raw.auto_publish : base.auto_publish,
+    remix: sanitizeRemix(raw.remix),
   };
 };
 

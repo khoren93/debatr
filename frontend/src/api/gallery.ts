@@ -1,5 +1,5 @@
 import { api } from './client';
-import type { DebateDetail, GalleryPeriod, GalleryResponse, GallerySort, Leaderboard } from './types';
+import type { DebateDetail, GalleryGroup, GalleryPeriod, GalleryResponse, GallerySort, Leaderboard } from './types';
 
 export interface GalleryQuery {
   category?: string;
@@ -11,6 +11,8 @@ export interface GalleryQuery {
   sort?: GallerySort;
   /** Publication window for `sort=top`. */
   period?: GalleryPeriod;
+  /** `motion`: one card per topic (its best version under these filters). */
+  group?: GalleryGroup;
   limit?: number;
   offset?: number;
 }

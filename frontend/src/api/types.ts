@@ -15,6 +15,8 @@ export const ACTIVE_STATUSES: readonly DebateStatus[] = ['queued', 'running'];
 export const GALLERY_CATEGORIES = ['tech', 'society', 'science', 'culture', 'money', 'fun'] as const;
 export type GalleryCategory = (typeof GALLERY_CATEGORIES)[number];
 export type GallerySort = 'new' | 'trending' | 'top';
+/** none: one card per debate; motion: one card per topic, its best version on the cover. */
+export type GalleryGroup = 'none' | 'motion';
 export type GalleryPeriod = 'week' | 'month' | 'year' | 'all';
 
 // --- Models ------------------------------------------------------------------
@@ -162,6 +164,8 @@ export interface DebateSettings {
   length_preset: string;
   intensity: number;
   output_style: OutputStyle;
+  /** The news story behind a trending topic (public, so a remix keeps it). */
+  news: NewsContext | null;
 }
 
 /** Why the viewer cannot vote / like (null when they can). */
@@ -226,6 +230,66 @@ export interface DebateDetail {
   config: DebateConfig | null;
   /** Gallery check; only present for the owner and the admin. */
   moderation: Moderation | null;
+  /** The topic's public versions (null while it has none). */
+  motion: MotionDetail | null;
+  /** The public debate this one remixes. */
+  remix_of: RemixParent | null;
+}
+
+// --- Topics (backend services/motions) ----------------------------------------
+
+/** A topic as the gallery sees it: counted over its public versions only. */
+export interface MotionRef {
+  slug: string;
+  /** The first public version's topic. */
+  title: string;
+  versions: number;
+  /** Debater models across the versions. */
+  models: string[];
+}
+
+/** One public version of a topic (no verdict: the audience votes blind). */
+export interface MotionVersion {
+  id: string;
+  slug: string;
+  topic: string;
+  language: string;
+  language_code: string;
+  author_name: string | null;
+  participants: Participant[];
+  likes: number;
+  views: number;
+  duration_ms: number | null;
+  premium_voices: boolean;
+  published_at: string | null;
+  /** The debate being viewed. */
+  current: boolean;
+}
+
+export interface MotionDetail {
+  slug: string;
+  title: string;
+  versions: number;
+  items: MotionVersion[];
+}
+
+export interface RemixParent {
+  slug: string;
+  topic: string;
+}
+
+/** `/t/:slug`: a topic and every public version of it. */
+export interface MotionPage {
+  slug: string;
+  title: string;
+  versions: number;
+  items: GalleryItem[];
+}
+
+/** The topic a wizard text would join, and similar topics to take the wording of. */
+export interface MotionSuggestions {
+  match: MotionRef | null;
+  similar: MotionRef[];
 }
 
 export interface ParticipantConfig {
@@ -269,6 +333,8 @@ export interface DebateConfig {
   user_provider_key?: string;
   /** Browser-only ElevenLabs key for the automatic audio build (never stored server-side). */
   user_tts_key?: string;
+  /** Id of the debate this one remixes (request-only; links it and keeps a translation in its topic). */
+  remix_of?: string;
 }
 
 export interface CreateDebateResponse {
@@ -461,6 +527,7 @@ export interface GalleryItem {
   title: string | null;
   topic: string;
   language: string;
+  language_code: string;
   category: string | null;
   author_name: string | null;
   views: number;
@@ -473,10 +540,13 @@ export interface GalleryItem {
   verdict: Verdict | null;
   participants: Participant[];
   published_at: string | null;
+  /** The topic this debate is a version of. */
+  motion: MotionRef | null;
 }
 
 export interface GalleryResponse {
   items: GalleryItem[];
+  /** Debates, or topics with `group=motion`. */
   total: number;
   categories: string[];
 }

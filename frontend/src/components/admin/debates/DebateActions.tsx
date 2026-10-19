@@ -1,14 +1,14 @@
 import { useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AudioLines, Ban, CheckCircle2, CircleDollarSign, Eye, EyeOff, Play, RefreshCw, Square, Trash2 } from 'lucide-react';
-import { debateAction, rebuildDebateMedia, refundDebate, type DebateAction } from '../../../api/admin/debates';
+import { AudioLines, Ban, CheckCircle2, CircleDollarSign, Eye, EyeOff, Layers, Play, RefreshCw, Square, Trash2 } from 'lucide-react';
+import { debateAction, moveDebateMotion, rebuildDebateMedia, refundDebate, type DebateAction } from '../../../api/admin/debates';
 import type { AdminDebateCard } from '../../../api/admin/types';
 import { FormField } from '../../account/FormField';
 import { Button, SwitchTrack, useToast } from '../../ui';
 import { ActionDialog } from '../ActionDialog';
 import { formatUsd } from '../helpers';
 
-type Dialog = DebateAction | 'media' | 'refund';
+type Dialog = DebateAction | 'media' | 'refund' | 'motion';
 
 interface Spec {
   title: string;
@@ -54,6 +54,8 @@ export const DebateActions = ({ card, permissions, onChanged }: DebateActionsPro
   const [force, setForce] = useState(false);
   const [amount, setAmount] = useState('');
   const [requestKey, setRequestKey] = useState('');
+  const [target, setTarget] = useState('');
+  const [whole, setWhole] = useState(false);
   const may = (permission: string) => permissions.includes(permission);
   const finished = ['completed', 'error', 'stopped'].includes(d.status);
   const building = ['queued', 'running'].includes(d.media_status);
@@ -75,6 +77,7 @@ export const DebateActions = ({ card, permissions, onChanged }: DebateActionsPro
     { key: 'resume', label: `Resume from turn ${(card.resume_from ?? 0) + 1}`, icon: <Play className="size-4" />, show: may('debates') && card.resume_from !== null },
     { key: 'media', label: 'Rebuild audio', icon: <AudioLines className="size-4" />, show: may('debates') && finished && !building },
     { key: 'refund', label: 'Refund', icon: <CircleDollarSign className="size-4" />, show: may('money') && refundable > 0 && d.owner !== null },
+    { key: 'motion', label: 'Topic…', icon: <Layers className="size-4" />, show: may('moderation') && card.motion !== null },
     { key: 'recount', label: 'Recount likes', icon: <RefreshCw className="size-4" />, show: may('debates') },
     { key: 'delete', label: 'Delete', icon: <Trash2 className="size-4" />, show: may('debates'), variant: 'danger' },
   ];
@@ -85,10 +88,14 @@ export const DebateActions = ({ card, permissions, onChanged }: DebateActionsPro
       setAmount('');
       setRequestKey(crypto.randomUUID());
     }
+    if (key === 'motion') {
+      setTarget('');
+      setWhole(false);
+    }
     setDialog(key);
   };
   const close = () => setDialog(null);
-  const simple = dialog && dialog !== 'media' && dialog !== 'refund' ? dialog : null;
+  const simple = dialog && dialog !== 'media' && dialog !== 'refund' && dialog !== 'motion' ? dialog : null;
 
   return (
     <>
@@ -144,6 +151,42 @@ export const DebateActions = ({ card, permissions, onChanged }: DebateActionsPro
           <span>
             <span className="block text-sm font-semibold text-text-2">Voice every turn again</span>
             <span className="block text-xs text-muted">Off: turns voiced before are reused from the cache</span>
+          </span>
+        </button>
+      </ActionDialog>
+
+      <ActionDialog
+        open={dialog === 'motion'}
+        title="Change the topic?"
+        body={`Versions of one topic share a card in the gallery. This one is in a topic with ${card.motion?.debates ?? 0} ${card.motion?.debates === 1 ? 'debate' : 'debates'} (${card.motion?.public_versions ?? 0} public).`}
+        confirmLabel={whole ? 'Merge the topic' : target.trim() ? 'Move it' : 'Split it off'}
+        ready={!whole || target.trim().length > 0}
+        onClose={close}
+        onSubmit={async (reason) => {
+          const out = await moveDebateMotion(d.id, { reason, target: target.trim() || undefined, whole });
+          toast.success(out.message);
+          onChanged();
+        }}
+      >
+        <FormField
+          label="Into the topic of"
+          optional
+          value={target}
+          onChange={(e) => setTarget(e.target.value)}
+          placeholder="Topic link (/t/…), debate link or id"
+          hint="Empty: a topic of its own (later debates with this exact text still join the old topic)"
+        />
+        <button
+          type="button"
+          role="switch"
+          aria-checked={whole}
+          onClick={() => setWhole(!whole)}
+          className="flex w-full cursor-pointer items-start gap-3 rounded-[12px] border border-line bg-ink px-3 py-2.5 text-left"
+        >
+          <SwitchTrack on={whole} size="sm" className="mt-0.5" />
+          <span>
+            <span className="block text-sm font-semibold text-text-2">Move the whole topic (merge)</span>
+            <span className="block text-xs text-muted">Every version goes, and the topic's text and link lead to the other one from now on</span>
           </span>
         </button>
       </ActionDialog>

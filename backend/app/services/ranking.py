@@ -18,6 +18,10 @@ TRENDING_GRAVITY = 1.5
 # Premium (ElevenLabs) voices count like two likes: without likes such a debate stays above
 # fresh runs with free voices for ~5 hours longer, while a debate people liked still wins.
 PREMIUM_VOICES_BONUS = 2 * LIKE_WEIGHT
+# A topic in the gallery ranks by its best version, a little higher for every other version
+# (remixes are interest too): 2 versions x1.14, 5 x1.32, 20 x1.6, so piling up versions cannot
+# lift a topic nobody liked.
+VERSIONS_BONUS = 0.2
 
 # Leaderboard rating: Bradley-Terry strengths shown on an Elo-like scale.
 RATING_BASE = 1000.0
@@ -37,6 +41,11 @@ def trending_score(
     if premium_voices:
         engagement += PREMIUM_VOICES_BONUS
     return engagement / math.pow(max(age_hours, 0.0) + TRENDING_OFFSET_HOURS, TRENDING_GRAVITY)
+
+
+def topic_trending_score(best: float, versions: int) -> float:
+    """Trending score of a gallery topic from its best version's (`routes_gallery` mirrors it)."""
+    return best * (1 + VERSIONS_BONUS * math.log(max(versions, 1)))
 
 
 @dataclass

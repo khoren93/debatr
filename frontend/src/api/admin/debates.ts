@@ -36,6 +36,11 @@ export type DebateAction = 'stop' | 'resume' | 'recount' | 'delete' | 'approve' 
 export const debateAction = (id: string, action: DebateAction, reason: string) =>
   adminApi.post<ActionOut>(`/debates/${id}/${action}`, { reason }).then((r) => r.data);
 
+/** Move the debate into the topic named by a link, id or slug; no target = a topic of its own;
+ *  `whole` merges its entire topic into the target. */
+export const moveDebateMotion = (id: string, body: { reason: string; target?: string; whole: boolean }) =>
+  adminApi.post<ActionOut>(`/debates/${id}/motion`, body).then((r) => r.data);
+
 export const rebuildDebateMedia = (id: string, reason: string, force: boolean) =>
   adminApi.post<ActionOut>(`/debates/${id}/media`, { reason, force }).then((r) => r.data);
 

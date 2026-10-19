@@ -34,7 +34,8 @@ backend/            FastAPI API + RQ worker (Python 3.12+, managed with uv)
                       routes_finance (finance series, CSV, models), routes_audit (audit log page,
                       facets, security summary), routes_settings (levers, alerts + test message)
   app/api/            routers: auth, tokens (API tokens + `debatr login` device flow), billing
-                      (Stripe), debates, gallery (+ leaderboard), reactions (likes/votes), models,
+                      (Stripe), debates, gallery (+ leaderboard), motions (topic page, wizard
+                      suggestions), reactions (likes/votes), models,
                       presets, topics (trending), stream (SSE), media, status (`GET /api/status`:
                       sign-ups / maintenance for the site); serializers.py builds the shared
                       response models
@@ -44,7 +45,8 @@ backend/            FastAPI API + RQ worker (Python 3.12+, managed with uv)
                       events (pub/sub), queue_manager, credits (ledger),
                       ledger (row category/title, monthly usage per day, CSV export),
                       estimate (pre-run cost), verdict (structured verdict), moderation (AI gallery
-                      check + auto-publish), views (view counter),
+                      check + auto-publish), views (view counter), motions (topics: versions,
+                      grouping rules, gallery groups, suggestions, admin move / merge),
                       engagement (likes/audience votes), ranking (trending score, model leaderboard),
                       studio (live scenes per turn, disputes, judge evidence), factcheck (web
                       check of on-screen figures), markers ([visual: …] / [dispute N: …]),
@@ -87,7 +89,8 @@ frontend/           React 19 + Vite 8 + Tailwind 4 + TypeScript
                       useModels, useBillingConfig, useVoices (wizard voice catalogue),
                       useLeaderboard (cached model ranking), useElevenLabsKeyStatus (checks
                       the browser's ElevenLabs key), useEstimate (debounced wizard estimate),
-                      useSiteStatus (sign-ups closed / maintenance banner, cached a minute)
+                      useSiteStatus (sign-ups closed / maintenance banner, cached a minute),
+                      useMotionSuggestions (debounced: the topic the wizard's text joins)
   src/components/ui/  design-system primitives (Button, Card, Chip, Segmented, Field, Pill,
                       Progress, Modal/ConfirmDialog, Toast, Avatar/SpeakerBadge, Thumb, Logo,
                       Dropdown — custom select, portalled list; SwitchTrack,
@@ -98,7 +101,8 @@ frontend/           React 19 + Vite 8 + Tailwind 4 + TypeScript
                            on a half in its speaker colour, slanted seams, VS; markup, never the winner)
   src/components/create/   three-step wizard + wizardState.ts (state, persistence, config mapping):
                            StepTopic (TrendingBrowser = today's news topics in rank order with search,
-                           categories, 10 per page + sticky "Your debate" panel), StepSpeakers
+                           categories, 10 per page + sticky "Your debate" panel; TopicVersions =
+                           remix chip, "joins a published topic", similar topics), StepSpeakers
                            (SpeakerRow per speaker: model / voice / persona fields + voice preview
                            when the voice has a sample, prompt editor, remove; no randomizer),
                            StepLaunch (style, outputs, scenes, keys + summary, estimate, start);
@@ -114,7 +118,8 @@ frontend/           React 19 + Vite 8 + Tailwind 4 + TypeScript
                            Transcript (row click = seek, ● NOW), VerdictTab, DetailsTab (lineup,
                            facts), AudienceVote (blind vote), RegenerateAudioDialog, TurnScenes
                            (scene board under each turn: Thumbnail stills, replay modal,
-                           fact-check/dispute badges); helpers.ts: speakerLineup, videoChapters,
+                           fact-check/dispute badges), VersionsStrip (the topic's other public
+                           versions, no winners); helpers.ts: speakerLineup, videoChapters,
                            timelineSrt, transcript/Markdown exports
   src/components/account/  Account page tabs (tabs.ts: `?tab=overview|keys|billing|security`,
                            accountPath): ProfileHeader, BalanceCard, UsageCards (bar per day),
@@ -128,7 +133,8 @@ frontend/           React 19 + Vite 8 + Tailwind 4 + TypeScript
                       PictureScenes: sketch strokes + Ken Burns pictures)
   src/pages/          Landing (/), Library (/library), Gallery (/gallery), Leaderboard (/leaderboard),
                       CreateDebate (/create, `?draft=<id>`, `?remix=<id>`),
-                      DebateView (/debate/:id and public /d/:slug), Account (/account?tab=…),
+                      DebateView (/debate/:id and public /d/:slug), Topic (/t/:slug: a topic's
+                      public versions), Account (/account?tab=…),
                       Device (/device?code=…, approves `debatr login`), Login (/login),
                       Register (/register); admin/ = the admin console (/admin/*, lazy AdminApp
                       outside AppShell and AuthProvider: AdminLogin, AdminOverview, AdminUsers
@@ -337,6 +343,38 @@ letting the others argue against silence. `POST /api/debates/{id}/resume` (owner
 earlier turns and pinned models, re-checks credits for the rest only
 (`estimate_debate(from_turn=…)`) and queues `start_debate_job(from_seq=…)`. A run that used an own
 OpenRouter key cannot resume on the system key (409); media goes back to `none`.
+
+### Topics: debates as versions of one topic (`services/motions`)
+
+- `motions` (`slug` random, `key` = `normalize_topic` text — NFKC, casefold, everything but letters
+  and digits → spaces — unique, nullable; `merged_into_id`) and `debates.motion_id`,
+  `debates.remix_of_id`. Migration 0014 grouped the debates before it (with a frozen copy of the
+  rule; `test_motions` fails if the two drift apart: changed keys need a re-keying migration).
+- `assign_motion` runs at create and at draft edit (`routes_debates`): a remix parent the user may
+  see (`DebateConfig.remix_of`, request-only like `draft`, ignored otherwise) gives its topic when
+  the text is the same after normalizing or the language differs (a translation); else the topic
+  of the key (merged ones lead on, one hop: merges are flattened); else a new topic. Nothing groups
+  by meaning: trending topics and the wizard's "Use" put the text in word for word.
+- A topic stores no counters: versions, the cover and the title (first public version by
+  publication) come from the public debates (`public_clause` = `is_public` + slug, the gallery's
+  condition), so publish / unpublish / moderation / delete paths never update topics.
+  `GET /api/gallery?group=motion` (the site; default `none` for the CLI): `covers_query` ranks
+  versions per `coalesce(motion_id, id)` with the sort's own keys, the cover is the best matching
+  one (trending: most trending, new: newest, top: most liked) and topics order by it; trending
+  multiplies by `ranking.topic_trending_score` (`1 + 0.2·ln(versions)`). `GalleryItem.motion` =
+  `MotionRef` (slug, title, public versions, models) for the "N versions" badge.
+- `DebateDetail.motion` (up to 12 public versions, the viewed one always in, `current`; null
+  without a public version) and `remix_of` (public parents only) via `serializers.topic_context`;
+  no verdicts on versions (blind voting). `GET /api/motions/{slug}` (the topic page, a merged slug
+  answers with its target) and `GET /api/motions/suggest?topic=&language=&remix_of=` (`match` =
+  the topic this text would join, `similar` = pg_trgm `%` + `similarity ≥ 0.35`) show only topics
+  with public versions: a topic of private debates exists for nobody else.
+- The wizard keeps `remix` (`{id, topic}`, set by `?remix=`, × unlinks) and sends `remix_of`;
+  `DebateSettingsOut.news` lets a remix of someone else's trending debate keep its story.
+- Console: the debate card's "Topic" fact and `POST /api/admin/debates/{id}/motion`
+  (`moderation`, reason, audit `debate.motion_changed`): move into the topic of a link / id /
+  slug (`parse_target`), split off (no target: a keyless topic; the text keeps joining the old
+  one) or merge the whole topic (`whole`).
 
 ### Likes, audience votes and the model ranking
 

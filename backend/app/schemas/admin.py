@@ -648,8 +648,27 @@ class RecoveryState(BaseModel):
     tts_key: bool  # an own ElevenLabs key waits for the build
 
 
+class AdminDebateMotion(BaseModel):
+    """The topic a debate is a version of (services/motions)."""
+
+    slug: str
+    title: str | None  # the first public version's text; None while none is public
+    public_versions: int
+    debates: int  # versions in all, private ones and drafts too
+    url: str | None = None  # the topic page on the site, while a version is public
+
+
+class MotionMoveRequest(ReasonRequest):
+    """Move a debate to another topic. `target`: a topic link (/t/…), a debate link or id, or a
+    slug; empty = a topic of its own. `whole`: move every version of its topic (a merge)."""
+
+    target: str | None = Field(default=None, max_length=500)
+    whole: bool = False
+
+
 class AdminDebateCard(BaseModel):
     debate: AdminDebateRow
+    motion: AdminDebateMotion | None = None
     topic: str
     config: dict[str, Any]  # as stored (keys never are), `billing` included
     totals: dict[str, Any]

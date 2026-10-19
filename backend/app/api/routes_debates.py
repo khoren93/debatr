@@ -21,7 +21,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from starlette.concurrency import run_in_threadpool
 
-from app.api.serializers import can_manage, can_view, detail_out, share_url, summary_out
+from app.api.serializers import (
+    can_manage,
+    can_view,
+    detail_out,
+    share_url,
+    summary_out,
+    topic_context,
+)
 from app.core.auth import get_current_user, request_api_token, require_user
 from app.core.config import settings
 from app.core.db import get_db
@@ -43,7 +50,7 @@ from app.schemas.schemas import (
     StartDebateRequest,
     StopDebateResponse,
 )
-from app.services import alerts, api_tokens, free_limits, runtime_settings
+from app.services import alerts, api_tokens, free_limits, motions, runtime_settings
 from app.services.credits import Prices, lever_prices, prices_of
 from app.services.debate_control import ACTIVE_STATUSES
 from app.services.debate_control import stop_debate as stop_debate_run
@@ -83,6 +90,19 @@ async def load_debate(db: AsyncSession, debate_id: str, *, full: bool = False) -
 def _require_manage(debate: Debate, user: User | None) -> None:
     if not can_manage(debate, user):
         raise HTTPException(status_code=403, detail="You do not own this debate")
+
+
+async def _remix_parent(db: AsyncSession, raw: str | None, user: User) -> Debate | None:
+    """The debate a remix comes from, when this user may see it; anything else is ignored (it
+    may have been unpublished or deleted while the wizard was open)."""
+    if not raw or not raw.strip():
+        return None
+    try:
+        parent_id = uuid.UUID(raw.strip())
+    except ValueError:
+        return None
+    parent = await db.get(Debate, parent_id)
+    return parent if parent is not None and can_view(parent, user) else None
 
 
 def _resolve_provider_key(user: User | None, request_key: str | None) -> tuple[str | None, bool]:
@@ -415,6 +435,9 @@ async def create_debate(
         api_token_id=token.id if token is not None and not config.draft else None,
     )
     _apply_config(debate, config, own_key, est, prices)
+    parent = await _remix_parent(db, config.remix_of, user)
+    debate.remix_of_id = parent.id if parent is not None else None
+    await motions.assign_motion(db, debate, config.topic, config.language, parent)
     db.add(debate)
     await db.commit()
     debate_id = str(debate.id)
@@ -442,6 +465,15 @@ async def update_draft(
         config = api_tokens.with_token_defaults(config)
     _key, own_key = _resolve_provider_key(user, config.user_provider_key)
     _apply_config(debate, config, own_key)
+    # The wizard re-opens a draft without its remix link: keep it unless one is sent.
+    if "remix_of" in config.model_fields_set:
+        parent = await _remix_parent(db, config.remix_of, user)
+        debate.remix_of_id = parent.id if parent is not None else None
+    else:
+        parent = await _remix_parent(
+            db, str(debate.remix_of_id) if debate.remix_of_id else None, user
+        )
+    await motions.assign_motion(db, debate, config.topic, config.language, parent)
     await db.commit()
     return DebateResponse(debate_id=debate_id, status="draft", message="Draft updated")
 
@@ -586,11 +618,14 @@ async def get_debate(
     if not can_view(debate, viewer):
         raise HTTPException(status_code=403, detail="This debate is private")
     await count_view(db, debate, viewer, request)
+    motion, remix_of = await topic_context(db, debate)
     return detail_out(
         debate,
         viewer,
         await engagement_out(db, debate, viewer),
         manager=can_manage(debate, viewer),
+        motion=motion,
+        remix_of=remix_of,
     )
 
 

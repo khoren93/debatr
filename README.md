@@ -82,6 +82,8 @@ Users sign up, run free models or bring their own OpenRouter key, buy credits wi
   month or year.
 - **❤️ Likes and remixes**: like the debates you enjoy, or remix any of them into your own version
   with a new cast.
+- **🧩 One topic, many versions**: debates on the same question share one card in the gallery,
+  so you can switch between the matchups (or languages) that argued it and add your own.
 - **👤 Your studio**: a library of drafts and finished debates, credits topped up via Stripe, or
   your own OpenRouter key to run models at your own cost.
 

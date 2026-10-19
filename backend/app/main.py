@@ -18,6 +18,7 @@ from app.api import (
     routes_gallery,
     routes_media,
     routes_models,
+    routes_motions,
     routes_presets,
     routes_reactions,
     routes_status,
@@ -103,6 +104,7 @@ app.include_router(routes_models.router, prefix="/api/models", tags=["models"])
 app.include_router(routes_presets.router, prefix="/api/presets", tags=["presets"])
 app.include_router(routes_topics.router, prefix="/api/topics", tags=["topics"])
 app.include_router(routes_gallery.router, prefix="/api/gallery", tags=["gallery"])
+app.include_router(routes_motions.router, prefix="/api/motions", tags=["gallery"])
 app.include_router(routes_debates.router, prefix="/api/debates", tags=["debates"])
 app.include_router(routes_reactions.router, prefix="/api/debates", tags=["reactions"])
 app.include_router(routes_stream.router, prefix="/api/debates", tags=["stream"])

@@ -112,6 +112,20 @@ const AdminDebate = () => {
               <Fact label="Reach">
                 {d.likes} likes · {d.votes} votes · {d.views} views
               </Fact>
+              <Fact label="Topic">
+                {card.motion ? (
+                  <span title={card.motion.title ?? undefined}>
+                    {card.motion.public_versions} public · {card.motion.debates} in all
+                    {card.motion.url && (
+                      <a href={card.motion.url} target="_blank" rel="noreferrer" className="ml-1.5 inline-flex items-center gap-0.5 text-muted hover:text-text">
+                        page <ArrowUpRight className="size-3" />
+                      </a>
+                    )}
+                  </span>
+                ) : (
+                  '—'
+                )}
+              </Fact>
             </div>
             <div className="mt-3 flex flex-wrap items-center gap-2">
               {d.models.map((m, i) => (

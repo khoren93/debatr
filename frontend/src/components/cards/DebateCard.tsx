@@ -1,7 +1,7 @@
 import type { CSSProperties, ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { AudioLines, Clock, Eye, Heart } from 'lucide-react';
-import type { Participant, Verdict } from '../../api/types';
+import { AudioLines, Clock, Eye, Heart, Layers } from 'lucide-react';
+import type { MotionRef, Participant, Verdict } from '../../api/types';
 import { formatCount, formatDuration, gradientFor } from '../../lib/format';
 import { ModelIcon, Thumb } from '../ui';
 import { debaterNames, verdictLabel } from './helpers';
@@ -66,6 +66,27 @@ export const PremiumVoicesBadge = () => (
     <AudioLines className="size-3" /> PREMIUM VOICES
   </span>
 );
+
+/** Cover badge of a topic with several public versions: how many, and the logos of the models
+ *  that argued it in the other versions (the cover already shows its own pair). */
+export const VersionsBadge = ({ motion, participants }: { motion: MotionRef | null | undefined; participants: Participant[] }) => {
+  if (!motion || motion.versions < 2) return null;
+  const shown = new Set(participants.map((p) => p.model));
+  const others = motion.models.filter((m) => !shown.has(m)).slice(0, 3);
+  return (
+    <span className="inline-flex max-w-full items-center gap-1.5 rounded-md bg-black/55 px-2 py-[3px] font-mono text-[10px] tracking-[0.06em] text-text backdrop-blur-sm" title={`${motion.versions} versions of this topic`}>
+      <Layers className="size-3 shrink-0" />
+      <span className="truncate">{motion.versions} VERSIONS</span>
+      {others.length > 0 && (
+        <span className="flex shrink-0 items-center gap-0.5">
+          {others.map((m) => (
+            <ModelIcon key={m} modelId={m} size={11} />
+          ))}
+        </span>
+      )}
+    </span>
+  );
+};
 
 /** Likes · views · length row of a public card (icons instead of words). */
 export const CardStats = ({ likes, views, durationMs }: { likes: number; views: number; durationMs?: number | null }) => (

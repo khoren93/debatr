@@ -5,7 +5,8 @@ Reads need `debates.read` (money columns also `money`) and run in a read-only tr
 opening someone's private debate is written to the audit log (once an hour per admin and
 debate). Changes name a reason and are audited in the same transaction: stop, resume (system key
 only), a free audio rebuild, recount, delete (sudo) need `debates`; publish / unpublish /
-approve / reject need `moderation`; a refund needs `money` and goes through the ledger with
+approve / reject and moving a debate to another topic (or merging topics) need
+`moderation`; a refund needs `money` and goes through the ledger with
 `provider_ref = admin:refund:<debate>:<idempotency key>`. The card's player reads the media folder
 through `/debates/{id}/files/…` (`debates.read`).
 """
@@ -40,11 +41,13 @@ from app.schemas.admin import (
     DebateListQuery,
     MediaRebuildRequest,
     ModerationQueue,
+    MotionMoveRequest,
     ReasonRequest,
     RefundOut,
     RefundRequest,
 )
 from app.schemas.media import MediaOptions
+from app.services import motions
 from app.services.admin import audit
 from app.services.admin import debates as admin_debates
 from app.services.credits import apply_transaction, lock_balance, to_usd
@@ -501,6 +504,60 @@ async def unpublish(
     await _record(db, ctx, request, "debate.unpublished", debate, body.reason)
     await db.commit()
     return ActionOut(status="private", message="Taken out of the gallery")
+
+
+@router.post("/debates/{debate_id}/motion", response_model=ActionOut)
+async def move_motion(
+    debate_id: str,
+    body: MotionMoveRequest,
+    request: Request,
+    ctx: AdminContext = Depends(require_admin("moderation")),
+    db: AsyncSession = Depends(get_db),
+) -> ActionOut:
+    """Fix how versions are grouped: move this debate into another topic, give it a topic of its
+    own (no target), or merge its whole topic into another one (`whole`; its text and slug then
+    lead there too)."""
+    debate = await _debate(db, debate_id, lock=True)
+    source = await motions.resolve(db, debate.motion_id) if debate.motion_id else None
+    before = await motions.motion_summary(db, source)
+    target: uuid.UUID | None = None
+    if body.target and body.target.strip():
+        target = await motions.find_target(db, body.target)
+        if target is None:
+            raise HTTPException(status_code=404, detail="No topic or debate behind that link")
+        if target == source:
+            raise HTTPException(status_code=409, detail="It is already in that topic")
+    elif body.whole:
+        raise HTTPException(status_code=400, detail="Name the topic to merge into")
+    elif before is not None and before["debates"] <= 1:
+        raise HTTPException(status_code=409, detail="It already has a topic of its own")
+
+    moved = 1
+    if body.whole and source is not None and target is not None:
+        moved = await motions.merge_motions(db, source, target)
+        debate.motion_id = target
+        message = f"Topic merged: {moved} {'debate' if moved == 1 else 'debates'} moved"
+    elif target is not None:
+        debate.motion_id = target
+        message = "Moved to the other topic"
+    else:
+        debate.motion_id = await motions.new_motion(db)
+        message = "Split off into a topic of its own"
+    after = await motions.motion_summary(db, debate.motion_id)
+    await _record(
+        db,
+        ctx,
+        request,
+        "debate.motion_changed",
+        debate,
+        body.reason,
+        motion_from=before["slug"] if before else None,
+        motion_to=after["slug"] if after else None,
+        whole=body.whole,
+        moved=moved,
+    )
+    await db.commit()
+    return ActionOut(status="moved", message=message)
 
 
 # --- money ----------------------------------------------------------------------------------------

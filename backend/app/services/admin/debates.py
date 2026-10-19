@@ -39,6 +39,7 @@ from app.models.models import (
     User,
 )
 from app.schemas.admin import DebateFilters, DebateSort
+from app.services import motions
 from app.services.admin.stats import ledger_category
 from app.services.admin.users import audit_out, day_start, ledger_row_out, like_pattern, public_url
 from app.services.debate_control import ACTIVE_STATUSES
@@ -435,6 +436,7 @@ async def debate_card(
     own_key = bool((config.get("billing") or {}).get("own_key"))
     return {
         "debate": row,
+        "motion": await motions.motion_summary(db, debate.motion_id),
         "topic": str(config.get("topic") or debate.title or ""),
         "config": clean_config(config),
         "totals": dict(debate.totals_json or {}),

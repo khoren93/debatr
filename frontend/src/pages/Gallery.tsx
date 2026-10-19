@@ -5,7 +5,7 @@ import { getErrorMessage } from '../api/client';
 import { listGallery } from '../api/gallery';
 import { GALLERY_CATEGORIES, type GalleryCategory, type GalleryItem, type GalleryPeriod, type GallerySort } from '../api/types';
 import { Page, PageTitle } from '../components/layout/AppShell';
-import { CardStats, DebateCard, DebateCover, PremiumVoicesBadge } from '../components/cards';
+import { CardStats, DebateCard, DebateCover, PremiumVoicesBadge, VersionsBadge } from '../components/cards';
 import { Avatar, Button, Chip, EmptyState, ErrorBox, LinkButton, ModelIcon, PageLoader, Segmented } from '../components/ui';
 import { shortModelName } from '../lib/format';
 
@@ -33,7 +33,11 @@ const PERIOD_OPTIONS: { value: GalleryPeriod; label: string }[] = [
 
 const oneOf = <T extends string>(value: string | null, options: { value: T }[], fallback: T): T => options.find((o) => o.value === value)?.value ?? fallback;
 
-/** Public gallery. Sort, period and the model / voice filters live in the URL (`?sort=top&period=week&model=…&voices=premium`). */
+/**
+ * Public gallery: one card per topic, whose cover is the version that earned it its place (the
+ * most trending, newest or most liked one matching the filters). Sort, period and the model /
+ * voice filters live in the URL (`?sort=top&period=week&model=…&voices=premium`).
+ */
 const Gallery = () => {
   const [params, setParams] = useSearchParams();
   const sort = oneOf(params.get('sort'), SORT_OPTIONS, 'trending');
@@ -67,6 +71,7 @@ const Gallery = () => {
       period: sort === 'top' ? period : undefined,
       model: model ?? undefined,
       premium_voices: premium || undefined,
+      group: 'motion',
     })
       .then((res) => {
         if (!cancelled) setResult({ key, items: res.items });
@@ -175,7 +180,13 @@ const Gallery = () => {
               index={i}
               to={`/d/${item.slug}`}
               title={item.topic || item.title || 'Untitled debate'}
-              cover={<DebateCover participants={item.participants} topRight={item.premium_voices ? <PremiumVoicesBadge /> : undefined} />}
+              cover={
+                <DebateCover
+                  participants={item.participants}
+                  topLeft={<VersionsBadge motion={item.motion} participants={item.participants} />}
+                  topRight={item.premium_voices ? <PremiumVoicesBadge /> : undefined}
+                />
+              }
               footerLeft={
                 <>
                   <Avatar seed={author} size={20} />

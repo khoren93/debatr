@@ -496,8 +496,21 @@ export interface RecoveryState {
   tts_key: boolean;
 }
 
+/** The topic a debate is a version of (backend services/motions). */
+export interface AdminDebateMotion {
+  slug: string;
+  /** The first public version's text; null while none is public. */
+  title: string | null;
+  public_versions: number;
+  /** Versions in all, private ones and drafts too. */
+  debates: number;
+  /** The topic page on the site, while a version is public. */
+  url: string | null;
+}
+
 export interface AdminDebateCard {
   debate: AdminDebateRow;
+  motion: AdminDebateMotion | null;
   topic: string;
   config: Record<string, unknown>;
   totals: Record<string, unknown>;

@@ -1,27 +1,32 @@
-"""Public gallery of published debates, share links (/d/{slug}) and the model leaderboard."""
+"""Public gallery of published debates, share links (/d/{slug}) and the model leaderboard.
+
+With `group=motion` the gallery lists topics: one card per topic (services/motions), whose cover
+is the version that earned the topic its place in this sort — the most trending, the newest or
+the most liked one among those matching the filters — and topics rank by that version."""
 
 from datetime import timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from sqlalchemy import ColumnElement, and_, case, func, select
+from sqlalchemy import ColumnElement, Float, Select, and_, case, cast, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import load_only, selectinload
 
-from app.api.serializers import debater_models, detail_out, gallery_item_out
+from app.api.serializers import debater_models, detail_out, gallery_item_out, topic_context
 from app.core.auth import get_current_user
 from app.core.db import get_db
 from app.models.models import Debate, DebateParticipant, DebateVote, User, utcnow
 from app.schemas.schemas import (
     GALLERY_CATEGORIES,
     DebateDetail,
+    GalleryGroup,
     GalleryPeriod,
     GalleryResponse,
     GallerySort,
     LeaderboardEntry,
     LeaderboardOut,
 )
-from app.services import ranking
+from app.services import motions, ranking
 from app.services.engagement import engagement_out
 from app.services.free_router import is_free_router
 from app.services.openrouter_client import openrouter_client
@@ -64,7 +69,78 @@ def trending_sql() -> ColumnElement[Any]:
 
 
 def _public() -> list[ColumnElement[bool]]:
-    return [Debate.is_public.is_(True), Debate.slug.is_not(None)]
+    return motions.public_clause()
+
+
+def _sort_keys(sort: GallerySort) -> list[tuple[str, Any]]:
+    """(label, expression) of a sort, most important first; higher is better for each."""
+    published = _published_at()
+    if sort == "trending":
+        return [("score", trending_sql()), ("published", published)]
+    if sort == "top":
+        return [
+            ("likes", Debate.likes_count),
+            ("votes", Debate.votes_count),
+            ("views", Debate.views),
+            ("published", published),
+        ]
+    return [("published", published), ("created", Debate.created_at)]
+
+
+def _group() -> ColumnElement[Any]:
+    """A debate's topic; one without a topic is a group of its own."""
+    return func.coalesce(Debate.motion_id, Debate.id)
+
+
+def covers_query(conditions: list[ColumnElement[bool]], sort: GallerySort) -> Select[Any]:
+    """Ids of the topics' covers in gallery order: the best version per topic under these
+    filters (row_number over the topic), topics ranked by it; in trending a topic with more
+    matching versions gets `ranking.topic_trending_score`'s bonus."""
+    group = _group()
+    keys = _sort_keys(sort)
+    within = [expr.desc().nulls_last() for _, expr in keys]
+    ranked = (
+        select(
+            Debate.id.label("id"),
+            func.row_number().over(partition_by=group, order_by=[*within, Debate.id]).label("rn"),
+            func.count().over(partition_by=group).label("versions"),
+            *[expr.label(label) for label, expr in keys],
+        )
+        .where(*conditions)
+        .subquery()
+    )
+    order: list[Any] = []
+    for i, (label, _expr) in enumerate(keys):
+        column = ranked.c[label]
+        if i == 0 and sort == "trending":
+            versions = cast(ranked.c.versions, Float)
+            column = column * (1 + ranking.VERSIONS_BONUS * func.ln(versions))
+        order.append(column.desc().nulls_last())
+    return select(ranked.c.id).where(ranked.c.rn == 1).order_by(*order, ranked.c.id)
+
+
+async def _grouped(
+    db: AsyncSession,
+    conditions: list[ColumnElement[bool]],
+    sort: GallerySort,
+    limit: int,
+    offset: int,
+) -> tuple[list[Debate], int]:
+    """One debate per topic (the cover) and the number of topics."""
+    query = covers_query(conditions, sort).limit(limit).offset(offset)
+    covers = (await db.execute(query)).scalars().all()
+    total = await db.scalar(select(func.count(func.distinct(_group()))).where(*conditions)) or 0
+    if not covers:
+        return [], int(total)
+    rows = (
+        await db.scalars(
+            select(Debate)
+            .options(selectinload(Debate.participants), selectinload(Debate.user))
+            .where(Debate.id.in_(covers))
+        )
+    ).all()
+    by_id = {d.id: d for d in rows}
+    return [by_id[i] for i in covers if i in by_id], int(total)
 
 
 @router.get("", response_model=GalleryResponse)
@@ -74,6 +150,7 @@ async def list_gallery(
     model: str | None = Query(None, max_length=200, description="Debates this model argued in"),
     premium_voices: bool = Query(False, description="Only debates voiced by ElevenLabs"),
     sort: GallerySort = Query("new"),
+    group: GalleryGroup = Query("none", description="motion: one card per topic"),
     period: GalleryPeriod = Query("all", description="Publication window for sort=top"),
     limit: int = Query(24, ge=1, le=100),
     offset: int = Query(0, ge=0),
@@ -98,6 +175,17 @@ async def list_gallery(
     if sort == "top" and period in PERIODS:
         conditions.append(_published_at() >= utcnow() - PERIODS[period])
 
+    if group == "motion":
+        debates, total = await _grouped(db, conditions, sort, limit, offset)
+        infos = await motions.motion_infos(db, [d.motion_id for d in debates])
+        return GalleryResponse(
+            items=[
+                gallery_item_out(d, infos.get(d.motion_id) if d.motion_id else None)
+                for d in debates
+            ],
+            total=total,
+        )
+
     newest = (Debate.published_at.desc().nulls_last(), Debate.created_at.desc())
     if sort == "trending":
         order: tuple[Any, ...] = (trending_sql().desc(), *newest)
@@ -121,7 +209,13 @@ async def list_gallery(
         .offset(offset)
     )
     debates = (await db.execute(stmt)).scalars().all()
-    return GalleryResponse(items=[gallery_item_out(d) for d in debates], total=int(total))
+    infos = await motions.motion_infos(db, [d.motion_id for d in debates])
+    return GalleryResponse(
+        items=[
+            gallery_item_out(d, infos.get(d.motion_id) if d.motion_id else None) for d in debates
+        ],
+        total=int(total),
+    )
 
 
 @router.get("/leaderboard", response_model=LeaderboardOut)
@@ -214,4 +308,11 @@ async def get_public_debate(
     if debate is None:
         raise HTTPException(status_code=404, detail="This debate is not public")
     await count_view(db, debate, viewer, request)
-    return detail_out(debate, viewer, await engagement_out(db, debate, viewer))
+    motion, remix_of = await topic_context(db, debate)
+    return detail_out(
+        debate,
+        viewer,
+        await engagement_out(db, debate, viewer),
+        motion=motion,
+        remix_of=remix_of,
+    )

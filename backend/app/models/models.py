@@ -144,6 +144,36 @@ class CreditTransaction(Base):
     user: Mapped["User"] = relationship("User", back_populates="transactions")
 
 
+class Motion(Base):
+    """A debate topic. Every debate is a version of one (services/motions): versions share the
+    normalized topic text, or a remix keeps its parent's topic in another language. What the
+    gallery shows (versions, cover, title) is computed from the public debates, never stored."""
+
+    __tablename__ = "motions"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    slug: Mapped[str] = mapped_column(String(32), unique=True)  # /t/{slug}
+    # Normalized topic text (motions.normalize_topic). NULL for a topic an admin split off a
+    # version into: new debates with that text keep joining the original topic.
+    key: Mapped[str | None] = mapped_column(String(600), nullable=True, unique=True)
+    # Set when an admin merged this topic into another one; lookups follow it (one hop: merging
+    # re-points the topics merged into this one).
+    merged_into_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("motions.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    # Similar topics for the wizard (pg_trgm similarity on the normalized text).
+    __table_args__ = (
+        Index(
+            "ix_motions_key_trgm",
+            "key",
+            postgresql_using="gin",
+            postgresql_ops={"key": "gin_trgm_ops"},
+        ),
+    )
+
+
 class Debate(Base):
     __tablename__ = "debates"
 
@@ -160,6 +190,21 @@ class Debate(Base):
     api_token_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("api_tokens.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
+    # The topic this debate is a version of (services/motions.assign_motion).
+    motion_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("motions.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    # The debate this one was remixed from ("Remix of …"; a translation stays in its topic).
+    remix_of_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("debates.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
     )

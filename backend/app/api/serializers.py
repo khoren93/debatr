@@ -1,6 +1,9 @@
 """Build API response models from ORM rows (shared by the debates and gallery routes)."""
 
+from collections.abc import Sequence
 from typing import Any
+
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.models.models import Debate, Turn, User
@@ -15,14 +18,21 @@ from app.schemas.schemas import (
     GalleryItem,
     MediaPlan,
     ModerationOut,
+    MotionOut,
+    MotionRef,
+    MotionVersion,
+    NewsContext,
     ParticipantOut,
+    RemixParentOut,
     TurnOut,
     TurnUsage,
     VerdictFeedback,
     VerdictOut,
 )
+from app.services import motions
 from app.services.free_router import is_free_router
 from app.services.media.languages import language_code
+from app.services.motions import MotionInfo
 from app.services.scheduler import speaker_role_for
 from app.services.studio import turn_visuals_out
 
@@ -204,12 +214,24 @@ def moderation_out(debate: Debate) -> ModerationOut:
     )
 
 
+def news_out(conf: dict[str, Any]) -> NewsContext | None:
+    raw = conf.get("news")
+    if not isinstance(raw, dict) or not raw.get("brief"):
+        return None
+    try:
+        return NewsContext.model_validate(raw)
+    except ValueError:
+        return None
+
+
 def detail_out(
     debate: Debate,
     viewer: User | None,
     engagement: EngagementOut | None = None,
     *,
     manager: bool = False,
+    motion: MotionOut | None = None,
+    remix_of: RemixParentOut | None = None,
 ) -> DebateDetail:
     conf: dict[str, Any] = debate.config_json or {}
     billing = conf.get("billing") or {}
@@ -233,6 +255,7 @@ def detail_out(
             length_preset=conf.get("length_preset", "medium"),
             intensity=int(conf.get("intensity") or 5),
             output_style=conf.get("output_style") or "markdown",
+            news=news_out(conf),
         ),
         totals=totals_out(debate),
         participants=participants_out(debate),
@@ -254,10 +277,77 @@ def detail_out(
         outputs=outputs(debate),
         billing=BillingOut(own_key=bool(billing.get("own_key"))),
         engagement=engagement or EngagementOut(likes=debate.likes_count or 0),
+        motion=motion,
+        remix_of=remix_of,
     )
 
 
-def gallery_item_out(debate: Debate) -> GalleryItem:
+def motion_ref_out(info: MotionInfo | None) -> MotionRef | None:
+    if info is None:
+        return None
+    return MotionRef(slug=info.slug, title=info.title, versions=info.versions, models=info.models)
+
+
+def motion_version_out(debate: Debate, current: Debate | None = None) -> MotionVersion:
+    conf: dict[str, Any] = debate.config_json or {}
+    return MotionVersion(
+        id=str(debate.id),
+        slug=debate.slug or "",
+        topic=topic_of(debate),
+        language=str(conf.get("language") or "English"),
+        language_code=language_code(conf.get("language")),
+        author_name=debate.user.display_name if debate.user is not None else None,
+        participants=participants_out(debate),
+        likes=debate.likes_count or 0,
+        views=debate.views or 0,
+        duration_ms=duration_ms(debate),
+        premium_voices=has_premium_voices(debate),
+        published_at=debate.published_at,
+        current=current is not None and debate.id == current.id,
+    )
+
+
+def motion_out(
+    info: MotionInfo | None, versions: Sequence[Debate], current: Debate
+) -> MotionOut | None:
+    """The version strip of a debate page: null while the topic has no public version."""
+    if info is None or not versions:
+        return None
+    return MotionOut(
+        slug=info.slug,
+        title=info.title,
+        versions=info.versions,
+        items=[motion_version_out(v, current) for v in versions],
+    )
+
+
+def remix_parent_out(parent: Debate | None) -> RemixParentOut | None:
+    """Only a public parent is named: a private one stays private even to its remixers."""
+    if parent is None or not parent.is_public or not parent.slug:
+        return None
+    return RemixParentOut(slug=parent.slug, topic=topic_of(parent))
+
+
+async def topic_context(
+    db: AsyncSession, debate: Debate
+) -> tuple[MotionOut | None, RemixParentOut | None]:
+    """The debate page's topic block: its public versions and the public debate it remixes."""
+    motion: MotionOut | None = None
+    if debate.motion_id is not None:
+        info = (await motions.motion_infos(db, [debate.motion_id])).get(debate.motion_id)
+        if info is not None:
+            versions = list(
+                await motions.public_versions(db, debate.motion_id, limit=motions.VERSIONS_SHOWN)
+            )
+            # The debate being viewed is always in its own strip, even past the first dozen.
+            if debate.is_public and debate.slug and all(v.id != debate.id for v in versions):
+                versions = [*versions[: motions.VERSIONS_SHOWN - 1], debate]
+            motion = motion_out(info, versions, debate)
+    parent = await db.get(Debate, debate.remix_of_id) if debate.remix_of_id else None
+    return motion, remix_parent_out(parent)
+
+
+def gallery_item_out(debate: Debate, motion: MotionInfo | None = None) -> GalleryItem:
     conf: dict[str, Any] = debate.config_json or {}
     return GalleryItem(
         id=str(debate.id),
@@ -265,6 +355,7 @@ def gallery_item_out(debate: Debate) -> GalleryItem:
         title=debate.title,
         topic=topic_of(debate),
         language=str(conf.get("language") or "English"),
+        language_code=language_code(conf.get("language")),
         category=debate.category,
         author_name=debate.user.display_name if debate.user is not None else None,
         views=debate.views or 0,
@@ -276,4 +367,5 @@ def gallery_item_out(debate: Debate) -> GalleryItem:
         verdict=verdict_out(debate),
         participants=participants_out(debate),
         published_at=debate.published_at,
+        motion=motion_ref_out(motion),
     )

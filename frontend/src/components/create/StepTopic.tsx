@@ -2,6 +2,7 @@ import { ArrowRight, ArrowUpRight, X } from 'lucide-react';
 import type { TrendingTopic } from '../../api/types';
 import { formatAge } from '../../lib/format';
 import { Dropdown, Hint } from '../ui';
+import { TopicVersions } from './TopicVersions';
 import { Favicon, TrendingBrowser } from './TrendingBrowser';
 import {
   LANGUAGES,
@@ -124,6 +125,7 @@ export const StepTopic = ({ state, free, patch, showErrors, estimateLine, onCont
               </div>
             )}
             {news && <LinkedStory news={news} onRemove={unpick} />}
+            <TopicVersions state={state} patch={patch} />
           </div>
 
           <div className="grid gap-2">

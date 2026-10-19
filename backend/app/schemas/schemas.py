@@ -18,10 +18,14 @@ ImageSource = Literal["off", "stock", "ai"]
 
 GALLERY_CATEGORIES: tuple[str, ...] = ("tech", "society", "science", "culture", "money", "fun")
 GallerySort = Literal["new", "trending", "top"]
+# none: one card per debate (the CLI); motion: one card per topic, its best version on the cover.
+GalleryGroup = Literal["none", "motion"]
 GalleryPeriod = Literal["week", "month", "year", "all"]
 
 # Request-only fields that must never be written to `debates.config_json`.
-TRANSIENT_CONFIG_FIELDS: frozenset[str] = frozenset({"user_provider_key", "user_tts_key", "draft"})
+TRANSIENT_CONFIG_FIELDS: frozenset[str] = frozenset(
+    {"user_provider_key", "user_tts_key", "draft", "remix_of"}
+)
 
 
 # --- Preset Schemas ---
@@ -152,6 +156,9 @@ class DebateConfig(BaseModel):
     user_provider_key: str | None = Field(default=None, max_length=300)
     # Optional BYOK ElevenLabs key for the automatic audio build. Never persisted either.
     user_tts_key: str | None = Field(default=None, max_length=200)
+    # Id of the debate this one is a remix of (`debates.remix_of_id`, services/motions). Request-
+    # only; ignored when the user may not see that debate.
+    remix_of: str | None = Field(default=None, max_length=64)
 
     @field_validator("topic")
     @classmethod
@@ -382,6 +389,8 @@ class DebateSettingsOut(BaseModel):
     length_preset: str
     intensity: int
     output_style: OutputStyle = "markdown"
+    # The news story behind a trending topic: public, so a remix by someone else keeps it.
+    news: NewsContext | None = None
 
 
 class AudienceOut(BaseModel):
@@ -409,6 +418,48 @@ class LikeOut(BaseModel):
 
 class VoteRequest(BaseModel):
     participant_id: str = Field(min_length=1, max_length=32)
+
+
+# --- Topics (services/motions) ---
+class MotionRef(BaseModel):
+    """A topic as the gallery sees it: counted over its public versions only."""
+
+    slug: str
+    title: str  # the first public version's topic
+    versions: int
+    models: list[str] = Field(default_factory=list)  # debater models across the versions
+
+
+class MotionVersion(BaseModel):
+    """One public version of a topic (no verdict: the audience votes blind)."""
+
+    id: str
+    slug: str
+    topic: str
+    language: str
+    language_code: str = "en"
+    author_name: str | None = None
+    participants: list[ParticipantOut] = Field(default_factory=list)
+    likes: int = 0
+    views: int = 0
+    duration_ms: int | None = None
+    premium_voices: bool = False
+    published_at: datetime | None = None
+    current: bool = False  # the debate being viewed
+
+
+class MotionOut(BaseModel):
+    """The topic of a debate and its public versions (the debate page's version strip)."""
+
+    slug: str
+    title: str
+    versions: int
+    items: list[MotionVersion] = Field(default_factory=list)
+
+
+class RemixParentOut(BaseModel):
+    slug: str
+    topic: str
 
 
 class DebateDetail(BaseModel):
@@ -443,6 +494,9 @@ class DebateDetail(BaseModel):
     config: DebateConfig | None = None
     # Gallery check; only sent to the owner and the admin.
     moderation: ModerationOut | None = None
+    # The topic's public versions (null when it has none) and the public debate it remixes.
+    motion: MotionOut | None = None
+    remix_of: RemixParentOut | None = None
 
 
 class StopDebateResponse(BaseModel):
@@ -457,6 +511,7 @@ class GalleryItem(BaseModel):
     title: str | None
     topic: str
     language: str
+    language_code: str = "en"
     category: str | None = None
     author_name: str | None = None
     views: int = 0
@@ -468,12 +523,30 @@ class GalleryItem(BaseModel):
     verdict: VerdictOut | None = None
     participants: list[ParticipantOut] = Field(default_factory=list)
     published_at: datetime | None = None
+    motion: MotionRef | None = None  # the topic this debate is a version of
 
 
 class GalleryResponse(BaseModel):
     items: list[GalleryItem]
-    total: int
+    total: int  # debates, or topics with group=motion
     categories: list[str] = Field(default_factory=lambda: list(GALLERY_CATEGORIES))
+
+
+class MotionPage(BaseModel):
+    """`/t/{slug}`: a topic and every public version of it."""
+
+    slug: str
+    title: str
+    versions: int
+    items: list[GalleryItem]
+
+
+class MotionSuggestions(BaseModel):
+    """For the wizard: the topic this text would join and similar topics to take the wording of
+    (topics with public versions only)."""
+
+    match: MotionRef | None = None
+    similar: list[MotionRef] = Field(default_factory=list)
 
 
 # --- Model leaderboard ---

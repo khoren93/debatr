@@ -1,7 +1,7 @@
 import type { PlayerRef } from '@remotion/player';
 import { Fragment, useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Lock, RotateCcw, ShieldAlert } from 'lucide-react';
+import { ArrowLeft, Lock, Repeat2, RotateCcw, ShieldAlert } from 'lucide-react';
 import { getErrorMessage, getErrorStatus } from '../api/client';
 import { deleteDebate, getDebate, resumeDebate, stopDebate } from '../api/debates';
 import { getPublicDebate } from '../api/gallery';
@@ -21,6 +21,7 @@ import { RegenerateAudioDialog } from '../components/debate/RegenerateAudioDialo
 import { SpeakerTile } from '../components/debate/SpeakerTile';
 import { Transcript, type StreamingTurn } from '../components/debate/Transcript';
 import { VerdictTab } from '../components/debate/VerdictTab';
+import { VersionsStrip } from '../components/debate/VersionsStrip';
 import { isJudgeTurn, pinRoutedModel, resumePoint, speakerLineup, speakerOfTurn, speakerTitle, turnColor, turnTypeLabel, videoChapters, type SpeakerInfo, type VideoFormat } from '../components/debate/helpers';
 import { useDebateMedia } from '../hooks/useDebateMedia';
 import { useDebateStream } from '../hooks/useDebateStream';
@@ -375,6 +376,11 @@ const DebateView = ({ id, slug }: Props) => {
       <span title={formatDate(debate.created_at)}>{formatAgo(debate.created_at)}</span>
       {debate.is_public && <CardStats likes={debate.engagement.likes} views={debate.views} />}
       {debate.author_name && !isOwner && <span>by {debate.author_name}</span>}
+      {debate.remix_of && (
+        <Link to={`/d/${debate.remix_of.slug}`} title={debate.remix_of.topic} className="inline-flex min-w-0 max-w-[260px] items-center gap-1 hover:text-text">
+          <Repeat2 className="size-3 shrink-0" /> <span className="truncate">remix of {debate.remix_of.topic}</span>
+        </Link>
+      )}
       {isOwner && debate.moderation?.status === 'flagged' && !debate.is_public && (
         <span className="inline-flex items-center gap-1 text-host">
           <ShieldAlert className="size-3" /> in review
@@ -465,6 +471,8 @@ const DebateView = ({ id, slug }: Props) => {
         </div>
 
         {showVote && <AudienceVote debate={debate} debaters={debaters} revealed={!verdictHidden} onReveal={reveal} onChange={updateAudience} />}
+
+        {debate.motion && <VersionsStrip motion={debate.motion} languageCode={debate.settings.language_code} remixId={debate.id} />}
 
         <div className="min-w-0">
           <div className="flex gap-[22px] border-b border-white/8" role="tablist">

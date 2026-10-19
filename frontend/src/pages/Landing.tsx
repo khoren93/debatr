@@ -4,7 +4,7 @@ import { listGallery } from '../api/gallery';
 import type { GalleryItem, Participant } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { Page } from '../components/layout/AppShell';
-import { CardStats, DebateCard, DebateCover, PremiumVoicesBadge } from '../components/cards';
+import { CardStats, DebateCard, DebateCover, PremiumVoicesBadge, VersionsBadge } from '../components/cards';
 import { Avatar, Bars, LinkButton, LogoMark } from '../components/ui';
 import { APP_DESCRIPTION, APP_NAME } from '../lib/brand';
 
@@ -77,11 +77,13 @@ const Landing = () => {
     let cancelled = false;
     // The landing is the first impression: debates with premium voices come first, the
     // general trending list only fills the free places.
-    Promise.all([listGallery({ limit: FEATURED, sort: 'trending', premium_voices: true }), listGallery({ limit: FEATURED, sort: 'trending' })])
+    // One card per topic in both lists; a topic in both shows its premium version.
+    Promise.all([listGallery({ limit: FEATURED, sort: 'trending', premium_voices: true, group: 'motion' }), listGallery({ limit: FEATURED, sort: 'trending', group: 'motion' })])
       .then(([premium, all]) => {
         if (cancelled) return;
-        const ids = new Set(premium.items.map((item) => item.id));
-        setFeatured([...premium.items, ...all.items.filter((item) => !ids.has(item.id))].slice(0, FEATURED));
+        const topicOf = (item: GalleryItem) => item.motion?.slug ?? item.id;
+        const topics = new Set(premium.items.map(topicOf));
+        setFeatured([...premium.items, ...all.items.filter((item) => !topics.has(topicOf(item)))].slice(0, FEATURED));
       })
       .catch(() => {
         // The "Trending in the gallery" section is optional: it stays hidden when the gallery is unavailable.
@@ -162,7 +164,13 @@ const Landing = () => {
                 index={i}
                 to={`/d/${item.slug}`}
                 title={item.topic || item.title || 'Untitled debate'}
-                cover={<DebateCover participants={item.participants} topRight={item.premium_voices ? <PremiumVoicesBadge /> : undefined} />}
+                cover={
+                  <DebateCover
+                    participants={item.participants}
+                    topLeft={<VersionsBadge motion={item.motion} participants={item.participants} />}
+                    topRight={item.premium_voices ? <PremiumVoicesBadge /> : undefined}
+                  />
+                }
                 footerLeft={
                   <>
                     <Avatar seed={item.author_name?.trim() || 'Anonymous'} size={20} />

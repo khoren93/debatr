@@ -8,6 +8,7 @@ import Landing from './pages/Landing';
 import Library from './pages/Library';
 import Gallery from './pages/Gallery';
 import Leaderboard from './pages/Leaderboard';
+import Topic from './pages/Topic';
 import Account from './pages/Account';
 import Login from './pages/Login';
 import Register from './pages/Register';
@@ -52,6 +53,7 @@ const Site = () => (
         <Route path="/gallery" element={<Gallery />} />
         <Route path="/leaderboard" element={<Leaderboard />} />
         <Route path="/d/:slug" element={<PublicDebateRoute />} />
+        <Route path="/t/:slug" element={<Topic />} />
         <Route path="/debate/:id" element={<DebateRoute />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />

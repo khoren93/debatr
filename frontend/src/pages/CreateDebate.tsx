@@ -100,7 +100,7 @@ const CreateDebate = () => {
     getDebate(remixId)
       .then((d) => {
         if (cancelled) return;
-        setState(stateFromConfig(configFromDebate(d), initialState()));
+        setState({ ...stateFromConfig(configFromDebate(d), initialState()), remix: { id: d.id, topic: d.settings.topic || d.title || '' } });
         toast.info('Prefilled from the debate — tweak anything you like');
         navigate('/create', { replace: true });
       })
