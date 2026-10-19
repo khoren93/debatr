@@ -6,8 +6,9 @@ Sync functions run in the worker (charging finished runs); async ones in the API
 
 import logging
 import uuid
+from dataclasses import asdict, dataclass
 from decimal import ROUND_HALF_UP, Decimal
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import Select, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,6 +16,9 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.models.models import CreditTransaction, Debate, User
+
+if TYPE_CHECKING:
+    from app.services.runtime_settings import Levers
 
 logger = logging.getLogger(__name__)
 
@@ -160,17 +164,70 @@ def uses_own_key(debate: Debate) -> bool:
     return bool(billing.get("own_key"))
 
 
-def markup() -> Decimal:
-    return Decimal(str(settings.CREDIT_MARKUP))
+@dataclass(frozen=True)
+class Prices:
+    """What a run charges: provider cost x `markup` (models, fact-checks, AI pictures), at least
+    `min_charge` for a completed paid debate, `voices_per_1k` per 1000 premium-voice characters.
+    A run keeps the prices it was quoted (`config_json.billing.prices`, `media_json.prices`);
+    rows from before that take the env settings, which they were quoted with."""
+
+    markup: float
+    min_charge: float
+    voices_per_1k: float
+
+    def as_dict(self) -> dict[str, float]:
+        return asdict(self)
+
+
+def env_prices() -> Prices:
+    return Prices(
+        markup=settings.CREDIT_MARKUP,
+        min_charge=settings.MIN_DEBATE_CHARGE_USD,
+        voices_per_1k=settings.TTS_CREDIT_PRICE_PER_1K_CHARS,
+    )
+
+
+def lever_prices(levers: "Levers") -> Prices:
+    """Today's prices: the admin console's levers (services/runtime_settings.Levers)."""
+    return Prices(
+        markup=levers.credit_markup,
+        min_charge=levers.min_debate_charge_usd,
+        voices_per_1k=levers.tts_price_per_1k_chars,
+    )
+
+
+def prices_of(state: dict[str, Any] | None) -> Prices:
+    """The prices stored with a run (`billing` / `media_json`), the env settings for rows
+    without them."""
+    stored = (state or {}).get("prices") or {}
+    base = env_prices().as_dict()
+    for key in base:
+        try:
+            base[key] = float(stored[key])
+        except (KeyError, TypeError, ValueError):
+            continue
+    return Prices(**base)
+
+
+def debate_prices(debate: Debate) -> Prices:
+    return prices_of((debate.config_json or {}).get("billing"))
 
 
 def debate_charge_usd(debate: Debate) -> Decimal:
-    """Credits to charge for the LLM usage of a finished debate."""
+    """Credits to charge for the LLM usage (models, fact-checks) of a debate: cost x markup, and
+    at least the minimum once it completed (a stopped or failed run pays its usage only; a
+    resumed run that completes pays up to the minimum, `charge_due`)."""
     if uses_own_key(debate):
         return ZERO
     totals = debate.totals_json or {}
     cost = to_usd(totals.get("cost") or 0)
-    return to_usd(cost * markup())
+    if cost <= ZERO:
+        return ZERO
+    prices = debate_prices(debate)
+    amount = to_usd(cost * Decimal(str(prices.markup)))
+    if debate.status == "completed":
+        amount = max(amount, to_usd(prices.min_charge))
+    return amount
 
 
 def charge_due(total: Decimal, charged: Decimal) -> Decimal:
@@ -201,9 +258,8 @@ def _charged_sync(db: Session, debate_id: uuid.UUID, prefix: str) -> tuple[int, 
     return int(count), -to_usd(total)
 
 
-def tts_charge_usd(chars: int) -> Decimal:
-    price = Decimal(str(settings.TTS_CREDIT_PRICE_PER_1K_CHARS))
-    return to_usd(Decimal(max(0, chars)) / Decimal(1000) * price)
+def tts_charge_usd(chars: int, price_per_1k: float) -> Decimal:
+    return to_usd(Decimal(max(0, chars)) / Decimal(1000) * Decimal(str(price_per_1k)))
 
 
 def charge_debate_sync(db: Session, debate: Debate) -> CreditTransaction | None:
@@ -231,7 +287,7 @@ def charge_debate_sync(db: Session, debate: Debate) -> CreditTransaction | None:
         provider_ref=run_ref(prefix, earlier),
         meta={
             "provider_cost_usd": float(totals.get("cost") or 0),
-            "markup": float(markup()),
+            **debate_prices(debate).as_dict(),
             "tokens_in": int(totals.get("tokens_in") or 0),
             "tokens_out": int(totals.get("tokens_out") or 0),
         },
@@ -239,12 +295,19 @@ def charge_debate_sync(db: Session, debate: Debate) -> CreditTransaction | None:
 
 
 def charge_media_sync(
-    db: Session, debate: Debate, *, chars: int, provider: str, own_key: bool, build_ref: str
+    db: Session,
+    debate: Debate,
+    *,
+    chars: int,
+    provider: str,
+    own_key: bool,
+    build_ref: str,
+    price_per_1k: float,
 ) -> CreditTransaction | None:
     """Charge premium voices synthesized on the system key. Each build has its own ref."""
     if debate.user_id is None or own_key or provider != "elevenlabs":
         return None
-    amount = tts_charge_usd(chars)
+    amount = tts_charge_usd(chars, price_per_1k)
     if amount <= ZERO:
         return None
     return apply_transaction_sync(
@@ -256,7 +319,7 @@ def charge_media_sync(
         debate_id=debate.id,
         provider="system",
         provider_ref=f"debate:{debate.id}:media:{build_ref}",
-        meta={"chars": chars, "price_per_1k": settings.TTS_CREDIT_PRICE_PER_1K_CHARS},
+        meta={"chars": chars, "price_per_1k": price_per_1k},
     )
 
 
@@ -267,13 +330,13 @@ def has_balance(debate: Debate) -> bool:
 
 
 def charge_images_sync(
-    db: Session, debate: Debate, *, usd: float, count: int, build_ref: str
+    db: Session, debate: Debate, *, usd: float, count: int, build_ref: str, markup: float
 ) -> CreditTransaction | None:
     """Charge the AI pictures of a media build or of the live scenes (`build_ref="live"`, again
     for the new pictures when a resumed run ends): provider cost x markup."""
     if debate.user_id is None:
         return None
-    amount = to_usd(to_usd(usd) * markup())
+    amount = to_usd(to_usd(usd) * Decimal(str(markup)))
     if amount <= ZERO:
         return None
     prefix = f"debate:{debate.id}:images:{build_ref}"
@@ -290,5 +353,5 @@ def charge_images_sync(
         debate_id=debate.id,
         provider="system",
         provider_ref=run_ref(prefix, earlier),
-        meta={"images": count, "provider_cost_usd": usd, "markup": float(markup())},
+        meta={"images": count, "provider_cost_usd": usd, "markup": markup},
     )

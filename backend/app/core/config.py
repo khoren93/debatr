@@ -143,9 +143,13 @@ class Settings(BaseSettings):
     SESSION_MAX_AGE: int = 60 * 60 * 24 * 30  # seconds the login cookie stays valid
     LOGIN_RATE_LIMIT: int = 30  # login/register attempts per IP per hour (0 disables)
     SIGNUP_BONUS_USD: float = 0.0  # welcome credits for every new account (0 disables)
-    # Multiplier applied to the provider cost (OpenRouter usage) when charging credits.
+    # Prices (levers of the admin console override them; a run keeps the prices it started
+    # with, services/credits.Prices). The provider cost of models, fact-checks and AI pictures
+    # is charged times CREDIT_MARKUP; a completed paid debate costs at least
+    # MIN_DEBATE_CHARGE_USD; premium (ElevenLabs) voices on the system key cost
+    # TTS_CREDIT_PRICE_PER_1K_CHARS per 1000 characters.
     CREDIT_MARKUP: float = 1.2
-    # Premium (ElevenLabs) voices on the system key, charged to credits per 1000 characters.
+    MIN_DEBATE_CHARGE_USD: float = 0.0
     TTS_CREDIT_PRICE_PER_1K_CHARS: float = 0.15
     TOPUP_AMOUNTS_USD: str = "5,10,25"
     STRIPE_SECRET_KEY: str | None = None

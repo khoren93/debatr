@@ -76,9 +76,8 @@ async def billing_config() -> BillingConfigOut:
         currency=settings.STRIPE_CURRENCY,
         payments_mode=settings.payments_mode,  # type: ignore[arg-type]
         signup_bonus_usd=levers.signup_bonus_usd,
-        credit_markup=settings.CREDIT_MARKUP,
-        tts_price_per_1k_chars=settings.TTS_CREDIT_PRICE_PER_1K_CHARS,
-        tts_price_per_min=round(settings.TTS_CREDIT_PRICE_PER_1K_CHARS, 4),
+        tts_price_per_1k_chars=levers.tts_price_per_1k_chars,
+        tts_price_per_min=round(levers.tts_price_per_1k_chars, 4),
         elevenlabs_available=elevenlabs_ok,
         elevenlabs_error=elevenlabs_reason,
     )

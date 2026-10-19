@@ -230,8 +230,9 @@ async def providers(refresh: bool = False, _ctx: AdminContext = Depends(can_see)
         "currency": settings.STRIPE_CURRENCY,
         "topup_amounts": settings.topup_amounts,
         "signup_bonus_usd": levers.signup_bonus_usd,
-        "credit_markup": settings.CREDIT_MARKUP,
-        "tts_price_per_1k_chars": settings.TTS_CREDIT_PRICE_PER_1K_CHARS,
+        "credit_markup": levers.credit_markup,
+        "min_debate_charge_usd": levers.min_debate_charge_usd,
+        "tts_price_per_1k_chars": levers.tts_price_per_1k_chars,
     }
     return ProvidersOut(
         checked_at=datetime.now(UTC),

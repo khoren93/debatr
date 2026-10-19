@@ -44,6 +44,7 @@ from app.schemas.schemas import (
     StopDebateResponse,
 )
 from app.services import alerts, api_tokens, free_limits, runtime_settings
+from app.services.credits import Prices, lever_prices, prices_of
 from app.services.debate_control import ACTIVE_STATUSES
 from app.services.debate_control import stop_debate as stop_debate_run
 from app.services.engagement import engagement_out
@@ -152,9 +153,12 @@ async def _estimate(
     own_tts_key: bool = False,
     budget: Decimal | None = None,
     from_turn: int = 0,
+    prices: Prices | None = None,
 ) -> EstimateOut:
     """`budget`: what the API token making the request may still spend (None = no limit);
-    `from_turn`: a resumed run, which pays only the turns from there on."""
+    `from_turn`: a resumed run, which pays only the turns from there on; `prices`: the run's
+    own (a resume), else today's levers."""
+    prices = prices or await _current_prices()
     pricing = pricing_from_models(await openrouter_client.get_models())
     if not own_key:
         _require_priced(config, pricing)
@@ -164,8 +168,9 @@ async def _estimate(
         own_key=own_key,
         tts_provider=await _effective_tts_provider(config, own_tts_key),
         own_tts_key=own_tts_key,
-        tts_price_per_1k=settings.TTS_CREDIT_PRICE_PER_1K_CHARS,
-        markup=settings.CREDIT_MARKUP,
+        tts_price_per_1k=prices.voices_per_1k,
+        markup=prices.markup,
+        min_charge=prices.min_charge,
         default_model=settings.DEFAULT_MODEL_ID,
         fact_check_price=settings.FACT_CHECK_PRICE_USD,
         image_price=settings.MEDIA_IMAGE_PRICE_USD,
@@ -213,16 +218,24 @@ def _require_sufficient(est: EstimateOut) -> None:
     )
 
 
-def _billing(own_key: bool, est: EstimateOut | None) -> dict[str, Any]:
+async def _current_prices() -> Prices:
+    return lever_prices(await runtime_settings.current())
+
+
+def _billing(
+    own_key: bool, est: EstimateOut | None, prices: Prices | None = None
+) -> dict[str, Any]:
     """`config_json.billing`. The estimate of a started run lets an API token's spending limit
-    count runs that have not been charged yet (services.api_tokens.pending_estimate)."""
+    count runs that have not been charged yet (services.api_tokens.pending_estimate); its prices
+    are what the run is charged with (services/credits.Prices), whatever the levers say later."""
     billing: dict[str, Any] = {"own_key": own_key}
-    if est is not None:
+    if est is not None and prices is not None:
         media = (0.0 if est.own_tts_key else est.tts_cost_usd) + (
-            est.images_cost_usd * settings.CREDIT_MARKUP
+            est.images_cost_usd * prices.markup
         )
         billing["estimate_usd"] = est.credits_cost_usd
         billing["media_estimate_usd"] = round(media, 6)
+        billing["prices"] = prices.as_dict()
     return billing
 
 
@@ -240,10 +253,14 @@ async def _require_runnable(config: DebateConfig, *, starting: bool = True) -> N
 
 
 def _apply_config(
-    debate: Debate, config: DebateConfig, own_key: bool, est: EstimateOut | None = None
+    debate: Debate,
+    config: DebateConfig,
+    own_key: bool,
+    est: EstimateOut | None = None,
+    prices: Prices | None = None,
 ) -> None:
     debate.title = config.topic.strip()
-    debate.config_json = {**config.persisted(), "billing": _billing(own_key, est)}
+    debate.config_json = {**config.persisted(), "billing": _billing(own_key, est, prices)}
     debate.participants = [
         DebateParticipant(
             role=p.role,
@@ -377,10 +394,16 @@ async def create_debate(
     provider_key, own_key = _resolve_provider_key(user, config.user_provider_key)
     tts_key = _tts_key(config, config.user_tts_key)
     est: EstimateOut | None = None
+    prices = await _current_prices()
     if not config.draft:
         await _require_runnable(config)
         est = await _estimate(
-            config, user, own_key, tts_key is not None, await _token_budget(db, request)
+            config,
+            user,
+            own_key,
+            tts_key is not None,
+            await _token_budget(db, request),
+            prices=prices,
         )
         _require_sufficient(est)
         await require_debate_slot(db, user.id)
@@ -391,7 +414,7 @@ async def create_debate(
         status="draft" if config.draft else "queued",
         api_token_id=token.id if token is not None and not config.draft else None,
     )
-    _apply_config(debate, config, own_key, est)
+    _apply_config(debate, config, own_key, est, prices)
     db.add(debate)
     await db.commit()
     debate_id = str(debate.id)
@@ -442,13 +465,14 @@ async def start_draft(
     await _require_runnable(config)
     provider_key, own_key = _resolve_provider_key(user, body.user_provider_key if body else None)
     tts_key = _tts_key(config, body.user_tts_key if body else None)
+    prices = await _current_prices()
     est = await _estimate(
-        config, user, own_key, tts_key is not None, await _token_budget(db, request)
+        config, user, own_key, tts_key is not None, await _token_budget(db, request), prices=prices
     )
     _require_sufficient(est)
     await require_debate_slot(db, user.id)
     await free_limits.take(db, user, config, own_key=own_key)
-    debate.config_json = {**config.persisted(), "billing": _billing(own_key, est)}
+    debate.config_json = {**config.persisted(), "billing": _billing(own_key, est, prices)}
     # Whoever starts the run answers for it: its charges count against this token's limit.
     token = request_api_token(request)
     debate.api_token_id = token.id if token is not None else None
@@ -468,6 +492,7 @@ class _ResumePlan:
     own_key: bool
     tts_key: str | None
     est: EstimateOut
+    prices: Prices
 
 
 async def _resume_plan(
@@ -492,6 +517,7 @@ async def _resume_plan(
         )
     tts_key = _tts_key(config, body.user_tts_key if body else None)
     from_seq = resume_point(debate.turns)
+    prices = prices_of(billing)  # the rest is charged at the prices of the first run
     est = await _estimate(
         config,
         user,
@@ -499,8 +525,9 @@ async def _resume_plan(
         tts_key is not None,
         await _token_budget(db, request),
         from_turn=from_seq,
+        prices=prices,
     )
-    return _ResumePlan(config, from_seq, provider_key, own_key, tts_key, est)
+    return _ResumePlan(config, from_seq, provider_key, own_key, tts_key, est, prices)
 
 
 @router.post("/{debate_id}/resume/estimate", response_model=ResumeEstimateOut)
@@ -533,7 +560,10 @@ async def resume_debate(
     await require_debate_slot(db, debate.user_id or user.id)
 
     await reset_for_resume(db, debate, plan.from_seq)
-    debate.config_json = {**plan.config.persisted(), "billing": _billing(plan.own_key, plan.est)}
+    debate.config_json = {
+        **plan.config.persisted(),
+        "billing": _billing(plan.own_key, plan.est, plan.prices),
+    }
     token = request_api_token(request)
     if token is not None:  # from the browser the run stays on the token that started it
         debate.api_token_id = token.id

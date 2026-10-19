@@ -54,6 +54,9 @@ KINDS: dict[str, LeverKind] = {
     "free_max_rounds": "int",
     "free_max_debaters": "int",
     "free_lengths": "lengths",
+    "credit_markup": "factor",
+    "min_debate_charge_usd": "float",
+    "tts_price_per_1k_chars": "float",
 }
 
 

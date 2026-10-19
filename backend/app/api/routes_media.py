@@ -44,7 +44,7 @@ from app.schemas.media import (
     VoicesResponse,
 )
 from app.services import runtime_settings
-from app.services.credits import tts_charge_usd
+from app.services.credits import lever_prices, tts_charge_usd
 from app.services.fair_share import require_media_slot
 from app.services.media.ffmpeg import ffmpeg_available
 from app.services.media.languages import language_code
@@ -256,7 +256,9 @@ async def generate_debate_media(
         raise HTTPException(status_code=409, detail="A media build is already in progress")
     if body.provider not in PROVIDER_NAMES:
         raise HTTPException(status_code=400, detail="Unknown provider")
-    runtime_settings.require_runs_open(await runtime_settings.current())
+    levers = await runtime_settings.current()
+    runtime_settings.require_runs_open(levers)
+    prices = lever_prices(levers)  # the build is charged at today's prices
     if debate.user_id is not None:
         await require_media_slot(db, debate.user_id)
     own_tts_key = bool(body.user_tts_key)
@@ -288,7 +290,7 @@ async def generate_debate_media(
                     "or the free Edge voices.",
                 )
             chars = await _spoken_chars(db, debate)
-            needed = float(tts_charge_usd(chars))
+            needed = float(tts_charge_usd(chars, prices.voices_per_1k))
             if needed > float(user.credits_usd or 0):
                 raise HTTPException(
                     status_code=status.HTTP_402_PAYMENT_REQUIRED,
@@ -317,6 +319,7 @@ async def generate_debate_media(
             "options": options.model_dump(),
             "force": body.force,
             "own_tts_key": own_tts_key,
+            "prices": prices.as_dict(),
             "auto": False,
             "free": False,
             "step": "queued",

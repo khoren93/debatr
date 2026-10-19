@@ -393,7 +393,6 @@ export interface BillingConfig {
   currency: string;
   payments_mode: PaymentsMode;
   signup_bonus_usd: number;
-  credit_markup: number;
   tts_price_per_1k_chars: number;
   tts_price_per_min: number;
   elevenlabs_available: boolean;

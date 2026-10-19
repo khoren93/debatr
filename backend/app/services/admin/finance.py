@@ -136,7 +136,8 @@ class Money:
 
     @property
     def markup(self) -> float | None:
-        """Charges over the cost of what we bill (the configured CREDIT_MARKUP, roughly)."""
+        """Charges over the cost of what we bill (the `credit_markup` lever, roughly; minimum
+        charges push it up, runs keep the markup they started with)."""
         return round(self.charged / self.cost_billed, 3) if self.cost_billed else None
 
     def out(self) -> dict[str, Any]:

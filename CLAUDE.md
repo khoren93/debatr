@@ -284,14 +284,15 @@ docker compose exec api python -m app.manage credits user@example.com 5 --reason
    relays them as SSE and closes on a terminal event (or immediately if the debate is already
    finished). After the verdict turn `services/verdict.py` structures it with the cheap
    `VERDICT_MODEL` (old name `MEDIA_HIGHLIGHTS_MODEL` still read; a fixed model, since the
-   author picks the host; regex fallback) into `debates.verdict_json`; when every participant
-   argues on a free model it is the lever `free_verdict_model` instead (`:free` only, env
-   `FREE_VERDICT_MODEL`, `orchestrator._verdict_model`; on the system key it takes a free-quota
-   slot, none in 60 s → regex verdict and the check fails closed), so a free debate costs us
-   nothing but its visual scenes
-   (`winner_id`, `headline`, `feedback`). At the terminal state `services/credits.py` charges the
-   owner (`cost × CREDIT_MARKUP`, skipped with an own key; minus what earlier runs of the debate
-   were charged, so repeats and resumed runs are safe: `charge_due`, refs `…:llm`, `…:llm:2`;
+   author picks the host; regex fallback) into `debates.verdict_json` (`winner_id`, `headline`,
+   `feedback`). When every participant argues on a free model it is the lever
+   `free_verdict_model` instead (`:free` only, env `FREE_VERDICT_MODEL`,
+   `orchestrator._verdict_model`; on the system key it takes a free-quota slot, none in 60 s →
+   regex verdict and the check fails closed), so a free debate costs us nothing but its visual
+   scenes. At the terminal state `services/credits.py` charges the owner (`cost × markup`, at
+   least the minimum once completed, at the prices the run started with — `billing.prices`, see
+   "Credits and payments"; skipped with an own key; minus what earlier runs of the debate were
+   charged, so repeats and resumed runs are safe: `charge_due`, refs `…:llm`, `…:llm:2`;
    `totals_json.cost` = turns + fact-checks (`analysis_cost`) + discarded turns, while the verdict
    structuring and the gallery check go to `service_cost`, which nobody is billed for) and
    `_auto_media` queues the audio build when `config_json.media_plan.outputs` contains `audio`.
@@ -590,6 +591,14 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
 
 ### Credits and payments
 
+- Prices (`services/credits.Prices`): provider cost × `credit_markup` for models, fact-checks and AI
+  pictures, at least `min_debate_charge_usd` for a completed paid debate (a stopped or failed run
+  pays its usage only), `tts_price_per_1k_chars` for premium voices on the system key. All three
+  are levers of the console (Settings → Prices; env `CREDIT_MARKUP`, `MIN_DEBATE_CHARGE_USD`,
+  `TTS_CREDIT_PRICE_PER_1K_CHARS`). A run keeps the prices it was quoted: create / draft start
+  store them in `config_json.billing.prices` (a resume keeps them), `POST /media` and
+  `_auto_media` in `media_json.prices`; charges read the snapshot (`prices_of`, env values for rows
+  from before it). The public `GET /api/billing/config` shows prices, never the markup.
 - `users.credits_usd` is the balance; `credit_transactions` is the append-only ledger. Every
   change goes through `services/credits.apply_transaction(_sync)`; `provider_ref` makes charges
   and Stripe sessions idempotent. The balance may go slightly negative (actual cost > estimate).
@@ -686,7 +695,8 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   `signup_bonus_usd`, `free_models_per_minute`, `max_active_debates_per_user`,
   `max_active_media_per_user`, `muted_alerts` (see Alerts), `free_verdict_model` (verdict + gallery
   check of free debates), `free_debates_per_day`, `free_max_rounds`, `free_max_debaters`,
-  `free_lengths` (see "Workers and queues"). Only the fields of `Levers` exist (pydantic limits); without a row
+  `free_lengths` (see "Workers and queues"), `credit_markup`, `min_debate_charge_usd`,
+  `tts_price_per_1k_chars` (see "Credits and payments"). Only the fields of `Levers` exist (pydantic limits); without a row
   the env setting applies; a broken row is ignored. `PUT /settings/{key}` / `POST
   /settings/{key}/reset` need sudo and a reason and write the row + audit entry in one
   transaction; processes read through a 5 s cache (`CACHE_SECONDS`), so a change lands within

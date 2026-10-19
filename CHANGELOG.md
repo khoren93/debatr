@@ -15,6 +15,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Prices are levers of the admin console** (Settings → Prices): the markup on the provider
+  cost of models, fact-checks and AI pictures, a minimum for a completed paid debate (new) and
+  the price of premium voices. A run is charged at the prices it was quoted when it started (a
+  resume keeps them; an audio build at the prices of its request). The public billing
+  configuration no longer shows the markup.
 - **Limits of free debates**: an account without credits or an own OpenRouter key may start 5
   debates on free models in any 24 hours, of up to 3 rounds and 4 debaters with very short or
   short replies (they share OpenRouter's daily free-model quota). The wizard locks the longer

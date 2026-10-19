@@ -31,6 +31,18 @@ const COPY: Record<LeverKey, { label: string; hint: string }> = {
   free_max_rounds: { label: 'Rounds of a free debate', hint: 'More need credits or an own OpenRouter key. 0: no limit.' },
   free_max_debaters: { label: 'Debaters of a free debate', hint: 'The wizard offers up to 4; the CLI and MCP up to 7. 0: no limit.' },
   free_lengths: { label: 'Reply lengths of a free debate', hint: 'The others need credits or an own OpenRouter key. None picked: no limit.' },
+  credit_markup: {
+    label: 'Markup',
+    hint: 'Provider cost × this for models, fact-checks and AI pictures. A run keeps the prices it started with; users only see the final prices.',
+  },
+  min_debate_charge_usd: {
+    label: 'Minimum per paid debate',
+    hint: 'A completed debate on paid models costs at least this (covers its unbilled scenes). Stopped or failed runs pay their usage only; free debates stay free. 0: none.',
+  },
+  tts_price_per_1k_chars: {
+    label: 'Premium voices, per 1K characters',
+    hint: 'ElevenLabs on the system key (its API costs about $0.10 per 1K characters). About 1K characters is a minute of speech.',
+  },
   free_verdict_model: {
     label: 'Verdict model of free debates',
     hint: 'Structures the verdict and answers the gallery check when every participant argues on a free model, so such a debate costs nothing. Free models only; off: the paid VERDICT_MODEL. A model that stops answering sends those debates to the moderation queue.',
@@ -47,7 +59,8 @@ const show = (lever: Lever, value: LeverValue, events: AlertEvent[] = []): strin
   if (lever.kind === 'model') return String(value) || 'off (paid model)';
   if (lever.kind === 'lengths') return Array.isArray(value) && value.length ? value.map((v) => LENGTH_LABELS[v] ?? v).join(', ') : 'all';
   if (lever.kind === 'int' && lever.key.startsWith('free_') && Number(value) === 0) return 'no limit';
-  if (lever.key === 'signup_bonus_usd') return formatUsd(Number(value));
+  if (lever.kind === 'factor') return `× ${Number(value)}`;
+  if (lever.kind === 'float') return formatUsd(Number(value));
   if (lever.kind === 'text') return String(value) || '(standard text)';
   return String(value);
 };
@@ -99,12 +112,13 @@ const Toggle = ({ lever, onChange }: { lever: Lever; onChange: (value: boolean) 
 const NumberField = ({ lever, onSave }: { lever: Lever; onSave: (value: number) => void }) => {
   const [draft, setDraft] = useState<string | null>(null);
   const money = lever.kind === 'float';
+  const factor = lever.kind === 'factor';
   const text = draft ?? String(lever.value);
   const value = Number(text);
   const valid =
     text.trim() !== '' &&
     Number.isFinite(value) &&
-    (money || Number.isInteger(value)) &&
+    (money || factor || Number.isInteger(value)) &&
     (lever.minimum === null || value >= lever.minimum) &&
     (lever.maximum === null || value <= lever.maximum);
   const dirty = draft !== null && value !== Number(lever.value);
@@ -120,17 +134,17 @@ const NumberField = ({ lever, onSave }: { lever: Lever; onSave: (value: number) 
       }}
     >
       <div className="relative">
-        {money && <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted">$</span>}
+        {(money || factor) && <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted">{money ? '$' : '×'}</span>}
         <Input
           type="number"
-          inputMode={money ? 'decimal' : 'numeric'}
+          inputMode={money || factor ? 'decimal' : 'numeric'}
           aria-label={COPY[lever.key].label}
           min={lever.minimum ?? undefined}
           max={lever.maximum ?? undefined}
-          step={money ? 0.01 : 1}
+          step={money ? 0.01 : factor ? 0.1 : 1}
           value={text}
           onChange={(e) => setDraft(e.target.value)}
-          className={`w-28 tabular-nums ${money ? 'pl-7' : ''}`}
+          className={`w-28 tabular-nums ${money || factor ? 'pl-7' : ''}`}
         />
       </div>
       <Button type="submit" size="sm" variant="secondary" disabled={!valid || !dirty}>
@@ -330,6 +344,15 @@ const AdminSettings = () => {
                 {row('free_verdict_model', (lever) => (
                   <FreeModelField lever={lever} catalogue={settings.models} onChange={(value) => ask(lever, value)} />
                 ))}
+              </div>
+            </Card>
+            <Card>
+              <SectionLabel>Prices</SectionLabel>
+              <p className="mt-1 text-xs text-muted">What paid runs are charged. Changes apply to runs started (or audio queued) after them.</p>
+              <div className="mt-2 divide-y divide-line">
+                {row('credit_markup', number)}
+                {row('min_debate_charge_usd', number)}
+                {row('tts_price_per_1k_chars', number)}
               </div>
             </Card>
             <Card>

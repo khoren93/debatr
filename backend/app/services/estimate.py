@@ -105,6 +105,7 @@ def estimate_debate(
     own_tts_key: bool = False,
     tts_price_per_1k: float,
     markup: float,
+    min_charge: float = 0.0,
     default_model: str = "",
     fact_check_price: float = 0.0,
     image_price: float = 0.0,
@@ -113,8 +114,10 @@ def estimate_debate(
 ) -> Estimate:
     """Provider costs and credits of a run. Fact-checks (one per debater turn on average) run
     on the debate's key; AI pictures always on the system key, so they are charged even with an
-    own OpenRouter key. `from_turn`: a resumed run pays only the turns from that index on (the
-    prompts still carry the earlier turns); the media build comes after the run, so it stays."""
+    own OpenRouter key. A paid run costs at least `min_charge` (services/credits). `from_turn`:
+    a resumed run pays only the turns from that index on (the prompts still carry the earlier
+    turns; the minimum was quoted with the first run); the media build comes after the run, so
+    it stays."""
     participants: list[dict[str, Any]] = list(conf.get("participants") or [])
     num_rounds = int(conf.get("num_rounds") or 1)
     words_per_turn = length_words(str(conf.get("length_preset") or "medium"))
@@ -165,8 +168,11 @@ def estimate_debate(
     factcheck_cost = checks * fact_check_price
     wants_images = visuals and plan.get("images") == "ai" and "audio" in (plan.get("outputs") or [])
     images_cost = min(max_images, debater_turns) * image_price if wants_images else 0.0
+    llm_credits = (cost + factcheck_cost) * markup
+    if llm_credits > 0 and from_turn == 0:
+        llm_credits = max(llm_credits, min_charge)
     credits = (
-        (0.0 if own_key else (cost + factcheck_cost) * markup)
+        (0.0 if own_key else llm_credits)
         + (0.0 if own_tts_key else tts_cost)
         + images_cost * markup
     )

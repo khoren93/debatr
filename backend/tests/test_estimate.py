@@ -215,3 +215,16 @@ async def test_system_key_runs_need_a_price_for_every_model(monkeypatch: pytest.
     assert caught.value.status_code == 503
     free = await routes_debates._estimate(_debate("m/free:free"), None, own_key=False)
     assert free.credits_cost_usd == 0 and free.sufficient
+
+
+def test_a_paid_run_is_quoted_at_least_the_minimum():
+    pricing = {"m/pro": (1e-7, 1e-7), "m/con": (1e-7, 1e-7), "m/mod": (1e-7, 1e-7)}
+    cheap = _estimate(_conf(), pricing, markup=3.0, min_charge=0.05)
+    assert cheap.credits_cost_usd == 0.05
+    assert _estimate(_conf(), {}, markup=3.0, min_charge=0.05).credits_cost_usd == 0  # free
+    assert (
+        _estimate(_conf(), pricing, markup=3.0, min_charge=0.05, own_key=True).credits_cost_usd == 0
+    )
+    # A resume pays the rest of its turns; the minimum was quoted with the first run.
+    rest = _estimate(_conf(), pricing, markup=3.0, min_charge=0.05, from_turn=4)
+    assert 0 < rest.credits_cost_usd < 0.05

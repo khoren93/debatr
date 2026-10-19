@@ -33,7 +33,7 @@ from app.schemas.timeline import (
 )
 from app.schemas.visuals import ImageScene, SketchScene, TimelineVisual
 from app.services import free_quota, runtime_settings
-from app.services.credits import charge_images_sync, charge_media_sync, has_balance
+from app.services.credits import charge_images_sync, charge_media_sync, has_balance, prices_of
 from app.services.free_router import resolved_participants
 from app.services.heartbeat import beating
 from app.services.media import ffmpeg
@@ -841,8 +841,10 @@ def _charge_build(
     images: ImageStudio | None,
     build_ref: str,
 ) -> None:
-    """Charge the owner for premium voices and AI pictures of a finished build."""
+    """Charge the owner for premium voices and AI pictures of a finished build, at the prices
+    it was queued with (`media_json.prices`)."""
     debate_id = str(debate.id)
+    prices = prices_of(state)
     tx = charge_media_sync(
         db,
         debate,
@@ -850,12 +852,18 @@ def _charge_build(
         provider=options.provider,
         own_key=bool(state.get("own_tts_key")),
         build_ref=build_ref,
+        price_per_1k=prices.voices_per_1k,
     )
     if tx is not None:
         logger.info("Charged %s credits for voices of %s", -tx.amount_usd, debate_id)
     if images is not None and images.ai_count:
         tx = charge_images_sync(
-            db, debate, usd=images.ai_usd, count=images.ai_count, build_ref=build_ref
+            db,
+            debate,
+            usd=images.ai_usd,
+            count=images.ai_count,
+            build_ref=build_ref,
+            markup=prices.markup,
         )
         if tx is not None:
             logger.info("Charged %s credits for pictures of %s", -tx.amount_usd, debate_id)

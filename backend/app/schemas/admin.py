@@ -1101,7 +1101,9 @@ class SecuritySummary(BaseModel):
 
 # --- levers and alerts --------------------------------------------------------------------------
 
-LeverKind = Literal["bool", "int", "float", "text", "models", "model", "lengths", "alerts"]
+LeverKind = Literal[
+    "bool", "int", "float", "factor", "text", "models", "model", "lengths", "alerts"
+]
 
 
 class LeverOut(BaseModel):

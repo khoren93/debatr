@@ -33,7 +33,7 @@ from app.core.sync_db import get_sync_session
 from app.models.models import Debate, Turn, utcnow
 from app.services import queue_manager, runtime_settings
 from app.services import usage as usage_log
-from app.services.credits import charge_debate_sync, charge_images_sync
+from app.services.credits import charge_debate_sync, charge_images_sync, debate_prices
 from app.services.events import publish_event
 from app.services.free_quota import is_free_model, wait_for_slot
 from app.services.free_router import (
@@ -195,7 +195,10 @@ def _charge(db: Session, debate: Debate) -> None:
             logger.info("Charged %s credits for debate %s", -tx.amount_usd, debate.id)
         usd, count = live_pictures_cost(_turns(db, debate.id))
         if count:
-            tx = charge_images_sync(db, debate, usd=usd, count=count, build_ref="live")
+            markup = debate_prices(debate).markup
+            tx = charge_images_sync(
+                db, debate, usd=usd, count=count, build_ref="live", markup=markup
+            )
             if tx is not None:
                 logger.info("Charged %s credits for pictures of %s", -tx.amount_usd, debate.id)
     except Exception:
@@ -678,6 +681,7 @@ def _auto_media(db: Session, debate: Debate) -> None:
             },
             "force": False,
             "own_tts_key": own_tts_key,
+            "prices": debate_prices(debate).as_dict(),  # what the run was quoted with
             "auto": True,
             "free": False,
             "step": "queued",

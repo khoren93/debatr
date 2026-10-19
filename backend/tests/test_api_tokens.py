@@ -39,6 +39,7 @@ from app.services.api_tokens import (
     token_out,
     with_token_defaults,
 )
+from app.services.credits import Prices
 
 
 def _request(authorization: str | None = None, session: dict[str, Any] | None = None) -> Request:
@@ -248,15 +249,16 @@ def _estimate(**fields: Any) -> EstimateOut:
     return EstimateOut(**{**base, **fields})
 
 
-def test_billing_stores_the_estimate_and_its_media_part():
+def test_billing_stores_the_estimate_its_media_part_and_the_prices():
+    prices = Prices(markup=3.0, min_charge=0.05, voices_per_1k=0.25)
     assert _billing(False, None) == {"own_key": False}
-    billing = _billing(True, _estimate())
+    billing = _billing(True, _estimate(), prices)
     assert billing["own_key"] is True
     assert billing["estimate_usd"] == 0.93
-    assert billing["media_estimate_usd"] == pytest.approx(0.75 + 0.05 * 1.2)
-    assert _billing(False, _estimate(own_tts_key=True))["media_estimate_usd"] == pytest.approx(
-        0.05 * 1.2
-    )
+    assert billing["media_estimate_usd"] == pytest.approx(0.75 + 0.05 * 3.0)
+    assert billing["prices"] == {"markup": 3.0, "min_charge": 0.05, "voices_per_1k": 0.25}
+    own_tts = _billing(False, _estimate(own_tts_key=True), prices)
+    assert own_tts["media_estimate_usd"] == pytest.approx(0.05 * 3.0)
 
 
 def test_token_out_and_expiry():

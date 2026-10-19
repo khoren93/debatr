@@ -702,7 +702,7 @@ export interface ProvidersOut {
     key?: { label?: string | null; limit?: number | null; limit_remaining?: number | null; usage?: number | null; usage_daily?: number | null; is_free_tier?: boolean | null };
   };
   elevenlabs: { configured: boolean; ok?: boolean; reason?: string | null; tier?: string; used?: number; limit?: number; resets_at?: number | null };
-  payments: { mode: string; currency: string; topup_amounts: number[]; signup_bonus_usd: number; credit_markup: number; tts_price_per_1k_chars: number };
+  payments: { mode: string; currency: string; topup_amounts: number[]; signup_bonus_usd: number; credit_markup: number; min_debate_charge_usd: number; tts_price_per_1k_chars: number };
 }
 
 export interface MediaDir {
@@ -876,7 +876,7 @@ export interface SecuritySummary {
 
 // --- levers and alerts ---------------------------------------------------------------------------
 
-export type LeverKind = 'bool' | 'int' | 'float' | 'text' | 'models' | 'model' | 'lengths' | 'alerts';
+export type LeverKind = 'bool' | 'int' | 'float' | 'factor' | 'text' | 'models' | 'model' | 'lengths' | 'alerts';
 
 export type LeverKey =
   | 'registration_open'
@@ -892,7 +892,10 @@ export type LeverKey =
   | 'free_debates_per_day'
   | 'free_max_rounds'
   | 'free_max_debaters'
-  | 'free_lengths';
+  | 'free_lengths'
+  | 'credit_markup'
+  | 'min_debate_charge_usd'
+  | 'tts_price_per_1k_chars';
 
 export type LeverValue = boolean | number | string | string[];
 

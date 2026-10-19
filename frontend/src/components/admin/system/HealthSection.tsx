@@ -72,6 +72,7 @@ export const ProvidersSection = () => {
                 ['Top-ups', `${data.payments.topup_amounts.map((a) => `$${a}`).join(', ')} ${data.payments.currency.toUpperCase()}`],
                 ['Signup bonus', formatUsd(data.payments.signup_bonus_usd)],
                 ['Markup', `× ${data.payments.credit_markup}`],
+                ['Minimum per paid debate', formatUsd(data.payments.min_debate_charge_usd)],
                 ['Premium voices', `${formatUsd(data.payments.tts_price_per_1k_chars)} per 1K characters`],
               ]}
             />

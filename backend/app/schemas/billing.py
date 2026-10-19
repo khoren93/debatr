@@ -13,7 +13,7 @@ class BillingConfigOut(BaseModel):
     currency: str
     payments_mode: PaymentsMode
     signup_bonus_usd: float
-    credit_markup: float
+    # Prices only, never the markup (an internal lever of the admin console).
     tts_price_per_1k_chars: float
     # ~1000 characters of speech last about a minute at a natural pace.
     tts_price_per_min: float

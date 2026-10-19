@@ -7,7 +7,6 @@ const FALLBACK: BillingConfig = {
   currency: 'usd',
   payments_mode: 'disabled',
   signup_bonus_usd: 0,
-  credit_markup: 1,
   tts_price_per_1k_chars: 0.15,
   tts_price_per_min: 0.15,
   elevenlabs_available: false,
