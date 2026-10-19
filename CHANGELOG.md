@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Rap battles** (`format: "rap_battle"`): an MC opens, two models trade verses of 4–16 lines
+  over one beat for 1–3 rounds, and the judge scores every round. ElevenLabs Music generates the
+  beat and the rapped verses as one track (each rapper picks a flow in place of a voice; the MC
+  and the judge talk over it), paid per minute of music from the balance or on an own ElevenLabs
+  key on a paid plan. The wizard has format cards, the video and the verdict tab show the
+  judge's score sheet, the gallery a format filter and the ranking a Rappers tab.
+- **One topic, many versions**: debates on the same question (the same text after normalizing,
+  a remix, a translation) share one gallery card, whose cover is the version that earned it its
+  place; the debate page switches between the versions, `/t/<slug>` lists them all, the wizard
+  says which topic a question joins, and the console moves or merges topics.
+- **Sides**: debaters argue for or against the topic, or a position of their own (a structured
+  field instead of a sentence in the persona); round labels come from the server.
+- **CLI 0.3.0**: `debatr run --format rap_battle --flow …`, `debatr formats`, `--format` for
+  `gallery` and `leaderboard`, the judge's round scores in the output; MCP `list_formats` and
+  `format` / `flows` in `start_debate` and `estimate_debate`.
 - **`GET /api/health/full`** for an outside uptime monitor: besides the database and Redis it
   answers 503 when a queue (`default`, `background`, `media`) has no worker or the cron
   scheduler is gone, which the Telegram alerts cannot report since they run on those processes.
