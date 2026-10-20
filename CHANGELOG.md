@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.1] - 2026-10-21
+
+### Fixed
+
+- **Rap battle topics**: the safety review dropped most of them (9 of 20 were left), often only
+  because the story behind "Office or remote work?" or "Handheld or console?" mentioned layoffs or
+  a lawsuit. The writer now knows who may be a side (no politicians or groups of people) and the
+  review judges the sides, not the news story around them: 20 of 20 in a test run.
+
 ## [1.6.0] - 2026-10-20
 
 ### Added
@@ -401,7 +410,8 @@ First public release of **AI Debates**.
 - Admin panel for debates, participants, turns and sessions.
 - Docker Compose setup with FastAPI, PostgreSQL, Redis + RQ and a React + Vite frontend.
 
-[Unreleased]: https://github.com/khoren93/debatr/compare/v1.6.0...HEAD
+[Unreleased]: https://github.com/khoren93/debatr/compare/v1.6.1...HEAD
+[1.6.1]: https://github.com/khoren93/debatr/compare/v1.6.0...v1.6.1
 [1.6.0]: https://github.com/khoren93/debatr/compare/v1.5.1...v1.6.0
 [1.5.1]: https://github.com/khoren93/debatr/compare/v1.5.0...v1.5.1
 [1.5.0]: https://github.com/khoren93/debatr/compare/v1.4.1...v1.5.0
