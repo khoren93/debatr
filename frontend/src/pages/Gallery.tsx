@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router';
 import { AudioLines, MicVocal, Play, Trophy, X } from 'lucide-react';
 import { getErrorMessage } from '../api/client';
 import { listGallery } from '../api/gallery';

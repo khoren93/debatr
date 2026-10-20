@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router';
 import { ArrowUpRight, Ban, CheckCircle2, ShieldCheck } from 'lucide-react';
 import { debateAction, getDebateCard, getModerationQueue } from '../../api/admin/debates';
 import type { AdminDebateCard, ModerationQueue } from '../../api/admin/types';

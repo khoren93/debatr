@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { Eye, Heart, Layers, Plus } from 'lucide-react';
 import type { MotionDetail, MotionVersion, Participant } from '../../api/types';
 import { formatCount, shortModelName } from '../../lib/format';

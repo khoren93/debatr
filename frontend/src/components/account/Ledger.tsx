@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { AudioLines, Diamond, Download, Gift, ImageIcon, Music, Plus, Receipt, RotateCcw, SlidersHorizontal } from 'lucide-react';
 import { exportTransactions, listTransactions } from '../../api/billing';
 import { getErrorMessage } from '../../api/client';

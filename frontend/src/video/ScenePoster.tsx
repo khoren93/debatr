@@ -1,11 +1,9 @@
 import { AbsoluteFill, useCurrentFrame, useVideoConfig } from 'remotion';
 import type { TimelineVisual } from '../api/visuals';
+import { POSTER_H, POSTER_W } from './constants';
 import { frameToMs } from './utils';
 import { ScenePanel, type SceneCast } from './visuals/SceneStage';
 
-/** Size of the scene stage in the 16:9 video; posters and replays use the same box. */
-export const POSTER_W = 1160;
-export const POSTER_H = 700;
 
 export interface ScenePosterProps {
   visual: TimelineVisual; // start_ms = 0: times are relative to the scene

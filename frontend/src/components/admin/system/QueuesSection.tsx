@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { failedJobAction, getQueues } from '../../../api/admin/system';
 import type { JobSummary, WorkerInfo } from '../../../api/admin/types';
 import { Button, useToast } from '../../ui';

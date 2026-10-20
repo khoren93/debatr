@@ -1,6 +1,6 @@
 import { Play, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { getErrorMessage, getErrorStatus } from '../../api/client';
 import { useAuth } from '../../auth/AuthContext';
 import { deleteMedia, generateMedia, getMediaCapabilities, getVoices } from '../../api/media';

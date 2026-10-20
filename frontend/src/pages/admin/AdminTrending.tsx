@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router';
 import { ArrowUpRight, Eye, EyeOff, RefreshCw } from 'lucide-react';
 import { buildTrendingNow, getTrendingBatch, listTrendingBatches, setTopicHidden } from '../../api/admin/debates';
 import type { Page as PageOf, TrendingBatchCard, TrendingBatchRow, TrendingTopicRow } from '../../api/admin/types';

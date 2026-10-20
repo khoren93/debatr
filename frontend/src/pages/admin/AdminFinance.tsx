@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { Download } from 'lucide-react';
 import { needsSudo } from '../../api/admin/client';
 import { exportFinance, getFinance } from '../../api/admin/finance';

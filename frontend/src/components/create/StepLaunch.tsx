@@ -1,6 +1,6 @@
 import { ArrowLeft, ArrowRight, ArrowUpRight, Check, Globe, KeyRound, PenTool, SearchCheck } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import type { DebateConfig, Estimate, ImageSource, PaymentsMode, VoiceInfo } from '../../api/types';
 import { detectStyle } from '../../data/styles';
 import type { TtsKeyCheck, TtsKeyStatus } from '../../hooks/useElevenLabsKeyStatus';

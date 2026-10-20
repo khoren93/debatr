@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router';
 import { listDebates, type DebateListQuery } from '../../api/admin/debates';
 import type { AdminDebateList, AdminDebateRow, DebateSort } from '../../api/admin/types';
 import { getErrorMessage } from '../../api/client';

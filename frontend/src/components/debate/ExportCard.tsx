@@ -2,13 +2,14 @@ import type { RenderMediaOnWebProgress } from '@remotion/web-renderer';
 import { Download, RefreshCw, Video } from 'lucide-react';
 import { useEffect, useRef, useState, type ComponentType, type MouseEvent } from 'react';
 import { reportRender } from '../../api/debates';
+import { absoluteMediaBase } from '../../api/media';
 import type { Timeline } from '../../api/timeline';
 import { formatDuration } from '../../lib/format';
 import { FPS, LONG_H, LONG_W, SHORT_H, SHORT_W } from '../../video/constants';
 import { DebateLong } from '../../video/DebateLong';
 import { DebateShort } from '../../video/DebateShort';
 import { SCALE_720P, checkRenderSupport, renderMp4 } from '../../video/render';
-import { longDurationInFrames, shortDurationInFrames } from '../../video/utils';
+import { longDurationInFrames, shortDurationInFrames } from '../../video/timing';
 import { preloadSceneAssets } from '../../video/visuals/geoLoader';
 
 type AnyComposition = ComponentType<Record<string, unknown>>;
@@ -134,7 +135,8 @@ export const ExportCard = ({ kind, debateId, timeline, mediaBase, highlightIndex
     abortRef.current = ctrl;
     try {
       const composition = (isLong ? DebateLong : DebateShort) as unknown as AnyComposition;
-      const inputProps: Record<string, unknown> = isLong ? { timeline, mediaBase } : { timeline, mediaBase, highlightIndex };
+      const base = absoluteMediaBase(mediaBase);
+      const inputProps: Record<string, unknown> = isLong ? { timeline, mediaBase: base } : { timeline, mediaBase: base, highlightIndex };
       await preloadSceneAssets(timeline);
       const { blob, ms: took } = await renderMp4({
         id: isLong ? 'DebateLong' : `DebateShort${highlightIndex}`,

@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { LogOut } from 'lucide-react';
 import { changePassword } from '../../api/auth';
 import { getErrorMessage } from '../../api/client';

@@ -116,3 +116,5 @@ export const ExportRail = ({ open, onClose, debate, lineup, media, timeline, med
     </>
   );
 };
+
+export default ExportRail;

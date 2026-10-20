@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
+import { Navigate, useNavigate, useSearchParams } from 'react-router';
 import { ArrowRight, Fingerprint, KeyRound, ShieldCheck } from 'lucide-react';
 import { adminLogin, confirmEnrollment, passkeySignInOptions, signInWithPasskey, startEnrollment, verifyAdminCode } from '../../api/admin/auth';
 import type { AdminMe, EnrollStartOut } from '../../api/admin/types';

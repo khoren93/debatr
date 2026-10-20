@@ -1,6 +1,7 @@
 import type { Timeline } from '../../api/timeline';
 import type { DebateDetail } from '../../api/types';
-import { formatCost, formatCount, formatTokens, shortModelName } from '../../lib/format';
+import { useHydrated } from '../../hooks/useHydrated';
+import { formatCost, formatCount, formatDateTime, formatTokens, shortModelName } from '../../lib/format';
 import type { SpeakerInfo } from './helpers';
 import { SpeakerTile } from './SpeakerTile';
 
@@ -13,19 +14,16 @@ interface Props {
 const LENGTHS: Record<string, string> = { very_short: 'very short replies', short: 'short replies', medium: 'medium replies', long: 'long replies' };
 const PROVIDERS: Record<string, string> = { elevenlabs: 'ElevenLabs', edge: 'Edge neural voices' };
 
-const created = (iso: string) => {
-  const d = new Date(iso);
-  return `${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} · ${d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`;
-};
-
 /** Details tab: who spoke with which model and voice, and the run's facts. */
 export const DetailsTab = ({ debate, lineup, timeline }: Props) => {
   const { settings, totals } = debate;
+  // The viewer's local time once hydrated; the server renders UTC.
+  const hydrated = useHydrated();
   const provider = timeline?.provider ?? (debate.media_status !== 'none' ? debate.media_plan?.provider : undefined);
   const facts: { k: string; v: string }[] = [
     { k: 'TOKENS', v: `${formatTokens(totals.tokens_in)} in · ${formatTokens(totals.tokens_out)} out` },
     ...(debate.is_owner ? [{ k: 'MODEL COST', v: `${formatCost(totals.cost)}${debate.billing.own_key ? ' · own key' : ''}` }] : []),
-    { k: 'CREATED', v: created(debate.created_at) },
+    { k: 'CREATED', v: hydrated ? formatDateTime(debate.created_at) : `${formatDateTime(debate.created_at, 'UTC')} UTC` },
     { k: 'STYLE', v: `${settings.output_style === 'spoken' ? 'Spoken' : 'Markdown'} · ${LENGTHS[settings.length_preset] ?? settings.length_preset}` },
     { k: 'FORMAT', v: `${settings.num_rounds} ${settings.num_rounds === 1 ? 'round' : 'rounds'} · ${settings.language}` },
     ...(provider ? [{ k: 'VOICES', v: PROVIDERS[provider] ?? provider }] : []),

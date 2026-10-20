@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation } from 'react-router';
 import { Page, PageTitle } from '../../components/layout/AppShell';
 import { HealthSection, ProvidersSection } from '../../components/admin/system/HealthSection';
 import { QueuesSection } from '../../components/admin/system/QueuesSection';

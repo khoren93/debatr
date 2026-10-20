@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router';
 import { ArrowLeft, ArrowRight } from 'lucide-react';
 import { getErrorMessage, getErrorStatus } from '../api/client';
 import { createDebate, getDebate, startDraft, updateDraft } from '../api/debates';

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { Laptop, LogOut, RefreshCw } from 'lucide-react';
 import { adminLogoutEverywhere, listAdminSessions, regenerateRecoveryCodes, revokeAdminSession } from '../../api/admin/auth';
 import { needsSudo } from '../../api/admin/client';

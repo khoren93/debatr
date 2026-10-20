@@ -1,5 +1,5 @@
 import { Suspense, lazy, useEffect, useState, type ReactNode } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router';
 import { ArrowLeft, ArrowUpRight } from 'lucide-react';
 import { getDebateCard } from '../../api/admin/debates';
 import type { AdminDebateCard } from '../../api/admin/types';

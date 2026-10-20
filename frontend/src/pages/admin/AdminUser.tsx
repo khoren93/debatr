@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router';
 import { ArrowLeft, KeyRound, ShieldCheck } from 'lucide-react';
 import type { AdminUserCard } from '../../api/admin/types';
 import { getUserCard } from '../../api/admin/users';

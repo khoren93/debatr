@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactNode } from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { AudioLines, Clock, Eye, Heart, Layers, MicVocal } from 'lucide-react';
 import type { MotionRef, Participant, Verdict } from '../../api/types';
 import { formatCount, formatDuration, gradientFor } from '../../lib/format';

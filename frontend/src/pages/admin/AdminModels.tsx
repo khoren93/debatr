@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { getModels } from '../../api/admin/finance';
 import type { ModelRow, ModelsPeriod } from '../../api/admin/types';
 import { getErrorMessage } from '../../api/client';

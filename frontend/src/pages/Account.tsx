@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router';
 import { confirmCheckout, getUsage, listTransactions } from '../api/billing';
 import { getErrorMessage } from '../api/client';
 import type { Transaction, Usage, User } from '../api/types';

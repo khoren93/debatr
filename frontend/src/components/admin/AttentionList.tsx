@@ -1,6 +1,6 @@
 import { ArrowUpRight, CircleAlert, Info, TriangleAlert } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import type { AttentionItem } from '../../api/admin/types';
 
 const LOOK = {

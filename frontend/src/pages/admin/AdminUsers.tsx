@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router';
 import { Download, KeyRound, Terminal } from 'lucide-react';
 import { needsSudo } from '../../api/admin/client';
 import type { AdminUserList, AdminUserRow, UserSort } from '../../api/admin/types';

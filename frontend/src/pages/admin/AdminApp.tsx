@@ -1,4 +1,4 @@
-import { Route, Routes } from 'react-router-dom';
+import { Route, Routes } from 'react-router';
 import { AdminAuthProvider, RequireAdmin } from '../../auth/AdminAuthContext';
 import { AdminShell } from '../../components/admin/AdminShell';
 import { Page } from '../../components/layout/AppShell';
@@ -30,7 +30,7 @@ const AdminNotFound = () => (
   </Page>
 );
 
-/** The admin console (`/admin/*`): its own session, layout and pages, loaded on demand. */
+/** The admin console (`/admin/*`): its own session, layout and pages (src/admin-main.tsx). */
 const AdminApp = () => (
   <AdminAuthProvider>
     <Routes>

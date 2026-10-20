@@ -3,7 +3,7 @@ import type { DebateDetail, Participant, Turn } from '../../api/types';
 import { FREE_ROUTER_ID } from '../../lib/modelNames';
 import { JUDGE_COLOR, TURN_TYPE_LABELS, isErrorTurn, roleTag, roundLabel, speakerColor, speakerColorByName, splitEmotionTag } from '../../lib/format';
 import { INTRO_MS, SHORT_HOOK_MS } from '../../video/constants';
-import { frameToMs, highlightRange, longDurationInFrames, shortDurationInFrames } from '../../video/utils';
+import { frameToMs, highlightRange, longDurationInFrames, shortDurationInFrames } from '../../video/timing';
 
 export type VideoFormat = 'long' | 'short';
 

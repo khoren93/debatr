@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, Navigate, useNavigate, useSearchParams } from 'react-router';
 import { ArrowRight } from 'lucide-react';
 import { register } from '../api/auth';
 import { getErrorMessage, getErrorStatus } from '../api/client';

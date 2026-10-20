@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { Layers, Repeat2, X } from 'lucide-react';
 import { useMotionSuggestions } from '../../hooks/useMotionSuggestions';
 import { TOPIC_MAX_LENGTH, type WizardState } from './wizardState';

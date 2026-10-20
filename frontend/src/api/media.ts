@@ -44,8 +44,9 @@ export const deleteMedia = (debateId: string) => api.delete(`/debates/${debateId
 /** timeline.json lives under /api/media/files, i.e. outside the axios baseURL. */
 export const fetchTimeline = (url: string) => api.get<Timeline>(url, { baseURL: '' }).then((r) => r.data);
 
-/** Absolute folder URL for the renderer (Remotion needs full URLs for audio). */
-export const absoluteMediaBase = (base: string) => `${window.location.origin}${base}`;
+/** Absolute folder URL for Remotion, which needs full URLs for audio. Browser-only: the players
+ *  and the renderer call it, pages pass the folder as the API gives it (a path). */
+export const absoluteMediaBase = (base: string) => (base.startsWith('/') ? `${window.location.origin}${base}` : base);
 
 /** The debate's media folder even before an audio build: pictures of the live scenes live there. */
-export const debateFilesBase = (debateId: string) => absoluteMediaBase(`/api/media/files/${debateId}`);
+export const debateFilesBase = (debateId: string) => `/api/media/files/${debateId}`;

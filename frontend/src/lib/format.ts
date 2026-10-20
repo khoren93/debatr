@@ -40,9 +40,13 @@ export const formatCount = (n: number) => {
 export const formatDate = (iso: string | null | undefined) =>
   iso ? new Date(iso).toLocaleString() : '';
 
-/** "Sep 3, 2026" */
-export const formatDateShort = (iso: string | null | undefined) =>
-  iso ? new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
+/** "Sep 3, 2026" (in the viewer's zone unless `timeZone` names one: 'UTC' while server-rendered). */
+export const formatDateShort = (iso: string | null | undefined, timeZone?: string) =>
+  iso ? new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone }) : '';
+
+/** "Sep 3, 2026 · 14:05" (the viewer's zone unless `timeZone` names one). */
+export const formatDateTime = (iso: string, timeZone?: string) =>
+  `${formatDateShort(iso, timeZone)} · ${new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone })}`;
 
 /** "Today", "Yesterday", "5 days ago", "3 weeks ago", "2 months ago", "1 year ago" (calendar days, viewer's zone). */
 export const formatAgo = (iso: string | null | undefined, now: Date = new Date()) => {

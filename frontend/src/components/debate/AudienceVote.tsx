@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router';
 import { Check, Gavel } from 'lucide-react';
 import { getErrorMessage } from '../../api/client';
 import { castVote, retractVote } from '../../api/debates';

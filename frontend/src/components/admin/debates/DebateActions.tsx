@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { AudioLines, Ban, CheckCircle2, CircleDollarSign, Eye, EyeOff, Layers, Play, RefreshCw, Square, Trash2 } from 'lucide-react';
 import { debateAction, moveDebateMotion, rebuildDebateMedia, refundDebate, type DebateAction } from '../../../api/admin/debates';
 import type { AdminDebateCard } from '../../../api/admin/types';

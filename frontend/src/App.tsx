@@ -1,5 +1,5 @@
 import { Suspense, lazy } from 'react';
-import { Route, Routes, useParams } from 'react-router-dom';
+import { Route, Routes, useParams } from 'react-router';
 import { AppShell, Page } from './components/layout/AppShell';
 import { AuthProvider } from './auth/AuthContext';
 import { RequireAuth } from './auth/RequireAuth';
@@ -14,11 +14,9 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import Device from './pages/Device';
 
-// The wizard and the debate page pull in Remotion (player + browser renderer): load them lazily.
+// The wizard and the debate page are the heaviest pages: load them lazily.
 const CreateDebate = lazy(() => import('./pages/CreateDebate'));
 const DebateView = lazy(() => import('./pages/DebateView'));
-// The admin console: its own session, layout and pages, never downloaded by visitors of the site.
-const AdminApp = lazy(() => import('./pages/admin/AdminApp'));
 
 const NotFound = () => (
   <Page className="text-center">
@@ -44,7 +42,8 @@ const PublicDebateRoute = () => {
   return <DebateView key={`slug:${slug}`} slug={slug ?? ''} />;
 };
 
-const Site = () => (
+// The admin console (/admin) is a separate SPA: src/admin-main.tsx, built by vite.admin.config.ts.
+const App = () => (
   <AuthProvider>
     <AppShell>
       <Suspense fallback={<PageLoader />}>
@@ -95,21 +94,5 @@ const Site = () => (
     </AppShell>
   </AuthProvider>
 );
-
-function App() {
-  return (
-    <Routes>
-      <Route
-        path="/admin/*"
-        element={
-          <Suspense fallback={<PageLoader />}>
-            <AdminApp />
-          </Suspense>
-        }
-      />
-      <Route path="*" element={<Site />} />
-    </Routes>
-  );
-}
 
 export default App;

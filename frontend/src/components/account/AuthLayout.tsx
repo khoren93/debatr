@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { APP_NAME } from '../../lib/brand';
 import { Card, Logo, SectionLabel } from '../ui';
 

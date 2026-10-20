@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { getLimits, getRuns, recoverRun } from '../../../api/admin/system';
 import type { FairShareUser, RunInfo } from '../../../api/admin/types';
 import { Button, useToast } from '../../ui';

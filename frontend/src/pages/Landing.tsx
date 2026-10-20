@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { listGallery } from '../api/gallery';
 import type { GalleryItem, Participant } from '../api/types';
 import { useAuth } from '../auth/AuthContext';

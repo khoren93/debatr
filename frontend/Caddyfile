@@ -19,6 +19,24 @@
         reverse_proxy api:8000
     }
 
+    # Without ADMIN_HOST in .env (development) the API serves the console on the site's origin, so
+    # its pages are here too: the console's own build in /srv/admin (ADMIN_ON_SITE, docker-compose).
+    @console expression `"{$ADMIN_ON_SITE}" != "off" && path('/admin', '/admin/*', '/admin-assets/*')`
+    handle @console {
+        root * /srv/admin
+        handle /admin-assets/* {
+            encode gzip zstd
+            header Cache-Control "public, max-age=31536000, immutable"
+            file_server
+        }
+        handle {
+            encode gzip zstd
+            rewrite * /admin.html
+            header Cache-Control "no-cache"
+            file_server
+        }
+    }
+
     # Hashed build output: cached for good, and a missing chunk is a real 404 (an old tab after a
     # deploy then fails loudly instead of receiving index.html as JavaScript).
     handle /assets/* {
@@ -46,12 +64,12 @@
 }
 
 # The admin console on its own host (ADMIN_HOST, plain HTTP here: the external Caddy terminates
-# TLS). Only the console's pages, /api/admin and the health check; the API refuses /api/admin on
-# every other host (app/admin/gate.py), so on the site's own host the console does not exist.
-# Without ADMIN_HOST (development) the console is served on the site's origin instead and this
-# block only answers for admin.localhost.
+# TLS): its own static build (/srv/admin, vite.admin.config.ts), /api/admin and the health check.
+# The API refuses /api/admin on every other host (app/admin/gate.py), so with ADMIN_HOST set the
+# console does not exist on the site's host. Without it (development) the console is served on the
+# site's origin as well and this block only answers for admin.localhost.
 http://{$ADMIN_HOST:admin.localhost} {
-    root * /srv
+    root * /srv/admin
 
     @console_api path /api/admin /api/admin/* /api/health
     handle @console_api {
@@ -61,27 +79,28 @@ http://{$ADMIN_HOST:admin.localhost} {
         respond 404
     }
 
-    handle /assets/* {
+    handle /admin-assets/* {
         encode gzip zstd
         header Cache-Control "public, max-age=31536000, immutable"
         file_server
     }
 
-    # Site pages do not exist here: anything that is neither a console route nor a file goes to
-    # the console.
+    # Site pages do not exist here: anything that is neither a console route nor one of its files
+    # (favicon, model logos) goes to the console.
     handle {
         @site_page {
             not path /admin /admin/*
             not file
         }
+        redir / /admin 302
         redir @site_page /admin 302
         encode gzip zstd
-        try_files {path} /index.html
+        try_files {path} /admin.html
         header Cache-Control "no-cache"
         file_server
     }
 
-    # The SPA has no inline script and loads nothing from other origins but Google Fonts; it is
+    # The console has no inline script and loads nothing from other origins but Google Fonts; it is
     # never framed. media-src data: is the debate player's silent track that unlocks audio on the
     # first click (Remotion's shared audio tags).
     header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; media-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'"

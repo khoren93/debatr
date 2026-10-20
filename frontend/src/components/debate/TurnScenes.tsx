@@ -1,14 +1,15 @@
-import { Player, Thumbnail } from '@remotion/player';
 import { ExternalLink, Swords } from 'lucide-react';
-import { useEffect, useRef, useState, type RefObject } from 'react';
+import { Suspense, lazy, useEffect, useRef, useState, type RefObject } from 'react';
 import type { TurnVisuals } from '../../api/types';
 import type { SceneDispute, TimelineVisual } from '../../api/visuals';
-import { FPS } from '../../video/constants';
-import { POSTER_H, POSTER_W, ScenePoster } from '../../video/ScenePoster';
-import { msToFrame } from '../../video/utils';
+import { POSTER_H, POSTER_W } from '../../video/constants';
 import type { SceneCast } from '../../video/visuals/SceneStage';
 import { Modal, Spinner } from '../ui';
 import { CHECK_STYLES, TYPE_LABELS, liveVisual, rebase } from './sceneBoard';
+
+// Remotion draws the stills and replays: browser-only, loaded once a card scrolls into view or opens.
+const SceneThumbnail = lazy(() => import('./SceneStill').then((m) => ({ default: m.SceneThumbnail })));
+const ScenePlayer = lazy(() => import('./SceneStill').then((m) => ({ default: m.ScenePlayer })));
 
 const useInView = (ref: RefObject<HTMLElement | null>) => {
   const [seen, setSeen] = useState(false);
@@ -49,7 +50,6 @@ interface CardProps {
 const SceneCard = ({ visual, cast, mediaBase, checking, onOpen }: CardProps) => {
   const ref = useRef<HTMLButtonElement>(null);
   const inView = useInView(ref);
-  const frames = Math.max(2, msToFrame(visual.end_ms - visual.start_ms));
   const still: TimelineVisual = { ...visual, check: null, disputes: [] }; // badges are HTML below
   const disputes = visual.disputes ?? [];
   const check = visual.check;
@@ -57,7 +57,12 @@ const SceneCard = ({ visual, cast, mediaBase, checking, onOpen }: CardProps) => 
   return (
     <div className="w-[78%] min-w-0 shrink-0 snap-start sm:w-auto">
       <button ref={ref} type="button" onClick={onOpen} className="block w-full overflow-hidden rounded-[12px] border border-line-2 bg-ink text-left transition-colors hover:border-line-3 cursor-pointer" style={{ aspectRatio: `${POSTER_W} / ${POSTER_H}` }} aria-label={`${TYPE_LABELS[visual.scene.type] ?? 'Scene'} — open`}>
-        {inView && <Thumbnail component={ScenePoster} compositionWidth={POSTER_W} compositionHeight={POSTER_H} durationInFrames={frames} frameToDisplay={frames - 1} fps={FPS} inputProps={{ visual: still, cast, mediaBase }} style={{ width: '100%', height: '100%' }} />}
+        {/* The observer starts in an effect: the server and the first render show the empty card. */}
+        {inView && (
+          <Suspense fallback={null}>
+            <SceneThumbnail visual={still} cast={cast} mediaBase={mediaBase} />
+          </Suspense>
+        )}
       </button>
       {chips && (
         <div className="mt-1.5 flex flex-wrap gap-1">
@@ -79,14 +84,21 @@ const SceneCard = ({ visual, cast, mediaBase, checking, onOpen }: CardProps) => 
 };
 
 const SceneDetails = ({ visual, cast, mediaBase, onClose }: { visual: TimelineVisual; cast: SceneCast; mediaBase: string; onClose: () => void }) => {
-  const frames = Math.max(2, msToFrame(visual.end_ms - visual.start_ms));
   const speaker = cast.speakers.find((s) => s.id === visual.speaker_id);
   const check = visual.check;
   const scene = visual.scene;
   return (
     <Modal open onClose={onClose} title={`${TYPE_LABELS[scene.type] ?? 'Scene'}${speaker ? ` · ${speaker.name}` : ''}`} width="lg">
       <div className="overflow-hidden rounded-[12px] border border-line-2">
-        <Player component={ScenePoster} compositionWidth={POSTER_W} compositionHeight={POSTER_H} durationInFrames={frames + msToFrame(800)} fps={FPS} inputProps={{ visual, cast, mediaBase }} style={{ width: '100%' }} autoPlay loop controls />
+        <Suspense
+          fallback={
+            <div className="grid place-items-center text-muted" style={{ aspectRatio: `${POSTER_W} / ${POSTER_H}` }}>
+              <Spinner />
+            </div>
+          }
+        >
+          <ScenePlayer visual={visual} cast={cast} mediaBase={mediaBase} />
+        </Suspense>
       </div>
       {check && (
         <div className="mt-4">

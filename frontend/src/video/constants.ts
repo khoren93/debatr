@@ -7,6 +7,9 @@ export const INTRO_MS = 1800;
 export const OUTRO_MS = 2200;
 export const SHORT_HOOK_MS = 1600;
 export const SHORT_END_MS = 1400;
+/** Size of the scene stage in the 16:9 video; posters and replays use the same box. */
+export const POSTER_W = 1160;
+export const POSTER_H = 700;
 export const FONT = "'DM Sans', Inter, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
 export const DISPLAY_FONT = "'Bricolage Grotesque', 'DM Sans', Inter, -apple-system, 'Segoe UI', Roboto, sans-serif";
 export const MONO_FONT = "'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace";

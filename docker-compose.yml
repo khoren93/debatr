@@ -153,8 +153,11 @@ services:
     environment:
       # Plain HTTP; TLS is terminated by the external Caddy in production (see docker-compose.prod.yml)
       - DOMAIN_NAME=:80
-      # Host of the admin console (frontend/Caddyfile), from .env like the API's ADMIN_HOST.
+      # Host of the admin console (frontend/Caddyfile), from .env like the API's ADMIN_HOST. Without
+      # it (development) the API serves the console on the site's origin too, and so does Caddy:
+      # ADMIN_ON_SITE is "off" once ADMIN_HOST is set.
       - ADMIN_HOST=${ADMIN_HOST:-admin.localhost}
+      - ADMIN_ON_SITE=${ADMIN_HOST:+off}
     depends_on:
       - api
 

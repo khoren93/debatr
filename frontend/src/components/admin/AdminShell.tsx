@@ -1,4 +1,4 @@
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { NavLink, Outlet, useNavigate } from 'react-router';
 import { Activity, Bot, Flag, Gauge, LogOut, MessagesSquare, Newspaper, ScrollText, ShieldCheck, SlidersHorizontal, Users, Wallet } from 'lucide-react';
 import { useAdminAuth } from '../../auth/AdminAuthContext';
 import { Logo } from '../ui';

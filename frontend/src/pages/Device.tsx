@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router';
 import { Check, CheckCircle2, Terminal, X, XCircle } from 'lucide-react';
 import { getErrorMessage, getErrorStatus } from '../api/client';
 import { approveDevice, denyDevice, getDeviceRequest } from '../api/tokens';

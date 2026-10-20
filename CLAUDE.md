@@ -78,11 +78,18 @@ backend/            FastAPI API + RQ worker (Python 3.12+, managed with uv)
   app/schemas/        Pydantic request/response schemas (schemas, auth, billing, media, admin)
   migrations/         Alembic (async env)
   tests/              pytest (pure unit tests, no DB/Redis needed)
-frontend/           React 19 + Vite 8 + Tailwind 4 + TypeScript
+frontend/           React 19 + Vite 8 + Tailwind 4 + TypeScript + React Router 8 (`<BrowserRouter>` for now)
+  index.html, src/main.tsx   the site (`vite build` → dist)
+  admin.html, src/admin-main.tsx  the admin console, a separate SPA (vite.admin.config.ts →
+                      build/admin with its own admin-assets/; `npm run dev` serves admin.html on
+                      /admin* through a plugin in vite.config.ts); vitest.config.ts = unit tests
   src/index.css       Tailwind theme tokens (colors ink/surface/accent/pro/con/host…, fonts, radii)
   src/api/            axios client, typed API functions per area (auth, billing, debates,
                       gallery, media, models, topics), shared types.ts, timeline.ts;
-                      status (site levers); admin/ = the console's own client (CSRF header,
+                      status (site levers); server.server.ts = the SSR server's API client for
+                      route loaders (API_INTERNAL_URL; forwards cookie, X-Forwarded-For,
+                      User-Agent, Accept-Language; 3 s timeout; 4xx → same status, failure → 503
+                      with Retry-After; never in the browser bundle); admin/ = the console's own client (CSRF header,
                       401 → sign-in), types, auth (+ passkeys), webauthn (navigator.credentials
                       ⇄ JSON), audit, settings
   src/auth/           AuthContext (useAuth), RequireAuth route guard; AdminAuthContext
@@ -92,11 +99,14 @@ frontend/           React 19 + Vite 8 + Tailwind 4 + TypeScript
                       useLeaderboard (cached model ranking), useElevenLabsKeyStatus (checks
                       the browser's ElevenLabs key), useEstimate (debounced wizard estimate),
                       useSiteStatus (sign-ups closed / maintenance banner, cached a minute),
-                      useMotionSuggestions (debounced: the topic the wizard's text joins)
+                      useMotionSuggestions (debounced: the topic the wizard's text joins),
+                      useHydrated (false on the server and during hydration)
   src/components/ui/  design-system primitives (Button, Card, Chip, Segmented, Field, Pill,
                       Progress, Modal/ConfirmDialog, Toast, Avatar/SpeakerBadge, Thumb, Logo,
                       Dropdown — custom select, portalled list; SwitchTrack,
-                      ModelIcon — provider logo of a model id via src/lib/modelIcons.ts)
+                      ModelIcon — provider logo of a model id via src/lib/modelIcons.ts,
+                      ClientOnly — browser-only UI after hydration, RelativeDate — "5 days ago",
+                      the UTC date until hydrated)
   src/components/layout/AppShell.tsx  sidebar + mobile top bar/bottom tabs, Page, PageTitle
   src/components/cards/    DebateCard (library / gallery / landing; title under the cover, CardStats =
                            likes / views / length), DebateCover (face-off cover: each debater's logo
@@ -116,16 +126,18 @@ frontend/           React 19 + Vite 8 + Tailwind 4 + TypeScript
                            filter), VoicePicker (voice list with previews, debate-language / all scope),
                            PresetPicker (short preset list: PersonaPicker = persona presets + Custom,
                            rappers' flows), PickerFace, usePickerPopover
-  src/components/debate/   DebatePlayer (Remotion Player with own controls: SegmentBar = seek bar
-                           by turns, PlayerShell/placeholders), LiveCard (live frame: cast, speaker,
+  src/components/debate/   DebatePlayer (Remotion Player with own controls; browser-only, lazy),
+                           PlayerShell (frame, SegmentBar = seek bar by turns, PlayerPending = the
+                           ready player's layout while its chunk loads, PlayerPlaceholder = no audio
+                           yet / voicing), LiveCard (live frame: cast, speaker,
                            streamed captions), DebateActions (16:9 / 9:16 format icons + Like/Share/Remix/Export/… toolbar,
                            SharePopover = link + gallery switch + moderation), ExportRail
                            (slide-over: ExportCard browser MP4 render, MP3, PublishKit = YouTube
                            title/description with chapters/tags + canvas thumbnails, youtubeKit.ts),
                            Transcript (row click = seek, ● NOW), VerdictTab, DetailsTab (lineup,
                            facts), AudienceVote (blind vote), RegenerateAudioDialog, TurnScenes
-                           (scene board under each turn: Thumbnail stills, replay modal,
-                           fact-check/dispute badges), VersionsStrip (the topic's other public
+                           (scene board under each turn: SceneStill = lazy Remotion stills + replay
+                           modal, fact-check/dispute badges), VersionsStrip (the topic's other public
                            versions, no winners); helpers.ts: speakerLineup, videoChapters,
                            timelineSrt, transcript/Markdown exports
   src/components/account/  Account page tabs (tabs.ts: `?tab=overview|keys|billing|security`,
@@ -134,7 +146,8 @@ frontend/           React 19 + Vite 8 + Tailwind 4 + TypeScript
                            API tokens (ApiTokensCard, TokenOptionsFields, CopyBlock), SecurityCard;
                            auth layout/fields
   src/video/          Remotion compositions (DebateLong 16:9, DebateShort 9:16, ScenePoster =
-                      one scene for the transcript board) + render.ts;
+                      one scene for the transcript board) + render.ts; browser-only except
+                      constants.ts and timing.ts (frame / segment arithmetic, no Remotion);
                       visuals/ = scene renderer (SceneStage, 22 scene views, rough.js strokes,
                       drawn Lucide pictograms in icons.ts, lazy world map in geo.ts,
                       PictureScenes: sketch strokes + Ken Burns pictures)
@@ -143,8 +156,8 @@ frontend/           React 19 + Vite 8 + Tailwind 4 + TypeScript
                       DebateView (/debate/:id and public /d/:slug), Topic (/t/:slug: a topic's
                       public versions), Account (/account?tab=…),
                       Device (/device?code=…, approves `debatr login`), Login (/login),
-                      Register (/register); admin/ = the admin console (/admin/*, lazy AdminApp
-                      outside AppShell and AuthProvider: AdminLogin, AdminOverview, AdminUsers
+                      Register (/register); admin/ = the admin console (/admin/*, AdminApp mounted
+                      by src/admin-main.tsx, outside the site's AppShell and AuthProvider: AdminLogin, AdminOverview, AdminUsers
                       (filters in the URL), AdminUser (/admin/users/:id), AdminDebates,
                       AdminDebate (/admin/debates/:id), AdminModeration (keyboard queue),
                       AdminTrending, AdminFinance, AdminModels, AdminSystem (#runs #queues
@@ -216,9 +229,11 @@ Frontend (run from `frontend/`):
 
 ```bash
 npm install
-npm run dev        # Vite on :5173, proxies /api -> http://localhost:8000 (incl. SSE)
-npm run check      # tsc + eslint
-npm run build
+npm run dev        # Vite on :5173 (site + console on /admin), proxies /api -> http://localhost:8000 (incl. SSE)
+                   # VITE_DEV_API_TARGET=http://localhost: proxy to the Docker stack instead
+npm run check      # tsc + eslint + vitest
+npm test           # vitest (pure modules, src/**/*.test.ts)
+npm run build      # site → dist, console → build/admin
 ```
 
 CLI (run from `cli/`; `make cli a="…"` runs it against the local stack):
@@ -755,8 +770,10 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   the API there, enforces `ADMIN_ALLOWED_IPS`, refuses `Sec-Fetch-Site` other than same-origin /
   none (every `*.ai-debates.net` app is the same *site*, so SameSite cookies do not protect the
   console from them) and unsafe methods without the console's Origin, and adds no-store / noindex
-  / DENY headers. `frontend/Caddyfile` has the `http://{$ADMIN_HOST}` block (console routes only,
-  strict CSP).
+  / DENY headers. `frontend/Caddyfile` has the `http://{$ADMIN_HOST}` block: the console's own static build
+  (`/srv/admin`, never the site's files), strict CSP. Without ADMIN_HOST in .env, compose leaves
+  `ADMIN_ON_SITE` empty and the site's block serves the console at /admin as well (with it set,
+  `ADMIN_ON_SITE=off` and /admin on the site is just a page the site does not have).
 - Admins are accounts with `users.admin_role` (`admin` | `moderator`, `access.PERMISSIONS`),
   granted only by `python -m app.manage admin grant`, which prints a one-time enrollment code
   (Redis, 24 h). Sign-in (`routes_auth`): password (5 tries per 15 min per IP and per email, one
@@ -922,6 +939,19 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   never raw axios. No `alert`/`confirm`: use `useToast` and `ConfirmDialog`; no native `<select>`:
   use `Dropdown` (the design wants no system popups). Styling uses the
   theme tokens from `src/index.css` (`bg-surface`, `text-muted`, `font-display`, `rounded-panel`…).
+- SSR-safe frontend (public pages are going to render on the server, Stage C): router imports
+  come from `react-router` (v8 dropped `react-router-dom`). Browser-only modules — Remotion
+  (`src/video/**` except constants / timing), rough.js, d3-geo, the MP4 renderer, canvas work:
+  the `CLIENT_ONLY` list in `eslint.config.js` (DebatePlayer, SceneStill, ExportRail,
+  ExportCard, PublishKit, youtubeKit) — reach other code only through `lazy()` inside
+  `<ClientOnly fallback=…>` with a fallback of the same size; `no-restricted-imports` refuses
+  static imports (type imports are fine) and any import of console code (`admin/`) from the
+  site. What differs between the server and the viewer (time zone, the current moment,
+  `window` / `document`, browser storage) waits for `useHydrated()` or lives in effects and
+  handlers: `RelativeDate`, `useLocalKey` (`useSyncExternalStore` with a server snapshot);
+  `formatDateShort(iso, 'UTC')` before hydration. Pages pass media folders as the API gives
+  them (paths); only the Remotion islands make them absolute (`absoluteMediaBase`). Server
+  code lives in `*.server.ts` modules, the only place `process` is allowed.
 - Brand name and copy live in `src/lib/brand.ts`; speaker colours in `src/lib/format.ts` mirror
   `backend/app/services/media/timeline.py` (PALETTE / MODERATOR_COLOR / JUDGE_COLOR) and
   `cli/src/debatr/render.py`.

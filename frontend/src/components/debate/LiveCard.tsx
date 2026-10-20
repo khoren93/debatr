@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { hideStudioMarkers, shortModelName, splitEmotionTag } from '../../lib/format';
-import { PlayerFrame, PlayerShell } from './DebatePlayer';
+import { PlayerFrame, PlayerShell } from './PlayerShell';
 import type { SpeakerInfo } from './helpers';
 import { ModelLogo } from './SpeakerTile';
 

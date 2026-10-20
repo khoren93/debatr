@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { TriangleAlert } from 'lucide-react';
 import type { AdminLedgerRow, AdminUserCard, AdminUserDebate, AuditEntry, Page, UserApiToken, UserPeriodStats } from '../../../api/admin/types';
 import { getUserDebates, getUserLedger, removeUserReactions, revokeUserTokens } from '../../../api/admin/users';

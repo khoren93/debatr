@@ -1,22 +1,21 @@
 import type { PlayerRef } from '@remotion/player';
-import { Fragment, useEffect, useRef, useState } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Fragment, lazy, useEffect, useRef, useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router';
 import { ArrowLeft, Lock, MicVocal, Repeat2, RotateCcw, ShieldAlert } from 'lucide-react';
 import { getErrorMessage, getErrorStatus } from '../api/client';
 import { deleteDebate, getDebate, resumeDebate, stopDebate } from '../api/debates';
 import { getPublicDebate } from '../api/gallery';
-import { absoluteMediaBase, debateFilesBase } from '../api/media';
+import { debateFilesBase } from '../api/media';
 import { ACTIVE_STATUSES, type Audience, type DebateDetail, type Turn } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { Page } from '../components/layout/AppShell';
-import { Button, ConfirmDialog, EmptyState, ErrorBox, LinkButton, PageLoader, Pill, useToast } from '../components/ui';
+import { Button, ClientOnly, ConfirmDialog, EmptyState, ErrorBox, LinkButton, PageLoader, Pill, RelativeDate, useToast } from '../components/ui';
 import { CardStats } from '../components/cards';
 import { AudienceVote } from '../components/debate/AudienceVote';
 import { DebateActions } from '../components/debate/DebateActions';
-import { DebatePlayer, PlayerPlaceholder, SegmentBar, type BarSegment } from '../components/debate/DebatePlayer';
 import { DetailsTab } from '../components/debate/DetailsTab';
-import { ExportRail } from '../components/debate/ExportRail';
 import { LiveCard } from '../components/debate/LiveCard';
+import { PlayerPending, PlayerPlaceholder, SegmentBar, type BarSegment } from '../components/debate/PlayerShell';
 import { RegenerateAudioDialog } from '../components/debate/RegenerateAudioDialog';
 import { SpeakerTile } from '../components/debate/SpeakerTile';
 import { Transcript, type StreamingTurn } from '../components/debate/Transcript';
@@ -27,9 +26,13 @@ import { useDebateMedia } from '../hooks/useDebateMedia';
 import { useDebateStream } from '../hooks/useDebateStream';
 import { checkElevenLabsKey } from '../hooks/useElevenLabsKeyStatus';
 import { getLocalKey } from '../lib/localKeys';
-import { STAGE_COLORS, STAGE_LABELS, formatAgo, formatDate, roundLabel, shortModelName, stageOf } from '../lib/format';
+import { STAGE_COLORS, STAGE_LABELS, roundLabel, shortModelName, stageOf } from '../lib/format';
 import { formatSpec } from '../lib/formats';
-import { msToFrame } from '../video/utils';
+import { msToFrame } from '../video/timing';
+
+// Browser-only (Remotion, the MP4 renderer): loaded after hydration, see ClientOnly.
+const DebatePlayer = lazy(() => import('../components/debate/DebatePlayer'));
+const ExportRail = lazy(() => import('../components/debate/ExportRail'));
 
 interface Props {
   id?: string;
@@ -321,7 +324,7 @@ const DebateView = ({ id, slug }: Props) => {
   const stage = stageOf(debate.status, media?.media_status ?? debate.media_status);
   const completed = debate.status === 'completed' || debate.status === 'stopped';
   const voicing = media?.media_status === 'queued' || media?.media_status === 'running';
-  const mediaBase = media?.urls ? absoluteMediaBase(media.urls.base) : '';
+  const mediaBase = media?.urls?.base ?? '';
   const verdictTurn = debate.turns.find(isJudgeTurn) ?? null;
   const lastStatus = debate.turns.at(-1)?.visuals?.status;
   const studio = !streaming && (lastStatus === 'designing' || lastStatus === 'checking') ? lastStatus : null;
@@ -381,7 +384,7 @@ const DebateView = ({ id, slug }: Props) => {
           <MicVocal className="size-3" /> {show.label}
         </span>
       )}
-      <span title={formatDate(debate.created_at)}>{formatAgo(debate.created_at)}</span>
+      <RelativeDate iso={debate.created_at} />
       {debate.is_public && <CardStats likes={debate.engagement.likes} views={debate.views} />}
       {debate.author_name && !isOwner && <span>by {debate.author_name}</span>}
       {debate.remix_of && (
@@ -472,7 +475,9 @@ const DebateView = ({ id, slug }: Props) => {
               overview={overviewStrip}
             />
           ) : playable && timeline ? (
-            <DebatePlayer timeline={timeline} mediaBase={mediaBase} format={format} highlightIndex={highlightIndex} startSeq={startSeq} playerRef={playerRef} onActiveSeq={setActiveSeq} />
+            <ClientOnly fallback={<PlayerPending timeline={timeline} format={format} highlightIndex={highlightIndex} />}>
+              {() => <DebatePlayer timeline={timeline} mediaBase={mediaBase} format={format} highlightIndex={highlightIndex} startSeq={startSeq} playerRef={playerRef} onActiveSeq={setActiveSeq} />}
+            </ClientOnly>
           ) : (
             <PlayerPlaceholder media={media} isOwner={isOwner} completed={completed} onGenerate={openRegenerate} overview={overviewStrip} />
           )}
@@ -521,21 +526,26 @@ const DebateView = ({ id, slug }: Props) => {
         </div>
       </div>
 
+      {/* A hidden slide-over until opened: nothing of it goes into the server's HTML. */}
       {completed && (
-        <ExportRail
-          open={railOpen}
-          onClose={() => setRailOpen(false)}
-          debate={debate}
-          lineup={lineup}
-          media={media}
-          timeline={timeline}
-          mediaBase={mediaBase}
-          format={format}
-          onFormat={changeFormat}
-          highlightIndex={highlightIndex}
-          onHighlightChange={changeHighlight}
-          onGenerate={openRegenerate}
-        />
+        <ClientOnly>
+          {() => (
+            <ExportRail
+              open={railOpen}
+              onClose={() => setRailOpen(false)}
+              debate={debate}
+              lineup={lineup}
+              media={media}
+              timeline={timeline}
+              mediaBase={mediaBase}
+              format={format}
+              onFormat={changeFormat}
+              highlightIndex={highlightIndex}
+              onHighlightChange={changeHighlight}
+              onGenerate={openRegenerate}
+            />
+          )}
+        </ClientOnly>
       )}
 
       {isOwner && <RegenerateAudioDialog open={regenOpen} onClose={() => setRegenOpen(false)} debate={debate} media={media} onQueued={refreshMedia} />}

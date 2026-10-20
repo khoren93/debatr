@@ -1,4 +1,4 @@
-import { Link, NavLink, useLocation } from 'react-router-dom';
+import { Link, NavLink, useLocation } from 'react-router';
 import { Home, LayoutGrid, Play, Plus, Trophy, UserRound, Wrench } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useAuth } from '../../auth/AuthContext';

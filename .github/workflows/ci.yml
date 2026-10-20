@@ -55,7 +55,7 @@ jobs:
       - run: uv build
 
   frontend:
-    name: Frontend (tsc, eslint, build)
+    name: Frontend (tsc, eslint, vitest, build)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -72,4 +72,5 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm run lint
+      - run: npm test
       - run: npm run build

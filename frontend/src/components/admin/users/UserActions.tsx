@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { Ban, CircleDollarSign, KeyRound, LockKeyhole, LogOut, Trash2, UserCheck } from 'lucide-react';
 import type { AdminUserCard, CreditKind } from '../../../api/admin/types';
 import {

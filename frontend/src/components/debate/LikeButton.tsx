@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router';
 import { Heart } from 'lucide-react';
 import { getErrorMessage } from '../../api/client';
 import { setLike } from '../../api/debates';

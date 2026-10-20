@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Navigate, useLocation } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router';
 import { adminLogout, getAdminMe } from '../api/admin/auth';
 import { setCsrfToken, setSignedOutHandler } from '../api/admin/client';
 import type { AdminMe } from '../api/admin/types';

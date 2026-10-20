@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { getAuditFacets, getSecuritySummary, listAudit } from '../../api/admin/audit';
 import type { AuditEntry, AuditFacets, AuditPage, AuditQuery, AuditTab, FacetCount, SecuritySummary } from '../../api/admin/types';

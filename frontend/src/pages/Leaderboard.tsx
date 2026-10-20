@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router';
 import { MicVocal, Trophy } from 'lucide-react';
 import type { FormatId, LeaderboardEntry } from '../api/types';
 import { Page, PageTitle } from '../components/layout/AppShell';

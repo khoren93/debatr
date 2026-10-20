@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { Trash2 } from 'lucide-react';
 import { deleteOrphans, getHealth, getProviders } from '../../../api/admin/system';
 import type { MediaDir } from '../../../api/admin/types';

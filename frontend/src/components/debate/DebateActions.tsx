@@ -1,6 +1,6 @@
 import { Captions, Copy, Ellipsis, FileText, PanelRight, RectangleHorizontal, RectangleVertical, Repeat2, Share, Sparkles, Square, Trash2 } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import type { Timeline } from '../../api/timeline';
 import type { DebateDetail } from '../../api/types';
 import { formatCost, formatTokens } from '../../lib/format';

@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { CheckCircle2, RefreshCw } from 'lucide-react';
 import { getOverview } from '../../api/admin/overview';
 import type { Overview, OverviewPeriod, SeriesPoint } from '../../api/admin/types';

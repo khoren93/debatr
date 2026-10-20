@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { BellRing, Send } from 'lucide-react';
 import { getAlerts, sendTestAlert } from '../../api/admin/settings';
 import type { AlertSeverity } from '../../api/admin/types';
