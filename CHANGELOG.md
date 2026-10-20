@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-10-20
+
 ### Fixed
 
 - **Embeds in editors and apps**: the player sent `frame-ancestors *`, which browsers read as
@@ -350,7 +352,8 @@ First public release of **AI Debates**.
 - Admin panel for debates, participants, turns and sessions.
 - Docker Compose setup with FastAPI, PostgreSQL, Redis + RQ and a React + Vite frontend.
 
-[Unreleased]: https://github.com/khoren93/debatr/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/khoren93/debatr/compare/v1.4.1...HEAD
+[1.4.1]: https://github.com/khoren93/debatr/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/khoren93/debatr/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/khoren93/debatr/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/khoren93/debatr/compare/v1.1.0...v1.2.0
