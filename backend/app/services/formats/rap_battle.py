@@ -150,13 +150,14 @@ class RapBattleFormat(Format):
             "how fun the rivalry is and how well people know both sides (abstract or policy "
             "trade-offs get a low heat)"
         ),
-        review=(
-            "The two sides roast each other in rap verses, so also reject a topic whose sides "
-            "are politicians, political parties, candidates or other real people (famous "
-            "athletes, artists and teams compared on their work are fine, unless they are in "
-            "the news for a scandal, a crime or a court case), or groups of people "
-            "(nationalities, ethnicities, religions, genders, sexual orientations, the rich or "
-            "the poor)."
+        sides=(
+            "the two sides roast each other in rap verses, so a side is never a politician, a "
+            "political party or candidate, another real person (famous athletes and artists "
+            "compared on their work are fine unless the story is about their scandal, crime or "
+            "court case) or a group of people (nationalities, ethnicities, religions, genders, "
+            "sexual orientations, the rich or the poor). Brands, products, companies, apps, "
+            "teams, cities, technologies, habits and eras are fine sides, even when the story "
+            "behind them is about layoffs, lawsuits, complaints or politics"
         ),
         pick_note="Skip stories without a fun, concrete rivalry: fewer topics are fine.",
     )

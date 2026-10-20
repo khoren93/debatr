@@ -40,8 +40,9 @@ class TopicStyle:
     question: str  # the rule for the topic's wording
     from_news: str  # how a news story becomes such a topic
     heat: str  # what makes a topic good for this show (after "how widely discussed it is and")
-    # Extra rule of the safety review: what this show makes risky.
-    review: str = ""
+    # Who or what may be a side, when the show makes some risky: the writer follows it and the
+    # safety review rejects topics that break it.
+    sides: str = ""
     # Said when picking stories: some shows cannot use every story.
     pick_note: str = ""
 

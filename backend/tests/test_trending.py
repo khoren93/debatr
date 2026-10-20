@@ -157,12 +157,16 @@ def test_a_rap_battle_list_asks_for_rivalries() -> None:
     assert "sexual content of any kind" in user["content"]  # the same safety rules
     review = build_review_messages([_topic("Nvidia or AMD?", 5, ["BBC"])], style)[1]["content"]
     assert "rap battle topics must NOT be shown" in review
-    assert "politicians, political parties" in review
+    assert "breaks this rule: the two sides roast each other" in review
+    assert "a politician, a political party" in review
+    # The writer knows the rule too, so it does not write topics the review must drop.
+    assert "- Sides: the two sides roast each other" in user["content"]
     # The debate's prompt stays as it was.
     debate = build_topic_messages(pool, 3, today="Saturday")
     assert "debate a motion on camera" in debate[0]["content"]
     assert "A or B?" not in debate[1]["content"]
-    assert "politicians" not in build_review_messages([_topic("Q?", 5, ["BBC"])])[1]["content"]
+    assert "politician" not in build_review_messages([_topic("Q?", 5, ["BBC"])])[1]["content"]
+    assert "Sides:" not in debate[1]["content"]
 
 
 def test_formats_share_or_own_a_topic_list() -> None:

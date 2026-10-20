@@ -219,7 +219,7 @@ TOPIC_RULES = """Rules for every topic:
 - heat: 1-10, how widely discussed the story is and {heat}. Small, local or routine stories (a product review, a lifestyle tip, one company's quarterly numbers) get a low heat.
 - sources: the numbers of the headlines about this story (at least one).
 - One topic per story: merge headlines about the same story. Spread the topics over the categories when the news allows.
-- Never make a topic about {safety}. Skip such headlines entirely. When in doubt, leave it out."""
+- Never make a topic about {safety}. Skip such headlines entirely. When in doubt, leave it out.{sides}"""
 
 TOPICS_JSON_SPEC = (
     '{"topics": [{"label": "...", "question": "...", "brief": "...", "category": "...", '
@@ -410,6 +410,7 @@ def build_topic_messages(
         heat=style.heat,
         categories=", ".join(TOPIC_CATEGORIES),
         safety=SAFETY_RULES,
+        sides=f"\n- Sides: {style.sides}." if style.sides else "",
     )
     pick = f"Pick the {wanted} most compelling distinct stories and turn each into a {style.noun}"
     note = f" {style.pick_note}" if style.pick_note else ""
@@ -558,12 +559,14 @@ def build_review_messages(
         "audience aged 13 and up. Reply with a single JSON object and nothing else."
     )
     lines = [f"[{i}] {t.label} | {t.question} | {t.brief}" for i, t in enumerate(topics, 1)]
-    extra = f" {style.review}" if style.review else ""
+    sides = f" Also reject a topic that breaks this rule: {style.sides}." if style.sides else ""
     user = (
         f"JOB: decide which of these {style.noun}s must NOT be shown on the site. Reject a "
-        f"topic if its label, question or brief touches: {SAFETY_RULES}.{extra} "
+        f"topic if its label, question or brief touches: {SAFETY_RULES}.{sides} "
         "Controversial political, economic or social questions argued in general terms are "
-        "fine. When in doubt, reject."
+        "fine, and so is a brief that reports layoffs, lawsuits, complaints or criticism in "
+        "neutral words. Judge only these rules, never how good, important or serious a topic "
+        "is. When in doubt, reject."
         f"\n\nTopics:\n" + "\n".join(lines) + f"\n\nReturn JSON: {REVIEW_JSON_SPEC} "
         "(an empty list when every topic is fine)."
     )

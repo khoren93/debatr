@@ -983,9 +983,12 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   the picked card again or "×" unlinks it; switching topics also clears the angle. Switching the
   format keeps the topic and its story (`applyFormat`): a debate's news topic can become a battle.
 - A list per show format: `Format.topic_style` (`formats/base.TopicStyle`: noun, the wording rule,
-  how a story becomes such a topic, what makes it hot, an extra review rule). The rap battle writes
+  how a story becomes such a topic, what makes it hot, who may be a side). The rap battle writes
   rivalries ("A or B?" naming two concrete, familiar rivals, a yes/no hot take now and then, never
-  abstract trade-offs; ≤ 60 characters; its review also rejects sides that are politicians, parties, real people
+  abstract trade-offs; ≤ 60 characters). Its `sides` rule goes to the writer and to the review
+  (in 1.6.0 only the review had it: it dropped 11 of 20 battle topics, most for briefs that merely
+  mentioned layoffs or a lawsuit; the review is now told such briefs and brands / teams / places as
+  sides are fine, and to judge only its rules, never quality): no sides that are politicians, parties, real people
   other than athletes / artists compared on their work, or groups of people). Asking for "no
   abstract trade-offs" without making "A or B?" the rule swung the model to yes/no headlines
   ("US bans China's DeepSeek?"). A format with the debate's style shows the debate's list
