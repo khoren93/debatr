@@ -62,7 +62,9 @@ Besides debates there are rap battles (start_debate(format="rap_battle"), see li
 MC and two rappers trade verses, the judge scores every round.
 
 Debates are private unless public=true. Paid models are charged to the user's Debatr credits; \
-this server refuses debates estimated above {cap} (DEBATR_MAX_COST_USD)."""
+this server refuses debates estimated above {cap} (DEBATR_MAX_COST_USD). Only when the user asks, \
+generate_cover draws an AI cover (a thumbnail for the gallery, link previews and YouTube) for a \
+finished debate, paid from the credits; get_debate shows its cover_url once it is drawn."""
 
 
 class DebaterSpec(BaseModel):
@@ -644,6 +646,42 @@ def create_server(
                 }
                 for i, e in enumerate(entries[:limit], 1)
             ],
+        }
+
+    @server.tool(title="Generate an AI cover", annotations=WRITES)
+    async def generate_cover(
+        debate_id: Annotated[str, Field(description="Id of a completed debate.")],
+        hook: Annotated[
+            str | None,
+            Field(
+                max_length=22,
+                description="The cover's headline (at most 4 words, 22 characters); by default "
+                "the art director writes one from the debate.",
+            ),
+        ] = None,
+    ) -> dict[str, Any]:
+        """Draw an AI cover for a finished debate: a clickbait thumbnail with the debaters as
+        characters, used in the gallery, link previews and as the YouTube thumbnail. About a
+        minute; paid from the user's credits (~$0.04). Only when the user asks for it. Returns
+        at once; get_debate shows cover_url when it is ready."""
+        client = await clients.get()
+        try:
+            debate_ref = await _debate_id(client, debate_id)
+            detail = await client.debate(debate_ref)
+            price = float((detail.get("cover") or {}).get("price_usd") or 0)
+            if price > cost_cap:
+                raise ToolError(
+                    f"A cover costs about ${price:.2f}, above the limit of ${cost_cap:.2f}: ask "
+                    "the user to raise DEBATR_MAX_COST_USD."
+                )
+            state = await client.generate_cover(debate_ref, hook)
+        except ApiError as e:
+            raise _api(e) from e
+        return {
+            "debate_id": debate_ref,
+            "cover_status": state.get("status"),
+            "price_usd": round(price, 4),
+            "next": f"get_debate(debate_id='{debate_ref}', wait_seconds=45) in about a minute",
         }
 
     @server.tool(title="Publish a debate", annotations=IDEMPOTENT)

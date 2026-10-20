@@ -1,6 +1,7 @@
 import { api } from './client';
 import type {
   Audience,
+  Cover,
   CreateDebateResponse,
   DebateConfig,
   DebateDetail,
@@ -60,3 +61,12 @@ export const castVote = (id: string, participantId: string) =>
 export const retractVote = (id: string) => api.delete<Audience>(`/debates/${id}/vote`).then((r) => r.data);
 
 export const debateStreamUrl = (id: string) => `${api.defaults.baseURL}/debates/${id}/stream`;
+
+/** A new AI cover version (backend services/media/cover.py); `hook` replaces the art director's. */
+export const generateCover = (id: string, body: { hook?: string; user_provider_key?: string } = {}) =>
+  api.post<Cover>(`/debates/${id}/cover`, body).then((r) => r.data);
+
+/** Show another cover version (null: the markup cover). */
+export const selectCover = (id: string, version: string | null) => api.put<Cover>(`/debates/${id}/cover`, { version }).then((r) => r.data);
+
+export const deleteCoverVersion = (id: string, version: string) => api.delete<Cover>(`/debates/${id}/cover/${version}`).then((r) => r.data);

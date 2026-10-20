@@ -390,3 +390,31 @@ def charge_images_sync(
         provider_ref=run_ref(prefix, earlier),
         meta={"images": count, "provider_cost_usd": usd, "markup": markup},
     )
+
+
+def charge_cover_sync(
+    db: Session, debate: Debate, *, usd: float, version_id: str, markup: float
+) -> CreditTransaction | None:
+    """Charge an AI cover drawn on the system key: its provider cost (art director and
+    pictures) x markup, once per version."""
+    if debate.user_id is None:
+        return None
+    amount = to_usd(to_usd(usd) * Decimal(str(markup)))
+    if amount <= ZERO:
+        return None
+    return apply_transaction_sync(
+        db,
+        debate.user_id,
+        -amount,
+        "media",
+        description=f"AI cover: {(debate.title or 'Debate')[:250]}",
+        debate_id=debate.id,
+        provider="system",
+        provider_ref=f"debate:{debate.id}:cover:{version_id}",
+        meta={"provider_cost_usd": usd, "markup": markup},
+    )
+
+
+def cover_charge_usd(price: float, markup: float) -> Decimal:
+    """What a cover is quoted at: its estimated provider cost x markup."""
+    return to_usd(Decimal(str(price)) * Decimal(str(markup)))

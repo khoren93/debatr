@@ -77,8 +77,21 @@ export const PublishKit = ({ debate, lineup, timeline, active }: Props) => {
   useEffect(() => () => thumbs?.urls.forEach((u) => URL.revokeObjectURL(u)), [thumbs]);
 
   const current = thumbs?.key === thumbKey ? thumbs : null;
+  // The AI cover (when there is one) is the first choice, before the drawn variants.
+  const ai = debate.cover.current;
+  const offset = ai ? 1 : 0;
+  const choice = Math.min(pick, variants.length - 1 + offset);
+  const pickedAi = !!ai && choice === 0;
+  const preview = pickedAi ? ai.url : current?.urls[choice - offset];
   const saveThumbnail = () => {
-    const blob = current?.blobs[pick];
+    if (pickedAi) {
+      const link = document.createElement('a');
+      link.href = ai.yt_url;
+      link.download = `debate-${debate.id}-cover.jpg`;
+      link.click();
+      return;
+    }
+    const blob = current?.blobs[choice - offset];
     if (!blob) {
       toast.info('The thumbnail is still being drawn');
       return;
@@ -97,20 +110,32 @@ export const PublishKit = ({ debate, lineup, timeline, active }: Props) => {
         label="Thumbnail"
         action={
           <button type="button" onClick={saveThumbnail} className="inline-flex items-center gap-1.5 text-xs font-semibold text-text-3 hover:text-text cursor-pointer">
-            <Download className="size-3.5" /> PNG
+            <Download className="size-3.5" /> {pickedAi ? 'JPG' : 'PNG'}
           </button>
         }
       >
-        <div className="aspect-video overflow-hidden rounded-xl bg-surface-2">{current && <img src={current.urls[pick]} alt="Thumbnail preview" className="size-full object-cover" />}</div>
-        <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Thumbnail style">
+        <div className="aspect-video overflow-hidden rounded-xl bg-surface-2">{preview && <img src={preview} alt="Thumbnail preview" className="size-full object-cover" />}</div>
+        <div className={`grid gap-2 ${ai ? 'grid-cols-4' : 'grid-cols-3'}`} role="radiogroup" aria-label="Thumbnail style">
+          {ai && (
+            <button
+              type="button"
+              role="radio"
+              aria-checked={pickedAi}
+              aria-label="AI cover"
+              onClick={() => setPick(0)}
+              className={`aspect-video overflow-hidden rounded-lg bg-surface-2 outline-2 outline-offset-2 cursor-pointer ${pickedAi ? 'outline-accent' : 'outline-transparent hover:outline-line-3'}`}
+            >
+              <img src={ai.small_url} alt="" className="size-full object-cover" />
+            </button>
+          )}
           {variants.map((v, i) => (
             <button
               key={v.id}
               type="button"
               role="radio"
-              aria-checked={pick === i}
-              onClick={() => setPick(i)}
-              className={`aspect-video overflow-hidden rounded-lg bg-surface-2 outline-2 outline-offset-2 cursor-pointer ${pick === i ? 'outline-accent' : 'outline-transparent hover:outline-line-3'}`}
+              aria-checked={choice === i + offset}
+              onClick={() => setPick(i + offset)}
+              className={`aspect-video overflow-hidden rounded-lg bg-surface-2 outline-2 outline-offset-2 cursor-pointer ${choice === i + offset ? 'outline-accent' : 'outline-transparent hover:outline-line-3'}`}
             >
               {current && <img src={current.urls[i]} alt="" className="size-full object-cover" />}
             </button>

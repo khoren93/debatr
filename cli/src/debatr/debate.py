@@ -11,7 +11,7 @@ import re
 import uuid
 from dataclasses import dataclass
 from typing import Any, Literal
-from urllib.parse import urlsplit
+from urllib.parse import urljoin, urlsplit
 
 FREE_MODEL = "openrouter/free"  # OpenRouter's router over the free models
 HOST_NAME = "The Host"
@@ -93,11 +93,13 @@ def build_config(
     elevenlabs_key: str | None = None,
     format: str = "debate",
     flows: list[str] | None = None,
+    cover: bool | None = None,
 ) -> dict[str, Any]:
     """The request body of `POST /api/debates`. `host_model=None` runs without a host (the
     judge's verdict then uses the server's default model). `voices`: edge by default, premium
     (elevenlabs) for a rap battle, the only voices it takes. `flows`: a rap battle's rappers, in
-    order (see `debatr formats`). Raises ValueError with a message for the user when an option
+    order (see `debatr formats`). `cover`: an AI cover once it completes (paid; API tokens get none
+    unless asked; None leaves it to the server). Raises ValueError with a message for the user when an option
     is out of range."""
     if format not in FORMATS:
         raise ValueError(f"Format must be one of: {', '.join(FORMATS)}")
@@ -201,6 +203,8 @@ def build_config(
         "fact_check": fact_check,
         "draft": draft,
     }
+    if cover is not None:
+        config["cover"] = cover
     if context and context.strip():
         config["description"] = context.strip()
     if visuals or audio:
@@ -400,6 +404,13 @@ def transcript_markdown(detail: dict[str, Any], *, header: bool = True) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
+def cover_url(detail: dict[str, Any], page_url: str = "") -> str | None:
+    """The debate's AI cover (16:9, 1536 px), absolute next to its page; None without one."""
+    current = (detail.get("cover") or {}).get("current") or {}
+    path = current.get("url")
+    return urljoin(page_url, str(path)) if path else None
+
+
 def digest(
     detail: dict[str, Any],
     url: str,
@@ -432,6 +443,7 @@ def digest(
             "turns_total": total_turns(detail),
         },
         "verdict": verdict_of(detail),
+        "cover_url": cover_url(detail, url),
         "error": detail.get("error_message"),
         "provider_cost_usd": round(float((detail.get("totals") or {}).get("cost") or 0), 6),
         "is_public": bool(detail.get("is_public")),

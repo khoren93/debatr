@@ -15,5 +15,9 @@ class MediaStaticFiles(StaticFiles):
         self, full_path: Any, stat_result: os.stat_result, scope: Any, status_code: int = 200
     ) -> Response:
         response = super().file_response(full_path, stat_result, scope, status_code)
-        response.headers["Cache-Control"] = "public, max-age=3600"
+        # A cover version's files never change (a new version gets a new name).
+        immutable = "/covers/" in str(full_path).replace(os.sep, "/")
+        response.headers["Cache-Control"] = (
+            "public, max-age=31536000, immutable" if immutable else "public, max-age=3600"
+        )
         return response

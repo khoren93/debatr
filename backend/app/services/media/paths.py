@@ -45,6 +45,12 @@ class MediaPaths:
         return self.dir / "visuals"
 
     @property
+    def covers_dir(self) -> Path:
+        """AI covers: per version `<id>.webp` (1536 wide), `<id>-768.webp`, `<id>-yt.jpg`
+        (1280x720) and `<id>-og.jpg` (1200x630); JPEG where ffmpeg has no WebP encoder."""
+        return self.dir / "covers"
+
+    @property
     def music_dir(self) -> Path:
         """Generated battle tracks (`music/<plan hash>.mp3` + `.json` with the word times)."""
         return self.dir / "music"

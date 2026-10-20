@@ -61,6 +61,7 @@ async def test_tools_are_described(server: FakeServer, monkeypatch):
         "search_gallery",
         "get_leaderboard",
         "publish_debate",
+        "generate_cover",
     }
     read_only = tools["get_debate"].annotations
     writes = tools["start_debate"].annotations
@@ -279,3 +280,20 @@ async def test_agents_can_stage_a_rap_battle(server: FakeServer, monkeypatch):
             "speaker_id": "participant_1",
             "score": 8,
         }
+
+
+async def test_generate_cover_is_capped_and_reported(server: FakeServer, monkeypatch):
+    cover = {"status": "none", "current": None, "price_usd": 0.042, "reason": None}
+    server.on(f"GET /debates/{DEBATE_ID}", detail("completed", cover=cover))
+    server.on(f"POST /debates/{DEBATE_ID}/cover", {**cover, "status": "queued"})
+    async with Client(make(server, monkeypatch, cap=1.0)) as client:
+        out = structured(
+            await client.call_tool("generate_cover", {"debate_id": DEBATE_ID, "hook": "Who wins?"})
+        )
+        assert out["cover_status"] == "queued" and out["price_usd"] == 0.042
+        assert json.loads(server.calls(f"POST /debates/{DEBATE_ID}/cover")[0].content) == {
+            "hook": "Who wins?"
+        }
+    async with Client(make(server, monkeypatch, cap=0.01)) as client:
+        refused = await client.call_tool("generate_cover", {"debate_id": DEBATE_ID})
+        assert "above the limit" in error_text(refused)

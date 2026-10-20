@@ -378,12 +378,12 @@ async def generate_debate_media(
 
 
 def _remove_audio(paths: MediaPaths) -> None:
-    """Delete the build (track, timeline, cached turns) but keep `visuals/`: the pictures of the
-    scenes are shown on the transcript too."""
+    """Delete the build (track, timeline, cached turns) but keep `visuals/` (the pictures of the
+    scenes are shown on the transcript too) and `covers/`."""
     if not paths.dir.exists():
         return
     for child in paths.dir.iterdir():
-        if child == paths.visuals_dir:
+        if child in (paths.visuals_dir, paths.covers_dir):
             continue
         if child.is_dir():
             shutil.rmtree(child, ignore_errors=True)

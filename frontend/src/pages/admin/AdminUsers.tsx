@@ -92,7 +92,7 @@ const COLUMNS: Column<AdminUserRow>[] = [
     align: 'right',
     className: 'text-text-3',
     cell: (u) => (
-      <span title={`models ${formatUsd(u.spent_by.models)} · voices ${formatUsd(u.spent_by.voices)} · pictures ${formatUsd(u.spent_by.pictures)}`}>{formatUsd(u.spent)}</span>
+      <span title={`models ${formatUsd(u.spent_by.models)} · voices ${formatUsd(u.spent_by.voices)} · pictures ${formatUsd(u.spent_by.pictures)} · music ${formatUsd(u.spent_by.music)} · covers ${formatUsd(u.spent_by.cover)}`}>{formatUsd(u.spent)}</span>
     ),
   },
   {

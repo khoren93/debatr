@@ -44,6 +44,14 @@ export const moveDebateMotion = (id: string, body: { reason: string; target?: st
 export const rebuildDebateMedia = (id: string, reason: string, force: boolean) =>
   adminApi.post<ActionOut>(`/debates/${id}/media`, { reason, force }).then((r) => r.data);
 
+/** A new AI cover version on the system key, free for the owner. */
+export const regenerateDebateCover = (id: string, reason: string, hook?: string) =>
+  adminApi.post<ActionOut>(`/debates/${id}/cover`, { reason, hook: hook || undefined }).then((r) => r.data);
+
+/** Show another cover version (null: the markup cover). */
+export const selectDebateCover = (id: string, reason: string, version: string | null) =>
+  adminApi.post<ActionOut>(`/debates/${id}/cover/select`, { reason, version }).then((r) => r.data);
+
 export const refundDebate = (id: string, body: { reason: string; amount?: string; idempotency_key: string }) =>
   adminApi.post<RefundOut>(`/debates/${id}/refund`, body).then((r) => r.data);
 

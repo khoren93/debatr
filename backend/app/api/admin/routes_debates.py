@@ -37,6 +37,8 @@ from app.schemas.admin import (
     ActionOut,
     AdminDebateCard,
     AdminDebateList,
+    CoverRegenerateRequest,
+    CoverSelectRequest,
     DebateFilters,
     DebateListQuery,
     MediaRebuildRequest,
@@ -47,16 +49,21 @@ from app.schemas.admin import (
     RefundRequest,
 )
 from app.schemas.media import MediaOptions
-from app.services import indexnow, motions
+from app.services import indexnow, motions, runtime_settings
 from app.services.admin import audit
 from app.services.admin import debates as admin_debates
-from app.services.credits import apply_transaction, lock_balance, to_usd
+from app.services.credits import apply_transaction, lever_prices, lock_balance, to_usd
 from app.services.debate_control import ACTIVE_STATUSES, mark_stopped, signal_stopped
 from app.services.engagement import recount
+from app.services.media import cover as covers
 from app.services.media.paths import MediaPaths
 from app.services.media.tts.elevenlabs import system_key_status
 from app.services.moderation import mark_admin_decision, publish_async, wants_public
-from app.services.queue_manager import enqueue_debate_start, enqueue_media_build
+from app.services.queue_manager import (
+    enqueue_cover_build,
+    enqueue_debate_start,
+    enqueue_media_build,
+)
 from app.services.resume import reset_for_resume, resume_point
 
 logger = logging.getLogger(__name__)
@@ -343,6 +350,76 @@ async def rebuild_media(
         await db.commit()
         raise HTTPException(status_code=503, detail="The job queue is unavailable") from None
     return ActionOut(status="queued", message="Audio build queued (free for the owner)")
+
+
+@router.post("/debates/{debate_id}/cover", response_model=ActionOut)
+async def regenerate_cover(
+    debate_id: str,
+    body: CoverRegenerateRequest,
+    request: Request,
+    ctx: AdminContext = Depends(require_admin("debates")),
+    db: AsyncSession = Depends(get_db),
+) -> ActionOut:
+    """Draw a new AI cover version on the system key, free for the owner (a lever set to "off"
+    does not stop the console)."""
+    debate = await _debate(db, debate_id, lock=True)
+    if debate.status not in ("completed", "stopped"):
+        raise HTTPException(status_code=409, detail="The debate has not finished yet")
+    if debate.cover_status in covers.ACTIVE:
+        raise HTTPException(status_code=409, detail="A cover is already being drawn")
+    prices = lever_prices(await runtime_settings.current())
+    debate.cover_json = covers.queued_state(
+        debate.cover_json,
+        source="admin",
+        own_key=False,
+        free=True,
+        prices=prices.as_dict(),
+        hook=(body.hook or "").strip() or None,
+    )
+    debate.cover_status = "queued"
+    await _record(db, ctx, request, "debate.cover_generated", debate, body.reason, hook=body.hook)
+    await db.commit()
+    try:
+        await run_in_threadpool(enqueue_cover_build, str(debate.id))
+    except RedisError:
+        logger.exception("Failed to enqueue the cover of %s", debate.id)
+        debate.cover_status = "error"
+        debate.cover_json = {**(debate.cover_json or {}), "error": "Job queue unavailable"}
+        await db.commit()
+        raise HTTPException(status_code=503, detail="The job queue is unavailable") from None
+    return ActionOut(status="queued", message="Cover queued (free for the owner)")
+
+
+@router.post("/debates/{debate_id}/cover/select", response_model=ActionOut)
+async def select_cover(
+    debate_id: str,
+    body: CoverSelectRequest,
+    request: Request,
+    ctx: AdminContext = Depends(require_admin("moderation")),
+    db: AsyncSession = Depends(get_db),
+) -> ActionOut:
+    """Show another cover version, or none (`version: null`: the markup cover, e.g. a picture
+    that should not be in the gallery)."""
+    debate = await _debate(db, debate_id, lock=True)
+    before = (debate.cover_json or {}).get("current")
+    try:
+        debate.cover_json = covers.select_version(dict(debate.cover_json or {}), body.version)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="No such cover version") from None
+    await _record(
+        db,
+        ctx,
+        request,
+        "debate.cover_selected",
+        debate,
+        body.reason,
+        before=before,
+        version=body.version,
+    )
+    await db.commit()
+    return ActionOut(
+        status="ok", message="Cover changed" if body.version else "The markup cover is shown"
+    )
 
 
 @router.post("/debates/{debate_id}/recount", response_model=ActionOut)

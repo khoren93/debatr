@@ -254,13 +254,23 @@ class OpenRouterClient:
         aspect_ratio: str = "16:9",
         resolution: str | None = "1K",
         api_key: str | None = None,
+        quality: str | None = None,
+        references: list[str] | None = None,
+        read_timeout: float = 180.0,
     ) -> dict[str, Any]:
-        """Text-to-image via `POST /images`: {"data": [{"b64_json", "media_type"}], "usage"}."""
+        """Text-to-image via `POST /images`: {"data": [{"b64_json", "media_type"}], "usage"}.
+        `references`: data URLs of pictures the model works from (`input_references`)."""
         payload: dict[str, Any] = {"model": model, "prompt": prompt, "aspect_ratio": aspect_ratio}
         if resolution:
             payload["resolution"] = resolution
+        if quality:
+            payload["quality"] = quality
+        if references:
+            payload["input_references"] = [
+                {"type": "image_url", "image_url": {"url": url}} for url in references
+            ]
         try:
-            async with self._client(180.0) as client:
+            async with self._client(read_timeout) as client:
                 response = await client.post(
                     f"{self.base_url}/images", json=payload, headers=self._headers(api_key)
                 )

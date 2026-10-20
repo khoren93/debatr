@@ -6,6 +6,8 @@ x-backend-env: &backend-env
   DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-ai_debates}
   REDIS_URL: redis://redis:6379/0
   MEDIA_ROOT: /media
+  # The server renderer: the AI covers take the debaters' logos from it (/og/logo.png).
+  WEB_INTERNAL_URL: http://web:3000
   # From .env (or the shell): the admin console's host, also read by the frontend's Caddy.
   ADMIN_HOST: ${ADMIN_HOST:-}
 

@@ -32,6 +32,7 @@ const COST_GROUPS: { label: string; purposes: string[] }[] = [
   { label: 'Fact-checks', purposes: ['factcheck'] },
   { label: 'Scenes, sketches, highlights', purposes: ['director', 'sketch', 'image_check', 'highlights'] },
   { label: 'AI pictures', purposes: ['image'] },
+  { label: 'AI covers', purposes: ['cover', 'cover_director', 'cover_check'] },
   { label: 'Voices (estimated)', purposes: ['tts'] },
   { label: 'Trending topics', purposes: ['trending', 'trending_review'] },
 ];
@@ -301,7 +302,7 @@ const AdminOverview = () => {
                   previous={m.charged_total_previous}
                   previousLabel={previous}
                   format={formatUsd}
-                  hint={`models ${formatUsd(m.charged.models)} · voices ${formatUsd(m.charged.voices)} · pictures ${formatUsd(m.charged.pictures)}`}
+                  hint={`models ${formatUsd(m.charged.models)} · voices ${formatUsd(m.charged.voices)} · pictures ${formatUsd(m.charged.pictures)} · music ${formatUsd(m.charged.music)} · covers ${formatUsd(m.charged.cover)}`}
                 />
                 <StatTile label="Provider cost" value={formatUsd(m.cost_system)} current={m.cost_system} previous={m.cost_system_previous} upIsGood={false} previousLabel={previous} format={formatUsd} hint="system keys" />
                 <StatTile label="Margin" value={formatUsd(m.margin)} current={m.margin} previous={m.margin_previous} previousLabel={previous} format={formatUsd} hint="charged − provider cost" />

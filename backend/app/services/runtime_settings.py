@@ -12,7 +12,7 @@ warning instead of failing requests.
 import logging
 import re
 import time
-from typing import Any, get_args
+from typing import Any, Literal, get_args
 
 from fastapi import HTTPException, status
 from pydantic import BaseModel, Field, ValidationError, field_validator
@@ -74,6 +74,10 @@ class Levers(BaseModel):
     min_debate_charge_usd: float = Field(default=0.0, ge=0, le=5)
     tts_price_per_1k_chars: float = Field(default=0.15, ge=0, le=2)
     music_price_per_min: float = Field(default=0.30, ge=0, le=5)
+    # AI covers (services/media/cover.py): off | paid (runs paid from the balance or an own key
+    # get one when they complete; owners make more on the debate page) | all_public (free public
+    # debates too, at the operator's cost).
+    ai_covers: Literal["off", "paid", "all_public"] = "paid"
 
     @field_validator("maintenance_message")
     @classmethod
@@ -140,7 +144,16 @@ def defaults() -> dict[str, Any]:
         "min_debate_charge_usd": max(0.0, min(5.0, settings.MIN_DEBATE_CHARGE_USD)),
         "tts_price_per_1k_chars": max(0.0, min(2.0, settings.TTS_CREDIT_PRICE_PER_1K_CHARS)),
         "music_price_per_min": max(0.0, min(5.0, settings.MUSIC_CREDIT_PRICE_PER_MIN)),
+        "ai_covers": _env_cover_mode(),
     }
+
+
+def _env_cover_mode() -> str:
+    mode = settings.AI_COVERS.strip().lower()
+    if mode not in ("off", "paid", "all_public"):
+        logger.warning("AI_COVERS is not off | paid | all_public, ignoring it")
+        return "paid"
+    return mode
 
 
 def _env_free_model() -> str:

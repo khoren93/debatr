@@ -21,6 +21,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   voices: 'Premium voices',
   pictures: 'AI pictures',
   music: 'Battle music',
+  cover: 'AI covers',
   topup: 'Top-up',
   bonus: 'Bonus',
   refund: 'Refund',
@@ -46,7 +47,7 @@ export const StatsGrid = ({ stats }: { stats: UserPeriodStats }) => {
     <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
       <StatTile label="Debates" value={count(stats.debates)} hint={`${stats.completed} completed · ${stats.failed} failed · ${stats.stopped} stopped`} />
       <StatTile label="Error rate" value={formatPercent(stats.error_rate)} hint="of finished debates" />
-      <StatTile label="Spent" value={formatUsd(stats.spent)} hint={`models ${formatUsd(s.models)} · voices ${formatUsd(s.voices)} · pictures ${formatUsd(s.pictures)}`} />
+      <StatTile label="Spent" value={formatUsd(stats.spent)} hint={`models ${formatUsd(s.models)} · voices ${formatUsd(s.voices)} · pictures ${formatUsd(s.pictures)} · music ${formatUsd(s.music)} · covers ${formatUsd(s.cover)}`} />
       <StatTile label="Topped up" value={formatUsd(stats.topped_up)} hint={stats.credited ? `+${formatUsd(stats.credited)} bonuses, refunds, adjustments` : 'Stripe top-ups'} />
       <StatTile label="Model cost per debate" value={stats.avg_debate_cost === null ? '—' : formatUsd(stats.avg_debate_cost)} hint="charged per finished debate" />
       <StatTile label="Cost to us" value={formatUsd(stats.cost_system)} hint={`system keys · margin ${formatUsd(stats.spent - stats.cost_system)}`} />
@@ -58,10 +59,10 @@ export const StatsGrid = ({ stats }: { stats: UserPeriodStats }) => {
 
 /** Charges per UTC day for the last 30 days, stacked by what they paid for. */
 export const SpendChart = ({ days }: { days: AdminUserCard['spend_days'] }) => {
-  const total = days.reduce((sum, d) => sum + d.models + d.voices + d.pictures + d.music, 0);
+  const total = days.reduce((sum, d) => sum + d.models + d.voices + d.pictures + d.music + d.cover, 0);
   const labels = days.map((d) => new Date(d.day).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' }));
   const axisLabels = days.map((d) => bucketLabel(d.day, 'day'));
-  const series = (['models', 'voices', 'pictures', 'music'] as const).map((key) => ({
+  const series = (['models', 'voices', 'pictures', 'music', 'cover'] as const).map((key) => ({
     key,
     label: CATEGORY_LABELS[key],
     color: SPEND_COLORS[key],

@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, ArrowUpRight, Check, Globe, KeyRound, PenTool, SearchCheck } from 'lucide-react';
+import { ArrowLeft, ArrowRight, ArrowUpRight, Check, Globe, ImageIcon, KeyRound, PenTool, SearchCheck } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 import type { DebateConfig, Estimate, ImageSource, PaymentsMode, VoiceInfo } from '../../api/types';
@@ -193,10 +193,25 @@ export const StepLaunch = ({
       ? `models · ${sound} on your key`
       : cost === 0
         ? 'free models + voices'
-        : music
+        : shown && shown.cover_cost_usd > 0 && Math.abs((cost ?? 0) - shown.cover_cost_usd) < 1e-6
+          ? 'free models · AI cover'
+          : music
           ? 'models + music + voices'
           : 'model + voice cost';
   const insufficient = Boolean(estimate && !estimate.sufficient);
+  // AI covers come with runs paid from the balance or an own key; a free run gets one only when
+  // the site gives them to free public debates (backend services/media/cover.auto_cover).
+  const freeRun = Boolean(shown?.free_runs);
+  const freeCover = freeRun && site.ai_covers === 'all_public' && state.auto_publish;
+  const coverLocked = freeRun && !freeCover;
+  const coverOn = state.cover && !coverLocked;
+  const coverText = coverLocked
+    ? 'Comes with debates paid from your balance or your OpenRouter key.'
+    : !state.cover
+      ? 'Off: the face-off cover is used. You can make one later on the debate page.'
+      : freeCover
+        ? 'A clickbait thumbnail for the gallery and link previews, on us.'
+        : `A clickbait thumbnail for the gallery, link previews and YouTube — ${llmOnKey ? 'on your OpenRouter key' : `~$${site.cover_price_usd.toFixed(2)} from your balance`}.`;
   // A debate on free models over their limits (too big, or none left today).
   const freeLimit = estimate?.free_limit ?? null;
   const freeRuns = shown?.free_runs ?? null;
@@ -486,12 +501,13 @@ export const StepLaunch = ({
               rebuild with the same verses reuses the track.
             </Hint>
           )}
-          {shown && (shown.factcheck_cost_usd > 0 || shown.images_cost_usd > 0) && (
+          {shown && (shown.factcheck_cost_usd > 0 || shown.images_cost_usd > 0 || shown.cover_cost_usd > 0) && (
             <Hint className="mt-0">
               Includes{' '}
               {[
                 shown.factcheck_cost_usd > 0 ? `fact-checks ~${formatCost(shown.factcheck_cost_usd)}${shown.own_key ? ' (on your key)' : ''}` : '',
                 shown.images_cost_usd > 0 ? `AI images ~${formatCost(shown.images_cost_usd)}` : '',
+                shown.cover_cost_usd > 0 ? `the AI cover ~${formatCost(shown.cover_cost_usd)}` : '',
               ]
                 .filter(Boolean)
                 .join(' and ')}
@@ -559,6 +575,19 @@ export const StepLaunch = ({
           </span>
           <SwitchTrack on={state.auto_publish} />
         </button>
+
+        {site.ai_covers !== 'off' && (
+          <button type="button" role="switch" aria-checked={coverOn} disabled={coverLocked} onClick={() => patch({ cover: !state.cover })} className="flex items-center gap-3 text-left cursor-pointer disabled:cursor-not-allowed">
+            <span className={`grid size-[34px] shrink-0 place-items-center rounded-[10px] bg-surface-2 ${coverOn ? 'text-accent' : 'text-text-3'}`}>
+              <ImageIcon className="size-4" />
+            </span>
+            <span className={`min-w-0 flex-1 ${coverLocked ? 'opacity-60' : ''}`}>
+              <span className="block text-sm font-semibold">AI cover</span>
+              <span className="mt-0.5 block text-xs text-muted">{coverText}</span>
+            </span>
+            <SwitchTrack on={coverOn} className={coverLocked ? 'opacity-60' : ''} />
+          </button>
+        )}
 
         {startError && (
           <ErrorBox>

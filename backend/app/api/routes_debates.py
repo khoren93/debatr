@@ -24,6 +24,7 @@ from starlette.concurrency import run_in_threadpool
 from app.api.serializers import (
     can_manage,
     can_view,
+    cover_policy,
     detail_out,
     public_path,
     share_url,
@@ -52,13 +53,14 @@ from app.schemas.schemas import (
     StopDebateResponse,
 )
 from app.services import alerts, api_tokens, free_limits, indexnow, motions, runtime_settings
-from app.services.credits import Prices, lever_prices, prices_of
+from app.services.credits import Prices, cover_charge_usd, lever_prices, prices_of
 from app.services.debate_control import ACTIVE_STATUSES
 from app.services.debate_control import stop_debate as stop_debate_run
 from app.services.engagement import engagement_out
 from app.services.estimate import Pricing, estimate_debate, pricing_from_models, unpriced_models
 from app.services.fair_share import require_debate_slot
 from app.services.formats import format_of
+from app.services.media.cover import cover_expected, free_run_of
 from app.services.media.paths import MediaPaths
 from app.services.media.tts.elevenlabs import music_allowed, system_key_status
 from app.services.moderation import publish_async
@@ -107,7 +109,7 @@ async def _remix_parent(db: AsyncSession, raw: str | None, user: User) -> Debate
     return parent if parent is not None and can_view(parent, user) else None
 
 
-def _resolve_provider_key(user: User | None, request_key: str | None) -> tuple[str | None, bool]:
+def resolve_provider_key(user: User | None, request_key: str | None) -> tuple[str | None, bool]:
     """(key, own_key): a key sent with the request wins, then the account's saved key."""
     if request_key and request_key.strip():
         return request_key.strip(), True
@@ -229,6 +231,14 @@ async def _estimate(
         own_tts_key=own_tts_key,
         paid_models=_paid_models(config, pricing),
     )
+    balance = user.credits_usd if user is not None else 0
+    free_run = free_limits.is_free_run(config, own_key=own_key, balance=balance)
+    mode = (await runtime_settings.current()).ai_covers
+    if from_turn == 0 and cover_expected(config.cover, mode, free_run=free_run):
+        out.cover = True
+        if not own_key:
+            out.cover_cost_usd = float(cover_charge_usd(settings.COVER_PRICE_USD, prices.markup))
+            out.credits_cost_usd = round(out.credits_cost_usd + out.cover_cost_usd, 6)
     if user is not None:
         before = float(user.credits_usd or 0)
         out.credits_before = before
@@ -269,11 +279,16 @@ async def _current_prices() -> Prices:
 
 
 def _billing(
-    own_key: bool, est: EstimateOut | None, prices: Prices | None = None
+    own_key: bool,
+    est: EstimateOut | None,
+    prices: Prices | None = None,
+    *,
+    free_run: bool = False,
 ) -> dict[str, Any]:
     """`config_json.billing`. The estimate of a started run lets an API token's spending limit
     count runs that have not been charged yet (services.api_tokens.pending_estimate); its prices
-    are what the run is charged with (services/credits.Prices), whatever the levers say later."""
+    are what the run is charged with (services/credits.Prices), whatever the levers say later.
+    `free_run`: a run on the free limits (services/free_limits), which gets no paid cover."""
     billing: dict[str, Any] = {"own_key": own_key}
     if est is not None and prices is not None:
         media = (0.0 if est.own_tts_key else est.tts_cost_usd + est.music_cost_usd) + (
@@ -281,7 +296,9 @@ def _billing(
         )
         billing["estimate_usd"] = est.credits_cost_usd
         billing["media_estimate_usd"] = round(media, 6)
+        billing["cover_estimate_usd"] = est.cover_cost_usd
         billing["prices"] = prices.as_dict()
+        billing["free_run"] = free_run
     return billing
 
 
@@ -304,9 +321,14 @@ def _apply_config(
     own_key: bool,
     est: EstimateOut | None = None,
     prices: Prices | None = None,
+    *,
+    free_run: bool = False,
 ) -> None:
     debate.title = config.topic.strip()
-    debate.config_json = {**config.persisted(), "billing": _billing(own_key, est, prices)}
+    debate.config_json = {
+        **config.persisted(),
+        "billing": _billing(own_key, est, prices, free_run=free_run),
+    }
     debate.participants = [
         DebateParticipant(
             role=p.role,
@@ -386,7 +408,7 @@ async def estimate(
 ) -> EstimateOut:
     """Cost, length and credit impact of a configuration before running it."""
     await _require_runnable(config, starting=False)
-    _key, own_key = _resolve_provider_key(user, config.user_provider_key)
+    _key, own_key = resolve_provider_key(user, config.user_provider_key)
     own_tts_key = _tts_key(config, config.user_tts_key) is not None
     out = await _estimate(config, user, own_key, own_tts_key, await _token_budget(db, request))
     runs, out.free_limit = await free_limits.check(user, config, own_key=own_key)
@@ -437,7 +459,7 @@ async def create_debate(
     token = request_api_token(request)
     if token is not None:
         config = api_tokens.with_token_defaults(config)
-    provider_key, own_key = _resolve_provider_key(user, config.user_provider_key)
+    provider_key, own_key = resolve_provider_key(user, config.user_provider_key)
     tts_key = _tts_key(config, config.user_tts_key)
     est: EstimateOut | None = None
     prices = await _current_prices()
@@ -461,7 +483,8 @@ async def create_debate(
         status="draft" if config.draft else "queued",
         api_token_id=token.id if token is not None and not config.draft else None,
     )
-    _apply_config(debate, config, own_key, est, prices)
+    free_run = free_limits.is_free_run(config, own_key=own_key, balance=user.credits_usd)
+    _apply_config(debate, config, own_key, est, prices, free_run=free_run)
     parent = await _remix_parent(db, config.remix_of, user)
     debate.remix_of_id = parent.id if parent is not None else None
     await motions.assign_motion(db, debate, config.topic, config.language, parent)
@@ -490,7 +513,7 @@ async def update_draft(
         raise HTTPException(status_code=409, detail="Only drafts can be edited")
     if request_api_token(request) is not None:
         config = api_tokens.with_token_defaults(config)
-    _key, own_key = _resolve_provider_key(user, config.user_provider_key)
+    _key, own_key = resolve_provider_key(user, config.user_provider_key)
     _apply_config(debate, config, own_key)
     # The wizard re-opens a draft without its remix link: keep it unless one is sent.
     if "remix_of" in config.model_fields_set:
@@ -522,7 +545,7 @@ async def start_draft(
     stored.pop("billing", None)
     config = DebateConfig.stored(stored)
     await _require_runnable(config)
-    provider_key, own_key = _resolve_provider_key(user, body.user_provider_key if body else None)
+    provider_key, own_key = resolve_provider_key(user, body.user_provider_key if body else None)
     tts_key = _tts_key(config, body.user_tts_key if body else None)
     await _require_battle_audio(config, tts_key)
     prices = await _current_prices()
@@ -531,8 +554,12 @@ async def start_draft(
     )
     _require_sufficient(est)
     await require_debate_slot(db, user.id)
+    free_run = free_limits.is_free_run(config, own_key=own_key, balance=user.credits_usd)
     await free_limits.take(db, user, config, own_key=own_key)
-    debate.config_json = {**config.persisted(), "billing": _billing(own_key, est, prices)}
+    debate.config_json = {
+        **config.persisted(),
+        "billing": _billing(own_key, est, prices, free_run=free_run),
+    }
     # Whoever starts the run answers for it: its charges count against this token's limit.
     token = request_api_token(request)
     debate.api_token_id = token.id if token is not None else None
@@ -568,7 +595,7 @@ async def _resume_plan(
     billing = stored.pop("billing", None) or {}
     config = DebateConfig.stored(stored)
     await _require_runnable(config, starting=False)
-    provider_key, own_key = _resolve_provider_key(user, body.user_provider_key if body else None)
+    provider_key, own_key = resolve_provider_key(user, body.user_provider_key if body else None)
     if billing.get("own_key") and not own_key:
         # Its turns so far were not charged; the system key would bill the whole debate.
         raise HTTPException(
@@ -619,10 +646,11 @@ async def resume_debate(
     _require_sufficient(plan.est)
     await require_debate_slot(db, debate.user_id or user.id)
 
+    free_run = free_run_of(debate.config_json or {})  # as the first run started
     await reset_for_resume(db, debate, plan.from_seq)
     debate.config_json = {
         **plan.config.persisted(),
-        "billing": _billing(plan.own_key, plan.est, plan.prices),
+        "billing": _billing(plan.own_key, plan.est, plan.prices, free_run=free_run),
     }
     token = request_api_token(request)
     if token is not None:  # from the browser the run stays on the token that started it
@@ -655,6 +683,7 @@ async def get_debate(
         manager=can_manage(debate, viewer),
         motion=motion,
         remix_of=remix_of,
+        cover_policy=await cover_policy(debate, viewer),
     )
 
 

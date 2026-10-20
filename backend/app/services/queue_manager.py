@@ -16,6 +16,8 @@ MEDIA_QUEUE_NAME = "media"  # TTS / timeline builds (long-running, separate work
 
 _ORCHESTRATOR = "app.services.orchestrator"
 _MEDIA_JOBS = "app.services.media.jobs"
+_COVERS = "app.services.media.cover"
+COVER_JOB_TIMEOUT = 900  # the director, up to two pictures (5 min each at worst) and the check
 _TRENDING = "app.services.trending"
 
 
@@ -86,6 +88,16 @@ def enqueue_media_build(debate_id: str) -> None:
         f"{_MEDIA_JOBS}.build_media_job",
         queue_name=MEDIA_QUEUE_NAME,
         timeout=settings.MEDIA_JOB_TIMEOUT,
+        debate_id=debate_id,
+    )
+
+
+def enqueue_cover_build(debate_id: str) -> None:
+    """Draw a debate's AI cover (background queue: the turn workers take it between turns)."""
+    _enqueue(
+        f"{_COVERS}.build_cover_job",
+        queue_name=BACKGROUND_QUEUE_NAME,
+        timeout=COVER_JOB_TIMEOUT,
         debate_id=debate_id,
     )
 

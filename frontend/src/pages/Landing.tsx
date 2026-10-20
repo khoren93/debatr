@@ -2,7 +2,7 @@ import { Link } from 'react-router';
 import type { GalleryItem, Participant } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { Page } from '../components/layout/AppShell';
-import { CardStats, CoverBadge, DebateCard, DebateCover, VersionsBadge } from '../components/cards';
+import { CardCover, CardStats, CoverBadge, DebateCard, DebateCover, VersionsBadge } from '../components/cards';
 import { Avatar, Bars, LinkButton, LogoMark } from '../components/ui';
 import { APP_DESCRIPTION, APP_NAME } from '../lib/brand';
 
@@ -144,10 +144,11 @@ const Landing = ({ featured }: Props) => {
                 to={item.path || `/d/${item.slug}`}
                 title={item.topic || item.title || 'Untitled debate'}
                 cover={
-                  <DebateCover
+                  <CardCover
+                    cover={item.cover}
                     participants={item.participants}
                     topLeft={<VersionsBadge motion={item.motion} participants={item.participants} />}
-                    topRight={<CoverBadge format={item.format} premiumVoices={item.premium_voices} />}
+                    topRight={<CoverBadge format={item.cover ? undefined : item.format} premiumVoices={item.premium_voices} />}
                   />
                 }
                 footerLeft={

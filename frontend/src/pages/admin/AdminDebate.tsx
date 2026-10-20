@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useState, type ReactNode } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useState, type ReactNode } from 'react';
 import { Link, useParams } from 'react-router';
 import { ArrowLeft, ArrowUpRight } from 'lucide-react';
 import { getDebateCard } from '../../api/admin/debates';
@@ -8,6 +8,7 @@ import { useAdminAuth } from '../../auth/AdminAuthContext';
 import { Page } from '../../components/layout/AppShell';
 import { DebateActions } from '../../components/admin/debates/DebateActions';
 import { DebateFlags, DebateStatusText, ModerationText } from '../../components/admin/debates/DebateBits';
+import { CoverPanel } from '../../components/admin/debates/CoverPanel';
 import { ConfigPanel, MediaPanel, ModerationPanel, RecoveryPanel, UsagePanel } from '../../components/admin/debates/DebateSections';
 import { Transcript } from '../../components/admin/debates/Transcript';
 import { AuditPanel, LedgerTable, Panel } from '../../components/admin/users/UserSections';
@@ -34,6 +35,7 @@ const AdminDebate = () => {
   const [result, setResult] = useState<{ key: string; card: AdminDebateCard } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const key = `${id}:${version}`;
+  const reload = useCallback(() => setVersion((n) => n + 1), []);
 
   useEffect(() => {
     let cancelled = false;
@@ -142,7 +144,7 @@ const AdminDebate = () => {
               {d.via_token && <span className="text-xs text-muted">started with an API token</span>}
             </div>
             <div className="mt-5 border-t border-line pt-4">
-              <DebateActions card={card} permissions={me.permissions} onChanged={() => setVersion((n) => n + 1)} />
+              <DebateActions card={card} permissions={me.permissions} onChanged={reload} />
             </div>
           </Card>
 
@@ -159,6 +161,7 @@ const AdminDebate = () => {
             </div>
             <div className="grid gap-4">
               <ModerationPanel card={card} />
+              <CoverPanel card={card} permissions={me.permissions} onChanged={reload} />
               <MediaPanel card={card} />
               <RecoveryPanel card={card} />
             </div>

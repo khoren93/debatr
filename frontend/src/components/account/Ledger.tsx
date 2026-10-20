@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
-import { AudioLines, Diamond, Download, Gift, ImageIcon, Music, Plus, Receipt, RotateCcw, SlidersHorizontal } from 'lucide-react';
+import { AudioLines, Diamond, Download, Gift, ImageIcon, ImagePlay, Music, Plus, Receipt, RotateCcw, SlidersHorizontal } from 'lucide-react';
 import { exportTransactions, listTransactions } from '../../api/billing';
 import { getErrorMessage } from '../../api/client';
 import type { Transaction } from '../../api/types';
@@ -16,6 +16,7 @@ const CATEGORIES: Record<string, { label: string; icon: ReactNode; tone: string 
   voices: { label: 'Premium voices', icon: <AudioLines className="size-4" />, tone: 'bg-host/14 text-host' },
   pictures: { label: 'AI pictures', icon: <ImageIcon className="size-4" />, tone: 'bg-violet/14 text-violet' },
   music: { label: 'Battle music', icon: <Music className="size-4" />, tone: 'bg-con/14 text-con' },
+  cover: { label: 'AI cover', icon: <ImagePlay className="size-4" />, tone: 'bg-accent/12 text-accent' },
   topup: { label: 'Top-up', icon: <Plus className="size-4" strokeWidth={2.5} />, tone: 'bg-ok/14 text-ok' },
   bonus: { label: 'Bonus', icon: <Gift className="size-4" />, tone: 'bg-ok/14 text-ok' },
   refund: { label: 'Refund', icon: <RotateCcw className="size-4" />, tone: 'bg-ok/14 text-ok' },

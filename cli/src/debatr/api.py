@@ -271,6 +271,17 @@ class DebatrClient:
     async def unpublish(self, debate_id: str) -> dict[str, Any]:
         return await self.request("DELETE", f"/debates/{debate_id}/publish")
 
+    async def generate_cover(
+        self, debate_id: str, hook: str | None = None, openrouter_key: str | None = None
+    ) -> dict[str, Any]:
+        """Queue a new AI cover version; the debate's `cover` follows its build."""
+        body: dict[str, Any] = {}
+        if hook:
+            body["hook"] = hook
+        if openrouter_key:
+            body["user_provider_key"] = openrouter_key
+        return await self.request("POST", f"/debates/{debate_id}/cover", json_body=body)
+
     async def media(self, debate_id: str) -> dict[str, Any]:
         return await self.request("GET", f"/debates/{debate_id}/media")
 

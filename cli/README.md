@@ -83,6 +83,7 @@ debatr run "Tabs or spaces?" --format rap_battle --audio --flow smooth --flow fi
 | `--audio`, `--voices` | Voice it when done (free `edge` voices or premium `elevenlabs`). |
 | `--format rap_battle`, `--flow FLOW` | A rap battle: an MC and two rappers trade verses (4/8/12/16 lines by `--length`), 1–3 rounds, the judge scores each round. With `--audio` ElevenLabs makes one track of beat and verses (paid); `--flow` sets how each rapper sounds (`debatr formats`). |
 | `--public` | Publish to the gallery when finished (after an automatic content check). Private by default. |
+| `--cover` / `--no-cover` | An AI cover when it completes (≈ $0.04 from your credits, or your OpenRouter key). Runs from the CLI get none unless asked. |
 | `-y, --yes`, `--max-cost USD` | Start paid runs without a prompt; refuse runs estimated above a limit. |
 | `--detach`, `--json` | Print the id and return at once; or no live output, a JSON result at the end. |
 | `--config FILE`, `--print-config` | Use a full request body; print the one the options make. |
@@ -104,6 +105,7 @@ are asked whether to stop it on the server too.
 | `debatr stop` / `delete` / `publish` / `unpublish DEBATE` | Manage a debate. |
 | `debatr open DEBATE` | Open it in the browser: player, audience vote, video export. |
 | `debatr audio DEBATE [--build] [-o FILE]` | Download the voiced debate as MP3 (`--build` voices it first). |
+| `debatr cover DEBATE [--hook TEXT] [-o FILE]` | Draw an AI cover for a finished debate (a thumbnail for the gallery, link previews and YouTube; ≈ $0.04); `-o` saves the 1280×720 JPEG. |
 | `debatr formats` | Show formats (debate, rap battle) and the rappers' flows. |
 | `debatr gallery [WORDS] [--sort trending\|new\|top] [--format F]` | Browse public debates and rap battles. |
 | `debatr leaderboard [--free] [--format F]` | Models ranked by audience votes: best debaters, or best rappers. |
@@ -151,6 +153,7 @@ your `debatr login`.
 | `list_my_debates`, `search_gallery` | The user's debates; public debates to read. |
 | `resume_debate` | Runs a debate that stopped with an error again from the failed turn (within the cost limit). |
 | `stop_debate`, `publish_debate`, `get_account` | Manage a debate; balance and the token's limit. |
+| `generate_cover` | Draws an AI cover for a finished debate (only when the user asks; paid, within the cost limit); `get_debate` returns its `cover_url`. |
 
 Agents spend your credits only within two limits: the token's own spending limit (set it when
 you approve `debatr login` or create the token) and `DEBATR_MAX_COST_USD`, the most one debate

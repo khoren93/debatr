@@ -49,6 +49,7 @@ from app.services.free_router import (
 )
 from app.services.heartbeat import beating
 from app.services.markers import extract_markers, has_markers
+from app.services.media.cover import AutoCover, auto_cover, queue_auto_cover
 from app.services.media.tts.elevenlabs import system_key_status
 from app.services.moderation import (
     apply_check,
@@ -203,9 +204,14 @@ def _charge(db: Session, debate: Debate) -> None:
         db.rollback()
 
 
-def _cleanup_keys(debate_id: str, *, keep_tts_key: bool = False) -> None:
-    """Drop the run's secrets. The TTS key survives a completed run for the auto audio build."""
-    keys = [provider_key_key(debate_id), stop_flag_key(debate_id)]
+def _cleanup_keys(
+    debate_id: str, *, keep_tts_key: bool = False, keep_provider_key: bool = False
+) -> None:
+    """Drop the run's secrets. The TTS key survives a completed run for the auto audio build,
+    the OpenRouter key for an automatic cover drawn on it (the cover job drops it)."""
+    keys = [stop_flag_key(debate_id)]
+    if not keep_provider_key:
+        keys.append(provider_key_key(debate_id))
     if not keep_tts_key:
         keys.append(tts_key_key(debate_id))
     try:
@@ -710,6 +716,22 @@ def _auto_media(db: Session, debate: Debate) -> None:
         db.commit()
 
 
+def _cover_plan(debate: Debate) -> AutoCover | None:
+    """Whether the completed debate gets an AI cover and who pays (services/media/cover)."""
+    try:
+        return auto_cover(
+            debate.config_json or {},
+            mode=runtime_settings.current_sync().ai_covers,
+            moderation=debate.moderation_status or "none",
+            moderation_source=(debate.moderation_json or {}).get("source"),
+            is_public=debate.is_public,
+            balance=float(debate.user.credits_usd) if debate.user is not None else 0.0,
+        )
+    except Exception:
+        logger.exception("Could not decide on the cover of %s", debate.id)
+        return None
+
+
 # --- jobs ------------------------------------------------------------------
 
 
@@ -946,10 +968,13 @@ def finish_debate_job(debate_id: str) -> None:
         _auto_publish(db, debate)
         db.commit()
         _charge(db, debate)
-        _cleanup_keys(debate_id, keep_tts_key=True)
+        cover = _cover_plan(debate)
+        _cleanup_keys(debate_id, keep_tts_key=True, keep_provider_key=cover == "own")
         publish_event(
             debate_id,
             "debate_completed",
             {"debate_id": debate_id, "status": "completed", "totals": debate.totals_json},
         )
         _auto_media(db, debate)
+        if cover is not None:
+            queue_auto_cover(db, debate, cover, debate_prices(debate).as_dict())

@@ -1,7 +1,7 @@
 import { Plus } from 'lucide-react';
 import type { MotionPage } from '../api/types';
 import { Page, PageTitle } from '../components/layout/AppShell';
-import { CardStats, CoverBadge, DebateCard, DebateCover } from '../components/cards';
+import { CardCover, CardStats, CoverBadge, DebateCard } from '../components/cards';
 import { Avatar, LinkButton } from '../components/ui';
 
 /** Language of a version when the topic is debated in more than one. */
@@ -40,10 +40,11 @@ const Topic = ({ page }: { page: MotionPage }) => {
               to={item.path || `/d/${item.slug}`}
               title={item.topic || item.title || 'Untitled debate'}
               cover={
-                <DebateCover
+                <CardCover
+                  cover={item.cover}
                   participants={item.participants}
                   topLeft={languages.size > 1 ? <LanguageBadge code={item.language_code} /> : undefined}
-                  topRight={<CoverBadge format={item.format} premiumVoices={item.premium_voices} />}
+                  topRight={<CoverBadge format={item.cover ? undefined : item.format} premiumVoices={item.premium_voices} />}
                 />
               }
               footerLeft={

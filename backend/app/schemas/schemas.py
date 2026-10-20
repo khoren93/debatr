@@ -165,6 +165,9 @@ class DebateConfig(BaseModel):
     # Web fact-check of the figures and quotes shown in the visual scenes (services/factcheck),
     # billed like the debate. Needs media_plan.visuals.
     fact_check: bool = False
+    # An AI cover once the debate completes (services/media/cover.py): unset follows the rule
+    # (runs paid from the balance or an own key; API tokens only when they send it), false never.
+    cover: bool | None = None
     # Save without starting (status=draft). Request-only.
     draft: bool = False
     # Optional BYOK OpenRouter key. Never persisted to the database.
@@ -257,6 +260,10 @@ class EstimateOut(BaseModel):
     render_ms: int
     music_ms: int = 0  # a rap battle's generated track
     music_cost_usd: float = 0.0  # in credits, like tts_cost_usd
+    # The run gets an AI cover when it completes, and what it adds to `credits_cost_usd` (0 on
+    # an own OpenRouter key, which pays OpenRouter itself).
+    cover: bool = False
+    cover_cost_usd: float = 0.0
     own_key: bool = False
     own_tts_key: bool = False
     paid_models: list[str] = Field(default_factory=list)
@@ -406,6 +413,54 @@ class BillingOut(BaseModel):
     own_key: bool = False
 
 
+CoverStatus = Literal["none", "queued", "running", "ready", "error"]
+# Why the owner cannot ask for a cover now: turned off, the debate is not finished, one is being
+# drawn, or it needs credits (the browser's own OpenRouter key still can).
+CoverBlocker = Literal["off", "not_finished", "busy", "no_balance"]
+
+
+class CoverImageOut(BaseModel):
+    """One AI cover (a version): 16:9 at 1536 and 768 px wide, YouTube's 1280x720 JPEG and the
+    1200x630 link preview."""
+
+    id: str
+    url: str
+    small_url: str
+    yt_url: str
+    og_url: str
+    hook: str = ""
+    source: str = "owner"  # auto | owner | admin
+    created_at: datetime | None = None
+
+
+class CoverOut(BaseModel):
+    """A debate's AI cover: the one shown (null: the markup cover) and the latest build's
+    state. Versions, the error, the price and whether a new one can be asked for are for the
+    owner only."""
+
+    status: CoverStatus = "none"
+    current: CoverImageOut | None = None
+    versions: list[CoverImageOut] = Field(default_factory=list)
+    error: str | None = None
+    can_generate: bool = False
+    reason: CoverBlocker | None = None
+    price_usd: float = 0.0
+
+
+class CoverRequest(BaseModel):
+    """`POST /api/debates/{id}/cover`: a new version, optionally with the owner's own hook in
+    place of the art director's (at most 4 words / 22 characters, ALL CAPS on the cover)."""
+
+    hook: str | None = Field(default=None, max_length=22)
+    user_provider_key: str | None = Field(default=None, max_length=300)
+
+
+class CoverSelect(BaseModel):
+    """`PUT /api/debates/{id}/cover`: the version to show (null: the markup cover)."""
+
+    version: str | None = Field(default=None, max_length=32)
+
+
 class DebateSummary(BaseModel):
     id: str
     title: str | None
@@ -426,6 +481,8 @@ class DebateSummary(BaseModel):
     outputs: list[str] = Field(default_factory=list)
     verdict: VerdictOut | None = None
     participants: list[ParticipantOut] = Field(default_factory=list)
+    cover: CoverImageOut | None = None  # the AI cover shown (null: the markup cover)
+    cover_status: CoverStatus = "none"
 
 
 class DebateSettingsOut(BaseModel):
@@ -553,6 +610,7 @@ class DebateDetail(BaseModel):
     # The topic's public versions (null when it has none) and the public debate it remixes.
     motion: MotionOut | None = None
     remix_of: RemixParentOut | None = None
+    cover: CoverOut = Field(default_factory=CoverOut)
 
 
 class StopDebateResponse(BaseModel):
@@ -582,6 +640,7 @@ class GalleryItem(BaseModel):
     published_at: datetime | None = None
     motion: MotionRef | None = None  # the topic this debate is a version of
     path: str = ""  # canonical path of the debate's page
+    cover: CoverImageOut | None = None  # the AI cover (null: the markup cover)
 
 
 class GalleryResponse(BaseModel):
@@ -725,3 +784,6 @@ class SiteStatusOut(BaseModel):
     maintenance: bool  # new debates and audio builds are paused
     maintenance_message: str | None = None
     free_debates: FreeDebatesOut
+    # AI covers (lever): off | paid | all_public, and what one costs from the balance.
+    ai_covers: str = "paid"
+    cover_price_usd: float = 0.0

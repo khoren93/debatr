@@ -1,4 +1,4 @@
-import type { DebateDetail, MotionPage, Participant } from '../api/types';
+import type { CoverImage, DebateDetail, GalleryItem, MotionPage, Participant } from '../api/types';
 import { APP_TAGLINE, SEO_COPY } from './brand';
 import { debaterColor, shortModelName } from './format';
 import { formatSpec } from './formats';
@@ -9,7 +9,8 @@ import type { SeoImage } from './seo';
  * SSR server (`src/server/og`, routes `og/*`) from the card data built here. Pure (vitest): the
  * page and the image route build the same card, so the page's `?v=` names exactly the picture the
  * route draws, and social networks fetch a new one when it changes. Like the gallery cover, the
- * card shows the lineup and the question, never the winner (blind voting).
+ * card shows the lineup and the question, never the winner (blind voting). A debate with an AI
+ * cover (backend services/media/cover.py) shows that instead, cropped to 1200×630 by the API.
  */
 
 export const OG_WIDTH = 1200;
@@ -36,6 +37,8 @@ export interface OgCard {
   sides: OgSide[];
   /** BCP 47 language of `text` (picks the font of Han characters: Chinese, Japanese, Korean). */
   lang: string;
+  /** The AI cover shown in place of the drawn card: its version and 1200×630 file. */
+  cover?: { id: string; url: string } | null;
 }
 
 const collapse = (text: string) => text.replace(/\s+/g, ' ').trim();
@@ -54,16 +57,20 @@ const sideOf = (p: Participant, i: number): OgSide => ({ name: p.name?.trim() ||
 
 const debaters = (participants: Participant[]) => participants.filter((p) => p.role !== 'moderator');
 
-export const debateCard = (debate: Pick<DebateDetail, 'title' | 'settings' | 'participants'>): OgCard => ({
+const coverRef = (cover: CoverImage | null | undefined) => (cover ? { id: cover.id, url: cover.og_url } : null);
+
+export const debateCard = (debate: Pick<DebateDetail, 'title' | 'settings' | 'participants'> & { cover?: DebateDetail['cover'] }): OgCard => ({
   text: ogText(debate.settings.topic || debate.title || 'AI debate'),
   badge: formatSpec(debate.settings.format).label,
   sides: debaters(debate.participants).slice(0, MAX_SIDES).map(sideOf),
   lang: debate.settings.language_code || 'en',
+  cover: coverRef(debate.cover?.current),
 });
 
 /** A topic: its title over the models that argued it across the public versions (the first
  *  debater of each model, in the versions' order), and how many versions there are. */
 export const topicCard = (page: Pick<MotionPage, 'title' | 'versions' | 'items'>): OgCard => {
+  const covered: GalleryItem | undefined = page.items.find((item) => item.cover);
   const seen = new Map<string, Participant>();
   for (const item of page.items) for (const p of debaters(item.participants)) if (!seen.has(p.model)) seen.set(p.model, p);
   const languages = new Set(page.items.map((item) => item.language_code));
@@ -72,6 +79,8 @@ export const topicCard = (page: Pick<MotionPage, 'title' | 'versions' | 'items'>
     badge: page.versions === 1 ? formatSpec(page.items[0]?.format).label : `${page.versions} VERSIONS`,
     sides: [...seen.values()].slice(0, MAX_SIDES).map(sideOf),
     lang: languages.size === 1 ? [...languages][0] : 'en',
+    // The first version with an AI cover lends it to the topic.
+    cover: coverRef(covered?.cover),
   };
 };
 
@@ -120,7 +129,7 @@ export const OG_PATHS = {
   site: '/og/site.png',
 } as const;
 
-export const debateOgImage = (debate: Pick<DebateDetail, 'slug' | 'title' | 'settings' | 'participants'>): SeoImage | null =>
+export const debateOgImage = (debate: Pick<DebateDetail, 'slug' | 'title' | 'settings' | 'participants'> & { cover?: DebateDetail['cover'] }): SeoImage | null =>
   debate.slug ? image(OG_PATHS.debate(debate.slug), debateCard(debate)) : null;
 
 export const topicOgImage = (page: Pick<MotionPage, 'slug' | 'title' | 'versions' | 'items'>): SeoImage => image(OG_PATHS.topic(page.slug), topicCard(page));

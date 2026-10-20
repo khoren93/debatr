@@ -10,7 +10,7 @@
   `GET /settings`); a change of it is itself an alert that cannot be muted.
 """
 
-from typing import Any
+from typing import Any, get_args
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
@@ -58,6 +58,7 @@ KINDS: dict[str, LeverKind] = {
     "min_debate_charge_usd": "float",
     "tts_price_per_1k_chars": "float",
     "music_price_per_min": "float",
+    "ai_covers": "choice",
 }
 
 
@@ -69,6 +70,13 @@ def bounds(key: str) -> tuple[float | None, float | None]:
         low = getattr(item, "ge", low)
         high = getattr(item, "le", high)
     return low, high
+
+
+def choices(key: str) -> list[str] | None:
+    """The values of a "choice" lever (its Literal type)."""
+    if KINDS[key] != "choice":
+        return None
+    return [str(v) for v in get_args(Levers.model_fields[key].annotation)]
 
 
 def levers_out(rows: dict[str, RuntimeSetting]) -> list[LeverOut]:
@@ -87,6 +95,7 @@ def levers_out(rows: dict[str, RuntimeSetting]) -> list[LeverOut]:
                 overridden=row is not None,
                 minimum=low,
                 maximum=high,
+                choices=choices(key),
                 updated_at=row.updated_at if row else None,
                 updated_by=row.updated_by if row else None,
             )

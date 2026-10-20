@@ -708,6 +708,14 @@ def run(
         bool,
         typer.Option("--public", help="Publish to the gallery when done (after a content check)."),
     ] = False,
+    cover: Annotated[
+        bool | None,
+        typer.Option(
+            "--cover/--no-cover",
+            help="An AI cover when it completes (~$0.04 from the balance, or your OpenRouter key).",
+            show_default=False,
+        ),
+    ] = None,
     config_file: Annotated[
         Path | None,
         typer.Option(
@@ -758,6 +766,8 @@ def run(
         if topic:
             config["topic"] = topic
         config.setdefault("auto_publish", public)
+        if cover is not None:
+            config["cover"] = cover
         if draft:
             config["draft"] = True
         if openrouter_key:
@@ -797,6 +807,7 @@ def run(
                 elevenlabs_key=elevenlabs_key,
                 format=show.value,
                 flows=flow,
+                cover=cover,
             )
         except ValueError as e:
             fail(str(e))
@@ -1151,6 +1162,82 @@ def publish(
             out.print(result["share_url"])
     else:
         err.print("Waiting for a moderator: the content check flagged it for a review.")
+
+
+@app.command(name="cover")
+def cover_command(
+    ctx: typer.Context,
+    debate: Annotated[str, typer.Argument(help="Debate id or link.", metavar="DEBATE")],
+    hook: Annotated[
+        str | None,
+        typer.Option(
+            "--hook", help="Your own headline (at most 4 words, 22 characters).", metavar="TEXT"
+        ),
+    ] = None,
+    wait: Annotated[
+        bool, typer.Option("--wait/--no-wait", help="Wait until it is drawn (about a minute).")
+    ] = True,
+    output: Annotated[
+        Path | None,
+        typer.Option(
+            "--output", "-o", help="Save the 1280x720 YouTube thumbnail here.", dir_okay=False
+        ),
+    ] = None,
+    yes: Annotated[
+        bool, typer.Option("--yes", "-y", help="Pay from the balance without asking.")
+    ] = False,
+) -> None:
+    """Draw an AI cover for a finished debate (a thumbnail for the gallery, links and YouTube)."""
+    if hook is not None and not 0 < len(hook.strip()) <= 22:
+        fail("The hook takes 1 to 22 characters")
+    client = client_of(ctx, auth=True)
+    openrouter_key = os.environ.get(ENV_OPENROUTER_KEY) or None
+
+    async def go() -> dict[str, Any]:
+        async with client:
+            debate_id = await owned_id(client, debate)
+            detail = await client.debate(debate_id)
+            state = detail.get("cover") or {}
+            reason = state.get("reason")
+            if reason == "off":
+                fail("AI covers are turned off on this server.")
+            if reason == "not_finished":
+                fail("The debate has not finished yet.")
+            if reason == "busy":
+                fail("A cover is already being drawn: try again in a minute.")
+            if not openrouter_key and reason != "no_balance" and not yes and interactive():
+                price = float(state.get("price_usd") or 0)
+                if not typer.confirm(f"An AI cover costs about ${price:.2f}. Draw it?"):
+                    raise typer.Exit(1)
+            await client.generate_cover(debate_id, hook, openrouter_key)
+            if not wait:
+                return await client.debate(debate_id)
+            with err.status("Drawing the cover… (about a minute)"):
+                while True:
+                    await asyncio.sleep(4)
+                    detail = await client.debate(debate_id)
+                    status = (detail.get("cover") or {}).get("status")
+                    if status not in ("queued", "running"):
+                        break
+            state = detail.get("cover") or {}
+            if state.get("status") == "error":
+                fail(f"The cover failed: {state.get('error') or 'try again'}")
+            current = state.get("current") or {}
+            if output and current.get("yt_url"):
+                await client.download(str(current["yt_url"]), output)
+            return detail
+
+    detail = run_async(go())
+    state = detail.get("cover") or {}
+    current = state.get("current") or {}
+    if state.get("status") in ("queued", "running"):
+        err.print("[green]✓[/green] Queued: `debatr show` lists it once it is drawn.")
+        return
+    if output:
+        err.print(f"[green]✓[/green] Saved {escape(str(output))}")
+    if current.get("url"):
+        err.print(f"[green]✓[/green] Cover: “{escape(str(current.get('hook') or ''))}”")
+        out.print(client.absolute(str(current["url"])))
 
 
 @app.command()

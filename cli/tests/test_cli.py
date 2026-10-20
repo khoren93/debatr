@@ -556,3 +556,58 @@ def test_a_battle_without_its_track_explains_the_build(app, server):
     assert missing.exit_code == 1 and "ElevenLabs, paid" in missing.output
     edge = app("audio", DEBATE_ID, "--build", "--voices", "edge")
     assert edge.exit_code == 1 and "premium voices only" in edge.output
+
+
+def _covered(status: str, **extra: object) -> dict:
+    current = {
+        "id": "v1",
+        "url": f"/api/media/files/{DEBATE_ID}/covers/v1.webp",
+        "yt_url": f"/api/media/files/{DEBATE_ID}/covers/v1-yt.jpg",
+        "hook": "WHO WINS?",
+    }
+    cover = {
+        "status": status,
+        "current": current if status == "ready" else None,
+        "price_usd": 0.042,
+        "reason": None,
+        **extra,
+    }
+    return detail("completed", cover=cover)
+
+
+def test_cover_waits_and_saves_the_thumbnail(app, server, monkeypatch, tmp_path):
+    async def no_wait(_seconds: float) -> None:
+        return None
+
+    monkeypatch.setattr(cli.asyncio, "sleep", no_wait)
+    server.on(
+        f"GET /debates/{DEBATE_ID}", [_covered("none"), _covered("running"), _covered("ready")]
+    )
+    server.on(f"POST /debates/{DEBATE_ID}/cover", {"status": "queued"})
+    server.on(
+        f"GET /media/files/{DEBATE_ID}/covers/v1-yt.jpg", httpx.Response(200, content=b"JPEG")
+    )
+    dest = tmp_path / "thumb.jpg"
+    result = app("cover", DEBATE_ID, "--hook", "Who wins?", "-o", str(dest), "-y")
+    assert result.exit_code == 0, result.output
+    assert json.loads(server.calls(f"POST /debates/{DEBATE_ID}/cover")[0].content) == {
+        "hook": "Who wins?"
+    }
+    assert dest.read_bytes() == b"JPEG"
+    assert f"{SITE}/api/media/files/{DEBATE_ID}/covers/v1.webp" in result.output
+
+
+def test_cover_explains_why_not(app, server):
+    server.on(f"GET /debates/{DEBATE_ID}", _covered("none", reason="not_finished"))
+    result = app("cover", DEBATE_ID)
+    assert result.exit_code == 1 and "not finished" in result.output
+    result = app("cover", DEBATE_ID, "--hook", "x" * 30)
+    assert result.exit_code == 1 and "1 to 22 characters" in result.output
+
+
+def test_run_asks_for_a_cover(app, server):
+    result = app("run", "Cats or dogs?", "--cover", "--print-config")
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.output)["cover"] is True
+    result = app("run", "Cats or dogs?", "--print-config")
+    assert "cover" not in json.loads(result.output)

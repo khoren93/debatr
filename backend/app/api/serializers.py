@@ -1,6 +1,8 @@
 """Build API response models from ORM rows (shared by the debates and gallery routes)."""
 
 from collections.abc import Sequence
+from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,6 +11,9 @@ from app.core.config import settings
 from app.models.models import Debate, Turn, User
 from app.schemas.schemas import (
     BillingOut,
+    CoverBlocker,
+    CoverImageOut,
+    CoverOut,
     DebateConfig,
     DebateDetail,
     DebateSettingsOut,
@@ -30,10 +35,13 @@ from app.schemas.schemas import (
     VerdictFeedback,
     VerdictOut,
 )
-from app.services import motions, seo
+from app.services import motions, runtime_settings, seo
+from app.services.credits import cover_charge_usd
 from app.services.formats import SIDES, Format, format_of
 from app.services.free_router import is_free_router
+from app.services.media import cover as covers
 from app.services.media.languages import language_code
+from app.services.media.paths import public_url
 from app.services.motions import MotionInfo
 from app.services.scheduler import speaker_role_for
 from app.services.studio import turn_visuals_out
@@ -64,6 +72,82 @@ def public_path(debate: Debate) -> str | None:
 def share_url(debate: Debate) -> str | None:
     path = public_path(debate)
     return seo.absolute(settings.SITE_URL, path) if path else None
+
+
+def _when(value: Any) -> datetime | None:
+    try:
+        return datetime.fromisoformat(str(value)) if value else None
+    except ValueError:
+        return None
+
+
+def cover_image_out(debate: Debate, version: dict[str, Any] | None) -> CoverImageOut | None:
+    """A cover version's pictures as URLs under /api/media/files (names change per version)."""
+    files: dict[str, Any] = (version or {}).get("files") or {}
+    if version is None or not all(files.get(k) for k in ("full", "small", "yt", "og")):
+        return None
+    debate_id = str(debate.id)
+    return CoverImageOut(
+        id=str(version["id"]),
+        url=public_url(debate_id, f"covers/{files['full']}"),
+        small_url=public_url(debate_id, f"covers/{files['small']}"),
+        yt_url=public_url(debate_id, f"covers/{files['yt']}"),
+        og_url=public_url(debate_id, f"covers/{files['og']}"),
+        hook=str(version.get("hook") or ""),
+        source=str(version.get("source") or "owner"),
+        created_at=_when(version.get("created_at")),
+    )
+
+
+def current_cover(debate: Debate) -> CoverImageOut | None:
+    return cover_image_out(debate, covers.current_version(debate.cover_json))
+
+
+@dataclass(frozen=True)
+class CoverPolicy:
+    """What the owner's cover panel needs to know: the lever, today's price and whether the
+    account can pay (credits or a saved OpenRouter key)."""
+
+    mode: str
+    price_usd: float
+    can_pay: bool
+
+
+async def cover_policy(debate: Debate, user: User | None) -> CoverPolicy | None:
+    """The owner's view of the cover panel (None for everyone else)."""
+    if user is None or debate.user_id != user.id:
+        return None
+    levers = await runtime_settings.current()
+    price = float(cover_charge_usd(settings.COVER_PRICE_USD, levers.credit_markup))
+    can_pay = float(user.credits_usd or 0) > 0 or bool(user.openrouter_key_enc)
+    return CoverPolicy(mode=levers.ai_covers, price_usd=price, can_pay=can_pay)
+
+
+def cover_blocker(debate: Debate, policy: CoverPolicy) -> CoverBlocker | None:
+    if policy.mode == "off":
+        return "off"
+    if debate.status not in ("completed", "stopped"):
+        return "not_finished"
+    if debate.cover_status in covers.ACTIVE:
+        return "busy"
+    if not policy.can_pay:
+        return "no_balance"
+    return None
+
+
+def cover_out(debate: Debate, policy: CoverPolicy | None = None) -> CoverOut:
+    """Everyone sees the cover shown and the build's state; the owner (`policy`) gets the rest."""
+    state: dict[str, Any] = debate.cover_json or {}
+    out = CoverOut(status=debate.cover_status or "none", current=current_cover(debate))  # type: ignore[arg-type]
+    if policy is not None:
+        out.versions = [
+            image for v in covers.versions(state) if (image := cover_image_out(debate, v))
+        ]
+        out.error = state.get("error") or None
+        out.reason = cover_blocker(debate, policy)
+        out.can_generate = out.reason is None
+        out.price_usd = policy.price_usd
+    return out
 
 
 def totals_out(debate: Debate) -> DebateTotals:
@@ -210,6 +294,8 @@ def summary_out(debate: Debate) -> DebateSummary:
         outputs=outputs(debate),
         verdict=verdict_out(debate),
         participants=participants_out(debate),
+        cover=current_cover(debate),
+        cover_status=debate.cover_status or "none",  # type: ignore[arg-type]
     )
 
 
@@ -250,7 +336,10 @@ def detail_out(
     manager: bool = False,
     motion: MotionOut | None = None,
     remix_of: RemixParentOut | None = None,
+    cover_policy: CoverPolicy | None = None,
 ) -> DebateDetail:
+    """`cover_policy`: the owner's cover panel (versions, price, whether a new one can be asked
+    for); without it the cover shown only."""
     conf: dict[str, Any] = debate.config_json or {}
     billing = conf.get("billing") or {}
     author = debate.user.display_name if debate.user is not None else None
@@ -299,6 +388,7 @@ def detail_out(
         engagement=engagement or EngagementOut(likes=debate.likes_count or 0),
         motion=motion,
         remix_of=remix_of,
+        cover=cover_out(debate, cover_policy if owner else None),
     )
 
 
@@ -399,4 +489,5 @@ def gallery_item_out(debate: Debate, motion: MotionInfo | None = None) -> Galler
         published_at=debate.published_at,
         motion=motion_ref_out(motion),
         path=seo.debate_path(debate.slug or "", topic_of(debate)),
+        cover=current_cover(debate),
     )

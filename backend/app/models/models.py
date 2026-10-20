@@ -253,6 +253,13 @@ class Debate(Base):
         String, default="none", server_default="none", index=True
     )
     media_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, server_default="{}")
+    # AI cover (services/media/cover.py): none | queued | running | ready | error, the state of
+    # the latest build. cover_json: {current, versions[], request, error, started_at, ...};
+    # `current` is the version shown everywhere (null: the markup cover).
+    cover_status: Mapped[str] = mapped_column(
+        String(16), default="none", server_default="none", index=True
+    )
+    cover_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, server_default="{}")
 
     session: Mapped["Session | None"] = relationship("Session", back_populates="debates")
     user: Mapped["User | None"] = relationship("User", back_populates="debates")

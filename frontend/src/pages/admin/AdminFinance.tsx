@@ -27,13 +27,17 @@ const PERIODS: { value: FinancePeriod; label: string }[] = [
 ];
 
 // provider_usage purposes the owner pays for; the rest is ours alone.
-const BILLED = new Set(['turn', 'verdict', 'factcheck', 'image', 'tts']);
+const BILLED = new Set(['turn', 'verdict', 'factcheck', 'image', 'tts', 'music', 'cover', 'cover_director']);
 const PURPOSES: Record<string, string> = {
   turn: 'Debate turns',
   verdict: 'Verdicts',
   factcheck: 'Fact-checks',
   image: 'AI pictures',
   tts: 'Premium voices (estimated)',
+  music: 'Battle music (estimated)',
+  cover: 'AI covers',
+  cover_director: 'Cover art director',
+  cover_check: 'Cover checks',
   director: 'Scene director',
   sketch: 'Sketches',
   image_check: 'Picture checks',
@@ -68,9 +72,9 @@ const accountColumns: Column<TopAccount>[] = [
 const Charts = ({ data }: { data: FinanceOut }) => {
   const labels = data.series.map((p) => label(p.t, data.bucket, true));
   const axisLabels = data.series.map((p) => label(p.t, data.bucket, false));
-  const charged = (['models', 'voices', 'pictures', 'music'] as const).map((key) => ({
+  const charged = (['models', 'voices', 'pictures', 'music', 'cover'] as const).map((key) => ({
     key,
-    label: { models: 'Model tokens', voices: 'Premium voices', pictures: 'AI pictures', music: 'Battle music' }[key],
+    label: { models: 'Model tokens', voices: 'Premium voices', pictures: 'AI pictures', music: 'Battle music', cover: 'AI covers' }[key],
     color: SPEND_COLORS[key],
     values: data.series.map((p) => p[`charged_${key}`]),
   }));
@@ -166,7 +170,7 @@ const AdminFinance = () => {
           <section className="mt-6">
             <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
               <StatTile label="Top-ups" value={formatUsd(t.topups)} hint={`+${formatUsd(t.bonuses)} bonuses · ${formatUsd(t.refunds)} refunds`} />
-              <StatTile label="Charged" value={formatUsd(t.charged)} hint={`models ${formatUsd(t.charged_models)} · voices ${formatUsd(t.charged_voices)} · pictures ${formatUsd(t.charged_pictures)} · music ${formatUsd(t.charged_music)}`} />
+              <StatTile label="Charged" value={formatUsd(t.charged)} hint={`models ${formatUsd(t.charged_models)} · voices ${formatUsd(t.charged_voices)} · pictures ${formatUsd(t.charged_pictures)} · music ${formatUsd(t.charged_music)} · covers ${formatUsd(t.charged_cover)}`} />
               <StatTile label="Provider cost" value={formatUsd(t.cost)} hint={`OpenRouter ${formatUsd(t.cost_openrouter)} · ElevenLabs ${formatUsd(t.cost_elevenlabs)}`} />
               <StatTile label="Margin" value={formatUsd(t.margin)} hint="charged − refunds − provider cost" />
               <StatTile label="Effective markup" value={t.markup === null ? '—' : `× ${t.markup}`} hint={`charged ÷ cost of what we bill (${formatUsd(t.cost_billed)})`} />

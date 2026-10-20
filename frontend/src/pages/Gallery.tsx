@@ -2,7 +2,7 @@ import { Link, useNavigation, useSearchParams } from 'react-router';
 import { ArrowLeft, ArrowRight, AudioLines, MicVocal, Play, Trophy, X } from 'lucide-react';
 import type { GalleryItem } from '../api/types';
 import { Page, PageTitle } from '../components/layout/AppShell';
-import { CardStats, CoverBadge, DebateCard, DebateCover, VersionsBadge } from '../components/cards';
+import { CardCover, CardStats, CoverBadge, DebateCard, VersionsBadge } from '../components/cards';
 import { Avatar, Button, Chip, EmptyState, LinkButton, ModelIcon, Segmented } from '../components/ui';
 import { shortModelName } from '../lib/format';
 import { CATEGORY_OPTIONS, FORMAT_OPTIONS, GALLERY_PAGE_SIZE, PERIOD_OPTIONS, SORT_OPTIONS, galleryHref, type GalleryFilters } from '../lib/gallery';
@@ -167,10 +167,12 @@ const Gallery = ({ filters, items, total }: Props) => {
               to={item.path || `/d/${item.slug}`}
               title={item.topic || item.title || 'Untitled debate'}
               cover={
-                <DebateCover
+                <CardCover
+                  cover={item.cover}
                   participants={item.participants}
                   topLeft={<VersionsBadge motion={item.motion} participants={item.participants} />}
-                  topRight={<CoverBadge format={item.format} premiumVoices={item.premium_voices} />}
+                  // An AI cover shows its format itself.
+                  topRight={<CoverBadge format={item.cover ? undefined : item.format} premiumVoices={item.premium_voices} />}
                 />
               }
               footerLeft={

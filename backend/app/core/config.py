@@ -101,6 +101,21 @@ class Settings(BaseSettings):
     MEDIA_IMAGE_MODEL: str = "black-forest-labs/flux-3-image-klein"
     MEDIA_IMAGE_PRICE_USD: float = 0.009  # per AI picture, for estimates
     MEDIA_MAX_IMAGES: int = 6  # pictures per debate
+    # AI covers (services/media/cover.py): an art director writes the brief from the episode
+    # (never the verdict), the image model draws a 16:9 thumbnail with the debaters' logos as
+    # references, the visuals model checks it. On the debate's key (an own OpenRouter key pays
+    # OpenRouter itself), else paid from the owner's balance: provider cost x markup.
+    # AI_COVERS: off | paid (runs paid from the balance or an own key get one automatically) |
+    # all_public (free public debates too, at the operator's cost); the console's lever wins.
+    AI_COVERS: str = "paid"
+    COVER_DIRECTOR_MODEL: str = "anthropic/claude-sonnet-5.5"
+    COVER_IMAGE_MODEL: str = "openai/gpt-image-2.5-sunburst"
+    COVER_IMAGE_QUALITY: str = "medium"  # low | medium | high (GPT Image)
+    COVER_CHECK_MODEL: str = ""  # vision check of the picture; empty = MEDIA_VISUALS_MODEL
+    COVER_PRICE_USD: float = 0.035  # provider cost of one cover, for estimates (x markup)
+    # The site's server renderer (frontend `web`), which draws the logo references of the covers
+    # (/og/logo.png): compose sets http://web:3000; natively `npm run dev` on :5173.
+    WEB_INTERNAL_URL: str = "http://localhost:5173"
     # Web fact-check of on-screen figures and quotes (DebateConfig.fact_check). Runs during the
     # debate on the debate's OpenRouter key and is billed like the debate.
     FACT_CHECK_MODEL: str = "perplexity/sonar"

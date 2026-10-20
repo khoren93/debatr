@@ -37,7 +37,8 @@ backend/            FastAPI API + RQ worker (Python 3.12+, managed with uv)
   app/api/            routers: auth, tokens (API tokens + `debatr login` device flow), billing
                       (Stripe), debates, gallery (+ leaderboard), motions (topic page, wizard
                       suggestions), reactions (likes/votes), models,
-                      presets, topics (trending), stream (SSE), media, status (`GET /api/status`:
+                      presets, topics (trending), stream (SSE), media, covers (AI covers of a
+                      debate), status (`GET /api/status`:
                       sign-ups / maintenance for the site), seo (outside /api: robots.txt, the
                       sitemaps, the IndexNow key file); serializers.py builds the shared response
                       models
@@ -74,7 +75,9 @@ backend/            FastAPI API + RQ worker (Python 3.12+, managed with uv)
   app/services/media/ audio pipeline: script (markdown→speech), tts/ (elevenlabs, edge),
                       ffmpeg, highlights (the host model picks shorts), visuals (LLM director),
                       sketch (SVG line art → sanitized path data), images (Commons photos / AI
-                      pictures + vision check), jobs (build_media_job), timeline
+                      pictures + vision check), jobs (build_media_job), timeline, cover (AI
+                      covers: brief, prompt, check, versions, build_cover_job), cover_logos (logo
+                      references from the site's renderer + their descriptions)
   app/schemas/timeline.py  Timeline contract shared with frontend/src/api/timeline.ts;
                       visuals.py = scene specs shared with frontend/src/api/visuals.ts
   app/models/         SQLAlchemy ORM models (User, CreditTransaction, Debate, Turn, ProviderUsage,
@@ -93,7 +96,8 @@ frontend/           React 19 + React Router 8 (framework mode, server rendering)
                       debate/:id: browser only, HydrateFallback, `X-Robots-Tag: noindex`) →
                       `_private` (library, create, account, device: also a session) | `*` (a real
                       404); resource routes `og/d/:file`, `og/t/:file`, `og/site.png` (link preview
-                      pictures, see "Search engines") and `healthz` (Docker health check)
+                      pictures, see "Search engines"), `og/logo.png` (a model's logo as the AI covers'
+                      reference picture) and `healthz` (Docker health check)
   src/routes/         route modules: one `load(get)` per public page serves the server `loader`
                       (`serverGet`, the visitor's cookie) and the `clientLoader` (`routeGet`,
                       straight to the API); ErrorBoundary = RouteError / DebateError; public pages
@@ -142,7 +146,8 @@ frontend/           React 19 + React Router 8 (framework mode, server rendering)
                       twitter:card (React 19 hoists them into `<head>`), JSON-LD scripts
   src/components/cards/    DebateCard (library / gallery / landing; title under the cover, CardStats =
                            likes / views / length), DebateCover (face-off cover: each debater's logo
-                           on a half in its speaker colour, slanted seams, VS; markup, never the winner)
+                           on a half in its speaker colour, slanted seams, VS; markup, never the winner),
+                           CardCover (a card's 16:9 cover: the AI cover when there is one, else DebateCover)
   src/components/create/   three-step wizard + wizardState.ts (state, persistence, config mapping;
                            `applyFormat` / `fitFormat`: seats, prompts, rounds follow the format):
                            StepTopic (format cards on top, a locked one says why; TrendingBrowser =
@@ -164,7 +169,8 @@ frontend/           React 19 + React Router 8 (framework mode, server rendering)
                            yet / voicing), LiveCard (live frame: cast, speaker,
                            streamed captions), DebateActions (16:9 / 9:16 format icons + Like/Share/Remix/Export/… toolbar,
                            SharePopover = link + gallery switch + moderation), ExportRail
-                           (slide-over: ExportCard browser MP4 render, MP3, PublishKit = YouTube
+                           (slide-over: ExportCard browser MP4 render, MP3, CoverCard = the owner's AI
+                           cover and versions, PublishKit = YouTube
                            title/description with chapters/tags + canvas thumbnails, youtubeKit.ts),
                            Transcript (row click = seek, ● NOW), VerdictTab, DetailsTab (lineup,
                            facts), AudienceVote (blind vote), RegenerateAudioDialog, TurnScenes
@@ -410,8 +416,8 @@ docker compose exec api python -m app.manage credits user@example.com 5 --reason
    `_auto_media` queues the audio build when `config_json.media_plan.outputs` contains `audio`.
 
 SSE events: `connected`, `debate_started`, `turn_started`, `turn_delta`, `turn_completed`,
-`turn_error`, `turn_visuals`, `verdict_ready`, `media_progress`, `debate_completed`,
-`debate_error`, `debate_stopped`. `turn_completed` / `turn_error` carry the full serialized turn
+`turn_error`, `turn_visuals`, `verdict_ready`, `media_progress`, `cover_progress`,
+`debate_completed`, `debate_error`, `debate_stopped`. `turn_completed` / `turn_error` carry the full serialized turn
 (`TurnOut`); `turn_visuals` carries `{seq_index, visuals: TurnVisualsOut}` (designing →
 checking → ready).
 
@@ -506,7 +512,9 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   the format chip ("AI DEBATE", "RAP BATTLE"; a topic: "N VERSIONS" over the models of its
   versions) and the question; never the winner. `/og/d/{slug}.png`, `/og/t/{slug}.png` (from the
   API's public copy, fetched without the cookie: not public → 404 / 410, API down → the site's
-  card for a minute), `/og/site.png` (home, gallery, ranking). Pages add `?v=` = `ogVersion`
+  card for a minute), `/og/site.png` (home, gallery, ranking). A debate with an AI cover (a topic:
+  its first version with one) serves the cover's `og_url` file instead (fetched from the API,
+  kept in memory; gone → the drawn card for 5 minutes). Pages add `?v=` = `ogVersion`
   (hash of the card + `OG_DESIGN`): a matching `v` is cached for good (`immutable`), none or an
   old one for an hour (sitemaps name the address without it: `seo.debate_image_path`). Cards are
   kept by `cardKey` (same data = one file) in memory (64) and in `OG_CACHE_DIR` (volume
@@ -721,6 +729,67 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   next speakers and the judge (`studio.verdict_evidence`), and `totals_json.claims` (per
   participant) feeds the leaderboard's Accuracy column.
 
+### AI covers (`services/media/cover.py`)
+
+- A clickbait 16:9 thumbnail per debate, shown first wherever a cover goes: gallery / landing /
+  library / topic cards (`CardCover`; else the markup `DebateCover`, both 16:9), the link preview
+  (`/og/d/{slug}.png` serves its 1200×630 crop, `lib/og.ts` puts the version in `?v=`), JSON-LD,
+  the PublishKit (first YouTube thumbnail) and the owner's Export panel (`CoverCard`). The video's
+  first frame stays the face-off.
+- Build (`build_cover_job`, background queue, `cover_beat_key` heartbeat, timeout 15 min): the
+  art director (`COVER_DIRECTOR_MODEL`, Claude Sonnet, ~$0.007) reads format, topic, the debaters
+  (name, side, speaker colour, logo words) and the turns — never the verdict turn — and answers
+  JSON `{hook ≤ 4 words / 22 chars ALL CAPS, concept, setting, rivals[] one per debater,
+  centerpiece}` (`parse_brief`, asked twice at most; `fit_hook` trims); code builds the prompt by
+  a fixed template (exact text, site palette, 2 face off / 3–4 in a row, same-logo note, script
+  note for non-Latin hooks, 8 % crop margins, top-right corner free for the site's badges, no
+  other text / real faces / winner hints); `COVER_IMAGE_MODEL` (GPT Image 2.5 Sunburst,
+  `COVER_IMAGE_QUALITY` medium, ~$0.03) draws it with the debaters' logos as
+  `input_references`; `COVER_CHECK_MODEL` (empty = the visuals model, system key) checks the
+  hook's spelling, stray text and the rules (`parse_check`; an unreadable answer passes); a
+  rejected picture is drawn once more, then the build fails. Files under
+  `MEDIA_ROOT/{id}/covers/`: `<v>.webp` 1536 wide, `<v>-768.webp`, `<v>-yt.jpg` 1280×720,
+  `<v>-og.jpg` 1200×630 (ffmpeg `fill_jpeg`; JPEG without a WebP encoder), immutable caching,
+  kept by `DELETE /media`.
+- Logos: the worker asks the site's renderer (`WEB_INTERNAL_URL`, compose `http://web:3000`)
+  for `/og/logo.png?model=…` — the gallery's SVG and author mapping as a 512 px PNG, `X-Logo` =
+  the icon name — and `cover_logos.DESCRIPTIONS` (one line per icon file; a test checks every
+  file of `public/model-icons` has one) words it; no logo (or no answer) = a glowing emblem in
+  the speaker's colour. No logo PNGs live in git.
+- State: `debates.cover_status` (none | queued | running | ready | error, the latest build) and
+  `cover_json` (`current` version id — null shows the markup cover —, `versions[]` ≤ 5 with
+  files, hook, brief, cost, tries, source auto | owner | admin, own_key; `request` = who pays and
+  the prices of the queued build; `error`). `DebateDetail.cover` (`CoverOut`: everyone the
+  current `CoverImageOut`; the owner versions, error, `can_generate` / `reason` off |
+  not_finished | busy | no_balance, `price_usd`), `GalleryItem.cover`, `DebateSummary.cover`.
+- Who gets one: lever `ai_covers` (env `AI_COVERS`): `off`, `paid` (default: a completed run
+  that was not a free run — `billing.free_run`, set at start; older rows by key and models —
+  gets one on its own OpenRouter key or, with a balance, from it; `DebateConfig.cover=false`
+  opts out, API tokens get none unless they send `cover`), `all_public` (free public debates
+  too, at our cost). Not for debates the gallery check rejected or flagged for their content;
+  one flagged only because the check could not run (`source=fallback`) gets it and stays private.
+  `finish_debate_job` decides (`orchestrator._cover_plan`) before the keys are dropped, so an
+  own OpenRouter key stays in Redis for the cover job, which drops it. The estimate adds
+  `cover` / `cover_cost_usd` (`COVER_PRICE_USD` × markup) for a run that will get one; the
+  wizard's "AI cover" switch says why it is locked on free runs.
+- On demand: `POST /api/debates/{id}/cover` (owner, `completed | stopped`, `{hook?,
+  user_provider_key?}`: the request's or the account's OpenRouter key, else the balance ≥ the
+  price, 402; 403 off or a limited API token without a key; 409 busy; 429 `require_cover_slot`
+  = the media limit; 503 maintenance), `PUT …/cover {version|null}`, `DELETE …/cover/{v}`. The
+  page polls `GET /debates/{id}` while a build runs; the job also publishes `cover_progress`.
+- Money: a ready cover on the system key is charged its director + pictures cost × the run's
+  markup (`credits.charge_cover_sync`, ref `debate:{id}:cover:{v}`, ledger category `cover`);
+  failed builds and own keys are not charged, the check is ours. `provider_usage` purposes
+  `cover_director`, `cover`, `cover_check` (finance counts the first two as billed).
+- Recovery fails an orphaned build (never draws again on its own: each try costs money). The
+  console: debate card "AI cover" panel (versions, "New version (free)" with a hook = source
+  admin, free; show a version or the markup cover, both audited `debate.cover_*`), the cover next
+  to the text in the moderation queue, the lever, `cover` in finance / user spend charts. CLI
+  `debatr cover DEBATE [--hook] [-o FILE]`, `run --cover/--no-cover`; MCP `generate_cover`
+  (within `DEBATR_MAX_COST_USD`), `cover_url` in `get_debate`.
+- Never run real covers in tests or QA without the owner's go-ahead (~$0.04 each); tests fake
+  every provider (`tests/test_cover.py`).
+
 ### API tokens, the CLI and MCP
 
 - `api_tokens` (`debatr_` + 256 random bits; only `token_hash` = SHA-256 is stored, plus last4,
@@ -783,7 +852,8 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   A queued/running debate or media build with no heartbeat and no job waiting in its queue, on
   two checks in a row, is queued again from its first missing turn (failed rows dropped) or as a
   build (cached turns reused), up to `RECOVERY_ATTEMPTS`; runs older than 6 h, or whose own
-  OpenRouter key expired, fail instead (debate → Resume, media → generate again).
+  OpenRouter key expired, fail instead (debate → Resume, media → generate again). An orphaned AI
+  cover build fails at once (`cover_beat_key`; drawing again would cost again).
 
 ### Trending topics (news → debate topics)
 
@@ -923,7 +993,8 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   `max_active_media_per_user`, `muted_alerts` (see Alerts), `free_verdict_model` (verdict + gallery
   check of free debates), `free_debates_per_day`, `free_max_rounds`, `free_max_debaters`,
   `free_lengths` (see "Workers and queues"), `credit_markup`, `min_debate_charge_usd`,
-  `tts_price_per_1k_chars` (see "Credits and payments"). Only the fields of `Levers` exist (pydantic limits); without a row
+  `tts_price_per_1k_chars` (see "Credits and payments"), `ai_covers` (off | paid | all_public, a
+  "choice" lever; see "AI covers"). Only the fields of `Levers` exist (pydantic limits); without a row
   the env setting applies; a broken row is ignored. `PUT /settings/{key}` / `POST
   /settings/{key}/reset` need sudo and a reason and write the row + audit entry in one
   transaction; processes read through a 5 s cache (`CACHE_SECONDS`), so a change lands within

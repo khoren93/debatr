@@ -20,6 +20,7 @@ describe('debateCard', () => {
         { name: 'Gemini', model: 'google/gemini-3.5-pro', color: DEBATER_COLORS[1] },
       ],
       lang: 'en',
+      cover: null,
     });
   });
 
@@ -75,6 +76,16 @@ describe('preview images', () => {
     const page: MotionPage = { slug: 'tp', title: 'Cats?', versions: 1, items: [], path: '/t/tp/cats' };
     expect(topicOgImage(page).url).toMatch(/^\/og\/t\/tp\.png\?v=/);
     expect(SITE_OG_IMAGE.url).toMatch(/^\/og\/site\.png\?v=/);
+  });
+
+  it('shows the AI cover when there is one, and a new version of it changes the URL', () => {
+    const cover = (id: string) => ({ id, url: '', small_url: '', yt_url: '', og_url: `/api/media/files/d1/covers/${id}-og.jpg`, hook: 'WHO WINS?', source: 'owner', created_at: null });
+    const withCover = (id: string | null) => ({ ...card(), cover: { status: 'ready', current: id ? cover(id) : null, versions: [], error: null, can_generate: false, reason: null, price_usd: 0 } }) as DebateDetail;
+    expect(debateCard(withCover('aa')).cover).toEqual({ id: 'aa', url: '/api/media/files/d1/covers/aa-og.jpg' });
+    expect(debateCard(withCover(null)).cover).toBeNull();
+    expect(debateOgImage(withCover('aa'))?.url).not.toBe(debateOgImage(withCover('bb'))?.url);
+    const page: MotionPage = { slug: 'tp', title: 'Cats?', versions: 2, items: [{ participants: [], cover: null }, { participants: [], cover: cover('cc') }] as unknown as GalleryItem[], path: '/t/tp/cats' };
+    expect(topicCard(page).cover?.id).toBe('cc');
   });
 
   it('keeps the version stable and the alt text short', () => {

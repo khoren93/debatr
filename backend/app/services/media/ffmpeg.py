@@ -336,6 +336,22 @@ def to_jpeg(src: Path, dst: Path, *, width: int = 512, quality: int = 5) -> None
     )
 
 
+def fill_jpeg(src: Path, dst: Path, *, width: int, height: int, quality: int = 3) -> None:
+    """JPEG of exactly `width` x `height`: scaled to cover the box, the overflow cropped at the
+    centre (a 16:9 cover → YouTube's 1280x720, a 1200x630 link preview)."""
+    fill = (
+        f"scale={width}:{height}:force_original_aspect_ratio=increase:flags=lanczos,"
+        f"crop={width}:{height}"
+    )
+    ffmpeg(
+        [
+            *["-i", str(src), "-frames:v", "1", "-vf", fill],
+            *["-q:v", str(quality), "-map_metadata", "-1", str(dst)],
+        ],
+        timeout_s=60,
+    )
+
+
 def to_web_image(src: Path, stem: Path, *, max_width: int = 1600) -> Path:
     """WebP next to `stem` (stem + ".webp"); JPEG when this ffmpeg has no WebP encoder (e.g.
     a Homebrew build without libwebp). Returns the written file."""

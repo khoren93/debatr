@@ -12,7 +12,13 @@ from sqlalchemy import ColumnElement, Float, Select, and_, case, cast, func, sel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import load_only, selectinload
 
-from app.api.serializers import debater_models, detail_out, gallery_item_out, topic_context
+from app.api.serializers import (
+    cover_policy,
+    debater_models,
+    detail_out,
+    gallery_item_out,
+    topic_context,
+)
 from app.core.auth import get_current_user
 from app.core.db import get_db
 from app.models.models import Debate, DebateParticipant, DebateVote, User, utcnow
@@ -333,4 +339,5 @@ async def get_public_debate(
         await engagement_out(db, debate, viewer),
         motion=motion,
         remix_of=remix_of,
+        cover_policy=await cover_policy(debate, viewer),
     )

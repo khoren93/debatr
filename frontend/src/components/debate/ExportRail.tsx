@@ -1,10 +1,11 @@
 import { Download, Sparkles, X } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import type { Timeline } from '../../api/timeline';
-import type { DebateDetail, DebateMedia } from '../../api/types';
+import type { Cover, DebateDetail, DebateMedia } from '../../api/types';
 import { formatDuration } from '../../lib/format';
 import { SCALE_720P } from '../../video/render';
 import { Button, Progress } from '../ui';
+import { CoverCard } from './CoverCard';
 import { ExportCard } from './ExportCard';
 import type { SpeakerInfo, VideoFormat } from './helpers';
 import { PublishKit } from './PublishKit';
@@ -22,16 +23,21 @@ interface Props {
   highlightIndex: number;
   onHighlightChange: (i: number) => void;
   onGenerate: () => void;
+  onCover: (cover: Cover) => void;
+  /** Opened from "Generate AI cover": scroll to the cover card. */
+  focusCover: boolean;
 }
 
 /** Slide-over "Export & publish" panel: browser renders, the audio track and the YouTube kit.
  *  It stays mounted while hidden so a render keeps running when the panel is closed. */
-export const ExportRail = ({ open, onClose, debate, lineup, media, timeline, mediaBase, format, onFormat, highlightIndex, onHighlightChange, onGenerate }: Props) => {
+export const ExportRail = ({ open, onClose, debate, lineup, media, timeline, mediaBase, format, onFormat, highlightIndex, onHighlightChange, onGenerate, onCover, focusCover }: Props) => {
   const closeRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
-    if (open) closeRef.current?.focus();
-  }, [open]);
+    if (!open) return;
+    closeRef.current?.focus();
+    if (focusCover) document.getElementById('cover-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [open, focusCover]);
 
   useEffect(() => {
     if (!open) return;
@@ -111,6 +117,7 @@ export const ExportRail = ({ open, onClose, debate, lineup, media, timeline, med
           </div>
         </section>
 
+        {debate.is_owner && <CoverCard debate={debate} onChange={onCover} />}
         {debate.is_owner && <PublishKit debate={debate} lineup={lineup} timeline={timeline} active={open} />}
       </aside>
     </>

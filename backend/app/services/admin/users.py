@@ -42,7 +42,7 @@ from app.services.engagement import recount
 
 CHARGE_KINDS = ("debate", "media")
 CREDIT_KINDS = ("bonus", "refund")
-SPEND_CATEGORIES = ("models", "voices", "pictures", "music")
+SPEND_CATEGORIES = ("models", "voices", "pictures", "music", "cover")
 FINISHED = ("completed", "error", "stopped")
 FREE_ROUTER = "openrouter/free"
 LIST_LIMIT = 200
@@ -254,6 +254,7 @@ CSV_HEADER = [
     "spent_voices_usd",
     "spent_pictures_usd",
     "spent_music_usd",
+    "spent_cover_usd",
     "debates",
     "failed",
     "public",

@@ -126,26 +126,38 @@ def generate_image(
     aspect_ratio: str = "16:9",
     resolution: str | None = "1K",
     fallback_cost: float | None = None,
+    api_key: str | None = None,
+    quality: str | None = None,
+    references: list[str] | None = None,
+    timeout: float = 180.0,
 ) -> tuple[bytes, dict[str, Any]]:
-    """One generated picture on the system key. Returns (image bytes, usage). `fallback_cost`
-    is booked when the response carries no cost."""
+    """One generated picture (on the system key unless `api_key`). Returns (image bytes,
+    usage). `fallback_cost` is booked when the response carries no cost; `references` are data
+    URLs the model works from."""
     started = time.monotonic()
     try:
         body = asyncio.run(
             OpenRouterClient().generate_image(
-                model, prompt, aspect_ratio=aspect_ratio, resolution=resolution
+                model,
+                prompt,
+                aspect_ratio=aspect_ratio,
+                resolution=resolution,
+                api_key=api_key,
+                quality=quality,
+                references=references,
+                read_timeout=timeout,
             )
         )
         image = body["data"][0]
         data = base64.b64decode(str(image.get("b64_json") or ""))
     except Exception as e:
-        _failed(purpose, model, None, started, e)
+        _failed(purpose, model, api_key, started, e)
         raise
     usage = body.get("usage") or {}
     usage_log.record(
         purpose,
         model=model,
-        key="system",
+        key=usage_log.key_owner(api_key),
         usage=usage,
         cost_usd=None if usage.get("cost") is not None else fallback_cost,
         ok=bool(data),

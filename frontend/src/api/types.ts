@@ -144,6 +144,38 @@ export interface MediaPlan {
   flows?: Record<string, string>;
 }
 
+// --- AI covers (backend services/media/cover.py) ------------------------------------------
+
+export type CoverStatus = 'none' | 'queued' | 'running' | 'ready' | 'error';
+/** Why the owner cannot ask for a cover now (the browser's own OpenRouter key still can when
+ *  it is `no_balance`). */
+export type CoverBlocker = 'off' | 'not_finished' | 'busy' | 'no_balance';
+
+/** One AI cover version: 16:9 at 1536 and 768 px wide, YouTube's 1280×720 JPEG, the 1200×630
+ *  link preview. */
+export interface CoverImage {
+  id: string;
+  url: string;
+  small_url: string;
+  yt_url: string;
+  og_url: string;
+  hook: string;
+  source: 'auto' | 'owner' | 'admin' | string;
+  created_at: string | null;
+}
+
+/** A debate's cover: the one shown (null: the markup cover) and the latest build; versions,
+ *  the error, the price and whether a new one can be asked for come only to the owner. */
+export interface Cover {
+  status: CoverStatus;
+  current: CoverImage | null;
+  versions: CoverImage[];
+  error: string | null;
+  can_generate: boolean;
+  reason: CoverBlocker | null;
+  price_usd: number;
+}
+
 export interface DebateSummary {
   id: string;
   title: string | null;
@@ -164,6 +196,9 @@ export interface DebateSummary {
   outputs: MediaOutput[];
   verdict: Verdict | null;
   participants: Participant[];
+  /** The AI cover shown (null: the markup cover) and the latest build's state. */
+  cover: CoverImage | null;
+  cover_status: CoverStatus;
 }
 
 export interface DebateSettings {
@@ -249,6 +284,7 @@ export interface DebateDetail {
   motion: MotionDetail | null;
   /** The public debate this one remixes. */
   remix_of: RemixParent | null;
+  cover: Cover;
 }
 
 // --- Topics (backend services/motions) ----------------------------------------
@@ -353,6 +389,9 @@ export interface DebateConfig {
   auto_publish?: boolean;
   /** Web fact-check of the figures and quotes in the visual scenes (paid like the debate). */
   fact_check?: boolean;
+  /** An AI cover once it completes: unset follows the rule (runs paid from the balance or an own
+   *  key), false never. */
+  cover?: boolean | null;
   draft?: boolean;
   user_provider_key?: string;
   /** Browser-only ElevenLabs key for the automatic audio build (never stored server-side). */
@@ -383,6 +422,10 @@ export interface Estimate {
   /** A rap battle's generated track: its length and price in credits (like tts_cost_usd). */
   music_ms: number;
   music_cost_usd: number;
+  /** The run gets an AI cover when it completes, and what it adds to credits_cost_usd (0 on an
+   *  own OpenRouter key). */
+  cover: boolean;
+  cover_cost_usd: number;
   own_key: boolean;
   own_tts_key: boolean;
   paid_models: string[];
@@ -461,6 +504,9 @@ export interface SiteStatus {
   maintenance: boolean;
   maintenance_message: string | null;
   free_debates: FreeDebates;
+  /** AI covers (a lever): off | paid | all_public, and what one costs from the balance. */
+  ai_covers: 'off' | 'paid' | 'all_public';
+  cover_price_usd: number;
 }
 
 /** Limits of debates on free models for accounts without credits or an own OpenRouter key
@@ -508,7 +554,7 @@ export interface ConfirmResponse {
 }
 
 /** What a ledger row paid for (backend services/ledger.py). */
-export type TransactionCategory = 'models' | 'voices' | 'pictures' | 'music' | 'topup' | 'bonus' | 'refund' | 'adjustment';
+export type TransactionCategory = 'models' | 'voices' | 'pictures' | 'music' | 'cover' | 'topup' | 'bonus' | 'refund' | 'adjustment';
 
 export interface Transaction {
   id: string;
@@ -575,6 +621,8 @@ export interface GalleryItem {
   motion: MotionRef | null;
   /** Canonical path of the debate's page. */
   path: string;
+  /** The AI cover (null: the markup cover). */
+  cover: CoverImage | null;
 }
 
 export interface GalleryResponse {

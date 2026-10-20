@@ -73,3 +73,18 @@ async def require_media_slot(db: AsyncSession, user_id: uuid.UUID) -> None:
             detail=f"You already have {active} audio builds in progress: start this one when "
             "one of them is ready",
         )
+
+
+async def require_cover_slot(db: AsyncSession, user_id: uuid.UUID) -> None:
+    """AI covers count against the media limit on their own (one per debate at a time anyway)."""
+    limit = (await runtime_settings.current()).max_active_media_per_user
+    if limit <= 0:
+        return
+    active = await _active(db, user_id, Debate.cover_status)
+    if active >= limit:
+        await note_refusal("cover", user_id)
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"You already have {active} covers being drawn: ask for this one when one "
+            "of them is ready",
+        )

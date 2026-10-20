@@ -62,6 +62,11 @@ def media_beat_key(debate_id: str) -> str:
     return f"debate:{debate_id}:media_beat"
 
 
+def cover_beat_key(debate_id: str) -> str:
+    """Heartbeat of the job drawing a debate's AI cover."""
+    return f"debate:{debate_id}:cover_beat"
+
+
 def recovery_key(kind: str, debate_id: str) -> str:
     """Recovery bookkeeping of one run (app.services.recovery): `seen` / `attempts`."""
     return f"recovery:{kind}:{debate_id}"

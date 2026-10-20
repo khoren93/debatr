@@ -189,7 +189,7 @@ class MoneyOut(BaseModel):
     bonuses: float
     refunds: float
     adjustments: float
-    charged: dict[str, float]  # models / voices / pictures / music, as positive amounts
+    charged: dict[str, float]  # models / voices / pictures / music / cover, as positive amounts
     charged_total: float
     cost_system: float  # what providers cost us (system keys)
     cost_user_keys: float  # spent on users' own keys (not ours)
@@ -305,6 +305,7 @@ class SpendByCategory(BaseModel):
     voices: float = 0.0
     pictures: float = 0.0
     music: float = 0.0
+    cover: float = 0.0
 
 
 class AdminUserRow(BaseModel):
@@ -382,6 +383,7 @@ class SpendDay(BaseModel):
     voices: float = 0.0
     pictures: float = 0.0
     music: float = 0.0
+    cover: float = 0.0
 
 
 class ReactionOwner(BaseModel):
@@ -668,6 +670,35 @@ class MotionMoveRequest(ReasonRequest):
     whole: bool = False
 
 
+class AdminCoverVersion(BaseModel):
+    id: str
+    url: str  # 768 px wide, through the console's files route
+    full_url: str
+    hook: str
+    source: str  # auto | owner | admin
+    cost_usd: float  # provider cost of the director and the pictures
+    tries: int
+    own_key: bool
+    created_at: datetime | None = None
+
+
+class AdminCover(BaseModel):
+    """The debate's AI cover (services/media/cover): the latest build and its versions."""
+
+    status: str = "none"
+    error: str | None = None
+    current: str | None = None  # the version shown; None: the markup cover
+    versions: list[AdminCoverVersion] = Field(default_factory=list)
+
+
+class CoverRegenerateRequest(ReasonRequest):
+    hook: str | None = Field(default=None, max_length=22)
+
+
+class CoverSelectRequest(ReasonRequest):
+    version: str | None = Field(default=None, max_length=32)  # None: back to the markup cover
+
+
 class AdminDebateCard(BaseModel):
     debate: AdminDebateRow
     motion: AdminDebateMotion | None = None
@@ -679,6 +710,7 @@ class AdminDebateCard(BaseModel):
     moderation: dict[str, Any]
     wants_public: bool  # the owner asked for the gallery
     media: dict[str, Any]  # media_json: options, progress, stats, error, renders, free
+    cover: AdminCover = Field(default_factory=AdminCover)
     recovery: RecoveryState
     usage: list[UsageByPurpose] | None  # provider calls by purpose (`money`)
     ledger: list[AdminLedgerRow] | None  # `money`
@@ -698,6 +730,7 @@ class ModerationItem(BaseModel):
     source: str | None  # llm | fallback (the check gave no answer)
     checked_at: str | None
     publish_requested: bool  # the owner wants it public
+    cover_url: str | None = None  # its AI cover (console URL), when it has one
 
 
 class ModerationDecision(BaseModel):
@@ -984,6 +1017,7 @@ class MoneyRow(BaseModel):
     charged_voices: float
     charged_pictures: float
     charged_music: float = 0.0
+    charged_cover: float = 0.0
     charged: float
     cost_billed: float  # system-key cost of what users pay for
     cost_unbilled: float  # system-key cost nobody pays us for
@@ -1124,7 +1158,7 @@ class SecuritySummary(BaseModel):
 # --- levers and alerts --------------------------------------------------------------------------
 
 LeverKind = Literal[
-    "bool", "int", "float", "factor", "text", "models", "model", "lengths", "alerts"
+    "bool", "int", "float", "factor", "text", "models", "model", "lengths", "alerts", "choice"
 ]
 
 
@@ -1136,6 +1170,7 @@ class LeverOut(BaseModel):
     overridden: bool
     minimum: float | None = None
     maximum: float | None = None
+    choices: list[str] | None = None  # kind "choice": the values it takes
     updated_at: datetime | None = None
     updated_by: str | None = None
 

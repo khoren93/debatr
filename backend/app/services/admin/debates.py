@@ -43,6 +43,7 @@ from app.services import motions
 from app.services.admin.stats import ledger_category
 from app.services.admin.users import audit_out, day_start, ledger_row_out, like_pattern, public_url
 from app.services.debate_control import ACTIVE_STATUSES
+from app.services.media import cover as covers
 from app.services.moderation import wants_public
 from app.services.resume import resume_point
 from app.services.studio import turn_visuals_out
@@ -445,6 +446,7 @@ async def debate_card(
         "moderation": dict(debate.moderation_json or {}),
         "wants_public": wants_public(debate),
         "media": media_out(debate),
+        "cover": cover_card(debate),
         "recovery": await recovery_state(redis, str(debate.id)),
         "usage": await usage_by_purpose(db, debate.id) if with_money else None,
         "ledger": await debate_ledger(db, debate.id) if with_money else None,
@@ -452,6 +454,48 @@ async def debate_card(
         "resume_from": resume_point(turns) if can_resume(debate, own_key) else None,
         "audit": await debate_audit(db, debate.id),
     }
+
+
+def admin_file_url(debate_id: str, name: str) -> str:
+    """A file of the debate's folder through the console's own route (`/api/media` is closed on
+    the admin host)."""
+    return f"/api/admin/debates/{debate_id}/files/covers/{name}"
+
+
+def cover_card(debate: Debate) -> dict[str, Any]:
+    """The AI cover block of the card: the build's state and every version (console URLs)."""
+    state: dict[str, Any] = debate.cover_json or {}
+    out: list[dict[str, Any]] = []
+    for version in covers.versions(state):
+        files: dict[str, Any] = version.get("files") or {}
+        if not files.get("small") or not files.get("full"):
+            continue
+        out.append(
+            {
+                "id": str(version["id"]),
+                "url": admin_file_url(str(debate.id), str(files["small"])),
+                "full_url": admin_file_url(str(debate.id), str(files["full"])),
+                "hook": str(version.get("hook") or ""),
+                "source": str(version.get("source") or "owner"),
+                "cost_usd": float(version.get("cost_usd") or 0.0),
+                "tries": int(version.get("tries") or 1),
+                "own_key": bool(version.get("own_key")),
+                "created_at": version.get("created_at"),
+            }
+        )
+    return {
+        "status": debate.cover_status or "none",
+        "error": state.get("error") or None,
+        "current": state.get("current") or None,
+        "versions": out,
+    }
+
+
+def cover_thumb(debate: Debate) -> str | None:
+    """The current cover's small picture (console URL), for lists."""
+    version = covers.current_version(debate.cover_json)
+    small = ((version or {}).get("files") or {}).get("small")
+    return admin_file_url(str(debate.id), str(small)) if small else None
 
 
 # --- moderation -------------------------------------------------------------------------------
@@ -484,6 +528,7 @@ async def moderation_queue(db: AsyncSession, recent: int = 30) -> dict[str, Any]
                 "source": raw.get("source") or None,
                 "checked_at": raw.get("checked_at") or None,
                 "publish_requested": wants_public(debate),
+                "cover_url": cover_thumb(debate),
             }
         )
     entries = list(

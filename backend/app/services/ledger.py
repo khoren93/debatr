@@ -1,8 +1,8 @@
 """Ledger presentation and monthly usage for the Account page (pure functions, no DB).
 
 A ledger row's `category` says what the money paid for: `models` (debate tokens), `voices`
-(premium TTS), `pictures` (AI images) or the kind of a credit (`topup`, `bonus`, `refund`,
-`adjustment`). Charges carry the debate title in their description ("Premium voices: <title>"),
+(premium TTS), `pictures` (AI images), `music` (battle tracks), `cover` (AI covers) or the kind
+of a credit (`topup`, `bonus`, `refund`, `adjustment`). Charges carry the debate title in their description ("Premium voices: <title>"),
 so `title` strips that prefix and the UI shows the category as its own label.
 """
 
@@ -20,6 +20,7 @@ CATEGORY_LABELS = {
     "voices": "Premium voices",
     "pictures": "AI pictures",
     "music": "Battle music",
+    "cover": "AI cover",
     "topup": "Top-up",
     "bonus": "Bonus",
     "refund": "Refund",
@@ -27,7 +28,12 @@ CATEGORY_LABELS = {
 }
 
 # Description prefixes written by services/credits.py (kept for rows of deleted debates).
-_PREFIXES = {"voices": "Premium voices: ", "pictures": "AI pictures: ", "music": "Music: "}
+_PREFIXES = {
+    "voices": "Premium voices: ",
+    "pictures": "AI pictures: ",
+    "music": "Music: ",
+    "cover": "AI cover: ",
+}
 
 # Characters that make spreadsheets treat a cell as a formula (CSV injection).
 _FORMULA_START = ("=", "+", "-", "@", "\t", "\r")
@@ -42,6 +48,8 @@ def category(tx: CreditTransaction) -> str:
             return "pictures"
         if ":music:" in ref or (tx.description or "").startswith(_PREFIXES["music"]):
             return "music"
+        if ":cover:" in ref or (tx.description or "").startswith(_PREFIXES["cover"]):
+            return "cover"
         return "voices"
     return tx.kind
 

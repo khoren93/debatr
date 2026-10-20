@@ -9,7 +9,8 @@ jobs is never touched. Then it is queued again from where it stopped: turns are 
 so a debate goes on from its first missing turn (`resume.resume_point`), and an audio build
 reuses the turns it already voiced. After RECOVERY_ATTEMPTS, for runs older than MAX_AGE, or
 when the debate's own OpenRouter key has expired meanwhile, the debate fails with a message and
-waits for Resume; an audio build fails and can be generated again.
+waits for Resume; an audio build fails and can be generated again. An AI cover is never drawn
+again on its own (each try costs money): an orphaned one fails at once and the owner asks again.
 """
 
 import logging
@@ -24,6 +25,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.redis import (
+    cover_beat_key,
     debate_beat_key,
     get_sync_redis,
     media_beat_key,
@@ -35,6 +37,7 @@ from app.models.models import Debate, Turn, utcnow
 from app.services import queue_manager
 from app.services.formats import format_of
 from app.services.heartbeat import alive
+from app.services.media.cover import set_cover_state
 from app.services.media.state import set_media_state
 from app.services.orchestrator import fail_debate
 from app.services.resume import discarded, resume_point
@@ -177,6 +180,13 @@ def _recover_media(db: Session, redis: Redis, debate: Debate) -> None:
     queue_manager.enqueue_media_build(debate_id)
 
 
+def _recover_cover(db: Session, redis: Redis, debate: Debate) -> None:
+    logger.warning("Cover of %s lost its worker; failing it", debate.id)
+    set_cover_state(
+        db, debate, status="error", error="The cover was interrupted: generate it again"
+    )
+
+
 def _sweep(
     db: Session,
     redis: Redis,
@@ -209,6 +219,9 @@ def recover_runs_job() -> None:
         _sweep(db, redis, "debate", running, turns_waiting, debate_beat_key, _recover_debate)
         building = db.scalars(select(Debate).where(Debate.media_status.in_(ACTIVE))).all()
         _sweep(db, redis, "media", building, media_waiting, media_beat_key, _recover_media)
+        covers_waiting = queue_manager.waiting_debates(redis, queue_manager.BACKGROUND_QUEUE_NAME)
+        drawing = db.scalars(select(Debate).where(Debate.cover_status.in_(ACTIVE))).all()
+        _sweep(db, redis, "cover", drawing, covers_waiting, cover_beat_key, _recover_cover)
 
 
 def recover_now(debate_id: str, kind: str) -> str:

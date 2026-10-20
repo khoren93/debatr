@@ -14,6 +14,7 @@ from app.api import admin as admin_api
 from app.api import (
     routes_auth,
     routes_billing,
+    routes_covers,
     routes_debates,
     routes_formats,
     routes_gallery,
@@ -109,6 +110,7 @@ app.include_router(routes_topics.router, prefix="/api/topics", tags=["topics"])
 app.include_router(routes_gallery.router, prefix="/api/gallery", tags=["gallery"])
 app.include_router(routes_motions.router, prefix="/api/motions", tags=["gallery"])
 app.include_router(routes_debates.router, prefix="/api/debates", tags=["debates"])
+app.include_router(routes_covers.router, prefix="/api/debates", tags=["covers"])
 app.include_router(routes_reactions.router, prefix="/api/debates", tags=["reactions"])
 app.include_router(routes_stream.router, prefix="/api/debates", tags=["stream"])
 app.include_router(routes_media.router, prefix="/api", tags=["media"])

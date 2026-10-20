@@ -3,9 +3,11 @@ import { LRUCache } from 'lru-cache';
 import { fromJsx } from 'takumi-js/helpers/jsx';
 import { Renderer } from 'takumi-js/node';
 import { OG_DESIGN, OG_HEIGHT, OG_WIDTH, SITE_CARD, ogVersion, type OgCard } from '../../lib/og';
+import { apiInternalUrl } from '../../api/server.server';
 import { readImage, writeImage, type StoredImage } from './cache.server';
 import { OgCardView, cardLogos } from './card.server';
 import { ensureScriptFonts, registerBundledFonts, scriptFamilies } from './fonts.server';
+import { logoName, logoSource } from './logos.server';
 
 /**
  * Draws preview cards with Takumi (Rust, no browser: ~20–40 ms a card) and serves them from
@@ -49,8 +51,35 @@ async function draw(card: OgCard): Promise<OgImage> {
   return { body: await renderer.render(node, { ...options, format: 'jpeg', quality: JPEG_QUALITY }), type: 'image/jpeg', complete };
 }
 
-/** The card's picture: from memory, from disk, or drawn now (once, however many ask at a time). */
-export function ogImage(card: OgCard): Promise<OgImage> {
+/** An AI cover's 1200×630 file from the API (cached like a card); null when it is gone. */
+async function coverImage(cover: { id: string; url: string }): Promise<OgImage | null> {
+  const key = `cover-${cover.id.replace(/[^a-z0-9]/gi, '')}`;
+  const hit = memory.get(key);
+  if (hit) return hit;
+  try {
+    const response = await fetch(`${apiInternalUrl()}${cover.url}`, { signal: AbortSignal.timeout(5000) });
+    if (!response.ok) return null;
+    const image: OgImage = { body: new Uint8Array(await response.arrayBuffer()), type: 'image/jpeg', complete: true };
+    memory.set(key, image);
+    return image;
+  } catch {
+    return null;
+  }
+}
+
+/** The card's picture: its AI cover, or from memory, from disk, or drawn now (once, however
+ *  many ask at a time). */
+export async function ogImage(card: OgCard): Promise<OgImage> {
+  if (card.cover) {
+    const cover = await coverImage(card.cover);
+    if (cover) return cover;
+    const drawn = await ogImage({ ...card, cover: null });
+    return { ...drawn, complete: false }; // the cover will be back: ask again soon
+  }
+  return drawCard(card);
+}
+
+function drawCard(card: OgCard): Promise<OgImage> {
   const key = cardKey(card);
   const hit = memory.get(key);
   if (hit) return Promise.resolve(hit);
@@ -116,4 +145,33 @@ export async function ogRoute(request: Request, load: () => Promise<OgCard>): Pr
     return response;
   }
   return imageResponse(await ogImage(card), request, card);
+}
+
+// --- logo references of the AI covers -----------------------------------------------------------
+
+const LOGO_SIZE = 512;
+const LOGO_PAD = 40;
+/** Logos drawn in white (made for dark backgrounds) go on a near-black tile. */
+const DARK_TILES = new Set(['kimi-color']);
+const logos = new LRUCache<string, { name: string; body: Uint8Array }>({ max: 64 });
+
+/**
+ * A model's logo as the image model's reference picture (backend services/media/cover_logos):
+ * 512 px PNG on white, single-colour logos in near-black. Null for authors without a logo.
+ */
+export async function logoReference(modelId: string): Promise<{ name: string; body: Uint8Array } | null> {
+  const logo = logoSource(modelId, '#111111');
+  if (!logo) return null;
+  const name = logoName(logo.src);
+  const hit = logos.get(name);
+  if (hit) return hit;
+  const { node, css } = await fromJsx(
+    <div style={{ display: 'flex', width: LOGO_SIZE, height: LOGO_SIZE, alignItems: 'center', justifyContent: 'center', background: DARK_TILES.has(name) ? '#0A0B0F' : '#FFFFFF' }}>
+      <img src={logo.src} style={{ width: LOGO_SIZE - 2 * LOGO_PAD, height: LOGO_SIZE - 2 * LOGO_PAD }} />
+    </div>,
+  );
+  const body = await renderer.render(node, { width: LOGO_SIZE, height: LOGO_SIZE, format: 'png', css, images: [logo] });
+  const entry = { name, body };
+  logos.set(name, entry);
+  return entry;
 }

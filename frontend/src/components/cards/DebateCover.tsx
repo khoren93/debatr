@@ -28,8 +28,8 @@ interface CoverLayout {
 }
 
 const LAYOUTS = {
-  /** Gallery / library cards. */
-  card: { aspect: 'aspect-[5/2]', logoY: 52, logo: { 2: 15.5, 3: 12, 4: 9.5 }, vs: [8, 6.5], name: [2.8, 2.1], gap: 1.8, corners: 'p-3', shade: 'h-1/3 from-black/45' },
+  /** Gallery / library cards: 16:9 like the AI covers they sit next to (CardCover). */
+  card: { aspect: 'aspect-video', logoY: 50, logo: { 2: 17, 3: 13, 4: 10.5 }, vs: [9, 7.2], name: [3.2, 2.4], gap: 2.2, corners: 'p-3', shade: 'h-1/3 from-black/45' },
   /** The long video's first frame (`video/components/FaceOff` in the intro card): logos higher up,
    *  room for the question below, a pulsing VS mark. */
   poster: { aspect: 'aspect-video', logoY: 36, logo: { 2: 13, 3: 9.4, 4: 7.3 }, vs: [7.2, 5.6], name: [1.7, 1.4], nameMin: 9, gap: 2.2, corners: 'px-[2.4cqw] py-[2.2cqw]', shade: 'h-3/5 from-ink/90', vsClass: 'motion-safe:animate-vs-pulse' },
@@ -66,7 +66,8 @@ const BigLogo = ({ modelId, color, size }: { modelId: string; color: string; siz
 
 interface DebateCoverProps {
   participants: Participant[];
-  /** `card` = 5:2 gallery cover, `poster` = 16:9 like the video's first frame. */
+  /** `card` = gallery cover (title below it), `poster` = the video's first frame (room for the
+   *  question); both 16:9. */
   layout?: keyof typeof LAYOUTS;
   /** Overlays in the top corners (badges). */
   topLeft?: ReactNode;

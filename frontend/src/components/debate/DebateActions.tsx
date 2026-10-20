@@ -1,4 +1,4 @@
-import { Captions, Copy, Ellipsis, FileText, PanelRight, RectangleHorizontal, RectangleVertical, Repeat2, Share, Sparkles, Square, Trash2 } from 'lucide-react';
+import { Captions, Copy, Ellipsis, FileText, ImagePlus, PanelRight, RectangleHorizontal, RectangleVertical, Repeat2, Share, Sparkles, Square, Trash2 } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import type { Timeline } from '../../api/timeline';
@@ -27,6 +27,8 @@ interface Props {
   onLikes: (likes: number, liked: boolean) => void;
   onPatch: (patch: Partial<DebateDetail>) => void;
   onGenerate: () => void;
+  /** Open the export panel at the AI cover card. */
+  onCover: () => void;
   onStop: () => void;
   onDelete: () => void;
 }
@@ -46,7 +48,7 @@ const FORMATS = [
 ] as const;
 
 /** Toolbar over the player: video format, like, share, remix, export panel and the "more" menu. */
-export const DebateActions = ({ debate, timeline, isActive, completed, voicing, railOpen, canExport, onToggleRail, format, onFormat, onLikes, onPatch, onGenerate, onStop, onDelete }: Props) => {
+export const DebateActions = ({ debate, timeline, isActive, completed, voicing, railOpen, canExport, onToggleRail, format, onFormat, onLikes, onPatch, onGenerate, onCover, onStop, onDelete }: Props) => {
   const toast = useToast();
   const [open, setOpen] = useState<'share' | 'menu' | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -157,6 +159,11 @@ export const DebateActions = ({ debate, timeline, isActive, completed, voicing, 
           {owner && completed && !voicing && (
             <MenuItem icon={<Sparkles className="size-4" />} onClick={run(onGenerate)}>
               {timeline ? 'Regenerate audio' : 'Generate audio'}
+            </MenuItem>
+          )}
+          {owner && completed && debate.cover.reason !== 'off' && (
+            <MenuItem icon={<ImagePlus className="size-4" />} onClick={run(onCover)}>
+              {debate.cover.current ? 'New AI cover' : 'Generate AI cover'}
             </MenuItem>
           )}
           {(usage || owner) && <div className="mx-1.5 my-1 h-px bg-white/8" />}

@@ -126,28 +126,37 @@ async def spent_by_tokens(db: AsyncSession, token_ids: list[uuid.UUID]) -> dict[
     return out
 
 
-def pending_estimate(debate_status: str, media_status: str, config: dict[str, Any]) -> Decimal:
+def pending_estimate(
+    debate_status: str, media_status: str, config: dict[str, Any], cover_status: str = "none"
+) -> Decimal:
     """Credits a run of a token will still be charged: the whole estimate while it runs, the
-    media part (premium voices, AI pictures) while its automatic media build runs."""
+    media part (premium voices, AI pictures) while its automatic media build runs, the cover's
+    while its automatic cover is drawn."""
     billing = config.get("billing") or {}
     if debate_status in ACTIVE_RUN_STATUSES:
         return to_usd(billing.get("estimate_usd") or 0)
+    pending = ZERO
     if media_status in ACTIVE_MEDIA_STATUSES:
-        return to_usd(billing.get("media_estimate_usd") or 0)
-    return ZERO
+        pending += to_usd(billing.get("media_estimate_usd") or 0)
+    if cover_status in ACTIVE_MEDIA_STATUSES:
+        pending += to_usd(billing.get("cover_estimate_usd") or 0)
+    return pending
 
 
 async def reserved_by_token(db: AsyncSession, token_id: uuid.UUID) -> Decimal:
-    stmt = select(Debate.status, Debate.media_status, Debate.config_json).where(
+    stmt = select(
+        Debate.status, Debate.media_status, Debate.config_json, Debate.cover_status
+    ).where(
         Debate.api_token_id == token_id,
         or_(
             Debate.status.in_(ACTIVE_RUN_STATUSES),
             Debate.media_status.in_(ACTIVE_MEDIA_STATUSES),
+            Debate.cover_status.in_(ACTIVE_MEDIA_STATUSES),
         ),
     )
     total = ZERO
-    for status, media_status, config in (await db.execute(stmt)).all():
-        total += pending_estimate(status, media_status or "none", config or {})
+    for status, media_status, config, cover_status in (await db.execute(stmt)).all():
+        total += pending_estimate(status, media_status or "none", config or {}, cover_status)
     return total
 
 
@@ -167,10 +176,14 @@ async def budget_left(db: AsyncSession, token: ApiToken | None) -> Decimal | Non
 
 def with_token_defaults(config: DebateConfig) -> DebateConfig:
     """Debates created with an API token stay private unless the request asks to publish them
-    (`auto_publish` sent explicitly), so scripts and agents don't fill the gallery by accident."""
-    if "auto_publish" in config.model_fields_set:
-        return config
-    return config.model_copy(update={"auto_publish": False})
+    (`auto_publish` sent explicitly), so scripts and agents don't fill the gallery by accident,
+    and get no paid AI cover unless asked for (`cover`)."""
+    update: dict[str, Any] = {}
+    if "auto_publish" not in config.model_fields_set:
+        update["auto_publish"] = False
+    if "cover" not in config.model_fields_set:
+        update["cover"] = False
+    return config.model_copy(update=update) if update else config
 
 
 # --- device flow ----------------------------------------------------------------

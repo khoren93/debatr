@@ -5,7 +5,7 @@ import { listDebates } from '../api/debates';
 import type { DebateSummary, MediaOutput } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { Page, PageTitle } from '../components/layout/AppShell';
-import { DebateCard, DebateCover, DurationChip, VerdictLine } from '../components/cards';
+import { CardCover, DebateCard, DurationChip, VerdictLine } from '../components/cards';
 import { Button, EmptyState, ErrorBox, Input, LinkButton, PageLoader, SectionLabel, Segmented, StagePill, Tag, type SegmentOption } from '../components/ui';
 import { formatCount, formatDateShort, formatMoney, stageOfSummary } from '../lib/format';
 
@@ -136,7 +136,7 @@ const Library = () => {
                       index={i}
                       to={stage === 'draft' ? `/create?draft=${d.id}` : `/debate/${d.id}`}
                       title={d.topic || d.title || 'Untitled debate'}
-                      cover={<DebateCover participants={d.participants} topLeft={<StagePill stage={stage} />} topRight={<DurationChip ms={d.duration_ms} />} />}
+                      cover={<CardCover cover={d.cover} participants={d.participants} topLeft={<StagePill stage={stage} />} topRight={<DurationChip ms={d.duration_ms} />} />}
                       footerLeft={
                         <>
                           <span className="shrink-0">{formatDateShort(d.created_at)}</span>

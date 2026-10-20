@@ -32,5 +32,6 @@ export default [
   route('og/d/:file', 'routes/og.debate.ts'),
   route('og/t/:file', 'routes/og.topic.ts'),
   route('og/site.png', 'routes/og.site.ts'),
+  route('og/logo.png', 'routes/og.logo.ts'),
   route('healthz', 'routes/healthz.ts'),
 ] satisfies RouteConfig;

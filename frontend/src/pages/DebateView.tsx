@@ -57,6 +57,9 @@ const insertTurn = (turns: Turn[], turn: Turn) => {
   return [...turns, turn].sort((a, b) => a.seq_index - b.seq_index);
 };
 
+/** How often the page asks for an AI cover being drawn (it takes about a minute). */
+const COVER_POLL_MS = 4000;
+
 const isNearBottom = () => window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 240;
 
 const wordCount = (text: string) => text.split(/\s+/).filter(Boolean).length;
@@ -101,6 +104,7 @@ const DebateView = ({ initial, viewer, id, slug }: Props) => {
   const [startSeq, setStartSeq] = useState<number | null>(null);
   const [activeSeq, setActiveSeq] = useState<number | null>(null);
   const [railOpen, setRailOpen] = useState(false);
+  const [coverFocus, setCoverFocus] = useState(false);
   const [confirm, setConfirm] = useState<'stop' | 'delete' | null>(null);
   const [resuming, setResuming] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -153,6 +157,28 @@ const DebateView = ({ initial, viewer, id, slug }: Props) => {
   const isActive = ACTIVE_STATUSES.includes(debate.status);
   const isOwner = debate.is_owner;
   const { media, timeline, refresh: refreshMedia } = useDebateMedia(debateId);
+
+  // While the owner's AI cover is drawn (about a minute), poll the debate for it.
+  const coverStatus = debate.cover.status;
+  const drawingCover = isOwner && (coverStatus === 'queued' || coverStatus === 'running');
+  useEffect(() => {
+    if (!drawingCover || !debateId) return;
+    let cancelled = false;
+    const timer = window.setInterval(() => {
+      getDebate(debateId)
+        .then((d) => {
+          if (cancelled) return;
+          setDebate(d);
+          if (d.cover.status === 'ready') toast.success('The AI cover is ready');
+          else if (d.cover.status === 'error') toast.error(d.cover.error || 'The cover could not be drawn');
+        })
+        .catch(() => undefined);
+    }, COVER_POLL_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [drawingCover, debateId, toast]);
 
   // When the audio build finishes, reload the debate (outputs, duration, verdict winner).
   const mediaStatus = media?.media_status;
@@ -295,6 +321,11 @@ const DebateView = ({ initial, viewer, id, slug }: Props) => {
   const openRegenerate = () => {
     setRailOpen(false);
     setRegenOpen(true);
+  };
+
+  const openCover = () => {
+    setCoverFocus(true);
+    setRailOpen(true);
   };
 
   const scrollToTurn = (seq: number) => {
@@ -446,12 +477,16 @@ const DebateView = ({ initial, viewer, id, slug }: Props) => {
               voicing={voicing}
               railOpen={railOpen}
               canExport={canExport}
-              onToggleRail={() => setRailOpen((v) => !v)}
+              onToggleRail={() => {
+                setCoverFocus(false);
+                setRailOpen((v) => !v);
+              }}
               format={playable ? format : undefined}
               onFormat={changeFormat}
               onLikes={updateLikes}
               onPatch={(patch) => setDebate((d) => ({ ...d, ...patch }))}
               onGenerate={openRegenerate}
+              onCover={openCover}
               onStop={() => setConfirm('stop')}
               onDelete={() => setConfirm('delete')}
             />
@@ -544,6 +579,8 @@ const DebateView = ({ initial, viewer, id, slug }: Props) => {
               highlightIndex={highlightIndex}
               onHighlightChange={changeHighlight}
               onGenerate={openRegenerate}
+              onCover={(cover) => setDebate((d) => ({ ...d, cover }))}
+              focusCover={coverFocus}
             />
           )}
         </ClientOnly>

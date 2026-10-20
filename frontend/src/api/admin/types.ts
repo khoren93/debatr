@@ -118,7 +118,7 @@ export interface OverviewMoney {
   bonuses: number;
   refunds: number;
   adjustments: number;
-  charged: Record<'models' | 'voices' | 'pictures' | 'music', number>;
+  charged: Record<'models' | 'voices' | 'pictures' | 'music' | 'cover', number>;
   charged_total: number;
   cost_system: number;
   cost_user_keys: number;
@@ -222,6 +222,7 @@ export interface SpendByCategory {
   voices: number;
   pictures: number;
   music: number;
+  cover: number;
 }
 
 export interface AdminUserRow {
@@ -520,6 +521,7 @@ export interface AdminDebateCard {
   moderation: Record<string, unknown>;
   wants_public: boolean;
   media: Record<string, unknown> & { status: string };
+  cover: AdminCover;
   recovery: RecoveryState;
   usage: UsageByPurpose[] | null;
   ledger: AdminLedgerRow[] | null;
@@ -527,6 +529,28 @@ export interface AdminDebateCard {
   /** The turn a resume starts from (0-based), when the debate can be resumed. */
   resume_from: number | null;
   audit: AuditEntry[];
+}
+
+/** A debate's AI cover in the console (backend services/media/cover.py). */
+export interface AdminCoverVersion {
+  id: string;
+  /** 768 px wide, through the console's files route. */
+  url: string;
+  full_url: string;
+  hook: string;
+  source: 'auto' | 'owner' | 'admin' | string;
+  cost_usd: number;
+  tries: number;
+  own_key: boolean;
+  created_at: string | null;
+}
+
+export interface AdminCover {
+  status: 'none' | 'queued' | 'running' | 'ready' | 'error';
+  error: string | null;
+  /** The version shown; null: the markup cover. */
+  current: string | null;
+  versions: AdminCoverVersion[];
 }
 
 export interface ModerationItem {
@@ -540,6 +564,8 @@ export interface ModerationItem {
   source: string | null;
   checked_at: string | null;
   publish_requested: boolean;
+  /** Its AI cover (console URL), when it has one. */
+  cover_url: string | null;
 }
 
 export interface ModerationDecision {
@@ -764,6 +790,7 @@ export interface MoneyRow {
   charged_voices: number;
   charged_pictures: number;
   charged_music: number;
+  charged_cover: number;
   charged: number;
   /** System-key cost of what users pay for. */
   cost_billed: number;
@@ -891,7 +918,7 @@ export interface SecuritySummary {
 
 // --- levers and alerts ---------------------------------------------------------------------------
 
-export type LeverKind = 'bool' | 'int' | 'float' | 'factor' | 'text' | 'models' | 'model' | 'lengths' | 'alerts';
+export type LeverKind = 'bool' | 'int' | 'float' | 'factor' | 'text' | 'models' | 'model' | 'lengths' | 'alerts' | 'choice';
 
 export type LeverKey =
   | 'registration_open'
@@ -911,7 +938,8 @@ export type LeverKey =
   | 'credit_markup'
   | 'min_debate_charge_usd'
   | 'tts_price_per_1k_chars'
-  | 'music_price_per_min';
+  | 'music_price_per_min'
+  | 'ai_covers';
 
 export type LeverValue = boolean | number | string | string[];
 
@@ -924,6 +952,8 @@ export interface Lever {
   overridden: boolean;
   minimum: number | null;
   maximum: number | null;
+  /** Kind "choice": the values it takes. */
+  choices: string[] | null;
   updated_at: string | null;
   updated_by: string | null;
 }

@@ -47,6 +47,10 @@ const COPY: Record<LeverKey, { label: string; hint: string }> = {
     label: 'Battle music, per minute',
     hint: 'A rap battle’s generated track on the system key (ElevenLabs Music costs $0.15 a minute). A battle is 2–6 minutes of music; a rebuild with the same lyrics reuses the track and costs nothing.',
   },
+  ai_covers: {
+    label: 'AI covers',
+    hint: 'Paid: runs paid from the balance or an own OpenRouter key get a cover when they complete (≈ $0.03 × markup, from the balance), owners make more on the debate page. All public: free public debates get one too, on us. Off: no new covers (the console still makes them).',
+  },
   free_verdict_model: {
     label: 'Verdict model of free debates',
     hint: 'Structures the verdict and answers the gallery check when every participant argues on a free model, so such a debate costs nothing. Free models only; off: the paid VERDICT_MODEL. A model that stops answering sends those debates to the moderation queue.',
@@ -66,6 +70,7 @@ const show = (lever: Lever, value: LeverValue, events: AlertEvent[] = []): strin
   if (lever.kind === 'factor') return `× ${Number(value)}`;
   if (lever.kind === 'float') return formatUsd(Number(value));
   if (lever.kind === 'text') return String(value) || '(standard text)';
+  if (lever.kind === 'choice') return CHOICE_LABELS[String(value)] ?? String(value);
   return String(value);
 };
 
@@ -78,6 +83,7 @@ interface Pending {
 const loadSettings = () => getSettings();
 
 const LENGTH_LABELS: Record<string, string> = { very_short: 'very short', short: 'short', medium: 'medium', long: 'long' };
+const CHOICE_LABELS: Record<string, string> = { off: 'off', paid: 'paid runs', all_public: 'all public debates' };
 
 // Text and model lists take the row's whole width under the description.
 const Row = ({ lever, onReset, children }: { lever: Lever; onReset: () => void; children: ReactNode }) => (
@@ -358,6 +364,15 @@ const AdminSettings = () => {
                 {row('min_debate_charge_usd', number)}
                 {row('tts_price_per_1k_chars', number)}
                 {row('music_price_per_min', number)}
+                {row('ai_covers', (lever) => (
+                  <Dropdown
+                    size="sm"
+                    aria-label={COPY.ai_covers.label}
+                    value={String(lever.value)}
+                    options={(lever.choices ?? []).map((value) => ({ value, label: CHOICE_LABELS[value] ?? value }))}
+                    onChange={(value) => value !== lever.value && ask(lever, value)}
+                  />
+                ))}
               </div>
             </Card>
             <Card>

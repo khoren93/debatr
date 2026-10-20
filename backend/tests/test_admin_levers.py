@@ -252,6 +252,8 @@ async def test_site_status(levers: dict) -> None:
             "max_debaters": 4,
             "lengths": ["very_short", "short"],
         },
+        "ai_covers": "paid",
+        "cover_price_usd": 0.042,  # COVER_PRICE_USD 0.035 x markup 1.2
     }
     levers.update(registration_open=False, maintenance=True)
     out = await site_status()

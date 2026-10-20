@@ -182,6 +182,12 @@ const AdminModeration = () => {
                 </Button>
               </div>
             </div>
+            {current.cover_url && (
+              // Its AI cover goes to the gallery with it: judged together with the text.
+              <div className="border-b border-line px-4 py-3">
+                <img src={current.cover_url} alt="AI cover" className="aspect-video w-full max-w-[420px] rounded-[10px] border border-line object-cover" />
+              </div>
+            )}
             {cardError ? <ErrorBox className="m-4">{cardError}</ErrorBox> : shown ? <Transcript turns={shown.turns} folded={false} /> : <Spinner className="m-4 size-5" />}
           </Panel>
         </div>

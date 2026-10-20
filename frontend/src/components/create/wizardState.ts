@@ -97,6 +97,9 @@ export interface WizardState {
   fact_check: boolean;
   /** Publish to the gallery once finished and approved by the AI check. */
   auto_publish: boolean;
+  /** An AI cover once it completes (runs paid from the balance or an own key; backend
+   *  services/media/cover.py). */
+  cover: boolean;
   /** Set by "Remix"; the topic is a version of this debate's topic while the question (or its
    *  translation) stays the same (backend services/motions). */
   remix: RemixPick | null;
@@ -254,6 +257,7 @@ export const initialState = (): WizardState => ({
   images: 'off',
   fact_check: false,
   auto_publish: true,
+  cover: true,
   remix: null,
 });
 
@@ -436,6 +440,7 @@ export const buildConfig = (state: WizardState, opts: BuildOptions): DebateConfi
     },
     fact_check: visuals && state.fact_check,
     auto_publish: state.auto_publish,
+    cover: state.cover,
     remix_of: state.remix?.id,
     user_provider_key: opts.openrouterKey?.trim() || undefined,
     user_tts_key: (opts.provider === 'elevenlabs' && state.outputs.includes('audio') && opts.elevenlabsKey?.trim()) || undefined,
@@ -504,6 +509,7 @@ export const stateFromConfig = (config: DebateConfig, base: WizardState): Wizard
     images: spec.visuals ? (plan?.images ?? base.images) : base.images,
     fact_check: spec.visuals ? (config.fact_check ?? base.fact_check) : base.fact_check,
     auto_publish: config.auto_publish ?? base.auto_publish,
+    cover: config.cover ?? base.cover,
   });
 };
 
@@ -652,6 +658,7 @@ export const sanitizeState = (raw: unknown): WizardState => {
     images: oneOf(raw.images, ['off', 'stock', 'ai'] as const, base.images),
     fact_check: typeof raw.fact_check === 'boolean' ? raw.fact_check : base.fact_check,
     auto_publish: typeof raw.auto_publish === 'boolean' ? raw.auto_publish : base.auto_publish,
+    cover: typeof raw.cover === 'boolean' ? raw.cover : base.cover,
     remix: sanitizeRemix(raw.remix),
   });
 };
