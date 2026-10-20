@@ -7,17 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-10-20
+
 ### Added
 
 - **Rap battle topics from the news**: the wizard shows rap battles their own trending list,
-  rivalries like "Nvidia or AMD?" or "Streaming or cinema?" made from the same news as the debate
-  topics (in the same daily batch, half as many, reviewed for battles: no politicians or groups
-  of people as sides).
+  rivalries like "Ronaldo or Messi?" or "Office or remote work?" made from the same news as the
+  debate topics (in the same daily batch, reviewed for battles: no politicians or groups of people
+  as sides).
 - **Write your own topic with AI**: the search field of the first step is also where you write a
   topic of your own. As soon as you type, "Surprise me" turns into an AI button (Enter works too)
   that writes three topics from your words in the style of the chosen format, in your language,
   or takes your words as they are. Free, up to 40 an hour. A topic you picked stays picked when
   you switch the format, news story included.
+- **Earlier topics in search**: the list shows today's topics (20 a day per format); a search also
+  finds the topics of earlier days.
+- **Admin console**: Settings → Topics sets how many topics a day are written and how many are
+  shown, the model that writes them (and the AI topics) and the model that reviews them. Model
+  settings use the wizard's model picker, turned-off models too.
+
+### Changed
+
+- **Better trending topics**: Claude Haiku 5.5 writes them (sharper and cheaper than Gemini 2.5
+  Flash in a side-by-side run) from a wider pool of headlines; Gemini 2.5 Flash reviews them, so
+  no model checks its own topics.
 
 ## [1.5.1] - 2026-10-20
 
@@ -388,7 +401,8 @@ First public release of **AI Debates**.
 - Admin panel for debates, participants, turns and sessions.
 - Docker Compose setup with FastAPI, PostgreSQL, Redis + RQ and a React + Vite frontend.
 
-[Unreleased]: https://github.com/khoren93/debatr/compare/v1.5.1...HEAD
+[Unreleased]: https://github.com/khoren93/debatr/compare/v1.6.0...HEAD
+[1.6.0]: https://github.com/khoren93/debatr/compare/v1.5.1...v1.6.0
 [1.5.1]: https://github.com/khoren93/debatr/compare/v1.5.0...v1.5.1
 [1.5.0]: https://github.com/khoren93/debatr/compare/v1.4.1...v1.5.0
 [1.4.1]: https://github.com/khoren93/debatr/compare/v1.4.0...v1.4.1
