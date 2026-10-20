@@ -14,8 +14,10 @@ describe('markdownHtml', () => {
   it('renders GFM tables and links', () => {
     const html = markdownHtml('| Side | Score |\n| --- | ---: |\n| For | 7 |\n\nSee [the study](https://example.com/a?b=1&c=2) and https://example.org.');
     expect(html).toContain('<table>');
-    expect(html).toContain('<th align="right">Score</th>');
-    expect(html).toContain('<td align="right">7</td>');
+    // Inline, so .prose's `text-align: start` does not undo the column's alignment.
+    expect(html).toContain('<th style="text-align:right">Score</th>');
+    expect(html).toContain('<td style="text-align:right">7</td>');
+    expect(markdownHtml('| a |\n| --- |\n| <td align="left"> |')).toContain('<td>&lt;td align=&quot;left&quot;&gt;</td>');
     expect(html).toContain('<a href="https://example.com/a?b=1&amp;c=2">the study</a>');
     expect(html).toContain('<a href="https://example.org">https://example.org</a>');
   });
