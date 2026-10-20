@@ -38,7 +38,8 @@ backend/            FastAPI API + RQ worker (Python 3.12+, managed with uv)
                       (Stripe), debates, gallery (+ leaderboard), motions (topic page, wizard
                       suggestions), reactions (likes/votes), models,
                       presets, topics (trending), stream (SSE), media, covers (AI covers of a
-                      debate), status (`GET /api/status`:
+                      debate), oembed (`GET /api/oembed`: a pasted link → the player, CORS `*`),
+                      status (`GET /api/status`:
                       sign-ups / maintenance for the site), seo (outside /api: robots.txt, the
                       sitemaps, the IndexNow key file); serializers.py builds the shared response
                       models
@@ -57,6 +58,8 @@ backend/            FastAPI API + RQ worker (Python 3.12+, managed with uv)
                       check of on-screen figures), markers ([visual: …] / [dispute N: …]),
                       trending (RSS news → daily debate topics with source links),
                       seo (canonical paths `/d/{slug}/{kebab}`, robots.txt, sitemap XML),
+                      embed (the player for other sites: which page a link names, iframe size
+                      and HTML, the oEmbed answer),
                       indexnow (changed public pages → api.indexnow.org once a minute),
                       resume (failed turn → Resume), heartbeat / recovery / fair_share /
                       free_quota (worker safety, see "Workers and queues"), debate_control (stop),
@@ -100,7 +103,8 @@ frontend/           React 19 + React Router 8 (framework mode, server rendering)
                       t/:slug/:kebab?: rendered on the server) | `_client` (login, register,
                       debate/:id: browser only, HydrateFallback, `X-Robots-Tag: noindex`) →
                       `_private` (library, create, account, device: also a session) | `*` (a real
-                      404); resource routes `og/d/:file`, `og/t/:file`, `og/site.png` (link preview
+                      404); `embed/:slug` (outside `_site`: the player for other sites' iframes,
+                      no session, `handle.framed`); resource routes `og/d/:file`, `og/t/:file`, `og/site.png` (link preview
                       pictures, see "Search engines"), `og/logo.png` (a model's logo as the AI covers'
                       reference picture) and `healthz` (Docker health check)
   src/routes/         route modules: one `load(get)` per public page serves the server `loader`
@@ -108,7 +112,8 @@ frontend/           React 19 + React Router 8 (framework mode, server rendering)
                       straight to the API); ErrorBoundary = RouteError / DebateError; public pages
                       add the `microcache` middleware
   src/server/         `*.server.ts`: microcache (cookie-less GETs of public pages, LRU 200 entries /
-                      32 MB / 30 s; key = URL + whether the session is known), siteStatus (30 s memo),
+                      32 MB / 30 s; key = URL + whether the session is known; `sharedMicrocache`:
+                      the embed, the same with a cookie or without), siteStatus (30 s memo),
                       site (`siteOrigin`: SITE_URL, else the request's origin); og/ = the link preview
                       cards (Takumi): card.server.tsx (the card's JSX), fonts (bundled + fetched
                       scripts), logos (public/model-icons in the bundle), cache (disk), render
@@ -175,13 +180,16 @@ frontend/           React 19 + React Router 8 (framework mode, server rendering)
                            rappers' flows), PickerFace, usePickerPopover
   src/components/debate/   DebatePlayer (Remotion Player with own controls; browser-only, lazy;
                            `usePlaying` = play state as an external store, `deferred` = play asked
-                           before the chunk), PlayerShell (frame, SegmentBar = seek bar by turns,
+                           before the chunk; `embed` = EmbedShell: fills the iframe, controls and
+                           header float and hide while it plays; `startMs` = the embed's `t=`),
+                           PlayerShell (frame, SegmentBar = seek bar by turns,
                            PlayerPoster = the AI cover or VideoPoster until the first play,
                            PosterFace = it with the play button, PlayerPending = the ready player's
                            layout in the server's HTML and while its chunk loads, PlayerPlaceholder
                            = no audio yet / voicing), LiveCard (lazy; live frame: cast, speaker,
                            streamed captions), DebateActions (16:9 / 9:16 format icons + Like/Share/Remix/Export/… toolbar,
-                           SharePopover = link + gallery switch + moderation), ExportRail
+                           SharePopover = link + embed code (EmbedPanel: 16:9 / Short, start at the
+                           player's moment, live preview) + gallery switch + moderation), ExportRail
                            (slide-over: ExportCard browser MP4 render, MP3, CoverCard = the owner's AI
                            cover and versions, PublishKit = YouTube
                            title/description with chapters/tags + canvas thumbnails, youtubeKit.ts),
@@ -208,7 +216,8 @@ frontend/           React 19 + React Router 8 (framework mode, server rendering)
                       Landing (/), Library (/library), Gallery (/gallery), Leaderboard (/leaderboard),
                       CreateDebate (/create, `?draft=<id>`, `?remix=<id>`),
                       DebateView (/debate/:id and public /d/:slug), Topic (/t/:slug: a topic's
-                      public versions), Account (/account?tab=…),
+                      public versions), Embed (/embed/:slug: the facade, then DebatePlayer
+                      `embed`), Account (/account?tab=…),
                       Device (/device?code=…, approves `debatr login`), Login (/login),
                       Register (/register); admin/ = the admin console (/admin/*, AdminApp mounted
                       by src/admin-main.tsx, outside the site's AppShell and AuthProvider: AdminLogin, AdminOverview, AdminUsers
@@ -233,6 +242,9 @@ frontend/           React 19 + React Router 8 (framework mode, server rendering)
                       its API path (24 cards a page) / page address (`galleryHref`)
   src/lib/seo.ts      search and preview metadata of every page (pure, vitest): title / description
                       templates, canonical redirects, robots rules, JSON-LD (see "Search engines")
+  src/lib/embed.ts    the player for other sites (pure, vitest; mirrors backend services/embed):
+                      `?format=short&t=` parsing, `/embed/…` paths, the iframe code, `EmbedDebate`
+                      (the route's small data), the oEmbed address
   src/lib/markdown.ts the models' Markdown as HTML (micromark + GFM, raw HTML escaped, dangerous
                       link targets dropped; same output on the server and in the browser)
   src/lib/og.ts       link preview cards (pure, vitest): the card data of a debate / topic / the site,
@@ -563,6 +575,36 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   the scheduler's `flush_job` (every 60 s, background queue, only registered when on) resolves
   topics to their address now and POSTs up to 10 000 URLs to api.indexnow.org; 429 / 5xx /
   network errors put them back. Not booked in `provider_usage` (free).
+
+### Embedding on other sites (`/embed`, oEmbed; `lib/embed.ts`, `services/embed`)
+
+- `/embed/{slug}` (`?format=short` = the Short's first highlight, `?t=` = start in seconds,
+  `parseEmbedQuery`): outside `_site` — no AppShell, no session (the API is asked without the
+  cookie: a third-party frame never gets the SameSite=Strict one), `sharedMicrocache`, headers
+  `frame-ancestors *`, `X-Robots-Tag: noindex`, `Cache-Control: public, max-age=300` (60 s for
+  errors). The loader keeps only `EmbedDebate` (no transcript in the HTML). `handle.framed`
+  drops `<ScrollRestoration>` (WebKit leaves `history.state` empty in third-party frames).
+- The server's HTML is the facade (`pages/Embed.tsx`): the AI cover with the question on top (or
+  `VideoPoster` / the 9:16 `ShortPoster`), Play, the episode's length, "Watch on Debatr"
+  (`?ref=embed`, new tab). Intent (pointer enter, focus) loads the Remotion chunk and the media
+  (`GET /media` + timeline) and mounts `DebatePlayer embed` under the poster, so the click itself
+  plays (Apple's WebKit; a click before that plays on the next one). Nothing loads in idle time:
+  the frame comes with every visit of the other page. A view counts on the first play (beacon).
+  Not voiced → "Read it on Debatr" card; not public / unknown → a card with the API's status.
+- Share popover → "Embed on a website" (`EmbedPanel`, public debates with ready audio): 16:9 or
+  the Short, "Start at" the page player's moment (same format; the Short only on its first
+  highlight), a live preview iframe, `embedCode` (responsive: `width:100%;aspect-ratio`, a Short
+  ≤ 360 px; `allow="autoplay; picture-in-picture"` + `allowfullscreen` — `fullscreen` in `allow`
+  makes Chrome warn on the other page).
+- oEmbed `GET /api/oembed?url=&maxwidth=&maxheight=&format=json` (`routes_oembed`, CORS `*`,
+  `max-age=3600`): links of SITE_URL's host (port and `www.` ignored) to `/d/…`, `/t/…` (the most
+  liked public version with audio, else the most liked) or `/embed/…` (its format and start kept);
+  `type: video` with ready audio, else `rich`; size in the video's proportions within the limits
+  (640×360 / 360×640 by default, up to 1280 / 405 wide); thumbnail = the preview picture
+  (`/og/d/{slug}.png`, 1200×630); private / unknown → 404, `format=xml` → 501. `debateSeo` /
+  `topicSeo` set `oembed`, so `<Seo>` adds `<link rel="alternate" type="application/json+oembed">`.
+- JS before hydration: ~149 KiB gzip, of which React DOM + React Router are ~110 and the root's
+  shared chunks ~22; the player's own code ~17 KiB.
 
 ### Likes, audience votes and the model ranking
 
@@ -1191,7 +1233,9 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   api, `/assets/*` and other build files → `/srv`, the console → `/srv/admin`, everything else →
   `web:3000`; 502/503/504 from it → `offline.html` (503 + Retry-After); `/path/` → `/path` (301);
   `/robots.txt`, `/sitemap.xml`, `/sitemaps/*` and `/<8-128 chars>.txt` (the IndexNow key) → api
-  (`npm run dev` proxies the first three too).
+  (`npm run dev` proxies the first three too). Every response but `/embed/*` gets
+  `X-Frame-Options: SAMEORIGIN` + `Content-Security-Policy: frame-ancestors 'self'` (deferred
+  `header @framed`); the embed route sends `frame-ancestors *` itself.
   Views: the renderer's API calls carry `X-Debatr-Render: server` (`services/views.RENDER_HEADER`)
   and count nothing; a server-rendered debate page sends `POST /api/debates/{id}/view` (a beacon,
   `api/debates.countView`) after hydration, so crawlers without JavaScript and micro-cached pages

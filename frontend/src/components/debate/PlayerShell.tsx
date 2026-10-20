@@ -29,14 +29,24 @@ export const PlayerShell = ({ frame, controls, vertical = false, fullscreen = fa
   </div>
 );
 
+interface FrameProps {
+  vertical: boolean;
+  /** Fit the screen (full screen, the embedded player) instead of the page's column. */
+  fullscreen?: boolean;
+  /** Height kept free under the frame when it fits the screen (the control strip). */
+  reserve?: number;
+  children?: ReactNode;
+  className?: string;
+}
+
 /** Frame with the video's aspect ratio (a phone-sized column for the Short). */
-export const PlayerFrame = ({ vertical, fullscreen, children, className = '' }: { vertical: boolean; fullscreen?: boolean; children?: ReactNode; className?: string }) => (
+export const PlayerFrame = ({ vertical, fullscreen, reserve = 96, children, className = '' }: FrameProps) => (
   <div
     className={`@container relative w-full overflow-hidden ${vertical && !fullscreen ? 'max-w-[340px] rounded-[16px]' : ''} ${className}`}
     style={{
       aspectRatio: vertical ? '9 / 16' : '16 / 9',
-      // In fullscreen the frame fits between the screen edges and the control strip.
-      ...(fullscreen ? { width: `min(100%, calc((100dvh - 96px) * ${vertical ? 9 / 16 : 16 / 9}))` } : {}),
+      // Fitting the screen, the frame stays between its edges and the control strip.
+      ...(fullscreen ? { width: `min(100%, calc((100dvh - ${reserve}px) * ${vertical ? 9 / 16 : 16 / 9}))` } : {}),
     }}
   >
     {children}

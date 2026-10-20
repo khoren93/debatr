@@ -4,8 +4,9 @@ import { index, layout, route, type RouteConfig } from '@react-router/dev/routes
  * Route tree. `_site` = the app shell (session + site status from the server). Public pages
  * render on the server (loader for the first document, clientLoader straight to the API on
  * navigations); `_client` pages render only in the browser (HydrateFallback on the server);
- * `_private` ones also need a session. The admin console is a separate SPA (admin.html). Every
- * page renders one `<Seo>` (components/Seo.tsx): the document has no title of its own.
+ * `_private` ones also need a session; `embed` is the player of other sites' iframes. The admin
+ * console is a separate SPA (admin.html). Every page renders one `<Seo>` (components/Seo.tsx): the
+ * document has no title of its own.
  */
 export default [
   layout('routes/_site.tsx', [
@@ -28,6 +29,8 @@ export default [
     ]),
     route('*', 'routes/not-found.tsx'),
   ]),
+  // A public debate's player for other sites' iframes (lib/embed.ts): no app shell, no session.
+  route('embed/:slug', 'routes/embed.tsx'),
   // Link preview pictures (lib/og.ts, src/server/og): `{slug}.png` of a debate or a topic.
   route('og/d/:file', 'routes/og.debate.ts'),
   route('og/t/:file', 'routes/og.topic.ts'),

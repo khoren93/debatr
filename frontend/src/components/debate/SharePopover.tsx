@@ -1,25 +1,32 @@
-import { Check, Copy, ShieldAlert, ShieldX } from 'lucide-react';
+import { Check, ChevronDown, Code, Copy, ShieldAlert, ShieldX } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { getErrorMessage } from '../../api/client';
 import { publishDebate, unpublishDebate } from '../../api/debates';
 import { GALLERY_CATEGORIES, type DebateDetail } from '../../api/types';
 import { Button, Chip, Spinner, useToast } from '../ui';
+import { EmbedPanel, type PlayerPosition } from './EmbedPanel';
 
 interface Props {
   debate: DebateDetail;
   onChange: (patch: Partial<DebateDetail>) => void;
+  /** The page's player position (the embed may start there). */
+  position?: () => PlayerPosition | null;
 }
 
 const capitalise = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
-/** Share popover: the public link, and for the owner the gallery switch. Debates flagged by the
- *  automatic content check wait for an admin review instead of going public. */
-export const SharePopover = ({ debate, onChange }: Props) => {
+/** Share popover: the public link, the embed code of a voiced public debate and, for the owner,
+ *  the gallery switch. Debates flagged by the automatic content check wait for an admin review
+ *  instead of going public. */
+export const SharePopover = ({ debate, onChange, position }: Props) => {
   const toast = useToast();
   const [category, setCategory] = useState<string | null>(debate.category);
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [embedOpen, setEmbedOpen] = useState(false);
   const link = debate.is_public && debate.share_url ? debate.share_url : null;
+  // The player plays only with audio: a debate without it has nothing to embed yet.
+  const embeddable = Boolean(link && debate.slug) && debate.media_status === 'ready';
   const moderation = debate.moderation;
   const owner = debate.is_owner;
 
@@ -137,6 +144,16 @@ export const SharePopover = ({ debate, onChange }: Props) => {
           {copied ? 'Copied' : 'Copy'}
         </button>
       </div>
+      {embeddable && (
+        <div className="grid gap-3">
+          <button type="button" aria-expanded={embedOpen} onClick={() => setEmbedOpen((v) => !v)} className="flex items-center gap-2 text-left text-[13px] font-semibold text-text-2 hover:text-text cursor-pointer">
+            <Code className="size-4 text-muted" />
+            <span className="flex-1">Embed on a website</span>
+            <ChevronDown className={`size-4 text-muted transition-transform ${embedOpen ? 'rotate-180' : ''}`} />
+          </button>
+          {embedOpen && <EmbedPanel debate={debate} position={position} />}
+        </div>
+      )}
       {gallery}
     </div>
   );

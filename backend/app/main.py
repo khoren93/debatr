@@ -21,6 +21,7 @@ from app.api import (
     routes_media,
     routes_models,
     routes_motions,
+    routes_oembed,
     routes_presets,
     routes_reactions,
     routes_seo,
@@ -114,6 +115,7 @@ app.include_router(routes_covers.router, prefix="/api/debates", tags=["covers"])
 app.include_router(routes_reactions.router, prefix="/api/debates", tags=["reactions"])
 app.include_router(routes_stream.router, prefix="/api/debates", tags=["stream"])
 app.include_router(routes_media.router, prefix="/api", tags=["media"])
+app.include_router(routes_oembed.router, prefix="/api", tags=["embed"])
 # robots.txt, the sitemaps and the IndexNow key, outside /api (frontend/Caddyfile routes them).
 app.include_router(routes_seo.router)
 

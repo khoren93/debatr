@@ -19,12 +19,16 @@ const usePageLang = (): string => {
   return 'en';
 };
 
+/** A page for other sites' iframes (`handle.framed`, the embedded player). */
+const useFramed = (): boolean => useMatches().some(({ handle }) => (handle as PageHandle | undefined)?.framed === true);
+
 /** The fonts (src/fonts.ts, bundled into the root stylesheet) start with the stylesheet, not after it. */
 export const links: Route.LinksFunction = () => PRELOAD_FONTS.map((href) => ({ rel: 'preload', href, as: 'font', type: 'font/woff2', crossOrigin: 'anonymous' }));
 
 /** The HTML document of every page (the server renders it; the browser hydrates it). Titles and
  *  the rest of the head come from each page's `<Seo>`. */
 export function Layout({ children }: { children: ReactNode }) {
+  const framed = useFramed();
   return (
     <html lang={usePageLang()}>
       <head>
@@ -37,7 +41,7 @@ export function Layout({ children }: { children: ReactNode }) {
       </head>
       <body>
         {children}
-        <ScrollRestoration />
+        {!framed && <ScrollRestoration />}
         <Scripts />
       </body>
     </html>

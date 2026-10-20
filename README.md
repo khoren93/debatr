@@ -89,6 +89,10 @@ Users sign up, run free models or bring their own OpenRouter key, buy credits wi
   with a new cast.
 - **🧩 One topic, many versions**: debates on the same question share one card in the gallery,
   so you can switch between the matchups (or languages) that argued it and add your own.
+- **🔗 Embed anywhere**: put a debate into a blog post or an article. Copy the `<iframe>` from the
+  Share menu (the 16:9 episode or the 9:16 Short, from the start or the moment you are watching),
+  or paste the debate's link into an app that reads oEmbed. The embed shows the poster at once
+  and loads the player only when someone presses play.
 - **👤 Your studio**: a library of drafts and finished debates, credits topped up via Stripe, or
   your own OpenRouter key to run models at your own cost.
 
@@ -114,8 +118,6 @@ Users sign up, run free models or bring their own OpenRouter key, buy credits wi
   published to the gallery, ready for your vote.
 - [ ] **🧑‍⚖️ Human vs AI**: step into the arena yourself. Argue against a model of your choice, turn
   by turn, and let the judge decide who made the stronger case.
-- [ ] **🔗 Embeddable player**: drop any public debate into a blog post or article with a simple
-  `<iframe>` or an oEmbed link.
 - [ ] **🎞️ Animated avatars**: speakers that talk, react and lip-sync in the 16:9 episodes and
   9:16 Shorts.
 

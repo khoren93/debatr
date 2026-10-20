@@ -7,6 +7,7 @@ import { formatCost, formatTokens } from '../../lib/format';
 import { useToast } from '../ui';
 import { debateMarkdown, downloadText, timelineSrt, transcriptText, type VideoFormat } from './helpers';
 import { LikeButton } from './LikeButton';
+import type { PlayerPosition } from './EmbedPanel';
 import { ICON_ON_PHONES, TOOL_BUTTON } from './toolButton';
 
 // Opens on a click: not part of the page's first JavaScript.
@@ -31,6 +32,8 @@ interface Props {
   onGenerate: () => void;
   /** Open the export panel at the AI cover card. */
   onCover: () => void;
+  /** Where the page's player is (the embed code may start there). */
+  playerPosition?: () => PlayerPosition | null;
   onStop: () => void;
   onDelete: () => void;
 }
@@ -50,7 +53,7 @@ const FORMATS = [
 ] as const;
 
 /** Toolbar over the player: video format, like, share, remix, export panel and the "more" menu. */
-export const DebateActions = ({ debate, timeline, isActive, completed, voicing, railOpen, canExport, onToggleRail, format, onFormat, onLikes, onPatch, onGenerate, onCover, onStop, onDelete }: Props) => {
+export const DebateActions = ({ debate, timeline, isActive, completed, voicing, railOpen, canExport, onToggleRail, format, onFormat, onLikes, onPatch, onGenerate, onCover, playerPosition, onStop, onDelete }: Props) => {
   const toast = useToast();
   const [open, setOpen] = useState<'share' | 'menu' | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -143,7 +146,7 @@ export const DebateActions = ({ debate, timeline, isActive, completed, voicing, 
       {open === 'share' && (
         <div className={`${POPOVER} w-[min(360px,calc(100vw-32px))] p-4`} role="dialog" aria-label="Share this debate">
           <Suspense fallback={<div className="h-24" />}>
-            <SharePopover debate={debate} onChange={onPatch} />
+            <SharePopover debate={debate} onChange={onPatch} position={playerPosition} />
           </Suspense>
         </div>
       )}

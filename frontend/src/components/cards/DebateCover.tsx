@@ -33,6 +33,9 @@ const LAYOUTS = {
   /** The long video's first frame (`video/components/FaceOff` in the intro card): logos as high
    *  as there (the player's button sits below the VS), room for the question, a pulsing VS mark. */
   poster: { aspect: 'aspect-video', logoY: 31, logo: { 2: 13, 3: 9.4, 4: 7.3 }, vs: [7.2, 5.6], name: [1.7, 1.4], nameMin: 9, gap: 2.2, corners: 'px-[2.4cqw] py-[2.2cqw]', shade: 'h-3/5 from-ink/90', vsClass: 'motion-safe:animate-vs-pulse' },
+  /** The Short's first frame (its hook card, `video/DebateShort`): 9:16, logos at the same
+   *  height and size as there, the question in the lower half. */
+  short: { aspect: 'aspect-[9/16]', logoY: 30, logo: { 2: 21, 3: 15, 4: 12 }, vs: [10, 7], name: [3, 2.2], nameMin: 9, gap: 3, corners: 'px-[4cqw] py-[4cqw]', shade: 'h-3/5 from-ink/90', vsClass: 'motion-safe:animate-vs-pulse' },
 } satisfies Record<string, CoverLayout>;
 
 const sideClip = (i: number, n: number) => {
@@ -68,7 +71,7 @@ const BigLogo = ({ modelId, color, size, eager }: { modelId: string; color: stri
 interface DebateCoverProps {
   participants: Participant[];
   /** `card` = gallery cover (title below it), `poster` = the video's first frame (room for the
-   *  question); both 16:9. */
+   *  question), both 16:9; `short` = the Short's first frame (9:16). */
   layout?: keyof typeof LAYOUTS;
   /** Overlays in the top corners (badges). */
   topLeft?: ReactNode;
@@ -123,7 +126,7 @@ export const DebateCover = ({ participants, layout = 'card', topLeft, topRight, 
         const name = n > 2 ? look.name[1] : look.name[0];
         return (
           <div key={i} className="absolute flex -translate-x-1/2 -translate-y-1/2 flex-col items-center" style={{ left: `${cx}%`, top: `${look.logoY}%`, width: `${100 / n - 4}%` }}>
-            <span className="transition-transform duration-300 group-hover:scale-[1.06]">{p ? <BigLogo modelId={p.model} color={color} size={logo} eager={layout === 'poster'} /> : <span className="block rounded-full bg-white/10" style={{ width: `${logo}cqw`, height: `${logo}cqw` }} />}</span>
+            <span className="transition-transform duration-300 group-hover:scale-[1.06]">{p ? <BigLogo modelId={p.model} color={color} size={logo} eager={layout !== 'card'} /> : <span className="block rounded-full bg-white/10" style={{ width: `${logo}cqw`, height: `${logo}cqw` }} />}</span>
             <span className="max-w-full truncate font-mono font-semibold uppercase" style={{ color, marginTop: `${look.gap}cqw`, fontSize: look.nameMin ? `max(${look.nameMin}px, ${name}cqw)` : `${name}cqw`, letterSpacing: n > 2 ? '0.03em' : '0.12em' }}>
               {p ? names[i] : '—'}
             </span>

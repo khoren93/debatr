@@ -1,5 +1,6 @@
 import { useSiteUrl } from '../hooks/useSiteUrl';
 import { APP_NAME } from '../lib/brand';
+import { oembedHref } from '../lib/embed';
 import { ROBOTS, canonicalUrl, jsonLdText, ogLocale, type SeoData } from '../lib/seo';
 
 /**
@@ -8,7 +9,7 @@ import { ROBOTS, canonicalUrl, jsonLdText, ogLocale, type SeoData } from '../lib
  * client navigations; JSON-LD stays in the body, where search engines read it as well. Every
  * page renders exactly one `<Seo>` (the document has no title of its own).
  */
-export function Seo({ title, description, path, robots, type = 'website', image, lang, publishedAt, modifiedAt, jsonLd }: SeoData) {
+export function Seo({ title, description, path, robots, type = 'website', image, lang, publishedAt, modifiedAt, jsonLd, oembed = false }: SeoData) {
   const site = useSiteUrl();
   const url = path !== undefined ? canonicalUrl(site, path) : undefined;
   const imageUrl = image && (image.url.startsWith('/') ? canonicalUrl(site, image.url) : image.url);
@@ -21,6 +22,8 @@ export function Seo({ title, description, path, robots, type = 'website', image,
       {url && (
         <>
           <link rel="canonical" href={url} />
+          {/* Blogs, forums and notes apps turn a pasted link into the player (oembed.com). */}
+          {oembed && <link rel="alternate" type="application/json+oembed" href={oembedHref(site, url)} title={title} />}
           <meta property="og:site_name" content={APP_NAME} />
           <meta property="og:type" content={type} />
           <meta property="og:title" content={title} />

@@ -95,10 +95,17 @@
 
     header {
         Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
-        X-Frame-Options "SAMEORIGIN"
         X-Content-Type-Options "nosniff"
         Referrer-Policy "strict-origin-when-cross-origin"
         -Server
+    }
+    # Only the site may frame its pages, except the debates' player for other sites (/embed/*,
+    # frontend/src/routes/embed.tsx), which sends `frame-ancestors *` itself.
+    @framed not path /embed/*
+    header @framed {
+        defer
+        X-Frame-Options "SAMEORIGIN"
+        Content-Security-Policy "frame-ancestors 'self'"
     }
 }
 

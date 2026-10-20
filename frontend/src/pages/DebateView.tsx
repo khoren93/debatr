@@ -25,7 +25,7 @@ import { checkElevenLabsKey } from '../hooks/useElevenLabsKeyStatus';
 import { getLocalKey } from '../lib/localKeys';
 import { STAGE_COLORS, STAGE_LABELS, roundLabel, shortModelName, stageOf } from '../lib/format';
 import { formatSpec } from '../lib/formats';
-import { msToFrame } from '../video/timing';
+import { frameToMs, msToFrame } from '../video/timing';
 
 // Browser-only (Remotion, the MP4 renderer): loaded after hydration (see ClientOnly; the player:
 // the facade below).
@@ -392,6 +392,14 @@ const DebateView = ({ initial, viewer, id, slug }: Props) => {
     if (!railUsed) void import('../components/debate/ExportRail');
   };
 
+  /** The embed code may start where the page's player is (the Short: its first highlight only,
+   *  the one embeds show). */
+  const playerPosition = () => {
+    const player = playerRef.current;
+    if (!player || (format === 'short' && highlightIndex !== 0)) return null;
+    return { format, ms: frameToMs(player.getCurrentFrame()) };
+  };
+
   const scrollToTurn = (seq: number) => {
     setTab('transcript');
     window.setTimeout(() => document.getElementById(`turn-${seq}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50);
@@ -563,6 +571,7 @@ const DebateView = ({ initial, viewer, id, slug }: Props) => {
               onPatch={(patch) => setDebate((d) => ({ ...d, ...patch }))}
               onGenerate={openRegenerate}
               onCover={openCover}
+              playerPosition={playerPosition}
               onStop={() => setConfirm('stop')}
               onDelete={() => setConfirm('delete')}
             />

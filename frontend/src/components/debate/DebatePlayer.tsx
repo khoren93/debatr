@@ -11,7 +11,8 @@ import { chapterAt, msLabel, videoChapters, type Chapter, type VideoFormat } fro
 import { PlayBadge, PlayerFrame, PlayerShell, PosterFace, SegmentBar, type BarSegment } from './PlayerShell';
 
 /** The debate video (Remotion Player) with the studio's own controls. Browser-only: pages load it
- *  with `lazy()` inside `<ClientOnly>` and show `PlayerPending` (the poster) until it is there. */
+ *  with `lazy()` and show `PlayerPending` (the poster) until it is there. `embed`: the player of
+ *  another site's iframe (routes/embed.tsx) fills it, with the controls floating over the video. */
 
 /** Safari and every iOS browser: audio starts only inside the click itself, not after a load. */
 const appleWebKit = () => navigator.vendor.startsWith('Apple');
@@ -43,10 +44,12 @@ interface ControlsProps {
   canFullscreen: boolean;
   onFullscreen: () => void;
   onActiveSeq?: (seq: number | null) => void;
+  /** Before the full-screen button (the embed's "Watch on Debatr"). */
+  extra?: ReactNode;
 }
 
 /** Control strip of the ready player: seek bar by turns, play, mute, time, speaker, fullscreen. */
-const PlayerControls = ({ playerRef, chapters, totalMs, initialMs, fullscreen, canFullscreen, onFullscreen, onActiveSeq }: ControlsProps) => {
+const PlayerControls = ({ playerRef, chapters, totalMs, initialMs, fullscreen, canFullscreen, onFullscreen, onActiveSeq, extra }: ControlsProps) => {
   const [ms, setMs] = useState(initialMs);
   const playing = usePlaying(playerRef);
   const [muted, setMuted] = useState(false);
@@ -137,7 +140,9 @@ const PlayerControls = ({ playerRef, chapters, totalMs, initialMs, fullscreen, c
         <div className="whitespace-nowrap font-mono text-xs text-text-3">
           {msLabel(ms)} / {msLabel(totalMs)}
         </div>
-        <div className="min-w-0 flex-1 truncate text-right text-xs text-muted">{current ? `${current.speaker} · ${current.label}` : ''}</div>
+        {/* A very narrow player (an embedded Short) keeps the buttons and the time. */}
+        <div className="min-w-0 flex-1 truncate text-right text-xs text-muted max-[340px]:invisible">{current ? `${current.speaker} · ${current.label}` : ''}</div>
+        {extra}
         {canFullscreen && (
           <button type="button" onClick={onFullscreen} className={iconButton} aria-label={fullscreen ? 'Exit full screen' : 'Full screen'}>
             {fullscreen ? <Minimize className="size-[18px]" /> : <Maximize className="size-[18px]" />}
@@ -158,6 +163,42 @@ const PausedOverlay = ({ playerRef, onPlay }: { playerRef: RefObject<PlayerRef |
   return playing ? null : <PlayBadge />;
 };
 
+/** How long the embed's controls stay after the pointer rests while the video plays. */
+const CONTROLS_IDLE_MS = 2500;
+
+interface EmbedShellProps {
+  playerRef: RefObject<PlayerRef | null>;
+  shellRef: RefObject<HTMLDivElement | null>;
+  frame: ReactNode;
+  controls: ReactNode;
+  header?: ReactNode;
+}
+
+/** The embedded player: the video fills the iframe (letterboxed in other proportions) and the
+ *  controls float over its bottom (the header over its top), gone while it plays and the pointer
+ *  rests (keyboard focus brings them back). */
+const EmbedShell = ({ playerRef, shellRef, frame, controls, header }: EmbedShellProps) => {
+  const playing = usePlaying(playerRef);
+  const [awake, setAwake] = useState(false);
+  const timer = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(timer.current), []);
+  const wake = () => {
+    setAwake(true);
+    window.clearTimeout(timer.current);
+    timer.current = window.setTimeout(() => setAwake(false), CONTROLS_IDLE_MS);
+  };
+  const shown = !playing || awake;
+  const fade = `transition-opacity duration-200 has-[:focus-visible]:opacity-100 ${shown ? 'opacity-100' : 'opacity-0'}`;
+  return (
+    <div ref={shellRef} className={`relative grid h-full w-full place-items-center overflow-hidden bg-black ${shown ? '' : 'cursor-none'}`} onPointerMove={wake} onPointerDown={wake} onPointerLeave={() => setAwake(false)}>
+      {frame}
+      {header && <div className={`pointer-events-none absolute inset-x-0 top-0 ${fade} ${shown ? '' : '**:pointer-events-none'}`}>{header}</div>}
+      {/* The shade lets clicks through to the video; only the controls themselves take them. */}
+      <div className={`pointer-events-none absolute inset-x-0 bottom-0 grid grid-cols-1 gap-1.5 bg-linear-to-t from-black/85 via-black/45 to-transparent px-3 pt-10 pb-2.5 has-[:focus-visible]:*:pointer-events-auto ${fade} ${shown ? '*:pointer-events-auto' : ''}`}>{controls}</div>
+    </div>
+  );
+};
+
 interface PlayerProps {
   timeline: Timeline;
   /** The media folder (relative or absolute). */
@@ -166,6 +207,8 @@ interface PlayerProps {
   highlightIndex: number;
   /** Turn to start at (a transcript click that needed the long video); playback starts there. */
   startSeq: number | null;
+  /** Where the video starts without a turn to start at (the embed's `t=`), in ms; no autoplay. */
+  startMs?: number;
   /** Play was asked for before this chunk was there (the poster or a transcript click): play once
    *  mounted — except on Apple's WebKit, where the next click plays (audio needs the click). */
   deferred?: boolean;
@@ -175,18 +218,24 @@ interface PlayerProps {
   onPlay?: () => void;
   playerRef: RefObject<PlayerRef | null>;
   onActiveSeq?: (seq: number | null) => void;
+  /** The player of another site's iframe (EmbedShell). */
+  embed?: boolean;
+  /** In the control strip before the full-screen button. */
+  extra?: ReactNode;
+  /** Over the top of the embedded video while its controls show (the topic). */
+  header?: ReactNode;
 }
 
-export const DebatePlayer = ({ timeline, mediaBase, format, highlightIndex, startSeq, deferred = false, poster = null, onPlay, playerRef, onActiveSeq }: PlayerProps) => {
+export const DebatePlayer = ({ timeline, mediaBase, format, highlightIndex, startSeq, startMs = 0, deferred = false, poster = null, onPlay, playerRef, onActiveSeq, embed = false, extra, header }: PlayerProps) => {
   const shellRef = useRef<HTMLDivElement>(null);
   const [fullscreen, setFullscreen] = useState(false);
   const isLong = format === 'long';
   const { chapters, totalMs } = videoChapters(timeline, format, highlightIndex);
   const start = startSeq !== null ? chapters.find((c) => c.seq === startSeq) : undefined;
   // Frame 0 is the intro's face-off (or the Short's hook card), fully drawn.
-  const initialFrame = start ? msToFrame(start.startMs) : 0;
+  const initialFrame = start ? msToFrame(start.startMs) : msToFrame(Math.max(0, Math.min(totalMs - 1000, startMs)));
   const autoPlay = (Boolean(start) || deferred) && !(deferred && appleWebKit());
-  const key = `${format}-${highlightIndex}-${start?.seq ?? ''}`;
+  const key = `${format}-${highlightIndex}-${start?.seq ?? ''}-${startMs}`;
 
   useEffect(() => {
     const onChange = () => setFullscreen(document.fullscreenElement !== null && document.fullscreenElement === shellRef.current);
@@ -202,26 +251,20 @@ export const DebatePlayer = ({ timeline, mediaBase, format, highlightIndex, star
   // Remotion fetches the audio and pictures by full URL.
   const base = absoluteMediaBase(mediaBase);
   const common = { ref: playerRef, fps: FPS, controls: false, clickToPlay: true, acknowledgeRemotionLicense: true, initialFrame, autoPlay, style: { width: '100%', height: '100%' } } as const;
-  return (
-    <PlayerShell
-      shellRef={shellRef}
-      vertical={!isLong}
-      fullscreen={fullscreen}
-      frame={
-        <PlayerFrame vertical={!isLong} fullscreen={fullscreen}>
-          {isLong ? (
-            <Player key={`player-${key}`} {...common} component={DebateLong} inputProps={{ timeline, mediaBase: base }} durationInFrames={msToFrame(totalMs)} compositionWidth={LONG_W} compositionHeight={LONG_H} />
-          ) : (
-            <Player key={`player-${key}`} {...common} component={DebateShort} inputProps={{ timeline, mediaBase: base, highlightIndex }} durationInFrames={msToFrame(totalMs)} compositionWidth={SHORT_W} compositionHeight={SHORT_H} />
-          )}
-          <PausedOverlay key={`overlay-${key}`} playerRef={playerRef} onPlay={onPlay} />
-          {/* The click plays right here: a user gesture, so the audio starts on every browser. */}
-          {poster && <PosterFace poster={poster} onPlay={(e) => playerRef.current?.play(e)} />}
-        </PlayerFrame>
-      }
-      controls={<PlayerControls key={key} playerRef={playerRef} chapters={chapters} totalMs={totalMs} initialMs={(initialFrame / FPS) * 1000} fullscreen={fullscreen} canFullscreen={document.fullscreenEnabled} onFullscreen={toggleFullscreen} onActiveSeq={onActiveSeq} />}
-    />
+  const frame = (
+    <PlayerFrame vertical={!isLong} fullscreen={fullscreen || embed} reserve={embed ? 0 : undefined}>
+      {isLong ? (
+        <Player key={`player-${key}`} {...common} component={DebateLong} inputProps={{ timeline, mediaBase: base }} durationInFrames={msToFrame(totalMs)} compositionWidth={LONG_W} compositionHeight={LONG_H} />
+      ) : (
+        <Player key={`player-${key}`} {...common} component={DebateShort} inputProps={{ timeline, mediaBase: base, highlightIndex }} durationInFrames={msToFrame(totalMs)} compositionWidth={SHORT_W} compositionHeight={SHORT_H} />
+      )}
+      <PausedOverlay key={`overlay-${key}`} playerRef={playerRef} onPlay={onPlay} />
+      {/* The click plays right here: a user gesture, so the audio starts on every browser. */}
+      {poster && <PosterFace poster={poster} onPlay={(e) => playerRef.current?.play(e)} />}
+    </PlayerFrame>
   );
+  const controls = <PlayerControls key={key} playerRef={playerRef} chapters={chapters} totalMs={totalMs} initialMs={(initialFrame / FPS) * 1000} fullscreen={fullscreen} canFullscreen={document.fullscreenEnabled} onFullscreen={toggleFullscreen} onActiveSeq={onActiveSeq} extra={extra} />;
+  return embed ? <EmbedShell playerRef={playerRef} shellRef={shellRef} frame={frame} controls={controls} header={header} /> : <PlayerShell shellRef={shellRef} vertical={!isLong} fullscreen={fullscreen} frame={frame} controls={controls} />;
 };
 
 export default DebatePlayer;

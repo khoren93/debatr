@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Embeddable player**: `/embed/<slug>` plays a public debate on other sites (the 16:9 episode,
+  or the Short with `?format=short`; `?t=` starts at a second). The poster, the question and the
+  length arrive as plain HTML, the player loads when the visitor reaches for it, and a view
+  counts when it plays. The Share menu hands out the code with a live preview and can start it
+  at the moment you are watching; `GET /api/oembed` turns a pasted debate or topic link into the
+  player in apps that read oEmbed, and the pages name the endpoint. Only the player may be framed
+  by other sites: the rest of the site now also sends `frame-ancestors 'self'`.
+
 ### Changed
 
 - **Faster public pages**: the debate player is a facade — the page arrives with the poster (the

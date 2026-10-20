@@ -38,9 +38,12 @@ export interface SeoImage {
 
 export type JsonLd = Record<string, unknown>;
 
-/** A route module's `handle`: the language of its page (`<html lang>`, root.tsx). */
+/** A route module's `handle`: the language of its page (`<html lang>`, root.tsx); `framed`: a
+ *  page for other sites' iframes (no scroll restoration: nothing scrolls, and WebKit keeps
+ *  `history.state` empty in a third-party frame, which React Router's script trips over). */
 export interface PageHandle<LoaderData = unknown> {
   lang?: (loaderData: LoaderData) => string | undefined;
+  framed?: boolean;
 }
 
 export interface SeoData {
@@ -58,6 +61,8 @@ export interface SeoData {
   modifiedAt?: string | null;
   /** JSON-LD objects; absolute URLs are filled in by `jsonLd(site)`. */
   jsonLd?: (site: string) => JsonLd[];
+  /** The page has a player for other sites: name its oEmbed endpoint (backend routes_oembed). */
+  oembed?: boolean;
 }
 
 // --- text ---------------------------------------------------------------------------------------
@@ -251,6 +256,7 @@ export const debateSeo = (debate: DebateDetail): SeoData => {
     lang,
     publishedAt: published,
     modifiedAt: modified,
+    oembed: true,
     jsonLd: (site) => [
       {
         '@context': 'https://schema.org',
@@ -292,6 +298,7 @@ export const topicSeo = (page: MotionPage): SeoData => {
     type: 'website',
     image,
     lang,
+    oembed: true,
     jsonLd: (site) => [
       {
         '@context': 'https://schema.org',
@@ -315,6 +322,10 @@ export const topicSeo = (page: MotionPage): SeoData => {
     ],
   };
 };
+
+/** The player of another site's iframe (`/embed/…`): a title for the frame, out of every index
+ *  (the debate's own page is the one to find; `X-Robots-Tag` says so as well). */
+export const embedSeo = (title: string): SeoData => ({ title: withBrand(collapse(title)), robots: 'noindex' });
 
 /** Pages of an account and the sign-in forms: a title, kept out of every index. */
 export const privateSeo = (title: string): SeoData => ({ title: title ? withBrand(title) : APP_NAME, robots: 'private' });

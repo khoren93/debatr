@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { DebateDetail, GalleryItem, MotionPage, Participant, Turn } from '../api/types';
 import { galleryFilters } from './gallery';
-import { DESCRIPTION_MAX, TITLE_MAX, canonicalRedirect, clip, clipSentences, debateSeo, gallerySeo, homeSeo, jsonLdText, leaderboardSeo, ogLocale, plainText, topicSeo } from './seo';
+import { DESCRIPTION_MAX, TITLE_MAX, canonicalRedirect, clip, clipSentences, debateSeo, embedSeo, gallerySeo, homeSeo, jsonLdText, leaderboardSeo, ogLocale, plainText, topicSeo } from './seo';
 
 const SITE = 'https://debatr.example';
 
@@ -178,5 +178,22 @@ describe('listing pages', () => {
 
   it("share the site's preview picture", () => {
     for (const seo of [homeSeo(), gallerySeo(galleryFilters(new URLSearchParams())), leaderboardSeo('debate')]) expect(seo.image?.url).toMatch(/^\/og\/site\.png\?v=/);
+  });
+});
+
+describe('players for other sites', () => {
+  it('names the oEmbed endpoint on debates and topics only', () => {
+    expect(debateSeo(debate()).oembed).toBe(true);
+    expect(topicSeo({ slug: 't1', title: 'Cats or dogs?', versions: 0, items: [], path: '/t/t1/cats-or-dogs' }).oembed).toBe(true);
+    expect(homeSeo().oembed).toBeFalsy();
+    expect(gallerySeo(galleryFilters(new URLSearchParams())).oembed).toBeFalsy();
+  });
+
+  it('keeps the embedded player out of the index, without a canonical of its own', () => {
+    const seo = embedSeo('  Is remote work better than the office? — Claude vs Gemini vs GPT-5.5 vs Grok ');
+    expect(seo).toMatchObject({ robots: 'noindex' });
+    expect(seo.path).toBeUndefined();
+    expect(seo.title.length).toBeLessThanOrEqual(TITLE_MAX);
+    expect(embedSeo('Tabs?').title).toBe('Tabs? | Debatr');
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { microcache } from './microcache.server';
+import { microcache, sharedMicrocache } from './microcache.server';
 
 type Args = Parameters<typeof microcache>[0];
 
@@ -46,5 +46,18 @@ describe('microcache', () => {
     await settle();
     await run('http://site.test/e', {}, setsCookie);
     expect(setsCookie).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('sharedMicrocache', () => {
+  it('serves pages rendered without the session to everyone, cookie or not', async () => {
+    const next = vi.fn(async () => page('<p>player</p>'));
+    const run = async (headers: Record<string, string>) => (await sharedMicrocache({ request: new Request('http://site.test/embed/x', { headers }) } as Args, next as Parameters<typeof microcache>[1])) as Response;
+    await (await run({ cookie: 'session=1' })).text();
+    await settle();
+    const second = await run({ 'sec-fetch-site': 'cross-site' });
+    expect(second.headers.get('x-cache')).toBe('HIT');
+    expect(await second.text()).toBe('<p>player</p>');
+    expect(next).toHaveBeenCalledTimes(1);
   });
 });
