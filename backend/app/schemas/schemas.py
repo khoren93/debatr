@@ -781,6 +781,13 @@ class TrendingTopicsOut(BaseModel):
     categories: list[TrendingCategory]  # every category in display order, with its topic count
 
 
+class TrendingArchiveOut(BaseModel):
+    """`GET /api/topics/trending/search`: earlier batches' topics that match, newest first."""
+
+    format: str
+    topics: list[TrendingTopicOut]
+
+
 class TopicIdeasIn(BaseModel):
     """The wizard's AI button: the user's own words for a topic (services/topic_ideas.py)."""
 

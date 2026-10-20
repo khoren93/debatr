@@ -15,10 +15,13 @@ interface ModelPickerProps {
   paidLocked: boolean;
   /** Audience rank per model id (1 = best), from the leaderboard. */
   ranks: Record<string, number>;
-  /** Speaker colour, role chip and on-stage name (named after the model) for the trigger. */
+  /** Speaker colour, role chip and on-stage name (named after the model) for the trigger; the
+   *  admin console's model levers pass their own title and no chip. */
   color: string;
-  tag: string;
+  tag?: string;
   speakerName: string;
+  /** The trigger's accessible name (default "Model of {speakerName}"). */
+  ariaLabel?: string;
   onChange: (modelId: string) => void;
 }
 
@@ -56,7 +59,7 @@ const PriceBadge = ({ model }: { model: ModelInfo }) =>
   );
 
 /** Searchable OpenRouter model list with provider logos, prices, context and audience rank. */
-export const ModelPicker = ({ value, models, loading, paidLocked, ranks, color, tag, speakerName, onChange }: ModelPickerProps) => {
+export const ModelPicker = ({ value, models, loading, paidLocked, ranks, color, tag, speakerName, ariaLabel, onChange }: ModelPickerProps) => {
   const { open, show: openPopover, close, placement, rootRef, triggerRef } = usePickerPopover(POPOVER_WIDTH, POPOVER_HEIGHT);
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<Filter>('all');
@@ -165,7 +168,7 @@ export const ModelPicker = ({ value, models, loading, paidLocked, ranks, color, 
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={open ? listId : undefined}
-        aria-label={`Model of ${speakerName}`}
+        aria-label={ariaLabel ?? `Model of ${speakerName}`}
         className={pickerTriggerClass(open)}
         style={open ? { borderColor: color } : undefined}
       >

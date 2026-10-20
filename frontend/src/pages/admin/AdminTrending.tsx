@@ -195,7 +195,7 @@ const AdminTrending = () => {
 
           {card && (
             <>
-              <Panel title={`Topics of ${formatTime(card.batch.created_at)}`} aside={`${card.batch.model} · ${formatUsd(card.batch.cost_usd)}`}>
+              <Panel title={`Topics of ${formatTime(card.batch.created_at)}`} aside={`${card.batch.model}${card.batch.review_model !== card.batch.model ? `, reviewed by ${card.batch.review_model}` : ''} · ${formatUsd(card.batch.cost_usd)}`}>
                 {card.batch.formats.length > 0 && (
                   <ul className="flex flex-wrap gap-x-5 gap-y-1 border-b border-line/70 px-4 py-2.5 text-xs text-text-3">
                     {card.batch.formats.map((f) => (

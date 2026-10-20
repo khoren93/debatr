@@ -1,9 +1,10 @@
 """AI topic ideas for the wizard: the user's own words turned into topics for the chosen show.
 
 The search field of the wizard's first step is also where a user writes a topic of their own;
-its AI button sends the text here (`POST /api/topics/ideas`). One short call on the system key
-(`TOPIC_IDEAS_MODEL`) writes `IDEAS` topics by the format's `topic_style` (a debate wants a
-motion, a rap battle a rivalry), in the language of the text. It is booked in `provider_usage`
+its AI button sends the text here (`POST /api/topics/ideas`). One short call on the system key to
+the topic writer (lever `topic_model`, the one that writes the trending lists) writes `IDEAS`
+topics by the format's `topic_style` (a debate wants a motion, a rap battle a rivalry), in the
+language of the text. It is booked in `provider_usage`
 as `topic_ideas` on the account, never billed; the route limits it per account and hour. An idea
 is only a suggestion: a debate made from it goes through the usual gallery check.
 """
@@ -11,7 +12,6 @@ is only a suggestion: a debate made from it goes through the usual gallery check
 import re
 from typing import Any
 
-from app.core.config import settings
 from app.schemas.schemas import TOPIC_MAX_LENGTH
 from app.services import usage
 from app.services.formats import DEFAULT_FORMAT, FORMATS
@@ -80,11 +80,11 @@ def parse_ideas(text: str) -> list[str]:
     return ideas[:IDEAS]
 
 
-def suggest(text: str, format_id: str, language: str, user_id: str | None) -> list[str]:
+def suggest(model: str, text: str, format_id: str, language: str, user_id: str | None) -> list[str]:
     """Blocking: ask the model for topic ideas (empty: it refused the text)."""
     with usage.on_behalf_of(user_id):
         reply, _, _ = llm.complete_message(
-            settings.TOPIC_IDEAS_MODEL,
+            model,
             build_messages(text, format_id, language),
             purpose="topic_ideas",
             max_tokens=MAX_TOKENS,

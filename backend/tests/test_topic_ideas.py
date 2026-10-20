@@ -63,10 +63,9 @@ def test_suggest_books_the_call_on_the_account(
 
     monkeypatch.setattr(OpenRouterClient, "chat_completion", chat_completion)
     user_id = str(uuid.uuid4())
-    assert topic_ideas.suggest("vibe coding", "rap_battle", "English", user_id) == [
-        "Vibe coding or real coding?"
-    ]
-    assert asked[0]["model"] == settings.TOPIC_IDEAS_MODEL
+    found = topic_ideas.suggest("test/writer", "vibe coding", "rap_battle", "English", user_id)
+    assert found == ["Vibe coding or real coding?"]
+    assert asked[0]["model"] == "test/writer"
     (row,) = usage_rows
     assert row.purpose == "topic_ideas"
     assert row.key_owner == "system"
@@ -79,7 +78,7 @@ def _request() -> Request:
 
 
 async def test_the_route_limits_per_account_and_reports_failures(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, levers: dict
 ) -> None:
     user = User(id=uuid.uuid4(), email="a@example.com")
     limits: list[dict[str, Any]] = []
@@ -89,6 +88,7 @@ async def test_the_route_limits_per_account_and_reports_failures(
 
     monkeypatch.setattr(routes_topics, "enforce_limit", limit)
     monkeypatch.setattr(settings, "OPENROUTER_API_KEY", "sk-test")
+    levers["topic_model"] = "test/writer"  # the trending lists' writer writes the ideas too
     calls: list[tuple] = []
 
     def suggest(*args: Any) -> list[str]:
@@ -100,7 +100,7 @@ async def test_the_route_limits_per_account_and_reports_failures(
     out = await routes_topics.ideas(body, _request(), user)
     assert out.format == "rap_battle"
     assert out.ideas == ["Vibe coding or real coding?"]
-    assert calls == [("vibe coding is dead?", "rap_battle", "English", str(user.id))]
+    assert calls == [("test/writer", "vibe coding is dead?", "rap_battle", "English", str(user.id))]
     assert limits[0]["key"] == str(user.id)
     assert limits[0]["limit"] == settings.TOPIC_IDEAS_PER_HOUR
 

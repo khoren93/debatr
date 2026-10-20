@@ -92,8 +92,8 @@ def test_balanced_pool_round_robin_without_repeats() -> None:
 
 
 def test_pool_size_bounds() -> None:
-    assert pool_size(5) == 60
-    assert pool_size(50) == 150
+    assert pool_size(5) == 150  # a short list picks the best stories of a wide pool
+    assert pool_size(60) == 180
     assert pool_size(500) == 400
 
 
@@ -170,8 +170,6 @@ def test_formats_share_or_own_a_topic_list() -> None:
     assert topic_list_of("rap_battle") == "rap_battle"
     assert topic_list_of("debate") == "debate"
     assert topic_list_of("no_such_format") == "debate"
-    assert trending.list_size(FORMATS["rap_battle"].topic_style, 50) == 25
-    assert trending.list_size(DEBATE_TOPICS, 50) == 50
 
 
 # --- model replies -------------------------------------------------------------------------
@@ -302,6 +300,8 @@ def _fake_llm_by_list(replies: dict[tuple[str, str], str]) -> Any:
         text = messages[0]["content"] + messages[1]["content"]
         fmt = "rap_battle" if "rap battle topic" in text else "debate"
         step = "review" if "content moderator" in text else "topics"
+        # The writer never reviews its own topics.
+        assert model == ("test/reviewer" if step == "review" else "test/writer")
         reply = replies[(fmt, step)]
         if reply == "error":
             raise trending.OpenRouterError("upstream 500")
@@ -331,7 +331,7 @@ def test_build_batch_filters_headlines_and_applies_the_review(
     fake = _fake_llm([topics, '{"reject": [{"id": 2, "reason": "too local"}]}'])
     monkeypatch.setattr(llm, "complete_message", fake)
 
-    result = build_batch("test/model", topic_count=5, styles=DEBATE_ONLY)
+    result = build_batch("test/writer", "test/reviewer", topic_count=5, styles=DEBATE_ONLY)
 
     prompt = fake.calls[0][1]["content"]
     assert "Porn ban vote" not in prompt  # blocked before the model saw it
@@ -358,7 +358,7 @@ def test_build_batch_fails_closed_without_a_review(monkeypatch: pytest.MonkeyPat
     topics = _reply([{"label": "AI", "question": "Should the EU delay AI rules?", "sources": [1]}])
     monkeypatch.setattr(llm, "complete_message", _fake_llm([topics, "I'd rather not."]))
     with pytest.raises(TrendingError):
-        build_batch("test/model", topic_count=5, styles=DEBATE_ONLY)
+        build_batch("test/writer", "test/reviewer", topic_count=5, styles=DEBATE_ONLY)
 
 
 def test_build_batch_writes_a_list_per_format(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -387,7 +387,7 @@ def test_build_batch_writes_a_list_per_format(monkeypatch: pytest.MonkeyPatch) -
     )
     monkeypatch.setattr(llm, "complete_message", fake)
 
-    result = build_batch("test/model", topic_count=4)
+    result = build_batch("test/writer", "test/reviewer", topic_count=4)
 
     assert [(t.format, t.question) for t in result.topics] == [
         ("debate", "Should cities ban cars?"),
@@ -395,6 +395,7 @@ def test_build_batch_writes_a_list_per_format(monkeypatch: pytest.MonkeyPatch) -
         ("rap_battle", "Nvidia or AMD?"),
     ]
     assert result.cost_usd == pytest.approx(0.04)
+    assert (result.model, result.stats["review_model"]) == ("test/writer", "test/reviewer")
     assert result.stats["formats"] == {
         "debate": {"asked": 2, "kept": 2},
         "rap_battle": {"asked": 2, "kept": 1},  # half the count, at least what the pool allows
@@ -422,7 +423,7 @@ def test_a_failed_battle_list_keeps_the_debate_list(monkeypatch: pytest.MonkeyPa
         }
     )
     monkeypatch.setattr(llm, "complete_message", fake)
-    result = build_batch("test/model", topic_count=4)
+    result = build_batch("test/writer", "test/reviewer", topic_count=4)
     assert [t.format for t in result.topics] == ["debate"]
     assert result.stats["formats"]["rap_battle"] == {"error": "upstream 500"}
 
@@ -439,16 +440,23 @@ def test_a_failed_debate_list_fails_the_batch(monkeypatch: pytest.MonkeyPatch) -
     )
     monkeypatch.setattr(llm, "complete_message", fake)
     with pytest.raises(TrendingError, match="no usable topics"):
-        build_batch("test/model", topic_count=4)
+        build_batch("test/writer", "test/reviewer", topic_count=4)
 
 
 def test_build_batch_without_feeds(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(trending, "fetch_feeds", lambda: [[], []])
     with pytest.raises(TrendingError, match="every feed failed"):
-        build_batch("test/model", topic_count=5)
+        build_batch("test/writer", "test/reviewer", topic_count=5)
 
 
 # --- scheduling ----------------------------------------------------------------------------
+
+
+def test_search_terms_need_every_word_and_escape_wildcards() -> None:
+    assert trending.search_terms("  Vibe   CODING ") == ["%vibe%", "%coding%"]
+    assert trending.search_terms("100% of_us a\\b") == ["%100\\%%", "%of\\_us%", "%a\\\\b%"]
+    assert len(trending.search_terms("a b c d e f g h i j")) == 8
+    assert trending.search_terms("   ") == []
 
 
 def test_is_due() -> None:

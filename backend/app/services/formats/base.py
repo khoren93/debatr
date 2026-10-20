@@ -44,8 +44,6 @@ class TopicStyle:
     review: str = ""
     # Said when picking stories: some shows cannot use every story.
     pick_note: str = ""
-    # News topics per batch, as a share of TRENDING_TOPIC_COUNT.
-    share: float = 1.0
 
 
 DEBATE_TOPICS = TopicStyle(

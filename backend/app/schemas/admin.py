@@ -14,6 +14,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field, field_validator
 
 from app.schemas.auth import ApiTokenOut, normalize_email
+from app.schemas.schemas import ModelInfo
 
 
 class AdminLoginRequest(BaseModel):
@@ -806,7 +807,8 @@ class ActionOut(BaseModel):
 class TrendingBatchRow(BaseModel):
     id: str
     created_at: datetime
-    model: str
+    model: str  # the writer
+    review_model: str  # the safety review
     topic_count: int
     hidden: int
     cost_usd: float
@@ -1217,11 +1219,6 @@ class LeverOut(BaseModel):
     updated_by: str | None = None
 
 
-class CatalogueModel(BaseModel):
-    id: str
-    name: str
-
-
 class AlertEventOut(BaseModel):
     """An alert kind the console can mute (services/alert_events)."""
 
@@ -1234,7 +1231,7 @@ class AlertEventOut(BaseModel):
 
 class SettingsOut(BaseModel):
     levers: list[LeverOut]
-    models: list[CatalogueModel]  # OpenRouter's catalogue, for turning models off
+    models: list[ModelInfo]  # OpenRouter's catalogue, for the model levers
     alert_events: list[AlertEventOut]  # what `muted_alerts` can hold
     cache_seconds: float  # how soon every process sees a change
 

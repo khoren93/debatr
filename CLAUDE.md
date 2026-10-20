@@ -947,19 +947,29 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
 - `services/trending.py`: `refresh_trending_job` reads the RSS feeds in `FEEDS` (BBC, Guardian,
   NPR, NYT, Al Jazeera, DW, Google News with the real outlet from `<source>`, Hacker News, Ars,
   Verge, ScienceDaily), keeps headlines ≤ 48 h old with http(s) links, drops blocked ones, sends a
-  round-robin pool (3 headlines per wanted topic, 60–400) to `TRENDING_MODEL` (Gemini Flash,
-  ~$0.02/batch, system key) and keeps only topics that cite pool headlines (no invented stories).
-  Rank = model heat + 1.5 per extra outlet carrying the story (up to 3). The best
-  `TRENDING_TOPIC_COUNT` are saved as a `TrendingBatch` with `TrendingTopic` rows (`question`,
-  `label`, `brief` — what happened, because the debaters do not know recent news — `category`
-  from `TOPIC_CATEGORIES`, `heat`, `outlets`, `sources_json` = original articles). The newest batch
-  is the one shown; older batches stay as the archive (`stats_json`: feeds, headlines, dropped
-  topics with reasons). Repeats across days are fine by design.
+  round-robin pool (3 headlines per wanted topic, 150–400) to the topic writer (lever
+  `topic_model`, env `TOPIC_MODEL`: Claude Haiku 5.5, ~$0.007 a list, system key) and keeps only
+  topics that cite pool headlines (no invented stories). Rank = model heat + 1.5 per extra outlet
+  carrying the story (up to 3). The best `trending_daily_topics` per list (lever, env
+  `TRENDING_TOPIC_COUNT`, 20) are saved as a `TrendingBatch` with `TrendingTopic` rows
+  (`question`, `label`, `brief` — what happened, because the debaters do not know recent news —
+  `category` from `TOPIC_CATEGORIES`, `heat`, `outlets`, `sources_json` = original articles). The
+  wizard shows the newest batch, at most `trending_shown_topics` (lever, env
+  `TRENDING_SHOWN_TOPICS`, 50); older batches are the archive (`stats_json`: feeds, headlines,
+  dropped topics with reasons, `review_model`) that only answers searches:
+  `GET /api/topics/trending/search?format=&q=` (every word in question / label / brief,
+  `search_terms` escapes LIKE wildcards; newest first, 30 at most, repeats across days and of
+  today's list once), `useTopicArchive` (debounced, keeps the last answer while typing) → "Earlier
+  topics" under today's matches. Repeats across days are fine by design. Haiku 5.5 wrote clearly
+  better lists than Gemini 2.5 Flash in a side-by-side run (battles: "Ronaldo or Messi?", "iPhone
+  or Android?" against "Exports or domestic spending?") for less money; it takes ~45 s a list.
 - Safety, three layers, all strict: `BLOCKED_TERMS` (sexual content, violence/gore, tragedies,
   suicide…) on every headline before the model sees it and on the generated text, then a second
-  focused review call (`SAFETY_RULES`, "when in doubt, reject"). No usable review answer → the
-  batch is not saved (fails closed) and visitors keep the previous one. Admin: Trending topics →
-  Hide; Trending batches → "Build a new batch now".
+  focused review call (`SAFETY_RULES`, "when in doubt, reject") by another model (lever
+  `topic_review_model`, env `TOPIC_REVIEW_MODEL`: Gemini 2.5 Flash), so the writer never judges
+  its own topics. No usable review answer → the batch is not saved (fails closed) and visitors keep
+  the previous one. Admin: Trending topics → Hide; Trending batches → "Build a new batch now";
+  Settings → Topics (the four levers; the model levers use the wizard's `ModelPicker`).
 - Schedule: `TRENDING_REFRESH_HOURS` (24 in production, 720 in dev `.env`, 0 = off). The
   `scheduler` service enqueues the job hourly; the job builds only when `is_due` (newest batch
   older than the interval minus 30 min slack) and holds `trending:refresh:lock`, so restarts and
@@ -973,10 +983,9 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   the picked card again or "×" unlinks it; switching topics also clears the angle. Switching the
   format keeps the topic and its story (`applyFormat`): a debate's news topic can become a battle.
 - A list per show format: `Format.topic_style` (`formats/base.TopicStyle`: noun, the wording rule,
-  how a story becomes such a topic, what makes it hot, an extra review rule, `share` of
-  `TRENDING_TOPIC_COUNT`). The rap battle writes rivalries ("A or B?" naming two concrete,
-  familiar rivals, a yes/no hot take now and then, never abstract trade-offs; ≤ 60 characters;
-  half as many topics; its review also rejects sides that are politicians, parties, real people
+  how a story becomes such a topic, what makes it hot, an extra review rule). The rap battle writes
+  rivalries ("A or B?" naming two concrete, familiar rivals, a yes/no hot take now and then, never
+  abstract trade-offs; ≤ 60 characters; its review also rejects sides that are politicians, parties, real people
   other than athletes / artists compared on their work, or groups of people). Asking for "no
   abstract trade-offs" without making "A or B?" the rule swung the model to yes/no headlines
   ("US bans China's DeepSeek?"). A format with the debate's style shows the debate's list
@@ -988,8 +997,8 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   answers from the newest batch that has that list. Batches from before the column hold debate
   topics only (migration 0017), so a battle list appears with the next batch (or "Build now").
 - AI topic ideas (`services/topic_ideas`, `POST /api/topics/ideas {text 3–300, format, language}`,
-  signed in): one call to `TOPIC_IDEAS_MODEL` (Claude Haiku 5.5, ~$0.0001, ~2–3 s, system key, not
-  billed) writes 3 topics in the format's style (the sharpest form of the user's words, a bolder
+  signed in): one call to the topic writer (lever `topic_model`, the trending lists' writer: one
+  voice for both; ~$0.0001, ~2–3 s, system key, not billed) writes 3 topics in the format's style (the sharpest form of the user's words, a bolder
   take, another angle) in the language of the text (`language` when unclear), or `[]` for text the
   gallery check would refuse; `parse_ideas` drops numbering / quotes, repeats, ones under 8 or over
   `TOPIC_MAX_LENGTH` characters. `TOPIC_IDEAS_PER_HOUR` (40) per account → 429; no key → 503; a
@@ -1119,7 +1128,11 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   check of free debates), `free_debates_per_day`, `free_max_rounds`, `free_max_debaters`,
   `free_lengths` (see "Workers and queues"), `credit_markup`, `min_debate_charge_usd`,
   `tts_price_per_1k_chars` (see "Credits and payments"), `ai_covers` (off | paid | all_public, a
-  "choice" lever; see "AI covers"). Only the fields of `Levers` exist (pydantic limits); without a row
+  "choice" lever; see "AI covers"), `trending_daily_topics`, `trending_shown_topics`,
+  `topic_model`, `topic_review_model` (see "Trending topics"). Model levers (kind `model`) use the
+  wizard's `ModelPicker` on the full catalogue (`SettingsOut.models` = `ModelInfo`, plus models a
+  lever names that left it; the console cannot reach the public `/api/models`); turned-off models
+  are added with it too. Only the fields of `Levers` exist (pydantic limits); without a row
   the env setting applies; a broken row is ignored. `PUT /settings/{key}` / `POST
   /settings/{key}/reset` need sudo and a reason and write the row + audit entry in one
   transaction; processes read through a 5 s cache (`CACHE_SECONDS`), so a change lands within

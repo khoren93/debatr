@@ -819,6 +819,12 @@ export interface TrendingTopics {
   categories: { id: TrendingCategoryId | string; count: number }[];
 }
 
+/** `GET /topics/trending/search`: earlier batches' topics that match, newest first. */
+export interface TrendingArchive {
+  format: FormatId;
+  topics: TrendingTopic[];
+}
+
 /** `POST /topics/ideas`: the wizard's AI button (backend services/topic_ideas.py). */
 export interface TopicIdeas {
   format: FormatId;

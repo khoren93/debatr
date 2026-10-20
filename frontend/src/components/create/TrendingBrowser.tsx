@@ -1,8 +1,9 @@
-import { ArrowRight, ArrowUpRight, Check, Dice5, RefreshCw, Search, Sparkles, X } from 'lucide-react';
+import { ArrowRight, ArrowUpRight, Check, Dice5, History, RefreshCw, Search, Sparkles, X } from 'lucide-react';
 import { useRef, useState, type FormEvent } from 'react';
 import { getErrorMessage } from '../../api/client';
 import { getTopicIdeas } from '../../api/topics';
 import type { FormatId, TrendingSource, TrendingTopic } from '../../api/types';
+import { useTopicArchive } from '../../hooks/useTopicArchive';
 import { useTrendingTopics } from '../../hooks/useTrendingTopics';
 import { formatAge, sourceDomain } from '../../lib/format';
 import { formatSpec } from '../../lib/formats';
@@ -192,7 +193,8 @@ const IdeasPanel = ({
 };
 
 /** Step 1, left column: today's news topics for the format, with search, categories and
- * "Surprise me"; typing turns the search into the user's own topic, which the AI can sharpen. */
+ * "Surprise me"; a search also finds earlier days' topics (shown below today's), and typing
+ * turns the search into the user's own topic, which the AI can sharpen. */
 export const TrendingBrowser = ({ format, language, topic, isPicked, onPick, onUnpick, onUseText }: TrendingBrowserProps) => {
   const spec = formatSpec(format);
   const { data, error, loading, retry } = useTrendingTopics(spec.topicList);
@@ -202,15 +204,26 @@ export const TrendingBrowser = ({ format, language, topic, isPicked, onPick, onU
   const [ideas, setIdeas] = useState<Ideas | null>(null);
   const request = useRef(0);
 
+  const archive = useTopicArchive(spec.topicList, query);
+
   const topics = data?.topics ?? [];
   const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
+  const searching = terms.length > 0;
   const found = topics.filter((t) => matches(t, terms));
-  const categories = (data?.categories ?? []).filter((c) => c.count > 0);
-  // Another format's list may lack the chosen category: show them all then.
+  // Earlier days answer searches only; the last answer is narrowed by the words typed since.
+  const earlier = searching ? archive.topics.filter((t) => matches(t, terms) && !topics.some((today) => today.id === t.id)) : [];
+  const all = [...found, ...earlier];
+  const countIn = (id: string) => all.filter((t) => t.category === id).length;
+  const categories = (data?.categories ?? []).filter((c) => countIn(c.id) > 0);
+  // Another format's list (or another search) may lack the chosen category: show them all then.
   const activeCategory = categories.some((c) => c.id === category) ? category : 'all';
-  const list = found.filter((t) => activeCategory === 'all' || t.category === activeCategory);
+  const inCategory = (t: TrendingTopic) => activeCategory === 'all' || t.category === activeCategory;
+  const list = found.filter(inCategory);
+  const earlierList = earlier.filter(inCategory);
   const shown = list.slice(0, limit);
-  const badges = activeCategory === 'all' && terms.length === 0;
+  const shownEarlier = earlierList.slice(0, Math.max(0, limit - list.length));
+  const total = list.length + earlierList.length;
+  const badges = activeCategory === 'all' && !searching;
   const text = query.trim();
   const canAsk = text.length >= MIN_IDEA_TEXT;
   // Ideas were written for one format; another one asks again.
@@ -310,9 +323,9 @@ export const TrendingBrowser = ({ format, language, topic, isPicked, onPick, onU
       {ideasShown && <IdeasPanel ideas={ideasShown} show={spec.show} topic={topic} onUse={onUseText} onUnpick={onUnpick} onAgain={() => askAI(ideasShown.text)} onClose={closeIdeas} />}
 
       {/* A search without matches has nothing to sort into categories. */}
-      {categories.length > 1 && found.length > 0 && (
+      {categories.length > 1 && all.length > 0 && (
         <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-0.5 min-[1180px]:flex-wrap" role="tablist" aria-label="Categories">
-          {[{ id: 'all', count: found.length }, ...categories.map((c) => ({ id: c.id, count: found.filter((t) => t.category === c.id).length }))].map((c) => {
+          {[{ id: 'all', count: all.length }, ...categories.map((c) => ({ id: c.id, count: countIn(c.id) }))].map((c) => {
             const on = activeCategory === c.id;
             const style = c.id === 'all' ? { label: 'All', color: '#F2F3F7' } : categoryOf(c.id);
             return (
@@ -350,7 +363,7 @@ export const TrendingBrowser = ({ format, language, topic, isPicked, onPick, onU
           </button>
         </div>
       )}
-      {data && topics.length === 0 && (
+      {data && topics.length === 0 && !searching && (
         <div className="rounded-[16px] border border-dashed border-line-2 p-7 text-center text-sm text-text-3">
           No {spec.trendingTitle.toLowerCase()} yet today — write your own topic above.
         </div>
@@ -364,10 +377,25 @@ export const TrendingBrowser = ({ format, language, topic, isPicked, onPick, onU
         </div>
       )}
 
-      {topics.length > 0 && list.length === 0 && (
+      {shownEarlier.length > 0 && (
+        <>
+          <div className="flex items-center gap-2 pt-1 font-mono text-[11px] uppercase tracking-[0.08em] text-dim">
+            <History className="size-3.5" /> Earlier topics <span className="text-dim/70">{earlierList.length}</span>
+          </div>
+          <div className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(min(100%,270px),1fr))]">
+            {shownEarlier.map((t) => (
+              <TopicCard key={t.id} topic={t} source={t.sources[0]} selected={isPicked(t)} badge={false} onPick={() => (isPicked(t) ? onUnpick() : onPick(t, topics))} />
+            ))}
+          </div>
+        </>
+      )}
+
+      {data && total === 0 && (searching || topics.length > 0) && (
         <div className="grid justify-items-center gap-2.5 rounded-[16px] border border-dashed border-line-2 p-7 text-center">
-          <div className="text-sm text-text-3">{text ? `No trending topics match “${text}”.` : 'No topics in this category today.'}</div>
-          {text && !ideasShown && (
+          <div className="text-sm text-text-3">
+            {!searching ? 'No topics in this category today.' : archive.loading ? 'Searching earlier topics…' : `No topics match “${text}”.`}
+          </div>
+          {searching && !archive.loading && !ideasShown && (
             <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
               {canAsk && (
                 <button type="button" onClick={() => askAI()} className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-accent hover:text-accent-hover cursor-pointer">
@@ -382,13 +410,13 @@ export const TrendingBrowser = ({ format, language, topic, isPicked, onPick, onU
         </div>
       )}
 
-      {list.length > limit && (
+      {total > limit && (
         <button
           type="button"
           onClick={() => setLimit((n) => n + PAGE)}
           className="inline-flex h-[42px] items-center gap-2 justify-self-center rounded-field border border-line-2 bg-surface px-5 text-[13px] font-semibold transition-colors hover:bg-surface-2 cursor-pointer"
         >
-          Show more <span className="font-mono text-[11px] text-muted">{list.length - limit} left</span>
+          Show more <span className="font-mono text-[11px] text-muted">{total - limit} left</span>
         </button>
       )}
     </div>

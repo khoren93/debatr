@@ -54,6 +54,22 @@ def test_defaults_follow_the_env(monkeypatch: pytest.MonkeyPatch) -> None:
     assert levers.max_active_debates_per_user == settings.MAX_ACTIVE_DEBATES_PER_USER
 
 
+def test_topic_levers_follow_the_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "TRENDING_TOPIC_COUNT", 500)  # clamped to 60
+    monkeypatch.setattr(settings, "TRENDING_SHOWN_TOPICS", 30)
+    monkeypatch.setattr(settings, "TOPIC_MODEL", " openai/gpt-5.5-mini ")
+    monkeypatch.setattr(settings, "TOPIC_REVIEW_MODEL", "not a model!")  # the built-in one
+    levers = runtime_settings.resolve({})
+    assert (levers.trending_daily_topics, levers.trending_shown_topics) == (60, 30)
+    assert levers.topic_model == "openai/gpt-5.5-mini"
+    assert levers.topic_review_model == "google/gemini-2.5-flash"
+    stored = runtime_settings.resolve({"topic_model": "x-ai/grok-4", "trending_shown_topics": 0})
+    assert stored.topic_model == "x-ai/grok-4"
+    assert stored.trending_shown_topics == 30  # below the limit: the env value
+    with pytest.raises(ValueError, match="topic_review_model"):
+        runtime_settings.validate_value("topic_review_model", "")
+
+
 def test_stored_values_win_and_broken_ones_are_ignored() -> None:
     levers = runtime_settings.resolve(
         {
@@ -328,7 +344,9 @@ def api(monkeypatch: pytest.MonkeyPatch) -> tuple[FastAPI, SettingsDB]:
         yield db
 
     async def catalogue() -> list[dict[str, Any]]:
-        return [{"id": "x-ai/grok-4", "name": "Grok 4"}]
+        grok = {"id": "x-ai/grok-4", "name": "Grok 4", "context_length": 256000}
+        grok |= {"pricing": {"prompt": "0.000003", "completion": "0.000015"}, "is_free": False}
+        return [grok, {"id": "broken/entry"}]
 
     monkeypatch.setattr(openrouter_client, "get_models", catalogue)
     app = FastAPI()
@@ -368,7 +386,13 @@ async def test_changing_a_lever_needs_sudo_and_a_reason(
     async with _client(app) as client:
         listed = (await client.get("/api/admin/settings")).json()
         assert [lever["key"] for lever in listed["levers"]] == list(LEVER_KEYS)
-        assert listed["models"] == [{"id": "x-ai/grok-4", "name": "Grok 4"}]
+        models = {m["id"]: m for m in listed["models"]}
+        assert models["x-ai/grok-4"]["name"] == "Grok 4"  # the wizard's ModelInfo
+        assert models["x-ai/grok-4"]["context_length"] == 256000
+        assert "broken/entry" not in models
+        # Models the levers name stay listed after they leave the catalogue.
+        assert models["anthropic/claude-haiku-5.5"]["name"] == "anthropic/claude-haiku-5.5"
+        assert "google/gemini-2.5-flash" in models
         refused = await client.put("/api/admin/settings/maintenance", json=body)
         assert refused.status_code == 403 and refused.headers.get(SUDO_HEADER) == "required"
         app.dependency_overrides[current_admin] = lambda: _ctx("admin", sudo=True)

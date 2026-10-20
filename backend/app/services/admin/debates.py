@@ -624,6 +624,7 @@ def batch_row(batch: TrendingBatch, hidden: int, current: bool) -> dict[str, Any
         "id": str(batch.id),
         "created_at": batch.created_at,
         "model": batch.model,
+        "review_model": str(stats.get("review_model") or batch.model),  # one model before 1.6
         "topic_count": batch.topic_count,
         "hidden": hidden,
         "cost_usd": _usd(batch.cost_usd),

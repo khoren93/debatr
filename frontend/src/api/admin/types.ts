@@ -1,5 +1,7 @@
 // Mirrors backend/app/schemas/admin.py (the admin console API).
 
+import type { ModelInfo } from '../types';
+
 export type AdminRole = 'admin' | 'moderator';
 
 export interface AdminUser {
@@ -635,7 +637,9 @@ export interface RefundOut {
 export interface TrendingBatchRow {
   id: string;
   created_at: string;
+  /** The writer, and the model that reviewed the lists (the same one before 1.6). */
   model: string;
+  review_model: string;
   topic_count: number;
   hidden: number;
   cost_usd: number;
@@ -988,7 +992,11 @@ export type LeverKey =
   | 'min_debate_charge_usd'
   | 'tts_price_per_1k_chars'
   | 'music_price_per_min'
-  | 'ai_covers';
+  | 'ai_covers'
+  | 'trending_daily_topics'
+  | 'trending_shown_topics'
+  | 'topic_model'
+  | 'topic_review_model';
 
 export type LeverValue = boolean | number | string | string[];
 
@@ -1007,11 +1015,6 @@ export interface Lever {
   updated_by: string | null;
 }
 
-export interface CatalogueModel {
-  id: string;
-  name: string;
-}
-
 export type AlertGroup = 'security' | 'people' | 'debates' | 'system';
 
 /** An alert kind the console can mute (backend services/alert_events). */
@@ -1026,7 +1029,8 @@ export interface AlertEvent {
 
 export interface SettingsOut {
   levers: Lever[];
-  models: CatalogueModel[];
+  /** OpenRouter's catalogue (the wizard's model picker), plus models the levers name that left it. */
+  models: ModelInfo[];
   /** What `muted_alerts` can hold. */
   alert_events: AlertEvent[];
   /** How soon every server process sees a change. */

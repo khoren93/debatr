@@ -1,7 +1,8 @@
 """Levers and alerts of the admin console (permission `system`).
 
 - `GET /settings`: every lever with its value, env default and who changed it last, plus
-  OpenRouter's catalogue for turning models off.
+  OpenRouter's catalogue (the wizard's `ModelInfo`, so the console uses the wizard's model
+  picker) for the model levers.
 - `PUT /settings/{key}` / `POST /settings/{key}/reset`: sudo and a reason; the
   `runtime_settings` row and the audit entry are written in one transaction, and every process
   sees the change within `runtime_settings.CACHE_SECONDS`.
@@ -13,6 +14,7 @@
 from typing import Any, get_args
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -23,13 +25,13 @@ from app.schemas.admin import (
     AlertEventOut,
     AlertsOut,
     AlertTestOut,
-    CatalogueModel,
     LeverChangeRequest,
     LeverKind,
     LeverOut,
     ReasonRequest,
     SettingsOut,
 )
+from app.schemas.schemas import ModelInfo, ModelPricing
 from app.services import alerts, runtime_settings
 from app.services.admin import audit
 from app.services.alert_events import EVENTS
@@ -59,6 +61,10 @@ KINDS: dict[str, LeverKind] = {
     "tts_price_per_1k_chars": "float",
     "music_price_per_min": "float",
     "ai_covers": "choice",
+    "trending_daily_topics": "int",
+    "trending_shown_topics": "int",
+    "topic_model": "model",
+    "topic_review_model": "model",
 }
 
 
@@ -110,17 +116,31 @@ async def _rows(db: AsyncSession) -> dict[str, RuntimeSetting]:
 
 async def _settings_out(db: AsyncSession) -> SettingsOut:
     rows = await _rows(db)
-    catalogue: dict[str, str] = {}
+    catalogue: dict[str, ModelInfo] = {}
     for model in await openrouter_client.get_models():
-        model_id = str(model.get("id") or "")
-        if model_id:
-            catalogue[model_id] = str(model.get("name") or model_id)
+        try:
+            info = ModelInfo.model_validate(model)
+        except ValidationError:  # an odd catalogue entry must not take the page down
+            continue
+        catalogue[info.id] = info
     current = runtime_settings.resolve({key: row.value_json for key, row in rows.items()})
-    for model_id in current.disabled_models:  # gone from the catalogue, still turned off
-        catalogue.setdefault(model_id, model_id)
+    # Models a lever names that left the catalogue (still turned off, still in use).
+    named = [*current.disabled_models, current.free_verdict_model]
+    named += [current.topic_model, current.topic_review_model]
+    for model_id in filter(None, named):
+        catalogue.setdefault(
+            model_id,
+            ModelInfo(
+                id=model_id,
+                name=model_id,
+                context_length=0,
+                pricing=ModelPricing(prompt="0", completion="0"),
+                is_free=model_id.endswith(":free"),
+            ),
+        )
     return SettingsOut(
         levers=levers_out(rows),
-        models=[CatalogueModel(id=k, name=v) for k, v in sorted(catalogue.items())],
+        models=sorted(catalogue.values(), key=lambda m: m.id),
         alert_events=[
             AlertEventOut(kind=e.kind, group=e.group, label=e.label, hint=e.hint, at_once=e.at_once)
             for e in EVENTS

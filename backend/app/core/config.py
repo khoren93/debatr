@@ -121,15 +121,20 @@ class Settings(BaseSettings):
     FACT_CHECK_MODEL: str = "perplexity/sonar"
     FACT_CHECK_MAX_PER_TURN: int = 2
     FACT_CHECK_PRICE_USD: float = 0.006  # per check, for estimates
-    # Trending topics (services/trending.py): RSS headlines -> debate topics, one batch per run.
-    # Hours between batches; 0 turns automatic refreshes off (the admin can still build one).
+    # Trending topics (services/trending.py): RSS headlines -> a list of topics per show format,
+    # one batch per run. Hours between batches; 0 turns automatic refreshes off (the admin can
+    # still build one).
     TRENDING_REFRESH_HOURS: int = 24
-    TRENDING_MODEL: str = "google/gemini-2.5-flash"  # system key, ~$0.02 per batch
-    TRENDING_TOPIC_COUNT: int = 50  # the debate's list; a rap battle's has half as many
-    # The wizard's AI topic ideas (services/topic_ideas.py): the user's words -> three topics
-    # for the chosen format. System key, not billed (~$0.0001 a call); per account and hour.
-    TOPIC_IDEAS_MODEL: str = "anthropic/claude-haiku-5.5"
-    TOPIC_IDEAS_PER_HOUR: int = 40
+    # Topics written per format's list in a batch, and how many of the newest batch the wizard
+    # shows (older batches are found by search). The console's levers override both.
+    TRENDING_TOPIC_COUNT: int = 20
+    TRENDING_SHOWN_TOPICS: int = 50
+    # The topic writer: trending lists and the wizard's AI topic ideas (services/topic_ideas.py),
+    # and the independent safety review of the trending lists (another vendor on purpose). System
+    # key, not billed (~$0.03 a batch, ~$0.0001 an idea). The console's levers override both.
+    TOPIC_MODEL: str = "anthropic/claude-haiku-5.5"
+    TOPIC_REVIEW_MODEL: str = "google/gemini-2.5-flash"
+    TOPIC_IDEAS_PER_HOUR: int = 40  # AI topic ideas per account and hour (0 = no limit)
     MEDIA_GAP_MS: int = 600
     MEDIA_LOUDNESS_LUFS: float = -16.0
     FFMPEG_BIN: str = "ffmpeg"

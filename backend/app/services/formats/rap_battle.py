@@ -159,7 +159,6 @@ class RapBattleFormat(Format):
             "the poor)."
         ),
         pick_note="Skip stories without a fun, concrete rivalry: fewer topics are fine.",
-        share=0.5,
     )
 
     def schedule(self, conf: Mapping[str, Any]) -> list[ScheduledTurn]:

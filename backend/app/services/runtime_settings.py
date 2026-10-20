@@ -78,6 +78,13 @@ class Levers(BaseModel):
     # get one when they complete; owners make more on the debate page) | all_public (free public
     # debates too, at the operator's cost).
     ai_covers: Literal["off", "paid", "all_public"] = "paid"
+    # Trending topics (services/trending.py): topics written per format's list in a daily batch,
+    # and how many of the newest batch the wizard shows (older batches only answer searches).
+    trending_daily_topics: int = Field(default=20, ge=1, le=60)
+    trending_shown_topics: int = Field(default=50, ge=1, le=100)
+    # The topic writer (trending lists, AI topic ideas) and the trending lists' safety review.
+    topic_model: str = Field(default="anthropic/claude-haiku-5.5", min_length=1, max_length=120)
+    topic_review_model: str = Field(default="google/gemini-2.5-flash", min_length=1, max_length=120)
 
     @field_validator("maintenance_message")
     @classmethod
@@ -102,6 +109,14 @@ class Levers(BaseModel):
         model_id = value.strip()
         if model_id and not (MODEL_ID.match(model_id) and model_id.endswith(FREE_SUFFIX)):
             raise ValueError(f"not a free (:free) model: {value[:40]!r}")
+        return model_id
+
+    @field_validator("topic_model", "topic_review_model")
+    @classmethod
+    def _model(cls, value: str) -> str:
+        model_id = value.strip()
+        if not MODEL_ID.match(model_id):
+            raise ValueError(f"not a model id: {value[:40]!r}")
         return model_id
 
     @field_validator("free_lengths")
@@ -145,7 +160,21 @@ def defaults() -> dict[str, Any]:
         "tts_price_per_1k_chars": max(0.0, min(2.0, settings.TTS_CREDIT_PRICE_PER_1K_CHARS)),
         "music_price_per_min": max(0.0, min(5.0, settings.MUSIC_CREDIT_PRICE_PER_MIN)),
         "ai_covers": _env_cover_mode(),
+        "trending_daily_topics": max(1, min(60, settings.TRENDING_TOPIC_COUNT)),
+        "trending_shown_topics": max(1, min(100, settings.TRENDING_SHOWN_TOPICS)),
+        "topic_model": _env_model("TOPIC_MODEL", settings.TOPIC_MODEL, "topic_model"),
+        "topic_review_model": _env_model(
+            "TOPIC_REVIEW_MODEL", settings.TOPIC_REVIEW_MODEL, "topic_review_model"
+        ),
     }
+
+
+def _env_model(name: str, value: str, key: str) -> str:
+    try:
+        return getattr(Levers.model_validate({key: value}), key)
+    except ValidationError:
+        logger.warning("%s is not a model id, ignoring it", name)
+        return Levers.model_fields[key].default
 
 
 def _env_cover_mode() -> str:

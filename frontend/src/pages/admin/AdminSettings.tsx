@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { Plus, RotateCcw, Search, X } from 'lucide-react';
+import { RotateCcw, X } from 'lucide-react';
 import { changeLever, getSettings, resetLever } from '../../api/admin/settings';
 import type { AlertEvent, Lever, LeverKey, LeverValue, SettingsOut } from '../../api/admin/types';
 import { Page, PageTitle } from '../../components/layout/AppShell';
@@ -9,7 +9,9 @@ import { AlertsCard } from '../../components/admin/AlertsCard';
 import { mutedSummary, mutesSecurity } from '../../components/admin/alertEvents';
 import { formatTime, formatUsd } from '../../components/admin/helpers';
 import { useLoad } from '../../components/admin/useLoad';
+import { ModelPicker } from '../../components/create/ModelPicker';
 import { Button, Card, Dropdown, ErrorBox, Input, SectionLabel, Spinner, SwitchTrack, Textarea, useToast } from '../../components/ui';
+import { splitModelName } from '../../lib/modelNames';
 
 const COPY: Record<LeverKey, { label: string; hint: string }> = {
   registration_open: { label: 'Sign-ups', hint: 'New accounts. Accounts that exist keep signing in.' },
@@ -51,6 +53,22 @@ const COPY: Record<LeverKey, { label: string; hint: string }> = {
     label: 'AI covers',
     hint: 'Paid: runs paid from the balance or an own OpenRouter key get a cover when they complete (≈ $0.03 × markup, from the balance), owners make more on the debate page. All public: free public debates get one too, on us. Off: no new covers (the console still makes them).',
   },
+  trending_daily_topics: {
+    label: 'Topics a day, per format',
+    hint: 'Written from the news for each list (debates, rap battles) in every daily batch. Fewer topics are picked from the same pool of headlines, so they are the hottest stories.',
+  },
+  trending_shown_topics: {
+    label: 'Topics shown, per format',
+    hint: 'How many of the newest batch the wizard lists. Earlier days are kept and only answer searches.',
+  },
+  topic_model: {
+    label: 'Topic writer',
+    hint: 'Writes the trending lists from the news and the AI topics from a user’s own words in the wizard. System key, not billed (≈ $0.03 a batch, $0.0001 an AI topic). A change reaches the next batch.',
+  },
+  topic_review_model: {
+    label: 'Topic safety review',
+    hint: 'Checks every trending list before it is saved (fails closed: no answer, no batch). Keep it another model than the writer, so nothing judges its own topics.',
+  },
   free_verdict_model: {
     label: 'Verdict model of free debates',
     hint: 'Structures the verdict and answers the gallery check when every participant argues on a free model, so such a debate costs nothing. Free models only; off: the paid VERDICT_MODEL. A model that stops answering sends those debates to the moderation queue.',
@@ -64,7 +82,7 @@ const show = (lever: Lever, value: LeverValue, events: AlertEvent[] = []): strin
     return value ? 'on' : 'off';
   }
   if (lever.kind === 'models') return Array.isArray(value) && value.length ? value.join(', ') : 'none';
-  if (lever.kind === 'model') return String(value) || 'off (paid model)';
+  if (lever.kind === 'model') return String(value) || (lever.key === 'free_verdict_model' ? 'off (paid model)' : '—');
   if (lever.kind === 'lengths') return Array.isArray(value) && value.length ? value.map((v) => LENGTH_LABELS[v] ?? v).join(', ') : 'all';
   if (lever.kind === 'int' && lever.key.startsWith('free_') && Number(value) === 0) return 'no limit';
   if (lever.kind === 'factor') return `× ${Number(value)}`;
@@ -188,14 +206,35 @@ const MessageField = ({ lever, onSave }: { lever: Lever; onSave: (value: string)
   );
 };
 
+/** The wizard's model picker for one model lever (`free`: free models only). */
+const ModelLeverField = ({ lever, catalogue, free = false, onChange }: { lever: Lever; catalogue: SettingsOut['models']; free?: boolean; onChange: (value: string) => void }) => {
+  const value = String(lever.value);
+  const selected = catalogue.find((m) => m.id === value);
+  return (
+    <div className="flex w-full items-center gap-2 md:w-[340px]">
+      <ModelPicker
+        value={value}
+        models={free ? catalogue.filter((m) => m.id.endsWith(':free') || m.id === value) : catalogue}
+        loading={false}
+        paidLocked={false}
+        ranks={{}}
+        color="var(--color-accent)"
+        speakerName={selected ? splitModelName(selected).provider : free ? 'Off: the paid model' : 'Pick a model'}
+        ariaLabel={COPY[lever.key].label}
+        onChange={(id) => id !== value && onChange(id)}
+      />
+      {free && value && (
+        <button type="button" onClick={() => onChange('')} title="Off: the paid model" aria-label="Use the paid model" className="grid size-9 shrink-0 cursor-pointer place-items-center rounded-[10px] text-muted hover:bg-surface-2 hover:text-text">
+          <X className="size-4" />
+        </button>
+      )}
+    </div>
+  );
+};
+
 const ModelsField = ({ lever, catalogue, onChange }: { lever: Lever; catalogue: SettingsOut['models']; onChange: (value: string[]) => void }) => {
-  const [text, setText] = useState('');
   const off = Array.isArray(lever.value) ? (lever.value as string[]) : [];
   const names = new Map(catalogue.map((m) => [m.id, m.name]));
-  const needle = text.trim().toLowerCase();
-  const matches = needle
-    ? catalogue.filter((m) => !off.includes(m.id) && (m.id.toLowerCase().includes(needle) || m.name.toLowerCase().includes(needle))).slice(0, 8)
-    : [];
   return (
     <div className="grid w-full gap-2">
       {off.length > 0 && (
@@ -210,30 +249,20 @@ const ModelsField = ({ lever, catalogue, onChange }: { lever: Lever; catalogue: 
           ))}
         </div>
       )}
-      <div className="relative">
-        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted" />
-        <Input type="search" value={text} onChange={(e) => setText(e.target.value)} placeholder="Find a model to turn off" aria-label="Find a model to turn off" className="pl-9" />
+      {/* The wizard's picker; a pick is turned off. */}
+      <div className="md:max-w-[340px]">
+        <ModelPicker
+          value=""
+          models={catalogue.filter((m) => !off.includes(m.id))}
+          loading={false}
+          paidLocked={false}
+          ranks={{}}
+          color="var(--color-accent)"
+          speakerName="Turn off a model"
+          ariaLabel="Find a model to turn off"
+          onChange={(id) => onChange([...off, id])}
+        />
       </div>
-      {matches.length > 0 && (
-        <ul className="overflow-hidden rounded-[12px] border border-line bg-surface-2">
-          {matches.map((m) => (
-            <li key={m.id}>
-              <button
-                type="button"
-                onClick={() => {
-                  setText('');
-                  onChange([...off, m.id]);
-                }}
-                className="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-xs hover:bg-surface-3"
-              >
-                <Plus className="size-3.5 text-muted" />
-                <span className="font-semibold text-text-2">{m.name}</span>
-                <span className="truncate font-mono text-[11px] text-muted">{m.id}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
     </div>
   );
 };
@@ -259,18 +288,6 @@ const LengthsField = ({ lever, onChange }: { lever: Lever; onChange: (value: str
       })}
     </div>
   );
-};
-
-// One free model, or none: the catalogue's `:free` models (and the current one if it left).
-const FreeModelField = ({ lever, catalogue, onChange }: { lever: Lever; catalogue: SettingsOut['models']; onChange: (value: string) => void }) => {
-  const current = String(lever.value);
-  const free = catalogue.filter((m) => m.id.endsWith(':free'));
-  const options = [
-    { value: '', label: 'Off: the paid model' },
-    ...(current && !free.some((m) => m.id === current) ? [{ value: current, label: current, hint: 'Not in the OpenRouter catalogue any more' }] : []),
-    ...free.map((m) => ({ value: m.id, label: m.name, hint: m.id })),
-  ];
-  return <Dropdown value={current} options={options} onChange={onChange} aria-label={COPY[lever.key].label} className="w-full md:w-72" menuWidth={360} />;
 };
 
 const AdminSettings = () => {
@@ -343,6 +360,20 @@ const AdminSettings = () => {
               </div>
             </Card>
             <Card>
+              <SectionLabel>Topics</SectionLabel>
+              <p className="mt-1 text-xs text-muted">The wizard’s trending lists from the news (a batch a day) and its AI topics.</p>
+              <div className="mt-2 divide-y divide-line">
+                {row('trending_daily_topics', number)}
+                {row('trending_shown_topics', number)}
+                {row('topic_model', (lever) => (
+                  <ModelLeverField lever={lever} catalogue={settings.models} onChange={(value) => ask(lever, value)} />
+                ))}
+                {row('topic_review_model', (lever) => (
+                  <ModelLeverField lever={lever} catalogue={settings.models} onChange={(value) => ask(lever, value)} />
+                ))}
+              </div>
+            </Card>
+            <Card>
               <SectionLabel>Free debates</SectionLabel>
               <p className="mt-1 text-xs text-muted">On free models, by accounts without credits or an own OpenRouter key.</p>
               <div className="mt-2 divide-y divide-line">
@@ -353,7 +384,7 @@ const AdminSettings = () => {
                   <LengthsField lever={lever} onChange={(value) => ask(lever, value)} />
                 ))}
                 {row('free_verdict_model', (lever) => (
-                  <FreeModelField lever={lever} catalogue={settings.models} onChange={(value) => ask(lever, value)} />
+                  <ModelLeverField lever={lever} catalogue={settings.models} free onChange={(value) => ask(lever, value)} />
                 ))}
               </div>
             </Card>

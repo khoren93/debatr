@@ -1,24 +1,26 @@
 """Trending topics: today's news turned into debate topics, one batch per refresh.
 
 A refresh reads the RSS feeds in FEEDS, keeps fresh headlines (at most MAX_AGE_HOURS old) that
-pass the blocklist and sends a balanced pool of them (round-robin over the feeds) to
-`TRENDING_MODEL`. The model merges reports about one story and writes a motion, a neutral brief
-(the debaters do not know recent news; the wizard sends it as `DebateConfig.news`) and a category
-per story, citing the numbers of the headlines it used. Code keeps only topics grounded in those
-headlines, ranks them by the model's heat plus the number of outlets that carry the story, and
-saves the best `TRENDING_TOPIC_COUNT` with their source articles as a new `TrendingBatch`. The
-newest batch is what the site shows; older batches stay as an archive.
+pass the blocklist and sends a balanced pool of them (round-robin over the feeds) to the topic
+writer (lever `topic_model`). The model merges reports about one story and writes a motion, a
+neutral brief (the debaters do not know recent news; the wizard sends it as `DebateConfig.news`)
+and a category per story, citing the numbers of the headlines it used. Code keeps only topics
+grounded in those headlines, ranks them by the model's heat plus the number of outlets that
+carry the story, and saves the best `trending_daily_topics` (a lever) with their source articles
+as a new `TrendingBatch`. The wizard shows the newest batch (at most `trending_shown_topics`);
+older batches stay as the archive that answers its searches.
 
 Every show format that writes its topics its own way (`Format.topic_style`: the rap battle wants
 rivalries, "A or B?") gets its own list from the same pool in the same batch, asked and reviewed
-in parallel (`TrendingTopic.format`; `share` of the count). The default format's list is
-required; another one that fails is noted in the stats and its format keeps the list of an older
-batch (`GET /api/topics/trending?format=` reads the newest batch that has one).
+in parallel (`TrendingTopic.format`). The default format's list is required; another one that
+fails is noted in the stats and its format keeps the list of an older batch
+(`GET /api/topics/trending?format=` reads the newest batch that has one).
 
 Safety: what must never reach the site (sexual content, graphic violence, tragedies, abuse of
 children, private people, hate) is filtered three times: BLOCKED_TERMS on every headline before
 the model sees it, the same blocklist on the generated text, and a second, focused review call
-(SAFETY_RULES) over the finished list. The batch is saved only when that review answered (fails
+(SAFETY_RULES) over the finished list by another model (lever `topic_review_model`), so the
+writer never judges its own topics. The batch is saved only when that review answered (fails
 closed): visitors keep the previous batch. Admins can still hide a topic.
 
 Triggers: `python -m app.scheduler` enqueues `refresh_trending_job` hourly and the API enqueues it
@@ -51,7 +53,7 @@ from app.core.redis import get_sync_redis, trending_lock_key
 from app.core.sync_db import get_sync_session
 from app.models.models import TrendingBatch, TrendingTopic, utcnow
 from app.schemas.schemas import TOPIC_MAX_LENGTH
-from app.services import alerts, usage
+from app.services import alerts, runtime_settings, usage
 from app.services.formats import DEFAULT_FORMAT, TopicStyle, topic_styles
 from app.services.media import llm
 from app.services.openrouter_client import OpenRouterError
@@ -59,7 +61,9 @@ from app.services.openrouter_client import OpenRouterError
 logger = logging.getLogger(__name__)
 
 MAX_AGE_HOURS = 48  # older headlines are not news any more
-MIN_POOL, MAX_POOL = 60, 400  # headlines sent to the model: 3 per wanted topic, within these
+# Headlines sent to the model: 3 per wanted topic, within these (a short list picks the best
+# stories of a wide pool).
+MIN_POOL, MAX_POOL = 150, 400
 EXTRA_TOPICS = 1.2  # ask for 20% more topics than shown: filters and the review drop some
 OUTLET_BONUS = 1.5  # ranking points per extra outlet that carries the story (up to 3 extra)
 REFRESH_SLACK = timedelta(minutes=30)  # hourly ticks must not push the daily batch later
@@ -589,18 +593,19 @@ def _cost(usage: dict[str, Any]) -> float:
         return 0.0
 
 
-def list_size(style: TopicStyle, topic_count: int) -> int:
-    """How many topics a format's list keeps."""
-    return max(1, round(topic_count * style.share))
-
-
 def build_list(
-    model: str, pool: list[Headline], style: TopicStyle, format_id: str, count: int, today: str
+    writer: str,
+    reviewer: str,
+    pool: list[Headline],
+    style: TopicStyle,
+    format_id: str,
+    count: int,
+    today: str,
 ) -> TopicList:
     """Generate, rank and review one format's list (raises TrendingError when nothing is left)."""
     wanted = min(len(pool), math.ceil(count * EXTRA_TOPICS))
     text, _, usage_ = llm.complete_message(
-        model,
+        writer,
         build_topic_messages(pool, wanted, today=today, style=style),
         purpose="trending",
         max_tokens=min(64000, 4000 + wanted * 400),
@@ -615,7 +620,7 @@ def build_list(
         raise TrendingError("the model returned no usable topics")
 
     review_text, _, review_usage = llm.complete_message(
-        model,
+        reviewer,
         build_review_messages(topics, style),
         purpose="trending_review",
         max_tokens=8000,
@@ -631,7 +636,10 @@ def build_list(
 
 
 def build_batch(
-    model: str, topic_count: int, styles: dict[str, TopicStyle] | None = None
+    writer: str,
+    reviewer: str,
+    topic_count: int,
+    styles: dict[str, TopicStyle] | None = None,
 ) -> BatchResult:
     """Fetch, filter, generate, rank and review one batch (nothing is saved here): a list per
     topic style, all from one pool of headlines. The first style's list (the default format's)
@@ -659,9 +667,7 @@ def build_batch(
     today = datetime.now(UTC).strftime("%A, %d %B %Y")
     with usage.ContextThreadPool(max_workers=len(styles)) as threads:
         jobs = {
-            fid: threads.submit(
-                build_list, model, pool, style, fid, list_size(style, topic_count), today
-            )
+            fid: threads.submit(build_list, writer, reviewer, pool, style, fid, topic_count, today)
             for fid, style in styles.items()
         }
     lists: list[TopicList] = []
@@ -685,12 +691,13 @@ def build_batch(
         "headlines_blocked": len(blocked),
         "blocked": blocked[:200],  # to spot false positives of the blocklist
         "headlines_sent": len(pool),
+        "review_model": reviewer,
         "topics_asked": sum(lst.asked for lst in lists),
         "dropped": [{**d, "format": lst.format} for lst in lists for d in lst.dropped],
         "formats": formats,
     }
     return BatchResult(
-        model=model,
+        model=writer,
         topics=[t for lst in lists for t in lst.topics],
         cost_usd=sum(lst.cost_usd for lst in lists),
         stats=stats,
@@ -727,6 +734,15 @@ def save_batch(db: Session, result: BatchResult) -> TrendingBatch:
     return batch
 
 
+def search_terms(query: str, limit: int = 8) -> list[str]:
+    """LIKE patterns for a search of the archive: every word must appear (`%`, `_` and `\\` of
+    the words themselves escaped), lower case, at most `limit` words."""
+    words = [w for w in query.lower().split() if w][:limit]
+    return [
+        "%" + w.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%" for w in words
+    ]
+
+
 def latest_batch_time(db: Session) -> datetime | None:
     stmt = select(TrendingBatch.created_at).order_by(TrendingBatch.created_at.desc()).limit(1)
     return db.execute(stmt).scalar_one_or_none()
@@ -744,8 +760,8 @@ def is_due(latest: datetime | None, now: datetime, hours: int) -> bool:
 
 def refresh_trending_job(force: bool = False) -> None:
     """RQ job: build and save a new batch when one is due (`force`: now, from the admin)."""
-    if not settings.OPENROUTER_API_KEY or not settings.TRENDING_MODEL:
-        logger.info("Trending topics are off: no OPENROUTER_API_KEY or TRENDING_MODEL")
+    if not settings.OPENROUTER_API_KEY:
+        logger.info("Trending topics are off: no OPENROUTER_API_KEY")
         return
     if not force:
         with get_sync_session() as db:
@@ -757,7 +773,10 @@ def refresh_trending_job(force: bool = False) -> None:
         logger.info("A trending refresh is already running")
         return
     try:
-        result = build_batch(settings.TRENDING_MODEL, settings.TRENDING_TOPIC_COUNT)
+        levers = runtime_settings.current_sync()
+        result = build_batch(
+            levers.topic_model, levers.topic_review_model, levers.trending_daily_topics
+        )
         with get_sync_session() as db:
             save_batch(db, result)
             db.commit()
