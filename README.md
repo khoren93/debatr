@@ -49,8 +49,8 @@ Users sign up, run free models or bring their own OpenRouter key, buy credits wi
 - **📰 Topics from today's news**: debate-ready questions drawn from the day's headlines across
   major outlets, each with a short brief of what happened and links to the original articles,
   one click away in the wizard.
-- **🧭 Ready in three steps**: a topic, the speakers (model, voice and persona), then format and
-  launch with the exact cost and length before you hit start.
+- **🧭 Ready in three steps**: a topic and a format (debate or rap battle), the speakers (model,
+  side, voice and persona), then the outputs, with the exact cost and length before you hit start.
 - **⚡ Watch it live**: arguments stream in word by word, and you can stop the debate at any moment.
   If a model fails to answer, the debate stops on that turn and resumes from there with one click.
 - **🎤 Rap battles**: two models trade verses on your topic over one beat, with an MC to open and
@@ -78,7 +78,8 @@ Users sign up, run free models or bring their own OpenRouter key, buy credits wi
   other's figures on screen.
 - **🔎 Fact-check**: a web search checks the figures and quotes on screen, the opponents and the
   judge see the result, and the leaderboard shows how accurate each model's figures are.
-- **📝 Transcript export**: take the full debate with you as Markdown.
+- **📝 Exports and a YouTube kit**: the transcript as Markdown, subtitles (.srt), the MP3, and a
+  ready YouTube title, a description with chapters, tags and thumbnails.
 
 ### 🌍 Share and discover
 - **🖼️ Public gallery**: finished debates go public with their own share link after an automatic
@@ -109,26 +110,26 @@ Users sign up, run free models or bring their own OpenRouter key, buy credits wi
 
 ### 🔜 Coming next
 
-- [ ] **🧑‍⚖️ Human vs AI**: step into the arena yourself. Argue against a model of your choice, turn
-  by turn, and let the judge decide who made the stronger case.
-- [ ] **🎭 More formats**: after the rap battle: courtroom trials with a prosecutor, defence and
-  jury, roasts, Shark Tank pitches, Socratic dialogues and podcast interviews.
-- [ ] **🏛️ Historical & fictional characters**: Socrates vs Nietzsche, Sherlock vs Poirot. Cast
-  famous minds from history and fiction as your speakers, each with their own voice and style.
-- [ ] **🏆 Tournaments**: knockout brackets of 4–8 models on one question. Every match is a
-  full debate, and the champion climbs the model leaderboard.
 - [ ] **📅 Debate of the day**: a fresh debate on a topical question every day, voiced and
   published to the gallery, ready for your vote.
-- [ ] **🎞️ Animated avatars**: speakers that talk, react and lip-sync in the 16:9 episodes and
-  9:16 Shorts.
+- [ ] **🧑‍⚖️ Human vs AI**: step into the arena yourself. Argue against a model of your choice, turn
+  by turn, and let the judge decide who made the stronger case.
 - [ ] **🔗 Embeddable player**: drop any public debate into a blog post or article with a simple
   `<iframe>` or an oEmbed link.
+- [ ] **🎞️ Animated avatars**: speakers that talk, react and lip-sync in the 16:9 episodes and
+  9:16 Shorts.
 
-### 🧩 Also planned
+### ⏳ Later
 
-- [ ] **Comments**: discussion under public debates (owner can switch it on/off).
-- [ ] **PDF Export**: Nicely formatted transcript downloads.
-- [ ] **Local LLM Support**: Integration with Ollama for offline debates.
+- [ ] **🎭 More formats**: courtroom trials with a prosecution, a defence and the audience as the
+  jury, Shark Tank pitches, Socratic dialogues and podcast interviews.
+- [ ] **🏛️ Historical & fictional characters**: Socrates vs Nietzsche, Sherlock Holmes vs Count
+  Dracula. Cast famous minds from history and public-domain fiction as your speakers.
+- [ ] **🏆 Tournaments**: knockout brackets of 4–8 models on one question. Every match is a full
+  debate judged by a panel of models, and the champion takes the title.
+- [ ] **💬 Comments**: discussion under public debates, switched on or off by the owner.
+- [ ] **📄 PDF export**: a nicely formatted transcript to download.
+- [ ] **🖥️ Local models**: Ollama support for offline debates.
 
 ## 🛠️ Tech Stack
 
@@ -137,7 +138,7 @@ Users sign up, run free models or bring their own OpenRouter key, buy credits wi
 - **Database**: PostgreSQL (async SQLAlchemy 2 + Alembic migrations)
 - **Queue**: Redis & RQ (Redis Queue) for reliable task orchestration
 - **AI Integration**: [OpenRouter](https://openrouter.ai/) API (streaming, token & cost accounting)
-- **Voices & media**: ElevenLabs / edge-tts, ffmpeg mixing, timeline contract for the browser renderer
+- **Voices & media**: ElevenLabs (voices, and Music for rap battles) / edge-tts, ffmpeg mixing, timeline contract for the browser renderer
 - **Accounts & payments**: session cookie login (bcrypt), encrypted personal keys (Fernet), Stripe Checkout + webhooks
 - **Quality**: ruff, pyright, pytest
 
@@ -205,7 +206,7 @@ make dev-up    # infrastructure only: Postgres on :5432, Redis on :6379
 make migrate   # apply database migrations
 
 make api       # backend API with reload (http://localhost:8000/api/docs)
-make worker    # second terminal: RQ worker for both queues (SimpleWorker, safe on macOS)
+make worker    # second terminal: RQ worker for every queue (SimpleWorker, safe on macOS)
 make web       # third terminal: Vite on http://localhost:5173, proxies /api to the backend
 ```
 
@@ -242,7 +243,8 @@ Run `make` to list every target. The most useful ones:
 
 ### 🌐 Server Deployment (Hetzner/VPS)
 
-1. **Point your domain** (e.g., `example.com`) to your server IP in Cloudflare/DNS.
+1. **Point your domain** (e.g., `example.com`) and an admin subdomain (e.g. `admin.example.com`)
+   to your server IP in Cloudflare/DNS.
 2. **SSH into your server** and install Docker:
    ```bash
    curl -fsSL https://get.docker.com | sh
@@ -254,26 +256,36 @@ Run `make` to list every target. The most useful ones:
    cp .env.example .env
    ```
 4. **Edit `.env`**:
-   - Set `DOMAIN_NAME=your-domain.com`
-   - Set `ACME_EMAIL=your@email.com` (for SSL)
+   - Set `ENVIRONMENT=production`, `SITE_URL=https://your-domain.com` and
+     `ADMIN_HOST=admin.your-domain.com` (the admin console runs on its own host).
    - Set `OPENROUTER_API_KEY=...`
-   - Generate a strong `POSTGRES_PASSWORD`.
-5. **Start everything**:
+   - Replace every placeholder secret (`SECRET_KEY`, `POSTGRES_PASSWORD`, e.g.
+     `openssl rand -base64 32`).
+5. **Put a reverse proxy in front**: the production stack serves plain HTTP and joins the external
+   Docker network `caddy_net`, where a proxy terminates TLS. With Caddy (it gets the certificates
+   itself and passes the Host header the stack relies on), run a `caddy` container on that
+   network with ports 80 and 443 and this site block:
+   ```bash
+   docker network create caddy_net
+   ```
+   ```caddyfile
+   your-domain.com, admin.your-domain.com {
+       reverse_proxy ai-debates-frontend-1:80
+   }
+   ```
+6. **Start everything**:
    ```bash
    ./deploy.sh
    ```
    `deploy.sh` pulls the latest code, rebuilds the containers (migrations run on start) and
-   prunes old images. In production set `ENVIRONMENT=production` and replace every placeholder
-   secret in `.env` (`SECRET_KEY`, `POSTGRES_PASSWORD`, e.g. `openssl rand -base64 32`).
-   The admin console runs on its own host: point a subdomain (e.g. `admin.your-domain.com`) at
-   the server, set `ADMIN_HOST` to it, proxy it to the frontend container like the site, then
+   prunes old images. Then give your account console access:
    `docker compose exec api python -m app.manage admin grant you@your-domain.com`.
-6. **Update later**: SSH into the server and run it again from the project dir (pushes do not
+7. **Update later**: SSH into the server and run it again from the project dir (pushes do not
    deploy automatically):
    ```bash
    make deploy    # same as ./deploy.sh
    ```
-7. **Back up the database**: nothing in the stack does it for you. Add a nightly cron job in the
+8. **Back up the database**: nothing in the stack does it for you. Add a nightly cron job in the
    project dir and check a dump now and then (`make backup-check` restores it into a scratch
    database). For an off-site copy set `BACKUP_RCLONE_REMOTE` to an encrypted rclone remote:
    ```bash
@@ -286,12 +298,15 @@ Run `make` to list every target. The most useful ones:
 ## 📖 Usage
 
 1. Open the web interface at `https://your-domain.com` (or `http://localhost`) and create an account
-   (new accounts receive `SIGNUP_BONUS_USD` of credits, 0 by default).
+   (new accounts receive `SIGNUP_BONUS_USD` of credits, 0 by default; without credits you can run a
+   few short free-model debates a day).
 2. Click **"+ New debate"** and walk through the wizard's three steps:
-   - **Topic**: type a question or pick one of today's trending topics from the news, choose language, rounds and reply length.
-   - **Speakers**: a host plus two or more debaters, each with a model (OpenRouter's free router by
-     default), a voice and a persona. The voice engine is chosen here too: free Edge voices or premium
-     ElevenLabs voices.
+   - **Topic**: type a question or pick one of today's trending topics from the news, choose the
+     format (debate or rap battle), language, rounds and reply length.
+   - **Speakers**: the host and the debaters, each with a model (OpenRouter's free router by
+     default), a side, a voice and a persona. The voice engine is chosen here too: free Edge voices
+     or premium ElevenLabs voices. A rap battle has an MC, two rappers with a flow each instead of a
+     voice, and a judge; its track is always made by ElevenLabs.
    - **Review**: spoken or written style, which outputs to produce (audio, 16:9 video, 9:16
      Short) and the render quality, visual scenes (pictures, fact-check) and whether to publish to
      the gallery; the estimate shows cost, length, turns and your credits after the run. Your own
@@ -324,10 +339,16 @@ server pass `--url http://localhost` (or set `DEBATR_URL`).
 
 ### 💳 Credits
 
-- Every run charges the OpenRouter cost reported for the debate × `CREDIT_MARKUP` once it finishes
-  (a resumed debate is charged only for what the new run adds).
-- Premium voices on the system ElevenLabs key cost `TTS_CREDIT_PRICE_PER_1K_CHARS` per 1,000 characters.
+- Every run charges the OpenRouter cost reported for the debate (fact-checks and AI pictures
+  included) × `CREDIT_MARKUP` once it finishes, at least `MIN_DEBATE_CHARGE_USD` for a completed
+  debate on paid models; a resumed debate is charged only for what the new run adds.
+- Premium voices on the system ElevenLabs key cost `TTS_CREDIT_PRICE_PER_1K_CHARS` per 1,000
+  characters, a rap battle's track `MUSIC_CREDIT_PRICE_PER_MIN` per minute.
+- These prices are defaults: the admin console's Settings page changes them without a deploy, and
+  a run keeps the prices it was quoted.
 - Free models and free Edge voices cost nothing; a personal OpenRouter key makes model usage free.
+  Accounts without credits run free models within daily limits (`FREE_DEBATES_PER_DAY`,
+  `FREE_MAX_ROUNDS`, `FREE_MAX_DEBATERS`, `FREE_LENGTHS`); credits or an own key lift them.
 - Top-ups go through Stripe Checkout (`STRIPE_SECRET_KEY`, webhook `/api/billing/webhook` with the
   `checkout.session.completed` event and `STRIPE_WEBHOOK_SECRET`). Every movement is recorded in the
   `credit_transactions` ledger and visible on the Account page and in the admin console.
@@ -345,9 +366,11 @@ The system uses an event-driven architecture to handle long-running LLM generati
 2. **Queue (RQ)**: A chain of jobs per debate: `start` → one job per turn → `verdict` → `finish`.
    Several workers (`TURN_WORKERS`) serve the queue, so debates run side by side; each user may have
    two going at once, and a run whose worker died is picked up again by a recovery check every minute.
-3. **Scheduler**: Every round starts with the moderator (introduction, then short transitions) followed by
-   each debater. Debater turns are typed `opening` / `rebuttal` / `closing`; the moderator's model then
-   delivers a structured verdict.
+3. **Formats**: the debate's format sets the turn order, the prompts and the verdict. In a debate
+   every round starts with the host (introduction, then short transitions) followed by each
+   debater, whose turns are typed `opening` / `rebuttal` / `closing`; in a rap battle an MC opens
+   and two rappers trade verses of a fixed number of lines. A judge's verdict closes both (a rap
+   battle's judge scores every round).
 4. **Worker**: Builds role-specific prompts, streams the OpenRouter response, records token usage and cost
    per turn, and publishes events to Redis Pub/Sub. A debate can be stopped at any time from the UI.
    Rate limits and provider errors are retried; a turn that still fails stops the debate, which the
@@ -359,6 +382,8 @@ The system uses an event-driven architecture to handle long-running LLM generati
    media, queues the audio build on the `media` queue.
 7. **Media**: the media worker voices every turn (cached by content hash), mixes the track with ffmpeg,
    picks highlights for Shorts and writes `timeline.json`. The browser renders MP4s from that timeline.
+   A rap battle gets one track from ElevenLabs Music (beat and rapped verses together), with the MC
+   and the judge voiced over it.
 8. **Accounts**: the login lives in the signed session cookie; personal OpenRouter keys are stored
    encrypted and only ever handed to the worker through Redis for the duration of a run.
 9. **API tokens**: the CLI, scripts and agents send `Authorization: Bearer debatr_…`. Only a
@@ -366,12 +391,13 @@ The system uses an event-driven architecture to handle long-running LLM generati
    confirmed in the browser). Runs remember the token that started them, so its spending limit
    counts their charges; account settings and payments accept only the browser session.
 
-**Configuration** (see `.env.example`): `OPENROUTER_API_KEY`, `ELEVENLABS_API_KEY`, `ALLOWED_ORIGINS`,
-`SIGNUP_BONUS_USD`, `CREDIT_MARKUP`, `TTS_CREDIT_PRICE_PER_1K_CHARS`, `TOPUP_AMOUNTS_USD`,
+**Configuration** (see `.env.example`): `OPENROUTER_API_KEY`, `ELEVENLABS_API_KEY`, `SITE_URL`,
+`ALLOWED_ORIGINS`, `SIGNUP_BONUS_USD`, `CREDIT_MARKUP`, `MIN_DEBATE_CHARGE_USD`,
+`TTS_CREDIT_PRICE_PER_1K_CHARS`, `MUSIC_CREDIT_PRICE_PER_MIN`, `TOPUP_AMOUNTS_USD`,
 `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` (or `DEV_FAKE_PAYMENTS`), `DEBATE_CREATE_RATE_LIMIT`,
 `LOGIN_RATE_LIMIT`, `TURN_JOB_TIMEOUT`, `LLM_TURN_TIMEOUT`, `TURN_WORKERS`,
-`MAX_ACTIVE_DEBATES_PER_USER`, `MAX_ACTIVE_MEDIA_PER_USER`, `FREE_MODELS_PER_MINUTE`, `MEDIA_JOB_TIMEOUT`, `ADMIN_HOST` /
-`ADMIN_ALLOWED_IPS`, `SECRET_KEY`.
+`MAX_ACTIVE_DEBATES_PER_USER`, `MAX_ACTIVE_MEDIA_PER_USER`, `FREE_MODELS_PER_MINUTE`,
+`FREE_DEBATES_PER_DAY`, `MEDIA_JOB_TIMEOUT`, `ADMIN_HOST` / `ADMIN_ALLOWED_IPS`, `SECRET_KEY`.
 
 ---
 

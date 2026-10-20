@@ -31,7 +31,7 @@ dev-down: ## Stop the dev Postgres + Redis
 api: ## Run the API with reload on :8000
 	cd backend && uv run uvicorn app.main:app --reload
 
-worker: ## Run the RQ worker for both queues
+worker: ## Run the RQ worker for every queue
 	cd backend && RQ_SIMPLE_WORKER=true uv run python -m app.worker
 
 media-worker: ## Run a media-only worker (needs ffmpeg)
