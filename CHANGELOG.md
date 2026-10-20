@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.1] - 2026-10-20
+
+### Fixed
+
+- **Verdicts of free debates**: the free model that structures them and checks them for the
+  gallery (Nvidia's Nemotron 3 Super) now answers every request with an error, so free debates
+  fell back to a plain-text verdict and were held back from the gallery. They use MiniMax M3.1
+  Flash (free) instead; the console's lever can still switch it.
+
 ## [1.5.0] - 2026-10-20
 
 ### Changed
@@ -367,7 +376,8 @@ First public release of **AI Debates**.
 - Admin panel for debates, participants, turns and sessions.
 - Docker Compose setup with FastAPI, PostgreSQL, Redis + RQ and a React + Vite frontend.
 
-[Unreleased]: https://github.com/khoren93/debatr/compare/v1.5.0...HEAD
+[Unreleased]: https://github.com/khoren93/debatr/compare/v1.5.1...HEAD
+[1.5.1]: https://github.com/khoren93/debatr/compare/v1.5.0...v1.5.1
 [1.5.0]: https://github.com/khoren93/debatr/compare/v1.4.1...v1.5.0
 [1.4.1]: https://github.com/khoren93/debatr/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/khoren93/debatr/compare/v1.3.0...v1.4.0
