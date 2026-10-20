@@ -139,7 +139,15 @@ export const StepTopic = ({ state, free, patch, onFormat, formatLocks, showError
       </div>
 
       <div className="mt-[18px] grid items-start gap-[22px] animate-rise min-[1180px]:grid-cols-2">
-        <TrendingBrowser isPicked={isPicked} onPick={pick} onUnpick={unpick} onUseQuery={(q) => patch({ topic: q.replace(/\??$/, '?'), news: null })} />
+        <TrendingBrowser
+          format={state.format}
+          language={state.language}
+          topic={state.topic}
+          isPicked={isPicked}
+          onPick={pick}
+          onUnpick={unpick}
+          onUseText={(text) => patch({ topic: text.slice(0, TOPIC_MAX_LENGTH).trimEnd(), news: null })}
+        />
 
         <aside className="grid min-w-0 gap-[18px] rounded-panel border border-line bg-surface p-5 min-[1180px]:sticky min-[1180px]:top-5">
           <div className="flex items-center justify-between">
@@ -160,7 +168,7 @@ export const StepTopic = ({ state, free, patch, onFormat, formatLocks, showError
               value={state.topic}
               // A trending topic stays linked only while its question is unchanged.
               onChange={(e) => patch(news ? { topic: e.target.value, news: null } : { topic: e.target.value })}
-              placeholder="Are cryptocurrencies the future of finance or a bubble?"
+              placeholder={spec.topicPlaceholder}
               maxLength={TOPIC_MAX_LENGTH}
               className={`w-full resize-none rounded-[14px] border bg-ink px-4 py-3.5 font-display text-[19px] font-semibold leading-[1.3] tracking-[-0.01em] text-text outline-none transition-colors focus:border-accent ${
                 valid ? 'border-accent/45' : 'border-line-2'

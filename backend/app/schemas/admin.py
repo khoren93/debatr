@@ -818,6 +818,14 @@ class TrendingBatchRow(BaseModel):
     headlines_sent: int | None
     topics_asked: int | None
     dropped: int
+    formats: list["TrendingFormatList"] = []  # each format's list (empty for older batches)
+
+
+class TrendingFormatList(BaseModel):
+    format: str
+    asked: int | None
+    kept: int | None
+    error: str | None  # the list failed: its format keeps an older batch's list
 
 
 class TrendingBatchPage(BaseModel):
@@ -827,6 +835,7 @@ class TrendingBatchPage(BaseModel):
 
 class TrendingTopicOut(BaseModel):
     id: str
+    format: str
     rank: int
     label: str
     question: str
@@ -841,7 +850,8 @@ class TrendingTopicOut(BaseModel):
 class TrendingBatchCard(BaseModel):
     batch: TrendingBatchRow
     topics: list[TrendingTopicOut]
-    dropped: list[dict[str, Any]]  # topics the model or the review dropped, with the reason
+    # topics the model or the review dropped, with the reason (and the format's list)
+    dropped: list[dict[str, Any]]
     blocked: list[dict[str, Any]]  # headlines the blocklist removed
 
 

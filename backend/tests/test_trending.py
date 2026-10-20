@@ -7,6 +7,8 @@ from sqlalchemy.orm import Session
 
 from app.scheduler import TRENDING_TICK_SECONDS, build_scheduler
 from app.services import trending
+from app.services.formats import FORMATS, topic_list_of, topic_styles
+from app.services.formats.base import DEBATE_TOPICS
 from app.services.media import llm
 from app.services.trending import (
     Headline,
@@ -144,6 +146,34 @@ def test_prompts_carry_the_safety_rules() -> None:
     assert "sexual content of any kind" in review[1]["content"]
 
 
+def test_a_rap_battle_list_asks_for_rivalries() -> None:
+    style = FORMATS["rap_battle"].topic_style
+    pool = [_headline("Nvidia overtakes AMD in chip sales")]
+    system, user = build_topic_messages(pool, 3, today="Saturday", style=style)
+    assert "rap verses" in system["content"]
+    assert "rap battle topics" in system["content"]
+    assert "A or B?" in user["content"]
+    assert "Skip stories without a fun, concrete rivalry" in user["content"]
+    assert "sexual content of any kind" in user["content"]  # the same safety rules
+    review = build_review_messages([_topic("Nvidia or AMD?", 5, ["BBC"])], style)[1]["content"]
+    assert "rap battle topics must NOT be shown" in review
+    assert "politicians, political parties" in review
+    # The debate's prompt stays as it was.
+    debate = build_topic_messages(pool, 3, today="Saturday")
+    assert "debate a motion on camera" in debate[0]["content"]
+    assert "A or B?" not in debate[1]["content"]
+    assert "politicians" not in build_review_messages([_topic("Q?", 5, ["BBC"])])[1]["content"]
+
+
+def test_formats_share_or_own_a_topic_list() -> None:
+    assert list(topic_styles()) == ["debate", "rap_battle"]  # the default format's first
+    assert topic_list_of("rap_battle") == "rap_battle"
+    assert topic_list_of("debate") == "debate"
+    assert topic_list_of("no_such_format") == "debate"
+    assert trending.list_size(FORMATS["rap_battle"].topic_style, 50) == 25
+    assert trending.list_size(DEBATE_TOPICS, 50) == 50
+
+
 # --- model replies -------------------------------------------------------------------------
 
 
@@ -265,6 +295,24 @@ def _fake_llm(replies: list[str]) -> Any:
     return complete_message
 
 
+def _fake_llm_by_list(replies: dict[tuple[str, str], str]) -> Any:
+    """Answers by (list, step): the lists are asked in parallel, so not in a fixed order."""
+
+    def complete_message(model: str, messages: list[dict[str, Any]], **_: Any) -> Any:
+        text = messages[0]["content"] + messages[1]["content"]
+        fmt = "rap_battle" if "rap battle topic" in text else "debate"
+        step = "review" if "content moderator" in text else "topics"
+        reply = replies[(fmt, step)]
+        if reply == "error":
+            raise trending.OpenRouterError("upstream 500")
+        return reply, [], {"cost": 0.01}
+
+    return complete_message
+
+
+DEBATE_ONLY = {"debate": DEBATE_TOPICS}
+
+
 def test_build_batch_filters_headlines_and_applies_the_review(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -283,7 +331,7 @@ def test_build_batch_filters_headlines_and_applies_the_review(
     fake = _fake_llm([topics, '{"reject": [{"id": 2, "reason": "too local"}]}'])
     monkeypatch.setattr(llm, "complete_message", fake)
 
-    result = build_batch("test/model", topic_count=5)
+    result = build_batch("test/model", topic_count=5, styles=DEBATE_ONLY)
 
     prompt = fake.calls[0][1]["content"]
     assert "Porn ban vote" not in prompt  # blocked before the model saw it
@@ -295,8 +343,9 @@ def test_build_batch_filters_headlines_and_applies_the_review(
     assert result.stats["headlines_blocked"] == 1
     assert result.stats["blocked"] == [{"title": "Porn ban vote", "term": "porn"}]
     assert result.stats["dropped"] == [
-        {"question": "Should the EU delay AI rules?", "reason": "too local"}
+        {"question": "Should the EU delay AI rules?", "reason": "too local", "format": "debate"}
     ]
+    assert result.stats["formats"] == {"debate": {"asked": 2, "kept": 1}}
 
     batch = save_batch(Session(), result)  # unbound: add() needs no database
     assert batch.topic_count == 1
@@ -309,7 +358,88 @@ def test_build_batch_fails_closed_without_a_review(monkeypatch: pytest.MonkeyPat
     topics = _reply([{"label": "AI", "question": "Should the EU delay AI rules?", "sources": [1]}])
     monkeypatch.setattr(llm, "complete_message", _fake_llm([topics, "I'd rather not."]))
     with pytest.raises(TrendingError):
-        build_batch("test/model", topic_count=5)
+        build_batch("test/model", topic_count=5, styles=DEBATE_ONLY)
+
+
+def test_build_batch_writes_a_list_per_format(monkeypatch: pytest.MonkeyPatch) -> None:
+    pool = [
+        _headline("Nvidia overtakes AMD", "BBC", 1),
+        _headline("Cities weigh car bans", "DW", 2),
+    ]
+    monkeypatch.setattr(trending, "fetch_feeds", lambda: [pool])
+    fake = _fake_llm_by_list(
+        {
+            ("debate", "topics"): _reply(
+                [
+                    {"label": "Cars", "question": "Should cities ban cars?", "sources": [2]},
+                    {"label": "Chips", "question": "Should chips be regulated?", "sources": [1]},
+                ]
+            ),
+            ("debate", "review"): '{"reject": []}',
+            ("rap_battle", "topics"): _reply(
+                [
+                    {"label": "Chips", "question": "Nvidia or AMD?", "sources": [1], "heat": 9},
+                    {"label": "Cars", "question": "Cars or bikes?", "sources": [2]},
+                ]
+            ),
+            ("rap_battle", "review"): '{"reject": [{"id": 2, "reason": "dull"}]}',
+        }
+    )
+    monkeypatch.setattr(llm, "complete_message", fake)
+
+    result = build_batch("test/model", topic_count=4)
+
+    assert [(t.format, t.question) for t in result.topics] == [
+        ("debate", "Should cities ban cars?"),
+        ("debate", "Should chips be regulated?"),
+        ("rap_battle", "Nvidia or AMD?"),
+    ]
+    assert result.cost_usd == pytest.approx(0.04)
+    assert result.stats["formats"] == {
+        "debate": {"asked": 2, "kept": 2},
+        "rap_battle": {"asked": 2, "kept": 1},  # half the count, at least what the pool allows
+    }
+    assert result.stats["dropped"] == [
+        {"question": "Cars or bikes?", "reason": "dull", "format": "rap_battle"}
+    ]
+    batch = save_batch(Session(), result)
+    assert [(t.format, t.rank) for t in batch.topics] == [
+        ("debate", 1),
+        ("debate", 2),
+        ("rap_battle", 1),  # every list is ranked on its own
+    ]
+    assert batch.topic_count == 3
+
+
+def test_a_failed_battle_list_keeps_the_debate_list(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(trending, "fetch_feeds", lambda: [[_headline("Cities weigh car bans")]])
+    topics = _reply([{"label": "Cars", "question": "Should cities ban cars?", "sources": [1]}])
+    fake = _fake_llm_by_list(
+        {
+            ("debate", "topics"): topics,
+            ("debate", "review"): '{"reject": []}',
+            ("rap_battle", "topics"): "error",
+        }
+    )
+    monkeypatch.setattr(llm, "complete_message", fake)
+    result = build_batch("test/model", topic_count=4)
+    assert [t.format for t in result.topics] == ["debate"]
+    assert result.stats["formats"]["rap_battle"] == {"error": "upstream 500"}
+
+
+def test_a_failed_debate_list_fails_the_batch(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(trending, "fetch_feeds", lambda: [[_headline("Nvidia overtakes AMD")]])
+    battle = _reply([{"label": "Chips", "question": "Nvidia or AMD?", "sources": [1]}])
+    fake = _fake_llm_by_list(
+        {
+            ("debate", "topics"): _reply([]),
+            ("rap_battle", "topics"): battle,
+            ("rap_battle", "review"): '{"reject": []}',
+        }
+    )
+    monkeypatch.setattr(llm, "complete_message", fake)
+    with pytest.raises(TrendingError, match="no usable topics"):
+        build_batch("test/model", topic_count=4)
 
 
 def test_build_batch_without_feeds(monkeypatch: pytest.MonkeyPatch) -> None:

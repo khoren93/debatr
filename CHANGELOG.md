@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Rap battle topics from the news**: the wizard shows rap battles their own trending list,
+  rivalries like "Nvidia or AMD?" or "Streaming or cinema?" made from the same news as the debate
+  topics (in the same daily batch, half as many, reviewed for battles: no politicians or groups
+  of people as sides).
+- **Write your own topic with AI**: the search field of the first step is also where you write a
+  topic of your own. As soon as you type, "Surprise me" turns into an AI button (Enter works too)
+  that writes three topics from your words in the style of the chosen format, in your language,
+  or takes your words as they are. Free, up to 40 an hour. A topic you picked stays picked when
+  you switch the format, news story included.
+
 ## [1.5.1] - 2026-10-20
 
 ### Fixed

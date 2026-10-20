@@ -125,7 +125,11 @@ class Settings(BaseSettings):
     # Hours between batches; 0 turns automatic refreshes off (the admin can still build one).
     TRENDING_REFRESH_HOURS: int = 24
     TRENDING_MODEL: str = "google/gemini-2.5-flash"  # system key, ~$0.02 per batch
-    TRENDING_TOPIC_COUNT: int = 50
+    TRENDING_TOPIC_COUNT: int = 50  # the debate's list; a rap battle's has half as many
+    # The wizard's AI topic ideas (services/topic_ideas.py): the user's words -> three topics
+    # for the chosen format. System key, not billed (~$0.0001 a call); per account and hour.
+    TOPIC_IDEAS_MODEL: str = "anthropic/claude-haiku-5.5"
+    TOPIC_IDEAS_PER_HOUR: int = 40
     MEDIA_GAP_MS: int = 600
     MEDIA_LOUDNESS_LUFS: float = -16.0
     FFMPEG_BIN: str = "ffmpeg"

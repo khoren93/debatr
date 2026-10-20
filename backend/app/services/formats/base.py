@@ -30,6 +30,39 @@ class Seat:
     side: Side | None = None  # fixed by the format; None: the participant picks (Format.sides)
 
 
+@dataclass(frozen=True)
+class TopicStyle:
+    """How a topic for a show is written: the trending builder (services/trending) writes a
+    list of news topics per style, the wizard's AI topic ideas (services/topic_ideas) follow it."""
+
+    noun: str  # "debate topic"
+    site: str  # what happens on the site, after "a site where"
+    question: str  # the rule for the topic's wording
+    from_news: str  # how a news story becomes such a topic
+    heat: str  # what makes a topic good for this show (after "how widely discussed it is and")
+    # Extra rule of the safety review: what this show makes risky.
+    review: str = ""
+    # Said when picking stories: some shows cannot use every story.
+    pick_note: str = ""
+    # News topics per batch, as a share of TRENDING_TOPIC_COUNT.
+    share: float = 1.0
+
+
+DEBATE_TOPICS = TopicStyle(
+    noun="debate topic",
+    site="AI models debate a motion on camera",
+    question=(
+        'a crisp debate motion with two reasonable sides (usually "Should ...?" or "Is ...?"), '
+        "6-15 words and at most 100 characters"
+    ),
+    from_news=(
+        "Generalise the story into the argument it raises instead of asking about details of "
+        "one event."
+    ),
+    heat="how good it is for a lively debate",
+)
+
+
 def debaters_of(participants: Sequence[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
     return [p for p in participants if p.get("role") == "debater"]
 
@@ -67,6 +100,8 @@ class Format(ABC):
     announcer_voices: bool = False
     # Added to the gallery check's rules (what is fine in this format).
     moderation_note: str = ""
+    # How its topics are written; a format with the debate's style shows the debate's news list.
+    topic_style: TopicStyle = DEBATE_TOPICS
 
     # --- seats ----------------------------------------------------------------------------------
 

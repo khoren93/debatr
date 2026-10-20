@@ -791,7 +791,9 @@ export interface TrendingSource {
 
 export interface TrendingTopic {
   id: string;
-  /** 1 = hottest. */
+  /** Whose list it is on (a rap battle has its own: rivalries). */
+  format: FormatId;
+  /** 1 = hottest within that list. */
   rank: number;
   /** Short chip title. */
   label: string;
@@ -808,9 +810,18 @@ export interface TrendingTopic {
 }
 
 export interface TrendingTopics {
+  /** The list shown: the format asked for when it writes topics its own way, else "debate". */
+  format: FormatId;
   /** When the batch was built; null before the first one. */
   updated_at: string | null;
   topics: TrendingTopic[];
   /** Every category in display order, with its topic count. */
   categories: { id: TrendingCategoryId | string; count: number }[];
+}
+
+/** `POST /topics/ideas`: the wizard's AI button (backend services/topic_ideas.py). */
+export interface TopicIdeas {
+  format: FormatId;
+  /** Best first; empty when the model would not write topics on the text. */
+  ideas: string[];
 }

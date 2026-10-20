@@ -422,7 +422,7 @@ class ProviderUsage(Base):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
     )
     # turn | verdict | verdict_structure | moderation | factcheck | director | sketch |
-    # image | image_check | highlights | trending | trending_review | tts
+    # image | image_check | highlights | trending | trending_review | topic_ideas | tts | …
     purpose: Mapped[str] = mapped_column(String(32), index=True)
     provider: Mapped[str] = mapped_column(String(16))  # openrouter | elevenlabs | edge
     model: Mapped[str] = mapped_column(String(160))  # the model that answered when known
@@ -533,7 +533,7 @@ class TrendingBatch(Base):
 
 
 class TrendingTopic(Base):
-    """A debate topic made from today's news, with the articles it came from."""
+    """A debate (or battle) topic made from today's news, with the articles it came from."""
 
     __tablename__ = "trending_topics"
 
@@ -541,7 +541,9 @@ class TrendingTopic(Base):
     batch_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("trending_batches.id", ondelete="CASCADE"), index=True
     )
-    rank: Mapped[int] = mapped_column(Integer)  # 1 = hottest
+    # The show format whose list it is on (formats.topic_list_of: the rap battle has its own).
+    format: Mapped[str] = mapped_column(String(20), default="debate", server_default="debate")
+    rank: Mapped[int] = mapped_column(Integer)  # 1 = hottest within its format's list
     label: Mapped[str] = mapped_column(String(80))
     question: Mapped[str] = mapped_column(String(300))
     brief: Mapped[str] = mapped_column(Text, default="")  # what happened; goes to `description`

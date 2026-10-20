@@ -40,6 +40,11 @@ export interface FormatSpec {
   /** Default system prompts (the backend's fallbacks for the battle). */
   hostPrompt: string;
   debaterPrompt: string;
+  /** Whose list of news topics it shows (backend `formats.topic_list_of`: its own when it writes topics its own way). */
+  topicList: FormatId;
+  /** Heading of the wizard's news topics and the topic field's example. */
+  trendingTitle: string;
+  topicPlaceholder: string;
 }
 
 export const FORMATS: Record<FormatId, FormatSpec> = {
@@ -68,6 +73,9 @@ export const FORMATS: Record<FormatId, FormatSpec> = {
       rounds === 1 ? 'one argument each' : `opening · ${rounds > 2 ? `${rounds > 3 ? `${rounds - 2}× ` : ''}rebuttal · ` : ''}closing`,
     hostPrompt: 'You are an impartial debate moderator. Introduce the topic, keep speakers on time, summarize each round.',
     debaterPrompt: 'You are a skilled debater.',
+    topicList: 'debate',
+    trendingTitle: 'Trending topics',
+    topicPlaceholder: 'Are cryptocurrencies the future of finance or a bubble?',
   },
   rap_battle: {
     id: 'rap_battle',
@@ -96,6 +104,10 @@ export const FORMATS: Record<FormatId, FormatSpec> = {
     roundsHint: (rounds) => (rounds === 1 ? 'one verse each' : `${rounds} verses each · the second rapper opens round 2`),
     hostPrompt: 'You are a high-energy battle rap MC.',
     debaterPrompt: 'You are a sharp, witty battle rapper.',
+    // Rivalries ("A or B?"): backend formats/rap_battle.topic_style.
+    topicList: 'rap_battle',
+    trendingTitle: 'Trending battles',
+    topicPlaceholder: 'Streaming or cinema?',
   },
 };
 

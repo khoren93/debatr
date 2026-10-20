@@ -757,7 +757,8 @@ class TrendingSource(BaseModel):
 
 class TrendingTopicOut(BaseModel):
     id: str
-    rank: int  # 1 = hottest
+    format: str = "debate"  # whose list it is on (formats.topic_list_of)
+    rank: int  # 1 = hottest within that list
     label: str  # short chip title
     question: str  # the motion, ready for DebateConfig.topic
     brief: str  # what happened, for DebateConfig.description
@@ -773,9 +774,24 @@ class TrendingCategory(BaseModel):
 
 
 class TrendingTopicsOut(BaseModel):
+    # The list shown: the format asked for when it writes topics its own way, else "debate".
+    format: str = "debate"
     updated_at: datetime | None  # when the batch was built; None before the first one
     topics: list[TrendingTopicOut]
     categories: list[TrendingCategory]  # every category in display order, with its topic count
+
+
+class TopicIdeasIn(BaseModel):
+    """The wizard's AI button: the user's own words for a topic (services/topic_ideas.py)."""
+
+    text: str = Field(min_length=3, max_length=300)
+    format: FormatId = "debate"
+    language: str = Field(default="English", max_length=50)  # used when the text's is unclear
+
+
+class TopicIdeasOut(BaseModel):
+    format: FormatId
+    ideas: list[str]  # best first; empty when the model would not write topics on the text
 
 
 class FreeDebatesOut(BaseModel):

@@ -10,7 +10,7 @@ import re
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from app.services.formats.base import Format, Messages, Seat, debaters_of
+from app.services.formats.base import Format, Messages, Seat, TopicStyle, debaters_of
 from app.services.media import music
 from app.services.prompt_builder import intensity_description
 from app.services.scheduler import ScheduledTurn
@@ -128,6 +128,38 @@ class RapBattleFormat(Format):
     moderation_note = (
         "This is a rap battle: roasting the opposing rapper (an AI model) and its arguments, "
         "trash talk and bragging are expected and fine."
+    )
+    topic_style = TopicStyle(
+        noun="rap battle topic",
+        site="two AI models battle in rap verses over one beat, roasting each other's side",
+        question=(
+            'a punchy battle topic: two concrete, familiar rivals as "A or B?" that people '
+            "already pick sides on and a rapper can brag about (brands, products, apps, "
+            'platforms, teams, cities, technologies, habits, eras), like "Streaming or cinema?", '
+            '"Office or remote work?", "Xbox or PlayStation?". Only now and then a yes/no hot '
+            'take about something people love or hate, like "Is the office dead?". Never '
+            'abstract trade-offs, policy or jargon ("Economy or environment?", "Higher tax or '
+            'investment?"). 2-8 words and at most 60 characters; Rapper One backs A (or yes), '
+            "Rapper Two backs B (or no)"
+        ),
+        from_news=(
+            "Turn the story into the two things it sets against each other (news of a handheld "
+            'Xbox: "Handheld or console?"), not into details of one event or who did what.'
+        ),
+        heat=(
+            "how fun the rivalry is and how well people know both sides (abstract or policy "
+            "trade-offs get a low heat)"
+        ),
+        review=(
+            "The two sides roast each other in rap verses, so also reject a topic whose sides "
+            "are politicians, political parties, candidates or other real people (famous "
+            "athletes, artists and teams compared on their work are fine, unless they are in "
+            "the news for a scandal, a crime or a court case), or groups of people "
+            "(nationalities, ethnicities, religions, genders, sexual orientations, the rich or "
+            "the poor)."
+        ),
+        pick_note="Skip stories without a fun, concrete rivalry: fewer topics are fine.",
+        share=0.5,
     )
 
     def schedule(self, conf: Mapping[str, Any]) -> list[ScheduledTurn]:

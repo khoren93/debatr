@@ -3,11 +3,17 @@
 A refresh reads the RSS feeds in FEEDS, keeps fresh headlines (at most MAX_AGE_HOURS old) that
 pass the blocklist and sends a balanced pool of them (round-robin over the feeds) to
 `TRENDING_MODEL`. The model merges reports about one story and writes a motion, a neutral brief
-(the debaters do not know recent news; the wizard puts it into `description`) and a category per
-story, citing the numbers of the headlines it used. Code keeps only topics grounded in those
+(the debaters do not know recent news; the wizard sends it as `DebateConfig.news`) and a category
+per story, citing the numbers of the headlines it used. Code keeps only topics grounded in those
 headlines, ranks them by the model's heat plus the number of outlets that carry the story, and
 saves the best `TRENDING_TOPIC_COUNT` with their source articles as a new `TrendingBatch`. The
 newest batch is what the site shows; older batches stay as an archive.
+
+Every show format that writes its topics its own way (`Format.topic_style`: the rap battle wants
+rivalries, "A or B?") gets its own list from the same pool in the same batch, asked and reviewed
+in parallel (`TrendingTopic.format`; `share` of the count). The default format's list is
+required; another one that fails is noted in the stats and its format keeps the list of an older
+batch (`GET /api/topics/trending?format=` reads the newest batch that has one).
 
 Safety: what must never reach the site (sexual content, graphic violence, tragedies, abuse of
 children, private people, hate) is filtered three times: BLOCKED_TERMS on every headline before
@@ -28,6 +34,7 @@ import json
 import logging
 import math
 import re
+from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -44,7 +51,8 @@ from app.core.redis import get_sync_redis, trending_lock_key
 from app.core.sync_db import get_sync_session
 from app.models.models import TrendingBatch, TrendingTopic, utcnow
 from app.schemas.schemas import TOPIC_MAX_LENGTH
-from app.services import alerts
+from app.services import alerts, usage
+from app.services.formats import DEFAULT_FORMAT, TopicStyle, topic_styles
 from app.services.media import llm
 from app.services.openrouter_client import OpenRouterError
 
@@ -195,16 +203,16 @@ SAFETY_RULES = (
 )
 
 SYSTEM = (
-    "You are the editor of Debatr, a site where AI models debate a motion on camera. You turn "
-    "today's news into debate topics for a general audience."
+    "You are the editor of Debatr, a site where {site}. You turn today's news into {noun}s for "
+    "a general audience."
 )
 
 TOPIC_RULES = """Rules for every topic:
-- question: a crisp debate motion with two reasonable sides (usually "Should ...?" or "Is ...?"), 6-15 words and at most 100 characters, understandable without reading the news. Generalise the story into the argument it raises instead of asking about details of one event.
-- brief: 2-3 neutral sentences on what happened and when (the debaters are AI models that do not know recent news). No opinions.
+- question: {question}, understandable without reading the news. {from_news}
+- brief: 2-3 neutral sentences on what happened and when (the speakers are AI models that do not know recent news). No opinions.
 - label: a 1-4 word chip title.
 - category: one of {categories}.
-- heat: 1-10, how widely discussed the story is and how good it is for a lively debate. Small, local or routine stories (a product review, a lifestyle tip, one company's quarterly numbers) get a low heat.
+- heat: 1-10, how widely discussed the story is and {heat}. Small, local or routine stories (a product review, a lifestyle tip, one company's quarterly numbers) get a low heat.
 - sources: the numbers of the headlines about this story (at least one).
 - One topic per story: merge headlines about the same story. Spread the topics over the categories when the news allows.
 - Never make a topic about {safety}. Skip such headlines entirely. When in doubt, leave it out."""
@@ -246,6 +254,7 @@ class TopicDraft:
     category: str
     heat: int
     sources: list[Headline]
+    format: str = DEFAULT_FORMAT  # whose list it is on (formats.topic_list_of)
 
     @property
     def outlets(self) -> int:
@@ -257,9 +266,20 @@ class TopicDraft:
 
 
 @dataclass
+class TopicList:
+    """One format's list of a batch (`build_list`)."""
+
+    format: str
+    topics: list[TopicDraft]
+    asked: int
+    dropped: list[dict[str, str]]
+    cost_usd: float
+
+
+@dataclass
 class BatchResult:
     model: str
-    topics: list[TopicDraft]
+    topics: list[TopicDraft]  # every list, the default format's first
     cost_usd: float
     stats: dict[str, Any] = field(default_factory=dict)
 
@@ -371,20 +391,31 @@ def pool_size(topic_count: int) -> int:
 # --- the model ----------------------------------------------------------------------------
 
 
-def build_topic_messages(pool: list[Headline], wanted: int, *, today: str) -> list[dict[str, str]]:
+def build_topic_messages(
+    pool: list[Headline], wanted: int, *, today: str, style: TopicStyle | None = None
+) -> list[dict[str, str]]:
+    style = style or topic_styles()[DEFAULT_FORMAT]
     lines = []
     for i, item in enumerate(pool, 1):
         date = item.published_at.strftime("%Y-%m-%d") if item.published_at else "recent"
         summary = f" - {item.summary}" if item.summary else ""
         lines.append(f"[{i}] {item.outlet} · {date} · {item.title}{summary}")
-    rules = TOPIC_RULES.format(categories=", ".join(TOPIC_CATEGORIES), safety=SAFETY_RULES)
+    rules = TOPIC_RULES.format(
+        question=style.question,
+        from_news=style.from_news,
+        heat=style.heat,
+        categories=", ".join(TOPIC_CATEGORIES),
+        safety=SAFETY_RULES,
+    )
+    pick = f"Pick the {wanted} most compelling distinct stories and turn each into a {style.noun}"
+    note = f" {style.pick_note}" if style.pick_note else ""
     user = (
         f"Today is {today}. Below are {len(pool)} news headlines from the last {MAX_AGE_HOURS} "
-        f"hours. Pick the {wanted} most compelling distinct stories and turn each into a debate "
-        f"topic, best first.\n\n{rules}\n\nReply with JSON only: {TOPICS_JSON_SPEC}\n\n"
-        "Headlines:\n" + "\n".join(lines)
+        f"hours. {pick}, best first.{note}\n\n{rules}\n\nReply with JSON only: "
+        f"{TOPICS_JSON_SPEC}\n\nHeadlines:\n" + "\n".join(lines)
     )
-    return [{"role": "system", "content": SYSTEM}, {"role": "user", "content": user}]
+    system = SYSTEM.format(site=style.site, noun=style.noun)
+    return [{"role": "system", "content": system}, {"role": "user", "content": user}]
 
 
 def _json_object(text: str) -> dict[str, Any]:
@@ -433,7 +464,9 @@ def _heat(value: Any) -> int:
         return 5
 
 
-def parse_topics(text: str, pool: list[Headline]) -> tuple[list[TopicDraft], list[dict[str, str]]]:
+def parse_topics(
+    text: str, pool: list[Headline], format_id: str = DEFAULT_FORMAT
+) -> tuple[list[TopicDraft], list[dict[str, str]]]:
     """Topics from the model's reply plus the dropped ones with reasons. A topic must cite at
     least one headline of the pool (no invented stories) and pass the blocklist."""
     raw = _json_object(text).get("topics")
@@ -480,6 +513,7 @@ def parse_topics(text: str, pool: list[Headline]) -> tuple[list[TopicDraft], lis
                 category=normalize_category(item.get("category")),
                 heat=_heat(item.get("heat")),
                 sources=sources,
+                format=format_id,
             )
         )
     return topics, dropped
@@ -511,16 +545,21 @@ def drop_same_story(
     return kept, dropped
 
 
-def build_review_messages(topics: list[TopicDraft]) -> list[dict[str, str]]:
+def build_review_messages(
+    topics: list[TopicDraft], style: TopicStyle | None = None
+) -> list[dict[str, str]]:
+    style = style or topic_styles()[DEFAULT_FORMAT]
     system = (
         "You are a strict content moderator for the front page of a debate site for a general "
         "audience aged 13 and up. Reply with a single JSON object and nothing else."
     )
     lines = [f"[{i}] {t.label} | {t.question} | {t.brief}" for i, t in enumerate(topics, 1)]
+    extra = f" {style.review}" if style.review else ""
     user = (
-        "JOB: decide which of these debate topics must NOT be shown on the site. Reject a topic "
-        f"if its label, question or brief touches: {SAFETY_RULES}. Controversial political, "
-        "economic or social questions argued in general terms are fine. When in doubt, reject."
+        f"JOB: decide which of these {style.noun}s must NOT be shown on the site. Reject a "
+        f"topic if its label, question or brief touches: {SAFETY_RULES}.{extra} "
+        "Controversial political, economic or social questions argued in general terms are "
+        "fine. When in doubt, reject."
         f"\n\nTopics:\n" + "\n".join(lines) + f"\n\nReturn JSON: {REVIEW_JSON_SPEC} "
         "(an empty list when every topic is fine)."
     )
@@ -550,8 +589,53 @@ def _cost(usage: dict[str, Any]) -> float:
         return 0.0
 
 
-def build_batch(model: str, topic_count: int) -> BatchResult:
-    """Fetch, filter, generate, rank and review one batch (nothing is saved here)."""
+def list_size(style: TopicStyle, topic_count: int) -> int:
+    """How many topics a format's list keeps."""
+    return max(1, round(topic_count * style.share))
+
+
+def build_list(
+    model: str, pool: list[Headline], style: TopicStyle, format_id: str, count: int, today: str
+) -> TopicList:
+    """Generate, rank and review one format's list (raises TrendingError when nothing is left)."""
+    wanted = min(len(pool), math.ceil(count * EXTRA_TOPICS))
+    text, _, usage_ = llm.complete_message(
+        model,
+        build_topic_messages(pool, wanted, today=today, style=style),
+        purpose="trending",
+        max_tokens=min(64000, 4000 + wanted * 400),
+        read_timeout=GENERATE_TIMEOUT,
+    )
+    cost = _cost(usage_)
+    topics, dropped = parse_topics(text, pool, format_id)
+    topics, repeats = drop_same_story(rank_topics(topics))
+    dropped += repeats
+    topics = topics[: count + 10]  # a few spares for the review
+    if not topics:
+        raise TrendingError("the model returned no usable topics")
+
+    review_text, _, review_usage = llm.complete_message(
+        model,
+        build_review_messages(topics, style),
+        purpose="trending_review",
+        max_tokens=8000,
+        read_timeout=GENERATE_TIMEOUT,
+    )
+    cost += _cost(review_usage)
+    rejected = parse_review(review_text, len(topics))
+    dropped += [{"question": topics[i].question, "reason": r} for i, r in rejected.items()]
+    kept = [t for i, t in enumerate(topics) if i not in rejected][:count]
+    if not kept:
+        raise TrendingError("the review rejected every topic")
+    return TopicList(format_id, kept, wanted, dropped, cost)
+
+
+def build_batch(
+    model: str, topic_count: int, styles: dict[str, TopicStyle] | None = None
+) -> BatchResult:
+    """Fetch, filter, generate, rank and review one batch (nothing is saved here): a list per
+    topic style, all from one pool of headlines. The first style's list (the default format's)
+    is required; another one that fails only leaves a note in the stats."""
     groups = fetch_feeds()
     feeds_ok = sum(1 for g in groups if g)
     if not feeds_ok:
@@ -570,36 +654,29 @@ def build_batch(model: str, topic_count: int) -> BatchResult:
     if not pool:
         raise TrendingError("no usable headlines")
 
-    wanted = min(len(pool), math.ceil(topic_count * EXTRA_TOPICS))
+    styles = styles or topic_styles()
+    required = next(iter(styles))
     today = datetime.now(UTC).strftime("%A, %d %B %Y")
-    text, _, usage = llm.complete_message(
-        model,
-        build_topic_messages(pool, wanted, today=today),
-        purpose="trending",
-        max_tokens=min(64000, 4000 + wanted * 400),
-        read_timeout=GENERATE_TIMEOUT,
-    )
-    cost = _cost(usage)
-    topics, dropped = parse_topics(text, pool)
-    topics, repeats = drop_same_story(rank_topics(topics))
-    dropped += repeats
-    topics = topics[: max(topic_count, 1) + 10]  # a few spares for the review
-    if not topics:
-        raise TrendingError("the model returned no usable topics")
-
-    review_text, _, review_usage = llm.complete_message(
-        model,
-        build_review_messages(topics),
-        purpose="trending_review",
-        max_tokens=8000,
-        read_timeout=GENERATE_TIMEOUT,
-    )
-    cost += _cost(review_usage)
-    rejected = parse_review(review_text, len(topics))
-    dropped += [{"question": topics[i].question, "reason": r} for i, r in rejected.items()]
-    kept = [t for i, t in enumerate(topics) if i not in rejected][:topic_count]
-    if not kept:
-        raise TrendingError("the review rejected every topic")
+    with usage.ContextThreadPool(max_workers=len(styles)) as threads:
+        jobs = {
+            fid: threads.submit(
+                build_list, model, pool, style, fid, list_size(style, topic_count), today
+            )
+            for fid, style in styles.items()
+        }
+    lists: list[TopicList] = []
+    formats: dict[str, dict[str, Any]] = {}
+    for fid, job in jobs.items():
+        try:
+            built = job.result()
+        except Exception as exc:
+            if fid == required:
+                raise
+            logger.warning("Trending list for %s failed, keeping the previous one: %s", fid, exc)
+            formats[fid] = {"error": str(exc)[:300]}
+            continue
+        lists.append(built)
+        formats[fid] = {"asked": built.asked, "kept": len(built.topics)}
 
     stats = {
         "feeds_ok": feeds_ok,
@@ -608,10 +685,16 @@ def build_batch(model: str, topic_count: int) -> BatchResult:
         "headlines_blocked": len(blocked),
         "blocked": blocked[:200],  # to spot false positives of the blocklist
         "headlines_sent": len(pool),
-        "topics_asked": wanted,
-        "dropped": dropped,
+        "topics_asked": sum(lst.asked for lst in lists),
+        "dropped": [{**d, "format": lst.format} for lst in lists for d in lst.dropped],
+        "formats": formats,
     }
-    return BatchResult(model=model, topics=kept, cost_usd=cost, stats=stats)
+    return BatchResult(
+        model=model,
+        topics=[t for lst in lists for t in lst.topics],
+        cost_usd=sum(lst.cost_usd for lst in lists),
+        stats=stats,
+    )
 
 
 # --- storage and scheduling ---------------------------------------------------------------
@@ -624,19 +707,22 @@ def save_batch(db: Session, result: BatchResult) -> TrendingBatch:
         cost_usd=Decimal(str(round(result.cost_usd, 6))),
         stats_json=result.stats,
     )
-    batch.topics = [
-        TrendingTopic(
-            rank=rank,
-            label=t.label,
-            question=t.question,
-            brief=t.brief,
-            category=t.category,
-            heat=t.heat,
-            outlets=t.outlets,
-            sources_json=[s.source() for s in t.sources],
+    ranks: Counter[str] = Counter()  # each format's list is ranked on its own
+    for t in result.topics:
+        ranks[t.format] += 1
+        batch.topics.append(
+            TrendingTopic(
+                format=t.format,
+                rank=ranks[t.format],
+                label=t.label,
+                question=t.question,
+                brief=t.brief,
+                category=t.category,
+                heat=t.heat,
+                outlets=t.outlets,
+                sources_json=[s.source() for s in t.sources],
+            )
         )
-        for rank, t in enumerate(result.topics, 1)
-    ]
     db.add(batch)
     return batch
 

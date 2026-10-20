@@ -6,6 +6,9 @@ call belongs to comes from `attributed` jobs through a context variable, so deep
 director, sketches, pictures) need no extra arguments; `ContextThreadPool` carries it into
 worker threads. Writing never fails the caller: a lost row is logged, never raised.
 
+Calls made for an account outside a debate (the wizard's AI topic ideas) name it with
+`on_behalf_of`.
+
 `key_owner` says who pays the provider: "user" when the call ran on the account's own key (the
 debate's OpenRouter key in Redis, an own ElevenLabs key), "system" otherwise.
 """
@@ -13,8 +16,9 @@ debate's OpenRouter key in Redis, an own ElevenLabs key), "system" otherwise.
 import functools
 import logging
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from concurrent.futures import Future, ThreadPoolExecutor
+from contextlib import contextmanager
 from contextvars import ContextVar, copy_context
 from decimal import Decimal
 from typing import Any, Literal
@@ -42,6 +46,7 @@ ErrorKind = Literal[
 ]
 
 _debate: ContextVar[str | None] = ContextVar("usage_debate", default=None)
+_user: ContextVar[str | None] = ContextVar("usage_user", default=None)
 
 
 def key_owner(api_key: str | None) -> KeyOwner:
@@ -67,6 +72,16 @@ def attributed[**P, R](job: Callable[P, R]) -> Callable[P, R]:
             _debate.reset(token)
 
     return run
+
+
+@contextmanager
+def on_behalf_of(user_id: str | None) -> Iterator[None]:
+    """Book the provider calls made inside to this account (calls outside any debate)."""
+    token = _user.set(user_id)
+    try:
+        yield
+    finally:
+        _user.reset(token)
 
 
 class ContextThreadPool(ThreadPoolExecutor):
@@ -139,6 +154,7 @@ def usage_row(
     from `usage.cost` unless `cost_usd` is given (TTS estimates)."""
     cost = cost_usd if cost_usd is not None else float((usage or {}).get("cost") or 0.0)
     debate = debate_id if debate_id is not None else current_debate()
+    user = _user.get()
     return ProviderUsage(
         purpose=purpose[:32],
         provider=provider[:16],
@@ -152,6 +168,7 @@ def usage_row(
         error_kind=error_kind if not ok else None,
         duration_ms=duration_ms,
         debate_id=uuid.UUID(debate) if debate else None,
+        user_id=uuid.UUID(user) if user and not debate else None,  # a debate names its owner
         meta_json=meta or {},
     )
 

@@ -37,7 +37,8 @@ backend/            FastAPI API + RQ worker (Python 3.12+, managed with uv)
   app/api/            routers: auth, tokens (API tokens + `debatr login` device flow), billing
                       (Stripe), debates, gallery (+ leaderboard), motions (topic page, wizard
                       suggestions), reactions (likes/votes), models,
-                      presets, topics (trending), stream (SSE), media, covers (AI covers of a
+                      presets, topics (trending per format, AI topic ideas), stream (SSE),
+                      media, covers (AI covers of a
                       debate), oembed (`GET /api/oembed`: a pasted link → the player, CORS `*`),
                       status (`GET /api/status`:
                       sign-ups / maintenance for the site), seo (outside /api: robots.txt, the
@@ -57,7 +58,8 @@ backend/            FastAPI API + RQ worker (Python 3.12+, managed with uv)
                       engagement (likes/audience votes), ranking (trending score, model leaderboard),
                       studio (live scenes per turn, disputes, judge evidence), factcheck (web
                       check of on-screen figures), markers ([visual: …] / [dispute N: …]),
-                      trending (RSS news → daily debate topics with source links),
+                      trending (RSS news → daily debate and rap battle topics with source
+                      links), topic_ideas (the wizard's AI button: own words → topics),
                       seo (canonical paths `/d/{slug}/{kebab}`, robots.txt, sitemap XML),
                       embed (the player for other sites: which page a link names, iframe size
                       and HTML, the oEmbed answer),
@@ -167,8 +169,11 @@ frontend/           React 19 + React Router 8 (framework mode, server rendering)
   src/components/create/   three-step wizard + wizardState.ts (state, persistence, config mapping;
                            `applyFormat` / `fitFormat`: seats, prompts, rounds follow the format):
                            StepTopic (format cards on top, a locked one says why; TrendingBrowser =
-                           today's news topics in rank order with search,
-                           categories, 10 per page + sticky "Your debate" panel; TopicVersions =
+                           today's news topics of the format's list in rank order, categories,
+                           10 per page; its search field is also the "write your own" field:
+                           typing turns "Surprise me" into the AI button (Enter too) = three
+                           topics in the format's style (IdeasPanel) or "use my words as they
+                           are"; + sticky "Your debate" panel; TopicVersions =
                            remix chip, "joins a published topic", similar topics), StepSpeakers
                            (SpeakerRow per speaker: model / side / voice / persona fields + voice
                            preview when the voice has a sample, prompt editor, remove; no randomizer;
@@ -937,7 +942,7 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   OpenRouter key expired, fail instead (debate → Resume, media → generate again). An orphaned AI
   cover build fails at once (`cover_beat_key`; drawing again would cost again).
 
-### Trending topics (news → debate topics)
+### Trending topics (news → debate topics) and AI topic ideas
 
 - `services/trending.py`: `refresh_trending_job` reads the RSS feeds in `FEEDS` (BBC, Guardian,
   NPR, NYT, Al Jazeera, DW, Google News with the real outlet from `<source>`, Hacker News, Ars,
@@ -960,11 +965,35 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   older than the interval minus 30 min slack) and holds `trending:refresh:lock`, so restarts and
   extra triggers never add batches. `GET /api/topics/trending` (public) also enqueues it on a
   stale read (at most every 10 min via `trending:refresh:queued`), so native dev works without
-  the scheduler. Step 1 of the wizard lists them; picking one sets `topic` and links the story
+  the scheduler. Step 1 of the wizard lists them (`?format=`, `useTrendingTopics(list)` caches
+  per list); picking one sets `topic` and links the story
   (`DebateConfig.news`: brief, outlet, title, url, published_at), which always goes to the models:
   `prompt_builder._context_block` puts it into every prompt as "News background" (before the
   user's angle, `description`). A link never outlives its question: editing the question, clicking
-  the picked card again or "×" unlinks it; switching topics also clears the angle.
+  the picked card again or "×" unlinks it; switching topics also clears the angle. Switching the
+  format keeps the topic and its story (`applyFormat`): a debate's news topic can become a battle.
+- A list per show format: `Format.topic_style` (`formats/base.TopicStyle`: noun, the wording rule,
+  how a story becomes such a topic, what makes it hot, an extra review rule, `share` of
+  `TRENDING_TOPIC_COUNT`). The rap battle writes rivalries ("A or B?" naming two concrete,
+  familiar rivals, a yes/no hot take now and then, never abstract trade-offs; ≤ 60 characters;
+  half as many topics; its review also rejects sides that are politicians, parties, real people
+  other than athletes / artists compared on their work, or groups of people). Asking for "no
+  abstract trade-offs" without making "A or B?" the rule swung the model to yes/no headlines
+  ("US bans China's DeepSeek?"). A format with the debate's style shows the debate's list
+  (`formats.topic_list_of`, `topic_styles`; the frontend mirrors it as `FormatSpec.topicList`).
+  `build_batch` asks every list from the same pool in parallel (`usage.ContextThreadPool`) into
+  one batch (`TrendingTopic.format`, ranks per list, `stats_json.formats` = asked / kept / error,
+  dropped entries carry their format). The default format's list is required (no list → no
+  batch); another one that fails only notes its error and `GET /api/topics/trending?format=`
+  answers from the newest batch that has that list. Batches from before the column hold debate
+  topics only (migration 0017), so a battle list appears with the next batch (or "Build now").
+- AI topic ideas (`services/topic_ideas`, `POST /api/topics/ideas {text 3–300, format, language}`,
+  signed in): one call to `TOPIC_IDEAS_MODEL` (Claude Haiku 5.5, ~$0.0001, ~2–3 s, system key, not
+  billed) writes 3 topics in the format's style (the sharpest form of the user's words, a bolder
+  take, another angle) in the language of the text (`language` when unclear), or `[]` for text the
+  gallery check would refuse; `parse_ideas` drops numbering / quotes, repeats, ones under 8 or over
+  `TOPIC_MAX_LENGTH` characters. `TOPIC_IDEAS_PER_HOUR` (40) per account → 429; no key → 503; a
+  failed call → 502. Booked as `topic_ideas` on the account (`usage.on_behalf_of`).
 
 ### Credits and payments
 
@@ -1000,15 +1029,17 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
 
 - `provider_usage` (`services/usage`): one row per paid provider call or try — purpose (`turn |
   verdict | verdict_structure | moderation | factcheck | director | sketch | image |
-  image_check | highlights | trending | trending_review | tts`), provider, the model that
+  image_check | highlights | trending | trending_review | topic_ideas | tts | …`), provider, the
+  model that
   answered, `key_owner` (`system` | `user`: the debate's own OpenRouter key or an own ElevenLabs
   key), tokens, TTS chars, `cost_usd` (OpenRouter's `usage.cost`; ElevenLabs is an estimate from
   `USD_PER_1K_CHARS`, `meta_json.estimated`), `ok` + `error_kind` (`usage.classify_error`),
   `duration_ms`. Written only by `media/llm.py` (`complete` / `complete_message` /
   `generate_image`, each with a required `purpose`), `orchestrator._generate` (every try,
   `_book`) and the TTS step (`jobs._book_tts`). New provider calls must go through these. The
-  debate comes from `@usage.attributed` jobs via a context variable; worker thread pools use
-  `usage.ContextThreadPool` so it reaches sketches / pictures / fact-checks. Booking never fails
+  debate comes from `@usage.attributed` jobs via a context variable (an account outside a
+  debate from `usage.on_behalf_of`); worker thread pools use `usage.ContextThreadPool` so it
+  reaches sketches / pictures / fact-checks. Booking never fails
   the caller. Unlike `totals_json` it includes retries, dropped router answers and the system-key
   studio calls (director, sketches) that are not billed to users.
 - `turns.usage_json` also keeps `duration_ms`, `ttft_ms` and `error_kind` of the kept answer

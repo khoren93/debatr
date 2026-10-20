@@ -647,10 +647,23 @@ export interface TrendingBatchRow {
   headlines_sent: number | null;
   topics_asked: number | null;
   dropped: number;
+  /** Each format's list (empty for batches from before format lists). */
+  formats: TrendingFormatList[];
+}
+
+export interface TrendingFormatList {
+  format: string;
+  asked: number | null;
+  kept: number | null;
+  /** The list failed: its format keeps an older batch's list. */
+  error: string | null;
 }
 
 export interface TrendingTopicRow {
   id: string;
+  /** Whose list it is on ("debate", "rap_battle"). */
+  format: string;
+  /** 1 = hottest within that list. */
   rank: number;
   label: string;
   question: string;
@@ -665,7 +678,7 @@ export interface TrendingTopicRow {
 export interface TrendingBatchCard {
   batch: TrendingBatchRow;
   topics: TrendingTopicRow[];
-  dropped: { question?: string; reason?: string }[];
+  dropped: { question?: string; reason?: string; format?: string }[];
   blocked: { title?: string; term?: string }[];
 }
 

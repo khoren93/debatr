@@ -11,9 +11,16 @@ import { Panel } from '../../components/admin/users/UserSections';
 import { formatTime, formatUsd } from '../../components/admin/helpers';
 import { Button, ConfirmDialog, ErrorBox, Spinner, useToast } from '../../components/ui';
 import { sourceDomain } from '../../lib/format';
+import { formatSpec } from '../../lib/formats';
 
 const PAGE = 20;
 const ratio = (a: number | null, b: number | null) => (a === null ? '—' : b === null ? String(a) : `${a}/${b}`);
+
+/** A format's list: its topics' chip ("debate" lists go without one, as before formats). */
+const FormatChip = ({ format }: { format: string | undefined }) =>
+  format && format !== 'debate' ? (
+    <span className="rounded-[5px] bg-surface-2 px-1.5 py-0.5 font-mono text-[10px] tracking-[0.04em] text-text-3">{formatSpec(format).label}</span>
+  ) : null;
 
 const AdminTrending = () => {
   const { me } = useAdminAuth();
@@ -125,7 +132,10 @@ const AdminTrending = () => {
       header: 'Topic',
       cell: (t) => (
         <span className={`flex min-w-0 max-w-[560px] flex-col ${t.is_hidden ? 'opacity-50' : ''}`}>
-          <span className="font-semibold text-text-2">{t.question}</span>
+          <span className="flex flex-wrap items-center gap-2 font-semibold text-text-2">
+            <FormatChip format={t.format} />
+            {t.question}
+          </span>
           <span className="text-xs text-muted">
             {t.label} · {t.category} · heat {t.heat} · {t.outlets} outlet{t.outlets === 1 ? '' : 's'}
           </span>
@@ -186,6 +196,16 @@ const AdminTrending = () => {
           {card && (
             <>
               <Panel title={`Topics of ${formatTime(card.batch.created_at)}`} aside={`${card.batch.model} · ${formatUsd(card.batch.cost_usd)}`}>
+                {card.batch.formats.length > 0 && (
+                  <ul className="flex flex-wrap gap-x-5 gap-y-1 border-b border-line/70 px-4 py-2.5 text-xs text-text-3">
+                    {card.batch.formats.map((f) => (
+                      <li key={f.format}>
+                        <span className="font-semibold text-text-2">{formatSpec(f.format).name}</span>{' '}
+                        {f.error ? <span className="text-host">failed: {f.error} (the site keeps an older list)</span> : `${f.kept ?? '—'} kept of ${f.asked ?? '—'} asked`}
+                      </li>
+                    ))}
+                  </ul>
+                )}
                 <DataTable caption="Topics" columns={topicColumns} rows={card.topics} rowKey={(t) => t.id} empty="No topics." />
               </Panel>
               <div className="grid items-start gap-4 lg:grid-cols-2">
@@ -196,7 +216,10 @@ const AdminTrending = () => {
                     <ul className="max-h-96 divide-y divide-line/70 overflow-y-auto">
                       {card.dropped.map((d, i) => (
                         <li key={i} className="px-4 py-2.5 text-xs">
-                          <div className="text-text-2">{d.question ?? '—'}</div>
+                          <div className="flex flex-wrap items-center gap-2 text-text-2">
+                            <FormatChip format={d.format} />
+                            {d.question ?? '—'}
+                          </div>
                           <div className="text-muted">{d.reason ?? ''}</div>
                         </li>
                       ))}
@@ -226,7 +249,7 @@ const AdminTrending = () => {
       <ConfirmDialog
         open={confirmBuild}
         title="Build a new batch now?"
-        body="It reads the news feeds and asks the model for topics (about a minute, a few cents). The new batch replaces the one on the site."
+        body="It reads the news feeds and asks the model for debate and rap battle topics (about a minute, a few cents). The new batch replaces the one on the site."
         confirmLabel="Build"
         busy={building}
         onConfirm={build}

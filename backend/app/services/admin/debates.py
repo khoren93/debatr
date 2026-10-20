@@ -45,6 +45,7 @@ from app.services import motions
 from app.services.admin.stats import ledger_category
 from app.services.admin.users import audit_out, day_start, ledger_row_out, like_pattern, public_url
 from app.services.debate_control import ACTIVE_STATUSES
+from app.services.formats import DEFAULT_FORMAT
 from app.services.media import cover as covers
 from app.services.moderation import wants_public
 from app.services.resume import resume_point
@@ -634,7 +635,26 @@ def batch_row(batch: TrendingBatch, hidden: int, current: bool) -> dict[str, Any
         "headlines_sent": stat("headlines_sent"),
         "topics_asked": stat("topics_asked"),
         "dropped": len(stats.get("dropped") or []),
+        "formats": _format_lists(stats),
     }
+
+
+def _format_lists(stats: dict[str, Any]) -> list[dict[str, Any]]:
+    """Each format's list of the batch: asked, kept, or why it failed (batches from before
+    format lists hold the debate's only)."""
+    raw = stats.get("formats")
+    if not isinstance(raw, dict):
+        return []
+    return [
+        {
+            "format": str(fid),
+            "asked": _int_or_none(info.get("asked")),
+            "kept": _int_or_none(info.get("kept")),
+            "error": str(info["error"])[:300] if info.get("error") else None,
+        }
+        for fid, info in raw.items()
+        if isinstance(info, dict)
+    ]
 
 
 def _hidden_counts() -> Any:
@@ -673,6 +693,7 @@ async def trending_batches(
 def topic_out(topic: TrendingTopic) -> dict[str, Any]:
     return {
         "id": str(topic.id),
+        "format": topic.format,
         "rank": topic.rank,
         "label": topic.label,
         "question": topic.question,
@@ -694,7 +715,9 @@ async def trending_batch(db: AsyncSession, batch_id: uuid.UUID) -> dict[str, Any
             await db.scalars(
                 select(TrendingTopic)
                 .where(TrendingTopic.batch_id == batch_id)
-                .order_by(TrendingTopic.rank)
+                .order_by(
+                    TrendingTopic.format != DEFAULT_FORMAT, TrendingTopic.format, TrendingTopic.rank
+                )
             )
         ).all()
     )
