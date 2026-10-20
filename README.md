@@ -89,6 +89,10 @@ Users sign up, run free models or bring their own OpenRouter key, buy credits wi
   with a new cast.
 - **🧩 One topic, many versions**: debates on the same question share one card in the gallery,
   so you can switch between the matchups (or languages) that argued it and add your own.
+- **🔍 Easy to find, good to share**: every public debate is a complete page for search engines
+  and AI assistants, and a link to it unfolds into a picture of the matchup in Telegram, X,
+  WhatsApp or Slack. Debates paid from the balance also get an AI-drawn cover for the gallery,
+  link previews and YouTube.
 - **🔗 Embed anywhere**: put a debate into a blog post or an article. Copy the `<iframe>` from the
   Share menu (the 16:9 episode or the 9:16 Short, from the start or the moment you are watching),
   or paste the debate's link into an app that reads oEmbed. The embed shows the poster at once
@@ -147,7 +151,7 @@ Users sign up, run free models or bring their own OpenRouter key, buy credits wi
 ### Frontend
 - **Framework**: [React 19](https://react.dev/) + [React Router 8](https://reactrouter.com/) (server rendering of the public pages) + [Vite 8](https://vite.dev/) + TypeScript
 - **Styling**: Tailwind CSS 4 with the Debatr design tokens (dark studio theme)
-- **Data/Routing**: React Router loaders (the server's first render, then the browser calls the API directly), Axios
+- **Data/Routing**: React Router loaders (the server's first render, then the browser calls the API directly) over a small `fetch` client (the admin console keeps Axios)
 - **Streaming**: Server-Sent Events (SSE)
 - **Video**: Remotion Player + `@remotion/web-renderer` (MP4 encoded in the visitor's browser)
 

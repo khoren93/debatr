@@ -7,8 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-10-20
+
 ### Added
 
+- **Found by search engines**: public pages (home, gallery, ranking, debates, topics) arrive as
+  complete HTML, rendered by the new `web` service (React Router 8): each with its own title and
+  description, the whole transcript, Open Graph and JSON-LD, and real 404 / 410 answers. Debate
+  and topic addresses carry the topic's words (`/d/<slug>/<topic-words>`; older links redirect),
+  `robots.txt` and the sitemaps come from the API, and changed pages are announced through
+  IndexNow (`INDEXNOW_KEY`). Nothing tells who won: the audience still votes blind.
+- **Link preview pictures**: a 1200×630 card for every debate, topic and listing — the debaters
+  face off in their colours with the question — in Telegram, X, WhatsApp, Slack and the rest.
+- **AI covers**: an eye-catching thumbnail per debate, drawn by GPT Image from a brief an art
+  director writes without seeing the verdict. Runs paid from the balance or on an own OpenRouter
+  key get one when they finish (console lever `ai_covers`); owners draw new versions with their
+  own hook from the Export panel. The cover leads the gallery card, the link preview and the
+  YouTube kit.
 - **Embeddable player**: `/embed/<slug>` plays a public debate on other sites (the 16:9 episode,
   or the Short with `?format=short`; `?t=` starts at a second). The poster, the question and the
   length arrive as plain HTML, the player loads when the visitor reaches for it, and a view
@@ -21,9 +36,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   source per day and the sites that embed debates), and the debate card a Views panel. Only
   counts are kept per day, source and place (the page or a player elsewhere): no IP, address or
   account. Visitors see the total as before.
+- **CLI 0.4.0**: `debatr cover DEBATE [--hook] [-o FILE]`, `run --cover/--no-cover`, MCP
+  `generate_cover` (within `DEBATR_MAX_COST_USD`) and the cover's URL in `--json` / `get_debate`;
+  `show` and the other commands take the new `/d/<slug>/<topic-words>` links.
 
 ### Changed
 
+- **The admin console is a build of its own**, served only on its host (`ADMIN_HOST`): the site
+  carries none of its code. Gallery and library cards are 16:9, like the AI covers.
+- **Self-hosting**: compose adds the `web` service (Node, 256 MB) between Caddy and the API; new
+  optional settings `INDEXNOW_KEY`, `SEO_ALLOW_AI_CRAWLERS`, `AI_COVERS`, `COVER_*` and
+  `OG_CACHE_MAX_MB` (see `.env.example`).
 - **Honest view counts**: a view is counted only by the page itself once it has loaded (or by an
   embedded player when it starts), never by bots or by reading a debate through the API (the
   CLI, agents, the page renderer); one per visitor and debate in six hours, as before.
@@ -321,7 +344,8 @@ First public release of **AI Debates**.
 - Admin panel for debates, participants, turns and sessions.
 - Docker Compose setup with FastAPI, PostgreSQL, Redis + RQ and a React + Vite frontend.
 
-[Unreleased]: https://github.com/khoren93/debatr/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/khoren93/debatr/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/khoren93/debatr/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/khoren93/debatr/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/khoren93/debatr/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/khoren93/debatr/compare/v1.0.0...v1.1.0
