@@ -47,7 +47,7 @@ from app.schemas.admin import (
     RefundRequest,
 )
 from app.schemas.media import MediaOptions
-from app.services import motions
+from app.services import indexnow, motions
 from app.services.admin import audit
 from app.services.admin import debates as admin_debates
 from app.services.credits import apply_transaction, lock_balance, to_usd
@@ -397,8 +397,10 @@ async def delete(
         },
         commit=False,
     )
+    gone = indexnow.debate_refs(debate) if debate.is_public else []
     await db.delete(debate)
     await db.commit()
+    await indexnow.announce(gone)
     if active:
         with contextlib.suppress(RedisError):
             await get_async_redis().set(stop_flag_key(debate_id), "1", ex=3600)
@@ -436,6 +438,8 @@ async def approve(
         published=published,
     )
     await db.commit()
+    if published:
+        await indexnow.announce(indexnow.debate_refs(debate))
     return ActionOut(
         status="approved",
         message="Approved and published" if published else "Approved (the owner keeps it private)",
@@ -457,6 +461,8 @@ async def reject(
     debate.moderation_json = {**(debate.moderation_json or {}), "admin_reason": body.reason}
     await _record(db, ctx, request, "moderation.rejected", debate, body.reason, was=before)
     await db.commit()
+    if before["public"]:
+        await indexnow.announce(indexnow.debate_refs(debate))
     return ActionOut(status="rejected", message="Rejected; it stays out of the gallery")
 
 
@@ -485,6 +491,7 @@ async def publish(
         raise HTTPException(status_code=500, detail="Could not allocate a share link")
     await _record(db, ctx, request, "debate.published", debate, body.reason, slug=debate.slug)
     await db.commit()
+    await indexnow.announce(indexnow.debate_refs(debate))
     return ActionOut(status="public", message="Published to the gallery")
 
 
@@ -503,6 +510,7 @@ async def unpublish(
     debate.is_public = False
     await _record(db, ctx, request, "debate.unpublished", debate, body.reason)
     await db.commit()
+    await indexnow.announce(indexnow.debate_refs(debate))
     return ActionOut(status="private", message="Taken out of the gallery")
 
 
@@ -557,6 +565,11 @@ async def move_motion(
         moved=moved,
     )
     await db.commit()
+    if debate.is_public:
+        # Both topic pages changed (a merged one now leads to its target).
+        await indexnow.announce(
+            [*indexnow.debate_refs(debate), *indexnow.refs_of(None, "", source)]
+        )
     return ActionOut(status="moved", message=message)
 
 

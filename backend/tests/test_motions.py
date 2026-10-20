@@ -177,6 +177,12 @@ def test_admins_name_a_topic_by_link_id_or_slug() -> None:
     assert parse_target("https://ai-debates.net/t/abc234") == ("motion_slug", "abc234")
     assert parse_target("/t/abc234/") == ("motion_slug", "abc234")
     assert parse_target("https://ai-debates.net/d/xyz789?x=1") == ("debate_slug", "xyz789")
+    # Canonical links carry the topic's words after the slug.
+    assert parse_target("https://ai-debates.net/d/xyz789/tabs-or-spaces") == (
+        "debate_slug",
+        "xyz789",
+    )
+    assert parse_target("/t/abc234/лучше-ли-офис/") == ("motion_slug", "abc234")
     assert parse_target(f"https://admin.example/admin/debates/{debate_id}") == (
         "debate_id",
         debate_id,

@@ -6,11 +6,13 @@ import { readViewer } from '../auth/viewer.server';
 import { RouteError } from '../components/RouteError';
 import { AppShell } from '../components/layout/AppShell';
 import { SiteStatusProvider } from '../hooks/useSiteStatus';
+import { siteOrigin } from '../server/site.server';
 import { serverSiteStatus } from '../server/siteStatus.server';
 import type { Route } from './+types/_site';
 
 /** The app shell of every page: the session and the site levers come with the document, so the
- *  sidebar shows the account (and a maintenance banner) in the server's HTML. */
+ *  sidebar shows the account (and a maintenance banner) in the server's HTML; `siteUrl` is the
+ *  origin of canonical links and previews (components/Seo.tsx). */
 
 export const middleware: Route.MiddlewareFunction[] = [
   async ({ request, context }, next) => {
@@ -24,12 +26,12 @@ export const middleware: Route.MiddlewareFunction[] = [
 ];
 
 export async function loader({ request, context }: Route.LoaderArgs) {
-  return { viewer: context.get(viewerContext), status: await serverSiteStatus(request) };
+  return { viewer: context.get(viewerContext), status: await serverSiteStatus(request), siteUrl: siteOrigin(request) };
 }
 
 /** Only when the shell was not server-rendered: the browser asks for the session itself. */
-export function clientLoader(): { viewer: Viewer; status: SiteStatus | null } {
-  return { viewer: { user: null, known: false }, status: null };
+export function clientLoader(): { viewer: Viewer; status: SiteStatus | null; siteUrl: string } {
+  return { viewer: { user: null, known: false }, status: null, siteUrl: window.location.origin };
 }
 
 // The session lives in AuthProvider from here on (sign-in, sign-out, refresh).

@@ -43,6 +43,11 @@ export default defineConfig({
         target: process.env.VITE_DEV_API_TARGET || 'http://localhost:8000',
         changeOrigin: true,
       },
+      // robots.txt and the sitemaps come from the API, as behind Caddy.
+      '^/(robots\\.txt|sitemap\\.xml|sitemaps/.*)$': {
+        target: process.env.VITE_DEV_API_TARGET || 'http://localhost:8000',
+        changeOrigin: true,
+      },
     },
   },
 });

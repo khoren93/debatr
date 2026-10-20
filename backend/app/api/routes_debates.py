@@ -25,6 +25,7 @@ from app.api.serializers import (
     can_manage,
     can_view,
     detail_out,
+    public_path,
     share_url,
     summary_out,
     topic_context,
@@ -50,7 +51,7 @@ from app.schemas.schemas import (
     StartDebateRequest,
     StopDebateResponse,
 )
-from app.services import alerts, api_tokens, free_limits, motions, runtime_settings
+from app.services import alerts, api_tokens, free_limits, indexnow, motions, runtime_settings
 from app.services.credits import Prices, lever_prices, prices_of
 from app.services.debate_control import ACTIVE_STATUSES
 from app.services.debate_control import stop_debate as stop_debate_run
@@ -688,8 +689,10 @@ async def delete_debate(
         # Make sure the worker stops touching it.
         with contextlib.suppress(RedisError):
             await get_async_redis().set(stop_flag_key(debate_id), "1", ex=3600)
+    gone = indexnow.debate_refs(debate) if debate.is_public else []
     await db.delete(debate)
     await db.commit()
+    await indexnow.announce(gone)
     await run_in_threadpool(shutil.rmtree, MediaPaths(debate_id).dir, True)
 
 
@@ -719,10 +722,12 @@ async def publish_debate(
         raise HTTPException(status_code=500, detail="Could not allocate a share link")
     debate.category = body.category or debate.category
     await db.commit()
+    await indexnow.announce(indexnow.debate_refs(debate))
     return PublishOut(
         is_public=True,
         slug=debate.slug,
         share_url=share_url(debate),
+        path=public_path(debate),
         moderation_status=debate.moderation_status,
     )
 
@@ -736,10 +741,13 @@ async def unpublish_debate(
 ) -> PublishOut:
     debate = await load_debate(db, debate_id)
     _require_manage(debate, user)
+    was_public = debate.is_public
     debate.is_public = False
     # Withdraws a pending review request as well.
     debate.moderation_json = {**(debate.moderation_json or {}), "publish_requested": False}
     await db.commit()
+    if was_public:
+        await indexnow.announce(indexnow.debate_refs(debate))
     return PublishOut(
         is_public=False,
         slug=debate.slug,

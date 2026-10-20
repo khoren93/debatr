@@ -2,7 +2,9 @@ import { redirect } from 'react-router';
 import { getErrorStatus } from '../api/client';
 import { getDebate } from '../api/debates';
 import { routeError } from '../api/route';
+import { Seo } from '../components/Seo';
 import { DebateError } from '../components/debate/DebateError';
+import { privateSeo } from '../lib/seo';
 import DebateView from '../pages/DebateView';
 import type { Route } from './+types/debate-owner';
 
@@ -20,7 +22,13 @@ export async function clientLoader({ params, request }: Route.ClientLoaderArgs) 
 }
 
 export default function DebateOwnerRoute({ loaderData, params }: Route.ComponentProps) {
-  return <DebateView key={params.id} initial={loaderData.debate} id={params.id} />;
+  const { debate } = loaderData;
+  return (
+    <>
+      <Seo {...privateSeo(debate.settings.topic || debate.title || 'Debate')} />
+      <DebateView key={params.id} initial={debate} id={params.id} />
+    </>
+  );
 }
 
 export function ErrorBoundary() {

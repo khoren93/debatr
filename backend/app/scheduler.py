@@ -4,8 +4,9 @@ RQ's cron scheduler only enqueues: the workers run the jobs, from the background
 any waiting turn. The trending-topics refresh is enqueued every hour and decides itself whether
 a new batch is due (TRENDING_REFRESH_HOURS), so a restart never builds an extra batch. The
 recovery check (services/recovery) runs every minute and queues again the runs whose worker
-died. The alerts check (services/alerts) runs every five minutes. `--refresh-trending` builds a
-batch right now, in-process.
+died. The alerts check (services/alerts) runs every five minutes, the IndexNow flush
+(services/indexnow, production only) every minute. `--refresh-trending` builds a batch right now,
+in-process.
 """
 
 import argparse
@@ -17,7 +18,7 @@ from rq.cron import CronScheduler
 from app.core.config import settings
 from app.core.logging import setup_logging
 from app.core.redis import get_sync_redis
-from app.services import alerts, recovery
+from app.services import alerts, indexnow, recovery
 from app.services.queue_manager import BACKGROUND_QUEUE_NAME
 from app.services.trending import JOB_TIMEOUT, refresh_trending_job
 
@@ -50,6 +51,14 @@ def build_scheduler(conn: Redis) -> CronScheduler:
         job_timeout=alerts.JOB_TIMEOUT,
         result_ttl=60,
     )
+    if indexnow.enabled():
+        cron.register(
+            indexnow.flush_job,
+            queue_name=BACKGROUND_QUEUE_NAME,
+            interval=indexnow.FLUSH_SECONDS,
+            job_timeout=indexnow.JOB_TIMEOUT,
+            result_ttl=60,
+        )
     return cron
 
 

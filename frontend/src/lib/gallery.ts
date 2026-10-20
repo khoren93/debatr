@@ -1,8 +1,13 @@
 import { GALLERY_CATEGORIES, type FormatId, type GalleryCategory, type GalleryPeriod, type GallerySort } from '../api/types';
 import { toQuery } from '../api/route';
 
-/** The gallery's filters as they live in the URL (`?sort=top&period=week&format=rap_battle&…`):
- *  read by its route loaders and shown by the page. */
+/** The gallery's filters as they live in the URL (`?sort=top&period=week&format=rap_battle&…`,
+ *  `&page=2`): read by its route loaders and shown by the page. */
+
+/** Cards per gallery page. */
+export const GALLERY_PAGE_SIZE = 24;
+/** Pages past this are not served (the API's offset grows with them). */
+export const GALLERY_MAX_PAGE = 500;
 
 export type CategoryFilter = 'all' | GalleryCategory;
 export type FormatFilter = 'all' | FormatId;
@@ -44,7 +49,14 @@ export interface GalleryFilters {
   model: string | null;
   /** Only debates voiced with premium (ElevenLabs) voices. */
   premium: boolean;
+  /** 1-based page of GALLERY_PAGE_SIZE cards. */
+  page: number;
 }
+
+const pageOf = (raw: string | null) => {
+  const page = Number(raw);
+  return Number.isInteger(page) && page > 1 ? Math.min(page, GALLERY_MAX_PAGE) : 1;
+};
 
 export const galleryFilters = (params: URLSearchParams): GalleryFilters => ({
   sort: oneOf(params.get('sort'), SORT_OPTIONS, 'trending'),
@@ -53,6 +65,7 @@ export const galleryFilters = (params: URLSearchParams): GalleryFilters => ({
   category: oneOf(params.get('category'), CATEGORY_OPTIONS, 'all'),
   model: params.get('model')?.trim() || null,
   premium: params.get('voices') === 'premium',
+  page: pageOf(params.get('page')),
 });
 
 /** `GET /api/gallery` for these filters: one card per topic. */
@@ -65,4 +78,18 @@ export const galleryPath = (f: GalleryFilters) =>
     premium_voices: f.premium || undefined,
     format: f.format === 'all' ? undefined : f.format,
     group: 'motion',
+    limit: GALLERY_PAGE_SIZE,
+    offset: f.page > 1 ? (f.page - 1) * GALLERY_PAGE_SIZE : undefined,
+  })}`;
+
+/** The gallery's address for these filters (defaults left out), e.g. for its page links. */
+export const galleryHref = (f: GalleryFilters) =>
+  `/gallery${toQuery({
+    sort: f.sort === 'trending' ? undefined : f.sort,
+    period: f.sort === 'top' && f.period !== 'all' ? f.period : undefined,
+    format: f.format === 'all' ? undefined : f.format,
+    category: f.category === 'all' ? undefined : f.category,
+    model: f.model,
+    voices: f.premium ? 'premium' : undefined,
+    page: f.page > 1 ? f.page : undefined,
   })}`;

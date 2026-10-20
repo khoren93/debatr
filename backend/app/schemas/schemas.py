@@ -295,6 +295,7 @@ class PublishOut(BaseModel):
     is_public: bool
     slug: str | None
     share_url: str | None
+    path: str | None = None  # canonical path of the public page
     # "flagged" when the debate waits for an admin review instead of going public.
     moderation_status: str = "none"
 
@@ -476,6 +477,7 @@ class MotionRef(BaseModel):
     title: str  # the first public version's topic
     versions: int
     models: list[str] = Field(default_factory=list)  # debater models across the versions
+    path: str = ""  # the topic page's canonical path (services/seo)
 
 
 class MotionVersion(BaseModel):
@@ -494,6 +496,7 @@ class MotionVersion(BaseModel):
     premium_voices: bool = False
     published_at: datetime | None = None
     current: bool = False  # the debate being viewed
+    path: str = ""
 
 
 class MotionOut(BaseModel):
@@ -503,11 +506,13 @@ class MotionOut(BaseModel):
     title: str
     versions: int
     items: list[MotionVersion] = Field(default_factory=list)
+    path: str = ""
 
 
 class RemixParentOut(BaseModel):
     slug: str
     topic: str
+    path: str = ""
 
 
 class DebateDetail(BaseModel):
@@ -528,6 +533,9 @@ class DebateDetail(BaseModel):
     is_owner: bool = False
     is_public: bool = False
     slug: str | None = None
+    # The public page's canonical path (`/d/{slug}/{kebab}`, services/seo) and its absolute URL;
+    # null while the debate is not public.
+    path: str | None = None
     share_url: str | None = None
     category: str | None = None
     views: int = 0
@@ -573,6 +581,7 @@ class GalleryItem(BaseModel):
     participants: list[ParticipantOut] = Field(default_factory=list)
     published_at: datetime | None = None
     motion: MotionRef | None = None  # the topic this debate is a version of
+    path: str = ""  # canonical path of the debate's page
 
 
 class GalleryResponse(BaseModel):
@@ -588,6 +597,7 @@ class MotionPage(BaseModel):
     title: str
     versions: int
     items: list[GalleryItem]
+    path: str = ""
 
 
 class MotionSuggestions(BaseModel):

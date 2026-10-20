@@ -59,7 +59,7 @@ const VersionChip = ({ version, languageCode }: { version: MotionVersion; langua
     );
   }
   return (
-    <Link to={`/d/${version.slug}`} title={version.topic} className={`${CHIP} border-line bg-surface hover:border-line-3`}>
+    <Link to={version.path || `/d/${version.slug}`} title={version.topic} className={`${CHIP} border-line bg-surface hover:border-line-3`}>
       {body}
     </Link>
   );
@@ -86,7 +86,7 @@ export const VersionsStrip = ({ motion, languageCode, remixId }: VersionsStripPr
           <Link to={`/create?remix=${remixId}`} className="inline-flex items-center gap-1 text-accent transition-colors hover:text-accent-hover">
             <Plus className="size-4" /> Add your version
           </Link>
-          <Link to={`/t/${motion.slug}`} className="text-muted transition-colors hover:text-text">
+          <Link to={motion.path || `/t/${motion.slug}`} className="text-muted transition-colors hover:text-text">
             {n > motion.items.length ? `All ${n} →` : 'Topic page →'}
           </Link>
         </div>

@@ -2,6 +2,8 @@ import { routeGet, toQuery, type ApiGet } from '../api/route';
 import { serverGet } from '../api/server.server';
 import type { GalleryItem, GalleryResponse } from '../api/types';
 import { RouteError } from '../components/RouteError';
+import { Seo } from '../components/Seo';
+import { homeSeo } from '../lib/seo';
 import Landing from '../pages/Landing';
 import { microcache } from '../server/microcache.server';
 import type { Route } from './+types/home';
@@ -29,7 +31,12 @@ export const loader = ({ request }: Route.LoaderArgs) => load(serverGet(request)
 export const clientLoader = () => load(routeGet);
 
 export default function Home({ loaderData }: Route.ComponentProps) {
-  return <Landing featured={loaderData.featured} />;
+  return (
+    <>
+      <Seo {...homeSeo()} />
+      <Landing featured={loaderData.featured} />
+    </>
+  );
 }
 
 export function ErrorBoundary() {

@@ -37,7 +37,7 @@ const Topic = ({ page }: { page: MotionPage }) => {
               key={item.id}
               id={item.id}
               index={i}
-              to={`/d/${item.slug}`}
+              to={item.path || `/d/${item.slug}`}
               title={item.topic || item.title || 'Untitled debate'}
               cover={
                 <DebateCover

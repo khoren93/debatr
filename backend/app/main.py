@@ -22,6 +22,7 @@ from app.api import (
     routes_motions,
     routes_presets,
     routes_reactions,
+    routes_seo,
     routes_status,
     routes_stream,
     routes_tokens,
@@ -111,6 +112,8 @@ app.include_router(routes_debates.router, prefix="/api/debates", tags=["debates"
 app.include_router(routes_reactions.router, prefix="/api/debates", tags=["reactions"])
 app.include_router(routes_stream.router, prefix="/api/debates", tags=["stream"])
 app.include_router(routes_media.router, prefix="/api", tags=["media"])
+# robots.txt, the sitemaps and the IndexNow key, outside /api (frontend/Caddyfile routes them).
+app.include_router(routes_seo.router)
 
 # Generated audio + timeline files. Mounted after the routers so /api/media/voices etc. win.
 app.mount(

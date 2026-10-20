@@ -274,6 +274,9 @@ def parse_target(raw: str) -> tuple[TargetKind, str] | None:
     parts = [p for p in path.split("/") if p]
     if not parts:
         return None
+    # Canonical page links end in the topic's words: /d/{slug}/{kebab}, /t/{slug}/{kebab}.
+    if len(parts) >= 3 and parts[-3] in ("d", "t"):
+        parts = parts[:-1]
     if len(parts) >= 2:
         kind, value = parts[-2], parts[-1]
         if kind == "t":

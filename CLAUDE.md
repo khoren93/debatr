@@ -21,7 +21,8 @@ backend/            FastAPI API + RQ worker (Python 3.12+, managed with uv)
                       middleware), access (sessions → AdminContext, CSRF, roles, sudo)
   app/scheduler.py    periodic jobs (`python -m app.scheduler`, RQ cron on the background queue:
                       hourly trending check, recovery check every minute, alerts check every 5
-                      minutes; `--refresh-trending` builds a batch now)
+                      minutes, IndexNow flush every minute in production; `--refresh-trending`
+                      builds a batch now)
   app/core/           config (pydantic-settings), db (async SQLAlchemy), redis, logging,
                       ratelimit, auth (session cookie or Bearer API token; session-only deps),
                       security (bcrypt, Fernet, API token format/hash), ids
@@ -37,8 +38,9 @@ backend/            FastAPI API + RQ worker (Python 3.12+, managed with uv)
                       (Stripe), debates, gallery (+ leaderboard), motions (topic page, wizard
                       suggestions), reactions (likes/votes), models,
                       presets, topics (trending), stream (SSE), media, status (`GET /api/status`:
-                      sign-ups / maintenance for the site); serializers.py builds the shared
-                      response models
+                      sign-ups / maintenance for the site), seo (outside /api: robots.txt, the
+                      sitemaps, the IndexNow key file); serializers.py builds the shared response
+                      models
   app/services/       orchestrator (RQ jobs), formats/ (show formats: seats, limits, turn order,
                       prompts, verdict, round labels; `debate`, `rap_battle`), scheduler (the debate's turn
                       order), prompt_builder (the debate's prompts),
@@ -53,6 +55,8 @@ backend/            FastAPI API + RQ worker (Python 3.12+, managed with uv)
                       studio (live scenes per turn, disputes, judge evidence), factcheck (web
                       check of on-screen figures), markers ([visual: …] / [dispute N: …]),
                       trending (RSS news → daily debate topics with source links),
+                      seo (canonical paths `/d/{slug}/{kebab}`, robots.txt, sitemap XML),
+                      indexnow (changed public pages → api.indexnow.org once a minute),
                       resume (failed turn → Resume), heartbeat / recovery / fair_share /
                       free_quota (worker safety, see "Workers and queues"), debate_control (stop),
                       usage (provider_usage booking, debate context, ContextThreadPool),
@@ -81,18 +85,21 @@ backend/            FastAPI API + RQ worker (Python 3.12+, managed with uv)
 frontend/           React 19 + React Router 8 (framework mode, server rendering) + Vite 8 + Tailwind 4 + TypeScript
   react-router.config.ts  `ssr: true`, `appDirectory: src`, `routeDiscovery: initial` (the route
                       manifest comes with the page: navigations never ask the Node server)
-  src/root.tsx        the HTML document (head, fonts, ToastProvider, last-resort ErrorBoundary)
-  src/routes.ts       route tree: `_site` (AppShell; session + site status from the server) →
-                      public pages (home, gallery, leaderboard, d/:slug, t/:slug: rendered on the
-                      server) | `_client` (login, register, debate/:id: browser only,
-                      HydrateFallback) → `_private` (library, create, account, device: also a
-                      session) | `*` (a real 404); `healthz` (resource route, Docker health check)
+  src/root.tsx        the HTML document (fonts, `<html lang>` from the page's `handle.lang`,
+                      ToastProvider, last-resort ErrorBoundary; no title: every page has `<Seo>`)
+  src/routes.ts       route tree: `_site` (AppShell; session + site status + `siteUrl` from the
+                      server) → public pages (home, gallery, leaderboard, d/:slug/:kebab?,
+                      t/:slug/:kebab?: rendered on the server) | `_client` (login, register,
+                      debate/:id: browser only, HydrateFallback, `X-Robots-Tag: noindex`) →
+                      `_private` (library, create, account, device: also a session) | `*` (a real
+                      404); `healthz` (resource route, Docker health check)
   src/routes/         route modules: one `load(get)` per public page serves the server `loader`
                       (`serverGet`, the visitor's cookie) and the `clientLoader` (`routeGet`,
                       straight to the API); ErrorBoundary = RouteError / DebateError; public pages
                       add the `microcache` middleware
   src/server/         `*.server.ts`: microcache (cookie-less GETs of public pages, LRU 200 entries /
-                      32 MB / 30 s; key = URL + whether the session is known), siteStatus (30 s memo)
+                      32 MB / 30 s; key = URL + whether the session is known), siteStatus (30 s memo),
+                      site (`siteOrigin`: SITE_URL, else the request's origin)
   admin.html, src/admin-main.tsx  the admin console, a separate SPA (vite.admin.config.ts →
                       build/admin with its own admin-assets/; `npm run dev` serves admin.html on
                       /admin* through a plugin in vite.config.ts); vitest.config.ts = unit tests
@@ -118,7 +125,8 @@ frontend/           React 19 + React Router 8 (framework mode, server rendering)
                       useSiteStatus (sign-ups closed / maintenance banner, cached a minute),
                       useMotionSuggestions (debounced: the topic the wizard's text joins),
                       useSiteStatus (+ SiteStatusProvider: the status the server rendered with),
-                      useHydrated (false on the server and during hydration)
+                      useHydrated (false on the server and during hydration), useSiteUrl (the
+                      `_site` loader's origin for canonical links)
   src/components/ui/  design-system primitives (Button, Card, Chip, Segmented, Field, Pill,
                       Progress, Modal/ConfirmDialog, Toast, Avatar/SpeakerBadge, Thumb, Logo,
                       Dropdown — custom select, portalled list; SwitchTrack,
@@ -126,6 +134,8 @@ frontend/           React 19 + React Router 8 (framework mode, server rendering)
                       ClientOnly — browser-only UI after hydration, RelativeDate — "5 days ago",
                       the UTC date until hydrated)
   src/components/layout/AppShell.tsx  sidebar + mobile top bar/bottom tabs, Page, PageTitle
+  src/components/Seo.tsx  a page's head: title, description, robots, canonical, Open Graph,
+                      twitter:card (React 19 hoists them into `<head>`), JSON-LD scripts
   src/components/cards/    DebateCard (library / gallery / landing; title under the cover, CardStats =
                            likes / views / length), DebateCover (face-off cover: each debater's logo
                            on a half in its speaker colour, slanted seams, VS; markup, never the winner)
@@ -195,7 +205,10 @@ frontend/           React 19 + React Router 8 (framework mode, server rendering)
                       LineChart, StackedColumns, ChartCard (legend + table view), palette.ts =
                       validated chart colours)
   src/lib/cli.ts      install / login / MCP setup snippets shown on the Account page
-  src/lib/gallery.ts  the gallery's URL filters (sort, period, format, category, model, voices) and its API path
+  src/lib/gallery.ts  the gallery's URL filters (sort, period, format, category, model, voices, page) and
+                      its API path (24 cards a page) / page address (`galleryHref`)
+  src/lib/seo.ts      search and preview metadata of every page (pure, vitest): title / description
+                      templates, canonical redirects, robots rules, JSON-LD (see "Search engines")
   src/lib/formats.ts  show formats as the wizard runs them (mirrors backend services/formats:
                       seats, limits, premium-only, music, length / rounds wording, default
                       prompts) and the rappers' flows (mirrors media/music.FLOWS)
@@ -461,6 +474,47 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   (`moderation`, reason, audit `debate.motion_changed`): move into the topic of a link / id /
   slug (`parse_target`), split off (no target: a keyless topic; the text keeps joining the old
   one) or merge the whole topic (`whole`).
+
+### Search engines and link previews (`services/seo`, `lib/seo.ts`)
+
+- Canonical addresses carry the topic's words: `/d/{slug}/{kebab}`, `/t/{slug}/{kebab}`
+  (`seo.kebab`: letters, marks and digits of any script, lowercase, ≤ 60 characters cut between
+  words; Unicode paths, percent-encoded only in sitemaps, IndexNow and `Location`). The API sends
+  them as `path` (`DebateDetail` — null while private —, `GalleryItem`, `MotionRef`, `MotionOut`,
+  `MotionVersion`, `MotionPage`, `RemixParentOut`, `PublishOut`); `share_url` = SITE_URL + path.
+  The `d/:slug/:kebab?` and `t/:slug/:kebab?` loaders answer every other spelling (no kebab, an
+  old topic text, a merged topic) with a 301 to it (`canonicalRedirect`, query kept), also in
+  the client loaders. `GET /api/gallery/{slug}` answers 410 for a slug that is no longer public
+  (slugs outlive unpublishing), 404 for none; the page keeps the status.
+- `<Seo>` per page (`lib/seo.ts`): debate "{topic} — A vs B" (battle "… — A vs B rap battle"; the
+  topic is shortened first, the lineup dropped when too little topic would be left), the first
+  debater's opening (whole sentences when possible) + "Watch A vs B and vote who won.", an
+  `Article` + `BreadcrumbList` (Gallery › topic › debate); topic "{topic}: N AI debates" with a
+  `CollectionPage`; home `WebSite` + `Organization`; gallery / ranking texts in
+  `brand.SEO_COPY`. Titles ≤ 60, descriptions ≤ 160. No preview, description or JSON-LD names a
+  winner (blind voting). `og:image` waits for stage C3 (the component takes `image`).
+- Robots: public pages `index, follow, max-image-preview:large…`; gallery views other than the
+  plain list, its rap-battle view and their `?page=N` (sort, category, model, premium voices) are
+  `noindex, follow` with the plain list as canonical; topics with one public version are
+  `noindex` (a thin copy of that debate) and stay out of the sitemap
+  (`TOPIC_INDEX_MIN_VERSIONS`, mirrored); `_client` pages `noindex, nofollow` (meta +
+  `X-Robots-Tag`); errors `noindex`.
+- The debate page's HTML is complete for crawlers: the topic in `<h1>` (visually hidden under
+  the player's poster), the page an `<article>`, rounds in `<h2>`, every turn, the Details tab
+  (lineup, models, facts) rendered `hidden` when folded, and the judge's ruling in the DOM
+  under the "Reveal" gate (`hidden`, like a folded accordion) while the viewer's vote is blind.
+- `app/api/routes_seo.py` (outside /api, Caddy routes them): `robots.txt` (production: all but
+  the private prefixes, AI crawlers refused only with `SEO_ALLOW_AI_CRAWLERS=false`, `Sitemap:`
+  line; elsewhere `Disallow: /`), `sitemap.xml` (index) → `sitemaps/pages.xml` (home, gallery,
+  ranking and their battle views), `sitemaps/topics.xml`, `sitemaps/debates-{n}.xml` (10 000 per
+  file, `lastmod` = latest of published / ended); only `public_clause`; `max-age=3600`.
+- IndexNow (`services/indexnow`, production with an https SITE_URL and `INDEXNOW_KEY`, key file
+  `/{key}.txt`): publish / unpublish / delete (owner or console), approve / reject, topic moves,
+  disabling an account with "unpublish" and deleting one note the debate's URL and `motion:{id}`
+  in the Redis set `indexnow:pending` (`announce` / `announce_sync`, never failing the caller);
+  the scheduler's `flush_job` (every 60 s, background queue, only registered when on) resolves
+  topics to their address now and POSTs up to 10 000 URLs to api.indexnow.org; 429 / 5xx /
+  network errors put them back. Not booked in `provider_usage` (free).
 
 ### Likes, audience votes and the model ranking
 
@@ -970,7 +1024,10 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   live in the URL and change with `setSearchParams(…, { replace: true, preventScrollReset: true })`,
   loading = `useNavigation()`; loaders throw route error data (`data({status, detail})`) and the
   route's ErrorBoundary renders it with the same status code. A new public page = a route
-  module with `load(get)`, `loader` + `clientLoader`, `ErrorBoundary`, `microcache`.
+  module with `load(get)`, `loader` + `clientLoader`, `ErrorBoundary`, `microcache` and exactly
+  one `<Seo>` (data from `lib/seo.ts`; its canonical path comes from the API, never built in the
+  frontend; `handle.lang` when its language is not English). Private pages render
+  `<Seo {...privateSeo(title)} />`.
 - SSR-safe frontend (public pages render on the server): router imports come from
   `react-router` (v8 dropped `react-router-dom`). Browser-only modules — Remotion
   (`src/video/**` except constants / timing), rough.js, d3-geo, the MP4 renderer, canvas work:
@@ -1012,7 +1069,9 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
 - Pages come from the `web` service (Node, react-router-serve :3000, `mem_limit: 256m`,
   `--max-old-space-size=160`; ~50 MB idle, ~100 MB under load). `frontend/Caddyfile`: `/api*` →
   api, `/assets/*` and other build files → `/srv`, the console → `/srv/admin`, everything else →
-  `web:3000`; 502/503/504 from it → `offline.html` (503 + Retry-After); `/path/` → `/path` (301).
+  `web:3000`; 502/503/504 from it → `offline.html` (503 + Retry-After); `/path/` → `/path` (301);
+  `/robots.txt`, `/sitemap.xml`, `/sitemaps/*` and `/<8-128 chars>.txt` (the IndexNow key) → api
+  (`npm run dev` proxies the first three too).
   Views: the renderer's API calls carry `X-Debatr-Render: server` (`services/views.RENDER_HEADER`)
   and count nothing; a server-rendered debate page sends `POST /api/debates/{id}/view` (a beacon,
   `api/debates.countView`) after hydration, so crawlers without JavaScript and micro-cached pages

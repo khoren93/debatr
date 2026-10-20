@@ -50,6 +50,7 @@ from app.schemas.admin import (
     UserFilters,
     UserListQuery,
 )
+from app.services import indexnow
 from app.services.admin import audit
 from app.services.admin import users as accounts
 from app.services.api_tokens import spent_by_tokens, token_out
@@ -369,6 +370,7 @@ async def disable_user(
     for debate in stopped:
         mark_stopped(debate)
     revoked = await accounts.revoke_tokens(db, user.id) if body.revoke_tokens else 0
+    gone = await indexnow.public_refs(db, user.id) if body.unpublish else []
     unpublished = await accounts.unpublish_all(db, user.id) if body.unpublish else 0
     user.is_active = False
     user.session_epoch += 1
@@ -384,6 +386,7 @@ async def disable_user(
         unpublished=unpublished,
     )
     await db.commit()
+    await indexnow.announce(gone)
     for debate in stopped:
         await signal_stopped(str(debate.id))
     return DisableUserOut(stopped=len(stopped), tokens_revoked=revoked, unpublished=unpublished)
@@ -535,6 +538,7 @@ async def delete_user(
         "credits_usd": str(to_usd(user.credits_usd)),
     }
     target = user.id
+    gone = await indexnow.public_refs(db, user.id)
     deleted = await accounts.delete_account(db, user)
     await audit.record(
         db,
@@ -549,6 +553,7 @@ async def delete_user(
         commit=False,
     )
     await db.commit()
+    await indexnow.announce(gone)
     redis = get_async_redis()
     for debate_id in deleted.active_ids:
         try:

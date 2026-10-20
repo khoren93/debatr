@@ -1,7 +1,9 @@
 import { isRouteErrorResponse, useRevalidator, useRouteError } from 'react-router';
 import type { ReactNode } from 'react';
 import { UNAVAILABLE, routeErrorOf } from '../api/route';
+import { errorSeo } from '../lib/seo';
 import { Page } from './layout/AppShell';
+import { Seo } from './Seo';
 import { Button, EmptyState, ErrorBox, LinkButton } from './ui';
 
 interface Missing {
@@ -21,7 +23,7 @@ interface Props {
 }
 
 /** The generic 404 page of the design: mono kicker, big title, the way home. */
-export const NotFoundPage = () => (
+const NotFoundPage = () => (
   <Page className="text-center">
     <div className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">404</div>
     <h1 className="mt-2 font-display text-4xl font-extrabold tracking-tight">Page not found</h1>
@@ -35,8 +37,18 @@ export const NotFoundPage = () => (
 );
 
 /** ErrorBoundary body of a page route: the same on the server (with the status code) and after
- *  a client navigation. */
-export const RouteError = ({ missing, what = 'this page', render }: Props) => {
+ *  a client navigation; never indexed. */
+export const RouteError = (props: Props) => {
+  const { status } = routeErrorOf(useRouteError());
+  return (
+    <>
+      <Seo {...errorSeo(status)} />
+      <ErrorBody {...props} />
+    </>
+  );
+};
+
+const ErrorBody = ({ missing, what = 'this page', render }: Props) => {
   const error = useRouteError();
   const revalidator = useRevalidator();
   const { status, detail } = routeErrorOf(error);

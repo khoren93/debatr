@@ -119,6 +119,13 @@ class Settings(BaseSettings):
     # Site
     SITE_URL: str = "http://localhost"
     SECRET_KEY: str = "secret-key-for-sessions-change-me"
+    # Search engines (app/api/routes_seo, services/indexnow). AI crawlers (GPTBot, ClaudeBot,
+    # PerplexityBot, Google-Extended…) may read the public pages unless this is false.
+    SEO_ALLOW_AI_CRAWLERS: bool = True
+    # IndexNow (Bing, Yandex, Seznam, Naver, Yep): any 8-128 letters, digits or dashes, served
+    # at /{key}.txt. Changed public pages are announced at most once a minute; only in production
+    # with an https SITE_URL. Empty = off.
+    INDEXNOW_KEY: str = ""
 
     # Admin console (/admin + /api/admin, app/admin): admins are accounts with `users.admin_role`
     # (granted with `python -m app.manage admin grant`), signing in with password + TOTP.

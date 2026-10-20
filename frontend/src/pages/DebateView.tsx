@@ -383,7 +383,7 @@ const DebateView = ({ initial, viewer, id, slug }: Props) => {
       {debate.is_public && <CardStats likes={debate.engagement.likes} views={debate.views} />}
       {debate.author_name && !isOwner && <span>by {debate.author_name}</span>}
       {debate.remix_of && (
-        <Link to={`/d/${debate.remix_of.slug}`} title={debate.remix_of.topic} className="inline-flex min-w-0 max-w-[260px] items-center gap-1 hover:text-text">
+        <Link to={debate.remix_of.path || `/d/${debate.remix_of.slug}`} title={debate.remix_of.topic} className="inline-flex min-w-0 max-w-[260px] items-center gap-1 hover:text-text">
           <Repeat2 className="size-3 shrink-0" /> <span className="truncate">remix of {debate.remix_of.topic}</span>
         </Link>
       )}
@@ -397,7 +397,7 @@ const DebateView = ({ initial, viewer, id, slug }: Props) => {
 
   return (
     <Page>
-      <div className="mx-auto grid w-full max-w-[1180px] gap-[22px]">
+      <article className="mx-auto grid w-full max-w-[1180px] gap-[22px]">
         {posterHeader ? (
           <header className="flex min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-2">
             <h1 className="sr-only">{topic}</h1>
@@ -519,10 +519,13 @@ const DebateView = ({ initial, viewer, id, slug }: Props) => {
             />
           )}
           {tab === 'verdict' && <VerdictTab verdict={debate.verdict} verdictTurn={verdictTurn} lineup={lineup} isActive={isActive} markdown={markdown} hidden={verdictHidden} onReveal={reveal} show={show.show} />}
-          {tab === 'details' && <DetailsTab debate={debate} lineup={lineup} timeline={timeline} />}
+          {/* In the page even when folded: the lineup, models and facts for search engines. */}
+          <div hidden={tab !== 'details'}>
+            <DetailsTab debate={debate} lineup={lineup} timeline={timeline} />
+          </div>
           <div ref={bottomRef} />
         </div>
-      </div>
+      </article>
 
       {/* A hidden slide-over until opened: nothing of it goes into the server's HTML. */}
       {completed && (

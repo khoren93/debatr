@@ -30,7 +30,7 @@ from app.schemas.schemas import (
     VerdictFeedback,
     VerdictOut,
 )
-from app.services import motions
+from app.services import motions, seo
 from app.services.formats import SIDES, Format, format_of
 from app.services.free_router import is_free_router
 from app.services.media.languages import language_code
@@ -54,10 +54,16 @@ def can_manage(debate: Debate, viewer: User | None) -> bool:
     return is_owner(debate, viewer)
 
 
-def share_url(debate: Debate) -> str | None:
+def public_path(debate: Debate) -> str | None:
+    """The canonical path of a public debate's page (services/seo), None while private."""
     if not debate.slug or not debate.is_public:
         return None
-    return f"{settings.SITE_URL.rstrip('/')}/d/{debate.slug}"
+    return seo.debate_path(debate.slug, topic_of(debate))
+
+
+def share_url(debate: Debate) -> str | None:
+    path = public_path(debate)
+    return seo.absolute(settings.SITE_URL, path) if path else None
 
 
 def totals_out(debate: Debate) -> DebateTotals:
@@ -280,6 +286,7 @@ def detail_out(
         moderation=moderation_out(debate) if owner or manager else None,
         is_public=debate.is_public,
         slug=debate.slug,
+        path=public_path(debate),
         share_url=share_url(debate),
         category=debate.category,
         views=debate.views or 0,
@@ -298,7 +305,13 @@ def detail_out(
 def motion_ref_out(info: MotionInfo | None) -> MotionRef | None:
     if info is None:
         return None
-    return MotionRef(slug=info.slug, title=info.title, versions=info.versions, models=info.models)
+    return MotionRef(
+        slug=info.slug,
+        title=info.title,
+        versions=info.versions,
+        models=info.models,
+        path=seo.topic_path(info.slug, info.title),
+    )
 
 
 def motion_version_out(debate: Debate, current: Debate | None = None) -> MotionVersion:
@@ -317,6 +330,7 @@ def motion_version_out(debate: Debate, current: Debate | None = None) -> MotionV
         premium_voices=has_premium_voices(debate),
         published_at=debate.published_at,
         current=current is not None and debate.id == current.id,
+        path=seo.debate_path(debate.slug or "", topic_of(debate)),
     )
 
 
@@ -331,6 +345,7 @@ def motion_out(
         title=info.title,
         versions=info.versions,
         items=[motion_version_out(v, current) for v in versions],
+        path=seo.topic_path(info.slug, info.title),
     )
 
 
@@ -338,7 +353,8 @@ def remix_parent_out(parent: Debate | None) -> RemixParentOut | None:
     """Only a public parent is named: a private one stays private even to its remixers."""
     if parent is None or not parent.is_public or not parent.slug:
         return None
-    return RemixParentOut(slug=parent.slug, topic=topic_of(parent))
+    topic = topic_of(parent)
+    return RemixParentOut(slug=parent.slug, topic=topic, path=seo.debate_path(parent.slug, topic))
 
 
 async def topic_context(
@@ -382,4 +398,5 @@ def gallery_item_out(debate: Debate, motion: MotionInfo | None = None) -> Galler
         participants=participants_out(debate),
         published_at=debate.published_at,
         motion=motion_ref_out(motion),
+        path=seo.debate_path(debate.slug or "", topic_of(debate)),
     )

@@ -234,12 +234,15 @@ class DebateRef:
 
 
 def parse_debate_ref(ref: str) -> DebateRef:
-    """A debate id, a share slug or a link to either (`…/debate/<id>`, `…/d/<slug>`)."""
+    """A debate id, a share slug or a link to either (`…/debate/<id>`, `…/d/<slug>`, or the
+    canonical `…/d/<slug>/<topic-words>`)."""
     value = ref.strip()
     if "/" in value:
         parts = [
             p for p in urlsplit(value if "://" in value else f"x://{value}").path.split("/") if p
         ]
+        if len(parts) >= 3 and parts[-3] in ("d", "embed"):
+            parts = parts[:-1]
         if len(parts) >= 2 and parts[-2] in ("debate", "debates"):
             value = parts[-1]
         elif len(parts) >= 2 and parts[-2] in ("d", "embed"):

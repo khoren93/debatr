@@ -141,7 +141,7 @@ const Landing = ({ featured }: Props) => {
                 key={item.id}
                 id={item.id}
                 index={i}
-                to={`/d/${item.slug}`}
+                to={item.path || `/d/${item.slug}`}
                 title={item.topic || item.title || 'Untitled debate'}
                 cover={
                   <DebateCover

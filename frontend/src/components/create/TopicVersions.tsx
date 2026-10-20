@@ -50,7 +50,7 @@ export const TopicVersions = ({ state, patch }: TopicVersionsProps) => {
           <Layers className="mt-px size-3.5 shrink-0 text-accent" />
           <span className="min-w-0">
             Joins a published topic as another version ·{' '}
-            <Link to={`/t/${match.slug}`} target="_blank" rel="noreferrer" className="font-semibold text-accent hover:text-accent-hover">
+            <Link to={match.path || `/t/${match.slug}`} target="_blank" rel="noreferrer" className="font-semibold text-accent hover:text-accent-hover">
               {versionsLabel(match.versions)} so far
             </Link>
           </span>
@@ -61,7 +61,7 @@ export const TopicVersions = ({ state, patch }: TopicVersionsProps) => {
           <div className="text-[11px] leading-snug text-dim">Similar topics were debated before. Take one’s wording to add your debate as a version of it:</div>
           {similar.map((m) => (
             <div key={m.slug} className="flex min-w-0 items-center gap-2 rounded-[12px] border border-line bg-ink py-1.5 pr-1.5 pl-3">
-              <Link to={`/t/${m.slug}`} target="_blank" rel="noreferrer" title={m.title} className="min-w-0 flex-1 truncate text-[13px] font-semibold text-text-2 hover:text-text">
+              <Link to={m.path || `/t/${m.slug}`} target="_blank" rel="noreferrer" title={m.title} className="min-w-0 flex-1 truncate text-[13px] font-semibold text-text-2 hover:text-text">
                 {m.title}
               </Link>
               <span className="shrink-0 font-mono text-[10px] text-dim">{versionsLabel(m.versions)}</span>

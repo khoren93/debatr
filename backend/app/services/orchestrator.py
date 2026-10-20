@@ -31,7 +31,7 @@ from app.core.redis import (
 )
 from app.core.sync_db import get_sync_session
 from app.models.models import Debate, Turn, utcnow
-from app.services import queue_manager, runtime_settings
+from app.services import indexnow, queue_manager, runtime_settings
 from app.services import usage as usage_log
 from app.services.credits import charge_debate_sync, charge_images_sync, debate_prices
 from app.services.events import publish_event
@@ -626,6 +626,7 @@ def _auto_publish(db: Session, debate: Debate) -> None:
     try:
         if should_auto_publish(debate) and publish_sync(db, debate):
             logger.info("Debate %s published to the gallery", debate.id)
+            indexnow.announce_sync(indexnow.debate_refs(debate))
         elif debate.moderation_status == "flagged":
             reason = (debate.moderation_json or {}).get("reason")
             logger.info("Debate %s waits for review: %s", debate.id, reason)

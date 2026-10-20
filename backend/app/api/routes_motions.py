@@ -14,7 +14,7 @@ from app.core.auth import get_current_user
 from app.core.db import get_db
 from app.models.models import Debate, User
 from app.schemas.schemas import STORED_TOPIC_MAX_LENGTH, MotionPage, MotionSuggestions
-from app.services import motions
+from app.services import motions, seo
 
 router = APIRouter()
 
@@ -60,4 +60,5 @@ async def motion_page(slug: str, db: AsyncSession = Depends(get_db)) -> MotionPa
         title=info.title,
         versions=info.versions,
         items=[gallery_item_out(v, info) for v in versions],
+        path=seo.topic_path(info.slug, info.title),
     )

@@ -19,6 +19,20 @@
         reverse_proxy api:8000
     }
 
+    # Files for search engines come from the API (app/api/routes_seo): robots.txt, the sitemaps
+    # and the IndexNow key file (/<INDEXNOW_KEY>.txt).
+    @seo {
+        path /robots.txt /sitemap.xml /sitemaps/*
+    }
+    handle @seo {
+        encode gzip zstd
+        reverse_proxy api:8000
+    }
+    @indexnow path_regexp ^/[A-Za-z0-9-]{8,128}\.txt$
+    handle @indexnow {
+        reverse_proxy api:8000
+    }
+
     # Without ADMIN_HOST in .env (development) the API serves the console on the site's origin, so
     # its pages are here too: the console's own build in /srv/admin (ADMIN_ON_SITE, docker-compose).
     @console expression `"{$ADMIN_ON_SITE}" != "off" && path('/admin', '/admin/*', '/admin-assets/*')`
@@ -99,6 +113,13 @@ http://{$ADMIN_HOST:admin.localhost} {
     @console_api path /api/admin /api/admin/* /api/health
     handle @console_api {
         reverse_proxy api:8000
+    }
+    # Nothing here is for search engines (the headers say noindex as well).
+    handle /robots.txt {
+        header Content-Type "text/plain; charset=utf-8"
+        respond "User-agent: *
+Disallow: /
+"
     }
     handle /api* {
         respond 404

@@ -228,6 +228,9 @@ export interface DebateDetail {
   is_owner: boolean;
   is_public: boolean;
   slug: string | null;
+  /** The public page's canonical path (`/d/{slug}/{topic-words}`, backend services/seo); null
+   *  while private. `share_url` is its absolute address. */
+  path: string | null;
   share_url: string | null;
   category: string | null;
   views: number;
@@ -258,6 +261,8 @@ export interface MotionRef {
   versions: number;
   /** Debater models across the versions. */
   models: string[];
+  /** The topic page's canonical path. */
+  path: string;
 }
 
 /** One public version of a topic (no verdict: the audience votes blind). */
@@ -276,6 +281,7 @@ export interface MotionVersion {
   published_at: string | null;
   /** The debate being viewed. */
   current: boolean;
+  path: string;
 }
 
 export interface MotionDetail {
@@ -283,11 +289,13 @@ export interface MotionDetail {
   title: string;
   versions: number;
   items: MotionVersion[];
+  path: string;
 }
 
 export interface RemixParent {
   slug: string;
   topic: string;
+  path: string;
 }
 
 /** `/t/:slug`: a topic and every public version of it. */
@@ -296,6 +304,8 @@ export interface MotionPage {
   title: string;
   versions: number;
   items: GalleryItem[];
+  /** Canonical path (`/t/{slug}/{topic-words}`): other spellings redirect to it. */
+  path: string;
 }
 
 /** The topic a wizard text would join, and similar topics to take the wording of. */
@@ -391,6 +401,7 @@ export interface PublishResponse {
   is_public: boolean;
   slug: string | null;
   share_url: string | null;
+  path?: string | null;
   /** 'flagged' when the debate was queued for a review instead of going public. */
   moderation_status: ModerationStatus;
 }
@@ -562,6 +573,8 @@ export interface GalleryItem {
   published_at: string | null;
   /** The topic this debate is a version of. */
   motion: MotionRef | null;
+  /** Canonical path of the debate's page. */
+  path: string;
 }
 
 export interface GalleryResponse {

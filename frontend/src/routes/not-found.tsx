@@ -1,5 +1,5 @@
 import { data } from 'react-router';
-import { NotFoundPage } from '../components/RouteError';
+import { RouteError } from '../components/RouteError';
 
 /** Any other address: a real 404 (not the app with a 200). */
 const missing = (): never => {
@@ -14,5 +14,5 @@ export default function NotFound() {
 }
 
 export function ErrorBoundary() {
-  return <NotFoundPage />;
+  return <RouteError />;
 }

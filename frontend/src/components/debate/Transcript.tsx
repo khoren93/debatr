@@ -129,9 +129,9 @@ export const Transcript = ({ turns, streaming, participants, lineup, timeline, m
   const rows: ReactNode[] = [];
   let lastRound: string | null = null;
   const heading = (roundId: string, turnType: string, label?: string) => (
-    <div key={`h-${roundId}-${turnType}`} className="px-3.5 pt-3.5 pb-1.5 font-mono text-[11px] tracking-[0.12em] text-dim">
+    <h2 key={`h-${roundId}-${turnType}`} className="px-3.5 pt-3.5 pb-1.5 font-mono text-[11px] tracking-[0.12em] text-dim">
       {roundHeading(roundId, turnType, label)}
-    </div>
+    </h2>
   );
   for (const turn of turns) {
     if (turn.round_id !== lastRound) {
@@ -139,9 +139,15 @@ export const Transcript = ({ turns, streaming, participants, lineup, timeline, m
       lastRound = turn.round_id;
     }
     if (hideVerdict && turn.turn_type === 'verdict') {
+      // The ruling stays in the page, folded like an accordion (search engines read it; nobody
+      // sees it before revealing).
       rows.push(
         <div key={turn.seq_index} id={`turn-${turn.seq_index}`} className="p-3.5">
           <VerdictGate onReveal={onRevealVerdict} compact />
+          <div hidden>
+            <h3>{speakerTitle(turn)}</h3>
+            <p>{splitEmotionTag(turn.text).body}</p>
+          </div>
         </div>,
       );
       continue;
@@ -153,5 +159,9 @@ export const Transcript = ({ turns, streaming, participants, lineup, timeline, m
     if (streaming.round_id && streaming.round_id !== lastRound) rows.push(heading(streaming.round_id, streaming.turn_type, streaming.round_label));
     rows.push(<Row key={`s-${streaming.seq_index}`} turn={{ ...streaming, speaker_id: undefined }} participants={participants} lineup={lineup} time="now" markdown={false} streaming />);
   }
-  return <div className="mt-3.5 grid gap-1">{rows}</div>;
+  return (
+    <section aria-label="Transcript" className="mt-3.5 grid gap-1">
+      {rows}
+    </section>
+  );
 };

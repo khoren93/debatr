@@ -1,26 +1,63 @@
 import { Link, useNavigation, useSearchParams } from 'react-router';
-import { AudioLines, MicVocal, Play, Trophy, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, AudioLines, MicVocal, Play, Trophy, X } from 'lucide-react';
 import type { GalleryItem } from '../api/types';
 import { Page, PageTitle } from '../components/layout/AppShell';
 import { CardStats, CoverBadge, DebateCard, DebateCover, VersionsBadge } from '../components/cards';
 import { Avatar, Button, Chip, EmptyState, LinkButton, ModelIcon, Segmented } from '../components/ui';
 import { shortModelName } from '../lib/format';
-import { CATEGORY_OPTIONS, FORMAT_OPTIONS, PERIOD_OPTIONS, SORT_OPTIONS, type GalleryFilters } from '../lib/gallery';
+import { CATEGORY_OPTIONS, FORMAT_OPTIONS, GALLERY_PAGE_SIZE, PERIOD_OPTIONS, SORT_OPTIONS, galleryHref, type GalleryFilters } from '../lib/gallery';
 
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 interface Props {
   filters: GalleryFilters;
   items: GalleryItem[];
+  /** Cards (topics) across every page. */
+  total: number;
 }
+
+const PAGE_LINK = 'inline-flex items-center gap-1.5 rounded-full border border-line-2 bg-surface px-3.5 py-2 text-[13px] font-semibold transition-colors hover:border-line-3 hover:bg-surface-2';
+
+/** Previous / next page as real links, so crawlers reach every card (`?page=N`). */
+const Pager = ({ filters, total }: { filters: GalleryFilters; total: number }) => {
+  const pages = Math.ceil(total / GALLERY_PAGE_SIZE);
+  if (pages <= 1) return null;
+  const { page } = filters;
+  return (
+    <nav className="mt-8 flex items-center justify-center gap-3" aria-label="Gallery pages">
+      {page > 1 ? (
+        <Link to={galleryHref({ ...filters, page: page - 1 })} rel="prev" className={PAGE_LINK}>
+          <ArrowLeft className="size-4" /> Previous
+        </Link>
+      ) : (
+        <span className={`${PAGE_LINK} pointer-events-none opacity-40`} aria-hidden>
+          <ArrowLeft className="size-4" /> Previous
+        </span>
+      )}
+      <span className="font-mono text-xs text-muted">
+        {page} / {pages}
+      </span>
+      {page < pages ? (
+        <Link to={galleryHref({ ...filters, page: page + 1 })} rel="next" className={PAGE_LINK}>
+          Next <ArrowRight className="size-4" />
+        </Link>
+      ) : (
+        <span className={`${PAGE_LINK} pointer-events-none opacity-40`} aria-hidden>
+          Next <ArrowRight className="size-4" />
+        </span>
+      )}
+    </nav>
+  );
+};
 
 /**
  * Public gallery: one card per topic, whose cover is the version that earned it its place (the
  * most trending, newest or most liked one matching the filters). Every filter lives in the URL
- * (`?sort=top&period=week&format=rap_battle&category=tech&model=…&voices=premium`): changing one is
- * a navigation, and the route's loaders bring the cards (lib/gallery.ts).
+ * (`?sort=top&period=week&format=rap_battle&category=tech&model=…&voices=premium&page=2`): changing
+ * one is a navigation (back to the first page), and the route's loaders bring the cards
+ * (lib/gallery.ts).
  */
-const Gallery = ({ filters, items }: Props) => {
+const Gallery = ({ filters, items, total }: Props) => {
   const { sort, period, format, category, model, premium } = filters;
   const [, setParams] = useSearchParams();
   const navigation = useNavigation();
@@ -33,6 +70,7 @@ const Gallery = ({ filters, items }: Props) => {
         const next = new URLSearchParams(prev);
         if (value === null) next.delete(name);
         else next.set(name, value);
+        next.delete('page');
         return next;
       },
       { replace: true, preventScrollReset: true },
@@ -126,7 +164,7 @@ const Gallery = ({ filters, items }: Props) => {
               key={item.id}
               id={item.id}
               index={i}
-              to={`/d/${item.slug}`}
+              to={item.path || `/d/${item.slug}`}
               title={item.topic || item.title || 'Untitled debate'}
               cover={
                 <DebateCover
@@ -192,6 +230,7 @@ const Gallery = ({ filters, items }: Props) => {
         ))}
       </div>
       {renderBody()}
+      <Pager filters={filters} total={total} />
     </Page>
   );
 };

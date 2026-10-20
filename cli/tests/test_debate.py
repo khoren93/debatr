@@ -97,6 +97,8 @@ def test_media_plan_only_when_asked():
         (f"ai-debates.net/debate/{DEBATE_ID}?tab=verdict", "id", DEBATE_ID),
         ("https://ai-debates.net/d/k3m9xq2p7w", "slug", "k3m9xq2p7w"),
         ("/d/k3m9xq2p7w", "slug", "k3m9xq2p7w"),
+        ("https://ai-debates.net/d/k3m9xq2p7w/tabs-or-spaces", "slug", "k3m9xq2p7w"),
+        ("https://ai-debates.net/d/k3m9xq2p7w/дом-или-офис/", "slug", "k3m9xq2p7w"),
         ("k3m9xq2p7w", "slug", "k3m9xq2p7w"),
     ],
 )

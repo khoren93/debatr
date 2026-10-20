@@ -320,6 +320,9 @@ async def get_public_debate(
     )
     debate = (await db.execute(stmt)).scalar_one_or_none()
     if debate is None:
+        # A slug outlives its publication: 410 tells search engines the page is gone for good.
+        if await db.scalar(select(Debate.id).where(Debate.slug == slug)) is not None:
+            raise HTTPException(status_code=410, detail="This debate is no longer public")
         raise HTTPException(status_code=404, detail="This debate is not public")
     if counts_as_view(request):
         await count_view(db, debate, viewer, request)
