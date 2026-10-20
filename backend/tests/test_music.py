@@ -280,15 +280,15 @@ def test_a_battle_is_estimated_with_its_music() -> None:
     est = _estimate(conf, "elevenlabs")
     assert est.music_ms == rap.track_ms(conf, WORDS_PER_MINUTE) > 0
     assert est.music_cost_usd == round(est.music_ms / 60_000 * 0.3, 6)
-    # Only the MC and the judge are voiced: (MC words + verdict words) x 6 characters.
-    assert est.tts_chars == int((50 + rap.verdict_words(conf)) * 6)
+    # Only the MC and the judge's announcement are voiced: (MC words + its words) x 6 characters.
+    assert est.tts_chars == int((50 + rap.voiced_verdict_words(conf)) * 6)
     assert est.duration_ms == est.music_ms + 4000
     assert est.credits_cost_usd == pytest.approx(est.music_cost_usd + est.tts_cost_usd)
     own = _estimate(conf, "elevenlabs", own_tts_key=True)
     assert own.credits_cost_usd == 0 and own.music_ms == est.music_ms
     lyrics_only = _estimate(conf, None)
     assert lyrics_only.music_ms == 0 and lyrics_only.credits_cost_usd == 0
-    longer = _estimate({**conf, "num_rounds": 3, "length_preset": "long"}, "elevenlabs")
+    longer = _estimate({**conf, "num_rounds": 3, "length_preset": "medium"}, "elevenlabs")
     assert longer.music_ms > est.music_ms
 
 
@@ -458,7 +458,7 @@ async def test_the_voice_list_says_whether_an_own_key_may_make_music(
         def available(self) -> bool:
             return True
 
-        def list_voices(self, code: str) -> list[Any]:
+        def list_voices(self, code: str, *, announcers: bool = False) -> list[Any]:
             return []
 
     monkeypatch.setattr(routes_media, "get_provider", lambda name, api_key=None: Voices())
@@ -541,3 +541,11 @@ def test_the_judges_score_sheet_closes_the_battle() -> None:
     assert [r.scores["participant_1"] for r in board.scene.rounds] == [8, 9]
     # Shown from the announcement to the end of the verdict, while the judge goes round by round.
     assert board.start_ms < 90_400 and board.end_ms == 120_400
+
+
+def test_turn_audio_cache_keys_keep_their_hash_without_a_stability() -> None:
+    from app.services.media.jobs import _turn_hash
+
+    before = _turn_hash("elevenlabs", "eleven_v3", "v", "Hi")
+    assert _turn_hash("elevenlabs", "eleven_v3", "v", "Hi", None) == before
+    assert _turn_hash("elevenlabs", "eleven_v3", "v", "Hi", 0.0) != before

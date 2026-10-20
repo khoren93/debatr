@@ -74,7 +74,7 @@ class Settings(BaseSettings):
     MEDIA_API_TOKEN: str | None = None
     ELEVENLABS_API_KEY: str | None = None
     ELEVENLABS_BASE_URL: str = "https://api.elevenlabs.io"
-    TTS_DEFAULT_MODEL_ID: str = "eleven_v3"
+    TTS_DEFAULT_MODEL_ID: str = "eleven_v4"
     TTS_MAX_CHARS_PER_REQUEST: int = 2500
     TTS_CONCURRENCY: int = 2
     # Structures the judge's verdict (winner, headline) and answers the hidden gallery check

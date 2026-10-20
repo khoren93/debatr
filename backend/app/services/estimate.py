@@ -171,7 +171,7 @@ def estimate_debate(
     music_ms = 0
     if fmt.soundtrack == "music":
         # One generated track carries the debaters; only the host and the judge are voiced.
-        tts_chars = int((host_words + fmt.verdict_words(conf)) * CHARS_PER_WORD)
+        tts_chars = int((host_words + fmt.voiced_verdict_words(conf)) * CHARS_PER_WORD)
         if tts_provider == "elevenlabs":
             music_ms = fmt.track_ms(conf, WORDS_PER_MINUTE)
             duration_ms = music_ms + INTRO_OUTRO_MS

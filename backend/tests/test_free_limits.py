@@ -86,7 +86,7 @@ def test_size_rules_follow_the_levers(levers: dict, monkeypatch: pytest.MonkeyPa
     too_big = _config(*FREE, *FREE, "a/b:free", rounds=4, length="medium")
     problem = free_limits.size_problem(too_big, current)
     assert problem is not None
-    assert "up to 3 rounds and up to 4 debaters and very short or short replies" in problem
+    assert "up to 3 rounds and up to 4 debaters and short or medium replies" in problem
     monkeypatch.setattr(type(settings), "payments_mode", property(lambda _s: "disabled"))
     assert "add your own OpenRouter key" in str(free_limits.size_problem(too_big, current))
     off = runtime_settings.resolve(

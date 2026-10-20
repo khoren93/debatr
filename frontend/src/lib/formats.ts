@@ -62,7 +62,7 @@ export const FORMATS: Record<FormatId, FormatSpec> = {
     music: false,
     outputStyle: null,
     lengthLabel: 'Reply length',
-    lengthHints: { very_short: '~50 words · best for Shorts', short: '~100 words · snappy', medium: '~250 words · balanced', long: '~500 words · deep dive' },
+    lengthHints: { very_short: '~50 words · best for Shorts', short: '~100 words · snappy', medium: '~250 words · in depth', long: '~250 words · in depth' },
     // What the rounds consist of (backend scheduler.build_schedule).
     roundsHint: (rounds) =>
       rounds === 1 ? 'one argument each' : `opening · ${rounds > 2 ? `${rounds > 3 ? `${rounds - 2}× ` : ''}rebuttal · ` : ''}closing`,
@@ -92,7 +92,7 @@ export const FORMATS: Record<FormatId, FormatSpec> = {
     outputStyle: 'spoken',
     lengthLabel: 'Verse length',
     // One line per bar of the beat (backend formats/rap_battle.VERSE_LINES).
-    lengthHints: { very_short: '4 lines a verse', short: '8 lines a verse', medium: '12 lines a verse', long: '16 lines a verse' },
+    lengthHints: { very_short: '4 lines a verse', short: '8 lines a verse', medium: '12 lines a verse', long: '12 lines a verse' },
     roundsHint: (rounds) => (rounds === 1 ? 'one verse each' : `${rounds} verses each · the second rapper opens round 2`),
     hostPrompt: 'You are a high-energy battle rap MC.',
     debaterPrompt: 'You are a sharp, witty battle rapper.',

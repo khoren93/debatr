@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Rap battles sound like a show**: the MC calls the rappers into the ring like a ring announcer
+  (short, shouted, about 15 seconds instead of 25), and the judge no longer reads the round scores
+  aloud: the score sheet shows them while the judge shouts the totals and "and the winner is…".
+  Medium battles add the moment that decided it, Long ones a line per round.
+- **Eleven v4** voices new audio (ElevenLabs' most emotive model, same price); in rap battles the
+  MC and the judge get announcer voices and the widest emotional range.
+- **Three reply lengths**: Short, Medium and Long (~50, ~100 and ~250 words; 4, 8 and 12 lines a
+  verse). The old Long (~500 words) is gone: a request for it runs as the new Long.
+- **CLI 0.4.1**: `--length` (and the MCP tools' `length`) offers `very_short`, `short` and
+  `medium` (~50, ~100 and ~250 words); `long` is gone.
+
 ## [1.4.1] - 2026-10-20
 
 ### Fixed

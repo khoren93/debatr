@@ -60,6 +60,11 @@ class Format(ABC):
     output_style: Literal["markdown", "spoken"] | None = None
     # The judge scores every round; the verdict structuring keeps the scores (verdict_json.rounds).
     verdict_scores: bool = False
+    # How expressive the voiced turns are (ElevenLabs stability: 0 = the widest emotional range);
+    # None: the provider's default.
+    voice_stability: float | None = None
+    # The host and the judge get announcer voices by default (tts/elevenlabs.ANNOUNCERS).
+    announcer_voices: bool = False
     # Added to the gallery check's rules (what is fine in this format).
     moderation_note: str = ""
 
@@ -137,6 +142,14 @@ class Format(ABC):
     @abstractmethod
     def verdict_words(self, conf: Mapping[str, Any]) -> int:
         """Word budget of the verdict (the estimate prices it too)."""
+
+    def voiced_verdict_words(self, conf: Mapping[str, Any]) -> int:
+        """How much of the verdict is spoken (see `spoken_text`)."""
+        return self.verdict_words(conf)
+
+    def spoken_text(self, conf: Mapping[str, Any], turn_type: str, text: str) -> str:
+        """What of a saved turn is voiced (a format may keep lines for the screen only)."""
+        return text
 
     def track_ms(self, conf: Mapping[str, Any], words_per_minute: int) -> int:
         """Length of the generated track of a `soundtrack="music"` format (the estimate)."""

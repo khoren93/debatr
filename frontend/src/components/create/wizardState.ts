@@ -15,6 +15,7 @@ import type {
   VideoQuality,
   VoiceInfo,
 } from '../../api/types';
+import { ELEVENLABS_MODEL } from '../../api/media';
 import { STYLE_PRESETS, applyStyle, type PersonaStyle } from '../../data/styles';
 import { HOST_COLOR, debaterColor } from '../../lib/format';
 import { FLOWS, FORMAT_IDS, FORMATS, flowOf, formatSpec, type FormatSpec } from '../../lib/formats';
@@ -136,14 +137,17 @@ const normalizeLanguage = (value: string, fallback: string) => {
   return LANGUAGES.find((l) => l.value.toLowerCase() === key || l.label.toLowerCase() === key)?.value ?? value.trim();
 };
 
-/** Reply length presets; what each one means depends on the format (`FormatSpec.lengthHints`). */
+/** Reply length presets; what each one means depends on the format (`FormatSpec.lengthHints`).
+ *  The ids stay those of the API ("long", ~500 words, was retired: the API runs it as medium). */
 export const LENGTH_OPTIONS: { value: LengthPreset; label: string }[] = [
-  { value: 'very_short', label: 'Very short' },
-  { value: 'short', label: 'Short' },
-  { value: 'medium', label: 'Medium' },
-  { value: 'long', label: 'Long' },
+  { value: 'very_short', label: 'Short' },
+  { value: 'short', label: 'Medium' },
+  { value: 'medium', label: 'Long' },
 ];
 const LENGTH_VALUES = LENGTH_OPTIONS.map((o) => o.value);
+/** A preset from a saved config or the browser's draft: the retired "long" becomes the longest one left. */
+const lengthOf = (value: unknown, fallback: LengthPreset): LengthPreset =>
+  value === 'long' ? 'medium' : LENGTH_VALUES.includes(value as LengthPreset) ? (value as LengthPreset) : fallback;
 
 export const lengthOption = (value: LengthPreset) => LENGTH_OPTIONS.find((o) => o.value === value) ?? LENGTH_OPTIONS[2];
 
@@ -163,7 +167,7 @@ export const withinFreeLimits = (state: WizardState, free: FreeLimits): WizardSt
   return { ...state, num_rounds, length_preset };
 };
 
-/** "up to 3 rounds · very short or short replies · 5 a day" */
+/** "up to 3 rounds · short or medium replies · 5 a day" */
 export const freeLimitsText = (free: FreeDebates) => {
   const lengths = free.lengths.map((l) => lengthOption(l).label.toLowerCase());
   return [
@@ -430,7 +434,7 @@ export const buildConfig = (state: WizardState, opts: BuildOptions): DebateConfi
     })),
     media_plan: {
       provider: opts.provider,
-      model_id: 'eleven_v3',
+      model_id: ELEVENLABS_MODEL,
       voices,
       outputs: state.outputs,
       quality: state.quality,
@@ -494,7 +498,7 @@ export const stateFromConfig = (config: DebateConfig, base: WizardState): Wizard
     news: config.news?.brief ? { ...config.news } : null,
     language: normalizeLanguage(config.language, base.language),
     num_rounds: clamp(config.num_rounds, MIN_ROUNDS, MAX_ROUNDS),
-    length_preset: LENGTH_VALUES.includes(config.length_preset) ? config.length_preset : base.length_preset,
+    length_preset: lengthOf(config.length_preset, base.length_preset),
     // A format that writes in its own style says nothing about the wizard's choice.
     output_style: spec.outputStyle ? base.output_style : (config.output_style ?? 'spoken'),
     speakers,
@@ -529,7 +533,7 @@ export const configFromDebate = (debate: DebateDetail): DebateConfig => {
     news: settings.news ?? undefined,
     language: settings.language,
     num_rounds: settings.num_rounds,
-    length_preset: LENGTH_VALUES.includes(settings.length_preset as LengthPreset) ? (settings.length_preset as LengthPreset) : 'medium',
+    length_preset: lengthOf(settings.length_preset, 'medium'),
     intensity: settings.intensity,
     output_style: settings.output_style,
     participants: debate.participants
@@ -646,7 +650,7 @@ export const sanitizeState = (raw: unknown): WizardState => {
     news: raw.ground === false ? null : sanitizeNews(raw.news),
     language: normalizeLanguage(str(raw.language), base.language),
     num_rounds: Number.isFinite(rounds) ? clamp(Math.round(rounds), MIN_ROUNDS, MAX_ROUNDS) : base.num_rounds,
-    length_preset: oneOf(raw.length_preset, LENGTH_VALUES, base.length_preset),
+    length_preset: lengthOf(raw.length_preset, base.length_preset),
     output_style: oneOf(raw.output_style, ['spoken', 'markdown'] as const, base.output_style),
     speakers: sanitizeSpeakers(raw.speakers, format),
     provider: oneOf(raw.provider, ['edge', 'elevenlabs'] as const, base.provider),

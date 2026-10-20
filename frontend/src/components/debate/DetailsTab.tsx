@@ -11,7 +11,7 @@ interface Props {
   timeline: Timeline | null;
 }
 
-const LENGTHS: Record<string, string> = { very_short: 'very short replies', short: 'short replies', medium: 'medium replies', long: 'long replies' };
+const LENGTHS: Record<string, string> = { very_short: 'short replies', short: 'medium replies', medium: 'long replies', long: 'very long replies' };
 const PROVIDERS: Record<string, string> = { elevenlabs: 'ElevenLabs', edge: 'Edge neural voices' };
 
 /** Details tab: who spoke with which model and voice, and the run's facts. */

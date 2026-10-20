@@ -7,7 +7,7 @@ texts are written to be performed, whatever the config's output style.
 """
 
 import re
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 from app.services.formats.base import Format, Messages, Seat, debaters_of
@@ -15,14 +15,16 @@ from app.services.media import music
 from app.services.prompt_builder import intensity_description
 from app.services.scheduler import ScheduledTurn
 
-# Lines (bars) per verse by the length preset.
+# Lines (bars) per verse by the length preset ("long" only in configs saved before it was retired).
 VERSE_LINES: dict[str, int] = {"very_short": 4, "short": 8, "medium": 12, "long": 16}
-MC_INTRO_WORDS = 60
-VERDICT_WORDS_BASE = 50
-VERDICT_WORDS_PER_ROUND = 25
+MC_INTRO_WORDS = 40
+# The judge's score card: a line per round, shown on screen and in the transcript, never voiced.
+CARD_WORDS_PER_ROUND = 14
+CARD_TOTAL_WORDS = 6
 VERSE = "verse"
 
-_TAGS = "[excited] [laughs] [serious] [shouting] [pause]"
+# Delivery cues of the MC and the judge (ElevenLabs audio tags).
+_TAGS = "[shouts] [excited] [whispers] [laughs] [mischievously]"
 _LINE_JUNK = re.compile(r"^\s*(?:[-*•>]+|\d+[.)]|\(\d+\)|#+)\s*")
 # A section label on a line of its own ("Verse 1:", "[Round 2 - GPT]"), never a lyric that starts
 # with such a word ("Round one, I'm coming for your crown").
@@ -32,6 +34,7 @@ _LABEL = re.compile(
     re.I,
 )
 _EDGE_QUOTES = re.compile(r'^[\s"“”«»\']+|[\s"“”«»\']+$')
+_CARD_LINE = re.compile(r"^\W*(?:round\s*\d+|total)\s*[:\-\u2013\u2014]", re.I)
 
 
 def verse_lines(conf: Mapping[str, Any]) -> int:
@@ -52,6 +55,31 @@ def tidy_verse(text: str, lines: int) -> str:
             continue
         out.append(line)
     return "\n".join(out[:lines])
+
+
+def _announcement(conf: Mapping[str, Any]) -> tuple[int, str]:
+    """What the judge says out loud after the score card: (words, what), by the verse length.
+    The round scores are on screen, so a longer battle hears more of the why, not more numbers."""
+    rounds = int(conf.get("num_rounds") or 1)
+    preset = str(conf.get("length_preset") or "")
+    if preset == "very_short":
+        return 15, "the final totals, then the winner"
+    if preset in ("medium", "long"):
+        return 12 + 12 * rounds, (
+            "one quick line per round: who took it and with what (say the round in words, no "
+            "scores), then the final totals and the winner"
+        )
+    return 25, (
+        "the final totals, the one moment that decided the battle in a few words, then the winner"
+    )
+
+
+def is_card_line(line: str, names: Sequence[str]) -> bool:
+    """A line of the judge's score card: "Round 2: Claude 8, GPT 7 - why" or "Total: Claude 15,
+    GPT 14" (a score for every rapper; an announcement that mentions a round has none)."""
+    return bool(_CARD_LINE.match(line)) and all(
+        re.search(rf"{re.escape(name)}\W{{0,3}}\d{{1,2}}\b", line, re.I) for name in names
+    )
 
 
 def _names(conf: Mapping[str, Any]) -> tuple[str, str]:
@@ -95,6 +123,8 @@ class RapBattleFormat(Format):
     soundtrack = "music"
     output_style = "spoken"
     verdict_scores = True
+    voice_stability = 0.0  # the MC and the judge: the widest emotional range
+    announcer_voices = True
     moderation_note = (
         "This is a rap battle: roasting the opposing rapper (an AI model) and its arguments, "
         "trash talk and bragging are expected and fine."
@@ -126,21 +156,30 @@ class RapBattleFormat(Format):
         language = conf.get("language", "English")
         persona = speaker.get("persona_custom") or "You are a high-energy battle rap MC."
         system = (
-            f"You are the MC of a rap battle. Your name is {speaker.get('display_name')}.\n"
-            f"{persona}\n"
-            "You never take a side. Your words are voiced over the beat's intro, so write plain "
-            "spoken lines: no Markdown, no lists, no emojis, no stage directions. You may start "
-            f"one sentence with an emotion cue in square brackets, chosen only from: {_TAGS}.\n"
-            f"IMPORTANT: Write in {language}. Length: about {MC_INTRO_WORDS} words."
+            f"You are {speaker.get('display_name')}, the MC of a rap battle: the ring announcer "
+            "who calls the fighters into the ring and the hype man who gets the crowd on its "
+            f"feet.\n{persona}\n"
+            "You never take a side, and nobody has rapped yet: never give a score or a "
+            "winner. Your words are shouted over the beat's intro:\n"
+            '- short punchy sentences, most of them ending in "!" or "?!";\n'
+            '- hold the moment with "..." before each rapper\'s name, then hit the name in '
+            "CAPITALS, like a ring announcer calling a fighter; write every name exactly as "
+            "given, never respelled, stretched or translated;\n"
+            "- put a delivery cue in square brackets before two or three of the sentences, "
+            f"chosen only from: {_TAGS};\n"
+            "- no Markdown, no lists, no emojis, no stage directions, no sound effects in words.\n"
+            f"IMPORTANT: Write in {language}. At most {MC_INTRO_WORDS} words: every word must hit."
         )
         user = (
             f"Battle topic: {conf.get('topic')}\n"
             + _context(conf)
             + f"\nRappers: {one} raps FOR the topic, {two} raps AGAINST it (if the topic asks "
             f"'A or B?', {one} backs A and {two} backs B).\n"
-            f"\nYour task: hype the crowd, announce the topic, introduce {one} and {two} and "
-            f"their sides, say it is {rounds} round{'s' if rounds != 1 else ''} with the judge "
-            f"scoring each one, and hand the mic to {one}."
+            "\nIn this order: get the crowd going; the topic in one line (a long question cut "
+            f"to its core); call {one} into the ring with their side; call {two} with theirs; "
+            f"there will be {rounds} round{'s' if rounds != 1 else ''} and the judge will score "
+            f"every round; hand the mic to {one}.\n"
+            f"For example: [shouts] In this corner, rapping FOR... {one.upper()}!"
         )
         return [{"role": "system", "content": system}, {"role": "user", "content": user}]
 
@@ -192,26 +231,54 @@ class RapBattleFormat(Format):
         one, two = _names(conf)
         rounds = int(conf.get("num_rounds") or 1)
         language = conf.get("language", "English")
+        words, what = _announcement(conf)
         system = (
             "You are the judge of a rap battle. Score every round: each rapper gets 1 to 10 for "
             "bars, rhymes, punchlines, answering the opponent and making their case on the topic. "
             "The rapper with the higher total wins; a draw only when the totals are equal.\n"
-            "You are speaking on camera over the beat's last bars. Say the winner and the final "
-            f"score in your FIRST sentence. Then one short sentence per round with both scores, "
-            f"exactly like: 'Round 1: {one} 8, {two} 7' and why. Plain spoken prose only: no "
-            "Markdown, no lists, no emojis.\n"
-            f"Length: about {self.verdict_words(conf)} words. Write in {language}."
+            "\nAnswer in two parts.\n"
+            "Part 1, the score card. It is shown on screen and never spoken. One line per round, "
+            "then the totals, in exactly this form, in English whatever the battle's language:\n"
+            f"Round 1: {one} 8, {two} 7 - <why, at most 8 words in {language}>\n"
+            f"Total: {one} <the sum of their round scores>, {two} <the sum of theirs>\n"
+            "Part 2, after an empty line: your announcement, shouted over the beat's last bars "
+            f"like a ring announcer reading the scorecards: {what}. Say the totals of your card. "
+            f"End with the words for 'and the winner is...' in {language}, the '...' kept for "
+            "the pause, and the winner's name in CAPITALS with an exclamation mark (for a draw: "
+            "that it is a DRAW!). At most "
+            f"{words} words, in {language}. Write the names exactly as given, never respelled or "
+            "stretched. Put a delivery cue in square brackets before a sentence or two, chosen "
+            f"only from: {_TAGS}.\n"
+            "Plain text: no Markdown, no lists, no emojis."
         )
         user = (
             f"Battle topic: {conf.get('topic')}\n"
             f"{one} rapped FOR the topic, {two} AGAINST it, {rounds} round(s).\n"
             f"\nThe battle:\n{_history(history)}\n"
-            "\nDeliver your scores and verdict now."
+            "\nYour score card and announcement now."
         )
         return [{"role": "system", "content": system}, {"role": "user", "content": user}]
 
     def verdict_words(self, conf: Mapping[str, Any]) -> int:
-        return VERDICT_WORDS_BASE + VERDICT_WORDS_PER_ROUND * int(conf.get("num_rounds") or 1)
+        rounds = int(conf.get("num_rounds") or 1)
+        return CARD_WORDS_PER_ROUND * rounds + CARD_TOTAL_WORDS + self.voiced_verdict_words(conf)
+
+    def voiced_verdict_words(self, conf: Mapping[str, Any]) -> int:
+        return _announcement(conf)[0]
+
+    def spoken_text(self, conf: Mapping[str, Any], turn_type: str, text: str) -> str:
+        """The verdict without its score card (the score sheet shows it); the whole text when
+        nothing else is left."""
+        if turn_type != "verdict":
+            return text
+        names = _names(conf)
+        lines = text.splitlines()
+        # The card leads (or, from a model that got the order wrong, trails) the announcement.
+        while lines and (not lines[0].strip() or is_card_line(lines[0], names)):
+            lines.pop(0)
+        while lines and (not lines[-1].strip() or is_card_line(lines[-1], names)):
+            lines.pop()
+        return "\n".join(lines).strip() or text
 
     def track_ms(self, conf: Mapping[str, Any], words_per_minute: int) -> int:
         """The plan the build would make, with the MC and the judge at their word budgets."""
@@ -225,7 +292,9 @@ class RapBattleFormat(Format):
         ]
         per_word = 60_000 / words_per_minute
         sections = music.build_plan(
-            round(MC_INTRO_WORDS * per_word), verses, round(self.verdict_words(conf) * per_word)
+            round(MC_INTRO_WORDS * per_word),
+            verses,
+            round(self.voiced_verdict_words(conf) * per_word),
         )
         return music.track_ms(sections)
 

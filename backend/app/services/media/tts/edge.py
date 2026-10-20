@@ -55,7 +55,7 @@ class EdgeProvider:
     def available(self) -> bool:
         return True
 
-    def list_voices(self, language_code: str) -> list[VoiceInfo]:
+    def list_voices(self, language_code: str, *, announcers: bool = False) -> list[VoiceInfo]:
         prefix = language_code.lower()
         out: list[VoiceInfo] = []
         for v in _all_voices():
@@ -76,7 +76,9 @@ class EdgeProvider:
             )
         return out
 
-    def default_voices(self, language_code: str, speakers: list[SpeakerRef]) -> dict[str, str]:
+    def default_voices(
+        self, language_code: str, speakers: list[SpeakerRef], *, announcers: bool = False
+    ) -> dict[str, str]:
         voices = self.list_voices(language_code)
         available = {v.id for v in voices}
         prefs = _DEFAULTS.get(language_code.lower(), {})

@@ -561,6 +561,9 @@ class ScoreboardScene(_Scene):
     winner_id: str | None = None  # None: a draw
     headline: Annotated[str, BeforeValidator(_clip(160))] = ""
     rounds: list[ScoreboardRound] = Field(default_factory=list)  # rap battles: the score sheet
+    # Score sheets: ms after the scene's start when the winner is crowned (the judge calls the
+    # result); None: right after the totals.
+    decide_ms: int | None = Field(default=None, ge=0)
 
 
 # What the visual director may design.

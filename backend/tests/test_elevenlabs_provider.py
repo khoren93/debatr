@@ -231,3 +231,85 @@ def test_pick_default_voices_matches_names_with_descriptions() -> None:
 def test_estimate_usd() -> None:
     assert estimate_usd("eleven_v3", 12_000) == 1.2
     assert estimate_usd("unknown", 100) is None
+
+
+def test_v4_takes_tags_context_language_and_the_stability_asked_for() -> None:
+    bodies: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        bodies.append(json.loads(request.content))
+        return httpx.Response(
+            200, json={"audio_base64": base64.b64encode(b"x").decode(), "alignment": None}
+        )
+
+    provider = _provider(handler)
+    provider.synthesize(
+        SynthRequest("[shouts] GO!", "v1", "eleven_v4", "ru", previous_text="Ready?", stability=0.0)
+    )
+    provider.synthesize(SynthRequest("Hi", "v1", "eleven_v4", "en"))
+    provider.synthesize(SynthRequest("Hi", "v1", "eleven_v3", "en", stability=0.0))
+    first, default, v3 = bodies
+    assert first["text"] == "[shouts] GO!" and first["previous_text"] == "Ready?"
+    assert first["language_code"] == "ru" and first["voice_settings"] == {"stability": 0.0}
+    assert default["voice_settings"] == {"stability": 0.5}
+    assert v3["voice_settings"] == {"stability": 0.0} and "language_code" not in v3
+
+
+def test_show_formats_get_announcers_first() -> None:
+    voices = [
+        VoiceInfo("g", "George - Warm", gender="male"),
+        VoiceInfo("s", "Sarah - Confident", gender="female"),
+        VoiceInfo("ann", "David - Sports Arena Announcer", gender="male"),
+        VoiceInfo("tr", "Don - Movie Trailer Narrator", gender="male"),
+        VoiceInfo("b", "Bill - Wise", gender="male"),
+    ]
+    speakers = [
+        SpeakerRef("participant_0", "moderator", 0),
+        SpeakerRef("participant_1", "debater", 0),
+        SpeakerRef("judge", "judge", 0),
+    ]
+    fixed = {"moderator": "ann", "judge": "tr"}
+    picked = pick_default_voices(voices, speakers, fixed=fixed)
+    assert picked["participant_0"] == "ann" and picked["judge"] == "tr"
+    assert picked["participant_1"] not in ("ann", "tr")
+    # A debater listed before the judge never takes the judge's announcer.
+    later_judge = [SpeakerRef("participant_1", "debater", 0), SpeakerRef("judge", "judge", 0)]
+    only = [VoiceInfo("tr", "Don", gender="male"), VoiceInfo("s", "Sarah", gender="female")]
+    assert pick_default_voices(only, later_judge, fixed=fixed) == {
+        "participant_1": "s",
+        "judge": "tr",
+    }
+    # An announcer the list does not have leaves the usual choice.
+    assert pick_default_voices(voices, speakers, fixed={"moderator": "zzz"})["participant_0"] == "g"
+
+
+def test_announcers_come_from_the_account_or_the_library() -> None:
+    from app.services.media.tts import elevenlabs
+
+    elevenlabs._voices_cache.clear()
+    searched: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        path = request.url.path
+        if path == "/v1/voices":
+            own = {"voice_id": "DduhIyyKkOosbP8VefhP", "name": "David - Sports Arena Announcer"}
+            return httpx.Response(200, json={"voices": [{"voice_id": "g", "name": "George"}, own]})
+        if path == "/v1/user/subscription":
+            return httpx.Response(200, json={"tier": "starter"})
+        if path == "/v1/shared-voices":
+            searched.append(request.url.params["search"])
+            library = {"voice_id": "JJCR1UICgHnHljtvu5uF", "name": "Don - Movie Trailer Narrator"}
+            return httpx.Response(200, json={"voices": [{"voice_id": "other"}, library]})
+        raise AssertionError(path)
+
+    provider = _provider(handler)
+    voices = provider.list_voices("en", announcers=True)
+    assert [v.id for v in voices] == ["DduhIyyKkOosbP8VefhP", "JJCR1UICgHnHljtvu5uF", "g"]
+    assert searched == ["Movie Trailer Narrator"]  # the account had the host's already
+    speakers = [SpeakerRef("participant_0", "moderator", 0), SpeakerRef("judge", "judge", 0)]
+    assert provider.default_voices("en", speakers, announcers=True) == {
+        "participant_0": "DduhIyyKkOosbP8VefhP",
+        "judge": "JJCR1UICgHnHljtvu5uF",
+    }
+    assert [v.id for v in provider.list_voices("en")] == ["g", "DduhIyyKkOosbP8VefhP"]
+    elevenlabs._voices_cache.clear()

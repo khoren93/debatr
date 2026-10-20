@@ -177,6 +177,8 @@ export interface ScoreboardScene extends SceneBase {
   headline: string;
   /** The judge's scores per round (rap battles): the score sheet. */
   rounds?: { round: number; scores: Record<string, number> }[];
+  /** Score sheets: ms after the scene's start when the winner is crowned (the judge's call). */
+  decide_ms?: number | null;
 }
 
 export type Scene =

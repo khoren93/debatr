@@ -106,6 +106,7 @@ class TurnTask:
     previous_text: str | None
     next_text: str | None
     voice_id: str
+    stability: float | None = None  # Format.voice_stability
 
 
 @dataclass
@@ -120,8 +121,12 @@ class TurnAudio:
     cached: bool
 
 
-def _turn_hash(provider: str, model_id: str, voice_id: str, text: str) -> str:
+def _turn_hash(
+    provider: str, model_id: str, voice_id: str, text: str, stability: float | None = None
+) -> str:
     payload = "|".join([provider, model_id, voice_id, text, str(settings.MEDIA_LOUDNESS_LUFS)])
+    if stability is not None:  # turns voiced before the setting keep their hash
+        payload += f"|stability={stability}"
     return hashlib.sha256(payload.encode()).hexdigest()
 
 
@@ -195,7 +200,9 @@ def _synthesize_turn(
 ) -> TurnAudio:
     wav = paths.turn_wav(task.seq_index)
     meta_path = paths.turn_meta(task.seq_index)
-    digest = _turn_hash(options.provider, options.model_id, task.voice_id, task.text)
+    digest = _turn_hash(
+        options.provider, options.model_id, task.voice_id, task.text, task.stability
+    )
 
     if not force and wav.exists() and meta_path.exists():
         meta = json.loads(meta_path.read_text())
@@ -229,6 +236,7 @@ def _synthesize_turn(
                     language_code=code,
                     previous_text=previous,
                     next_text=following,
+                    stability=task.stability,
                 )
             )
             raw = paths.turn_raw(task.seq_index, i, result.ext)
@@ -649,8 +657,9 @@ def _build(db: Session, debate: Debate, options: MediaOptions, force: bool) -> B
         refs.append(SpeakerRef(s.id, s.role, debater_index if s.role == "debater" else 0))
         if s.role == "debater":
             debater_index += 1
+    fmt = format_of(conf)
     if any(s.id not in options.voices for s in speakers):
-        defaults = provider.default_voices(code, refs)
+        defaults = provider.default_voices(code, refs, announcers=fmt.announcer_voices)
         options = options.model_copy(update={"voices": {**defaults, **options.voices}})
     for s in speakers:
         s.voice_id = options.voices.get(s.id)
@@ -658,12 +667,11 @@ def _build(db: Session, debate: Debate, options: MediaOptions, force: bool) -> B
     allow_tags = provider.name == "elevenlabs" and options.model_id in TAG_MODELS
     cleaned: list[tuple[Turn, TimelineSpeaker, str]] = []
     for t in turns:
-        text = clean_markdown(t.text)
+        text = clean_markdown(fmt.spoken_text(conf, t.turn_type, t.text))
         if not allow_tags:
             text = strip_audio_tags(text)
         if text:
             cleaned.append((t, _speaker_for(t, speakers_by_id), text))
-    fmt = format_of(conf)
     if fmt.soundtrack == "music":
         return _build_battle(
             db,
@@ -696,6 +704,7 @@ def _build(db: Session, debate: Debate, options: MediaOptions, force: bool) -> B
                 previous_text=cleaned[i - 1][2] if i > 0 else None,
                 next_text=cleaned[i + 1][2] if i + 1 < len(cleaned) else None,
                 voice_id=voice_id,
+                stability=fmt.voice_stability,
             )
         )
 
@@ -865,6 +874,7 @@ def _build_battle(
 ) -> BuildResult:
     """A soundtrack of one generated track (rap battle): the MC and the judge are voiced by TTS
     and talk over the track's intro and outro, the verses are rapped in the track itself."""
+    fmt = format_of(debate.config_json or {})
     voiced: dict[int, TurnAudio] = {}
     tasks: list[TurnTask] = []
     for t, speaker, text in cleaned:
@@ -874,7 +884,17 @@ def _build_battle(
         if not voice_id:
             raise RuntimeError(f"No voice selected for {speaker.name}")
         tasks.append(
-            TurnTask(t.seq_index, speaker, t.round_id, t.turn_type, text, None, None, voice_id)
+            TurnTask(
+                t.seq_index,
+                speaker,
+                t.round_id,
+                t.turn_type,
+                text,
+                None,
+                None,
+                voice_id,
+                fmt.voice_stability,
+            )
         )
     set_media_state(
         db,
@@ -961,7 +981,6 @@ def _build_battle(
         if sec.kind == "verse" and sec.seq_index is not None
     }
 
-    fmt = format_of(debate.config_json or {})
     segments: list[TimelineSegment] = []
     for t, speaker, text in cleaned:
         if t.seq_index in voiced:

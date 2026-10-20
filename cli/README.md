@@ -76,12 +76,12 @@ debatr run "Tabs or spaces?" --format rap_battle --audio --flow smooth --flow fi
 | `-d, --debater MODEL` | A debater's model; repeat for each (1–7). Default: `openrouter/free` twice. |
 | `-n, --name` / `-s, --stance` | Names and personas, in the order of `-d`. By default the first argues for, the second against. |
 | `--host MODEL` / `--no-host` | The host opens each round and judges (default `openrouter/free`). |
-| `-r, --rounds`, `-l, --length` | 1–10 rounds; turns `very_short`, `short`, `medium` or `long`. |
+| `-r, --rounds`, `-l, --length` | 1–10 rounds; turns `very_short` (~50 words), `short` (~100) or `medium` (~250). |
 | `--language`, `--intensity`, `--style` | Debate language, 1 calm … 10 fierce, `markdown` or `spoken`. |
 | `-c, --context TEXT` | Background the speakers should know. |
 | `--scenes`, `--fact-check` | Design charts and schemes for the web page; web fact-check of the figures (paid). |
 | `--audio`, `--voices` | Voice it when done (free `edge` voices or premium `elevenlabs`). |
-| `--format rap_battle`, `--flow FLOW` | A rap battle: an MC and two rappers trade verses (4/8/12/16 lines by `--length`), 1–3 rounds, the judge scores each round. With `--audio` ElevenLabs makes one track of beat and verses (paid); `--flow` sets how each rapper sounds (`debatr formats`). |
+| `--format rap_battle`, `--flow FLOW` | A rap battle: an MC and two rappers trade verses (4/8/12 lines by `--length`), 1–3 rounds, the judge scores each round. With `--audio` ElevenLabs makes one track of beat and verses (paid); `--flow` sets how each rapper sounds (`debatr formats`). |
 | `--public` | Publish to the gallery when finished (after an automatic content check). Private by default. |
 | `--cover` / `--no-cover` | An AI cover when it completes (≈ $0.04 from your credits, or your OpenRouter key). Runs from the CLI get none unless asked. |
 | `-y, --yes`, `--max-cost USD` | Start paid runs without a prompt; refuse runs estimated above a limit. |

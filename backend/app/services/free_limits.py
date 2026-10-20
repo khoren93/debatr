@@ -35,7 +35,8 @@ from app.services.runtime_settings import Levers
 logger = logging.getLogger(__name__)
 
 WINDOW_SECONDS = 24 * 3600
-LENGTH_NAMES = {"very_short": "very short", "short": "short", "medium": "medium", "long": "long"}
+# What the site calls the presets (the wizard's labels).
+LENGTH_NAMES = {"very_short": "short", "short": "medium", "medium": "long", "long": "very long"}
 
 
 @dataclass(frozen=True)

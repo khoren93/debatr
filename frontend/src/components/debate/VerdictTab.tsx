@@ -1,5 +1,5 @@
 import type { Turn, Verdict } from '../../api/types';
-import { JUDGE_COLOR, shortModelName } from '../../lib/format';
+import { JUDGE_COLOR, shortModelName, splitEmotionTag } from '../../lib/format';
 import { markdownHtml } from '../../lib/markdown';
 import { EmptyState } from '../ui';
 import type { SpeakerInfo } from './helpers';
@@ -117,7 +117,7 @@ export const VerdictTab = ({ verdict, verdictTurn, lineup, isActive, markdown, h
           {markdown ? (
             <div className="prose prose-invert prose-sm mt-3 max-w-none text-text-2 prose-p:my-1.5 prose-headings:my-2 prose-strong:text-text" dangerouslySetInnerHTML={{ __html: markdownHtml(fullText) }} />
           ) : (
-            <p className="mt-3 whitespace-pre-line text-[15px] leading-[1.6] text-text-2">{fullText.replace(/^\s*\[[^\]]{1,30}\]\s*/, '')}</p>
+            <p className="mt-3 whitespace-pre-line text-[15px] leading-[1.6] text-text-2">{splitEmotionTag(fullText).body}</p>
           )}
         </details>
       )}

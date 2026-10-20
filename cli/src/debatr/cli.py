@@ -62,7 +62,6 @@ class Length(str, Enum):
     very_short = "very_short"
     short = "short"
     medium = "medium"
-    long = "long"
 
 
 class Style(str, Enum):
@@ -663,7 +662,12 @@ def run(
     ] = False,
     rounds: Annotated[int, typer.Option("--rounds", "-r", min=1, max=10)] = 2,
     length: Annotated[
-        Length, typer.Option("--length", "-l", help="Length of a turn.")
+        Length,
+        typer.Option(
+            "--length",
+            "-l",
+            help="Length of a turn: ~50, ~100 or ~250 words (battle: 4/8/12 lines).",
+        ),
     ] = Length.short,
     language: Annotated[
         str, typer.Option("--language", help="Language of the debate.")

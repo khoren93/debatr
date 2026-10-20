@@ -183,7 +183,7 @@ def fallback_round_scores(
 
 def _first_sentence(text: str) -> str:
     cleaned = re.sub(r"[*#_`>]+", "", text).strip()
-    cleaned = re.sub(r"^\s*\[[^\]]{1,30}\]\s*", "", cleaned)  # leading [emotion] tag
+    cleaned = re.sub(r"\[[a-zA-Z][a-zA-Z ,'-]{0,40}\]\s*", "", cleaned)  # [emotion] tags
     match = re.search(r"[^.!?\n]{8,}[.!?]", cleaned)
     return (match.group(0) if match else cleaned[:160]).strip()
 
@@ -233,7 +233,8 @@ def structure_verdict(
     debaters = debaters_from_config(conf)
     fmt = format_of(conf)
     rounds = int(conf.get("num_rounds") or 1) if fmt.verdict_scores else 0
-    fallback = fallback_verdict(verdict_text, debaters)
+    # What the judge said out loud: a battle's score card has reasons that may read like a draw.
+    fallback = fallback_verdict(fmt.spoken_text(conf, "verdict", verdict_text), debaters)
     if rounds:
         fallback["rounds"] = fallback_round_scores(verdict_text, debaters, rounds)
     if not verdict_text.strip() or not debaters:

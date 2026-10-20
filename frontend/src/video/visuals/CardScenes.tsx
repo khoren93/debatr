@@ -187,7 +187,9 @@ const ScoreSheetView = ({ scene, ctx }: { scene: ScoreboardScene; ctx: SceneCtx 
   const totals = debaters.map((d) => rounds.reduce((sum, r) => sum + (r.scores[d.id] ?? 0), 0));
   const rowAt = (i: number) => 600 + i * 550;
   const totalAt = rowAt(rounds.length);
-  const decided = easeOut(ramp(t, totalAt + 500, 450));
+  // The winner is crowned when the judge calls the result (`decide_ms`), never before the totals.
+  const decideAt = Math.max(totalAt + 500, scene.decide_ms ?? 0);
+  const decided = easeOut(ramp(t, decideAt, 450));
   const winnerIndex = debaters.findIndex((d) => d.id === scene.winner_id);
   const row = (i: number) => tableTop + rowH * i;
   return (
@@ -199,7 +201,7 @@ const ScoreSheetView = ({ scene, ctx }: { scene: ScoreboardScene; ctx: SceneCtx 
         {winnerIndex >= 0 && (
           <Stroke
             d={sketch.ellipse(cx(winnerIndex), row(rounds.length) + rowH / 2, scoreFs * 2.6, rowH * 1.05, seed + 9, { roughness: 1.3 })}
-            p={easeOut(ramp(t, totalAt + 500, 600))}
+            p={easeOut(ramp(t, decideAt, 600))}
             color={debaters[winnerIndex].color}
             width={5 * k}
           />
@@ -213,7 +215,7 @@ const ScoreSheetView = ({ scene, ctx }: { scene: ScoreboardScene; ctx: SceneCtx 
           <div key={d.id} style={{ position: 'absolute', left: labelW + colW * i, top: 0, width: colW, height: tableTop, opacity: Math.min(1, enter * 2) * dim, transform: `translateY(${(1 - easeOut(enter)) * 24 * k}px)` }}>
             {winner && (
               <div style={{ position: 'absolute', left: (colW - crownH) / 2, top: 0 }}>
-                <DrawnIcon name="crown" size={crownH} color={d.color} p={easeInOut(ramp(t, totalAt + 600, 800))} strokeWidth={1.8} fill={t > totalAt + 1400 ? `${d.color}40` : undefined} />
+                <DrawnIcon name="crown" size={crownH} color={d.color} p={easeInOut(ramp(t, decideAt + 100, 800))} strokeWidth={1.8} fill={t > decideAt + 900 ? `${d.color}40` : undefined} />
               </div>
             )}
             <div style={{ position: 'absolute', left: (colW - logo) / 2, top: crownH }}>
@@ -253,7 +255,7 @@ const ScoreSheetView = ({ scene, ctx }: { scene: ScoreboardScene; ctx: SceneCtx 
         ))}
       </div>
       {scene.headline && (
-        <Reveal p={easeOut(ramp(t, totalAt + 900, 450))} style={{ position: 'absolute', left: w * 0.04, right: w * 0.04, bottom: 0, height: headH, display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center', fontFamily: FONT, fontWeight: 700, fontSize: fitFont(scene.headline, w * 0.9, 2, 34 * k, 22 * k), lineHeight: 1.2, color: INK }}>
+        <Reveal p={easeOut(ramp(t, decideAt + 400, 450))} style={{ position: 'absolute', left: w * 0.04, right: w * 0.04, bottom: 0, height: headH, display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center', fontFamily: FONT, fontWeight: 700, fontSize: fitFont(scene.headline, w * 0.9, 2, 34 * k, 22 * k), lineHeight: 1.2, color: INK }}>
           {scene.headline}
         </Reveal>
       )}

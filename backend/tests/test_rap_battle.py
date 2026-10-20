@@ -147,12 +147,68 @@ def test_mc_and_judge_prompts() -> None:
     schedule = RAP.schedule(conf)
     system, user = RAP.host_messages(conf, conf["participants"][0], schedule[0], [])
     assert "MC of a rap battle" in system["content"] and "never take a side" in system["content"]
+    assert "ring announcer" in system["content"] and "At most 40 words" in system["content"]
+    assert "[shouts]" in system["content"]
     assert "Claude raps FOR the topic, GPT raps AGAINST it" in user["content"]
-    assert "2 rounds" in user["content"] and "hand the mic to Claude" in user["content"]
+    assert "there will be 2 rounds" in user["content"] and "never give a score" in system["content"]
+    assert "hand the mic to Claude" in user["content"] and "FOR... CLAUDE!" in user["content"]
     verdict_system, verdict_user = RAP.verdict_messages(conf, [])
-    assert "'Round 1: Claude 8, GPT 7'" in verdict_system["content"]
-    assert "about 100 words" in verdict_system["content"]  # 50 + 25 per round
+    assert "Round 1: Claude 8, GPT 7 - <why" in verdict_system["content"]
+    assert "Total: Claude <the sum" in verdict_system["content"]
+    assert "never spoken" in verdict_system["content"]
     assert "2 round(s)" in verdict_user["content"]
+
+
+@pytest.mark.parametrize(
+    ("length", "words", "what"),
+    [
+        ("very_short", 15, "the final totals, then the winner"),
+        ("short", 25, "the one moment that decided the battle"),
+        ("medium", 12 + 12 * 2, "one quick line per round"),
+        ("long", 12 + 12 * 2, "one quick line per round"),  # saved before it was retired
+    ],
+)
+def test_the_announcement_grows_with_the_verse_length(length: str, words: int, what: str) -> None:
+    conf = _conf(num_rounds=2, length_preset=length)
+    system = RAP.verdict_messages(conf, [])[0]["content"]
+    assert what in system and f"At most {words} words" in system
+    assert RAP.voiced_verdict_words(conf) == words
+    assert RAP.verdict_words(conf) == 14 * 2 + 6 + words  # the card is written, not spoken
+
+
+def test_only_the_announcement_is_spoken() -> None:
+    conf = _conf(num_rounds=2)
+    verdict = (
+        "Round 1: Claude 8, GPT 7 - the cache line landed\n"
+        "**Round 2:** Claude 7, GPT 9 - GPT flipped it\n"
+        "Total: Claude 15, GPT 16\n"
+        "\n"
+        "[shouts] Round two was a war! Claude 15, GPT 16... and the winner is... GPT!"
+    )
+    assert RAP.spoken_text(conf, "verdict", verdict) == (
+        "[shouts] Round two was a war! Claude 15, GPT 16... and the winner is... GPT!"
+    )
+    # A card at the end (the order got wrong) goes too; other turns and card-less text stay.
+    swapped = "And the winner is... GPT!\nRound 1: Claude 8, GPT 9 - sharper"
+    assert RAP.spoken_text(conf, "verdict", swapped) == "And the winner is... GPT!"
+    assert RAP.spoken_text(conf, "verse", verdict) == verdict
+    assert (
+        RAP.spoken_text(conf, "verdict", "Round 1: Claude 8, GPT 7") == "Round 1: Claude 8, GPT 7"
+    )
+    assert FORMATS["debate"].spoken_text(conf, "verdict", verdict) == verdict
+    # The card still feeds the fallback scores.
+    assert fallback_round_scores(verdict, DEBATERS, 2) == [
+        {"round": 1, "scores": {"participant_1": 8, "participant_2": 7}},
+        {"round": 2, "scores": {"participant_1": 7, "participant_2": 9}},
+    ]
+
+
+def test_long_was_retired_for_new_runs() -> None:
+    conf = _conf(length_preset="long")
+    assert DebateConfig.model_validate(conf).length_preset == "medium"
+    assert DebateConfig.stored(conf).length_preset == "long"
+    assert RAP.voice_stability == 0.0 and RAP.announcer_voices
+    assert FORMATS["debate"].voice_stability is None and not FORMATS["debate"].announcer_voices
 
 
 # --- lyrics as they are saved ----------------------------------------------------------------------
@@ -231,3 +287,31 @@ def test_structuring_asks_for_scores_and_the_formats_rules() -> None:
         topic="t", description=None, extra_rules=RAP.moderation_note
     )
     assert "roasting the opposing rapper" in check["content"]
+
+
+def test_the_fallback_verdict_reads_the_announcement() -> None:
+    from app.services import verdict as verdict_service
+
+    conf = _conf(num_rounds=1)
+    text = (
+        "Round 1: Claude 6, GPT 8 - Claude tied itself in knots\n"
+        "Total: Claude 6, GPT 8\n"
+        "\n"
+        "[shouts] Final totals: Claude 6, GPT 8! [excited] And the winner is... GPT!"
+    )
+
+    def broken(*args: Any, **kwargs: Any) -> Any:
+        raise RuntimeError("no structuring model")
+
+    import app.services.media.llm as llm
+
+    original = llm.complete
+    llm.complete = broken  # type: ignore[assignment]
+    try:
+        out, moderation, _ = verdict_service.structure_verdict(conf, text, model="m/x")
+    finally:
+        llm.complete = original  # type: ignore[assignment]
+    assert moderation is None and out["source"] == "fallback"
+    assert out["winner_name"] == "GPT" and not out["is_draw"]  # "tied" is on the card
+    assert out["headline"] == "Final totals: Claude 6, GPT 8!"
+    assert out["rounds"] == [{"round": 1, "scores": {"participant_1": 6, "participant_2": 8}}]

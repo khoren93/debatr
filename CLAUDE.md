@@ -362,6 +362,9 @@ docker compose exec api python -m app.manage credits user@example.com 5 --reason
    puts the OpenRouter key to use in Redis (`debate:{id}:provider_key`, TTL) — the request key or
    the account's encrypted key, never in Postgres — and enqueues `start_debate_job`.
    `POST /api/debates/{id}/start` queues a draft; `PATCH` replaces a draft's config.
+   Reply lengths: the site calls `very_short` / `short` / `medium` Short / Medium / Long (~50 /
+   ~100 / ~250 words; battles 4 / 8 / 12 lines); `long` (~500 words) was retired: a new config
+   that sends it runs as `medium` (`DebateConfig._retired_length`), saved ones keep it.
 2. The worker chains RQ jobs: `start_debate_job` → `process_turn_job(seq_index)` per turn →
    `conduct_verdict_job` → `finish_debate_job`. Each job opens its own blocking DB session
    (`NullPool`, safe across RQ forks). With visual scenes on, every saved turn first goes
@@ -370,7 +373,8 @@ docker compose exec api python -m app.manage credits user@example.com 5 --reason
 3. The debate's format (`services/formats`, `DebateConfig.format`, `format_of(conf)`: none or
    unknown → `debate`) is the single source of truth for turn order (`Format.schedule`), the
    prompts (`host_messages` / `debater_messages` / `verdict_messages`), the verdict's word budget
-   (`verdict_words`, also used by the estimate), the round labels (`round_label` → `TurnOut`,
+   (`verdict_words`, also used by the estimate; `voiced_verdict_words` / `spoken_text`: what of
+   it is voiced, a battle's score card is not), the round labels (`round_label` → `TurnOut`,
    `turn_started`, timeline segments) and its limits (`problems`, checked by `DebateConfig`).
    The orchestrator, the estimate, the recovery and the console never branch on a format id.
    `debate` (the only format so far) wraps `scheduler.build_schedule()` and `prompt_builder`:
@@ -387,8 +391,13 @@ docker compose exec api python -m app.manage credits user@example.com 5 --reason
    `rap_battle` (`formats/rap_battle.py`): an MC (required) opens, exactly two rappers trade verses
    for 1–3 rounds (the second opens round 2), Rapper One for the topic and Rapper Two against
    (for "A or B?" topics: A / B); a verse is exactly N lines (very_short 4, short 8, medium 12,
-   long 16; `finish_text` tidies the answer into lines); the judge scores every round
-   (`verdict_json.rounds`, from the structuring call or `fallback_round_scores`); no scenes, the
+   long 16 in old configs; `finish_text` tidies the answer into lines). The MC is a ring announcer
+   (≤ 40 words, names in CAPITALS after "...", `[shouts]`-style cues; never scores). The judge
+   writes a score card first ("Round N: A 8, B 7 - why" per round, "Total: A 15, B 14", in English
+   whatever the language: `verdict_json.rounds` from the structuring call or
+   `fallback_round_scores`), then a shouted announcement that is the only voiced part
+   (`spoken_text`): the totals and "and the winner is... NAME!", plus the deciding moment
+   (Medium) or a line per round (Long); no scenes, the
    output style is always spoken, the gallery check allows trash talk (`moderation_note`). Audio
    is optional but premium only (`voices="elevenlabs"`: Edge → 400, no Edge fallback in
    `_auto_media`) and comes from one generated track (`soundtrack="music"`, see the media
@@ -675,7 +684,13 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
    answers 402. Only an own key ElevenLabs accepts unlocks them: `useElevenLabsKeyStatus` checks
    it via `GET /media/voices` (502 = rejected) and a rejected key is neither used nor sent.
    `output_style=spoken` in `DebateConfig` asks the models for plain spoken prose with
-   optional `[emotion]` tags, which ElevenLabs v3 understands.
+   optional `[emotion]` tags, which ElevenLabs v3 / v4 understand. New builds default to
+   `eleven_v4` (`TTS_DEFAULT_MODEL_ID`, wizard `ELEVENLABS_MODEL`: tags, `previous_text`,
+   `language_code`); `voice_settings.stability` is 0.5 unless the format sets
+   `voice_stability` (rap battle: 0 = the widest emotional range; part of the turn cache key).
+   Formats with `announcer_voices` (rap battle) give the host and the judge Voice Library
+   announcers by default (`tts/elevenlabs.ANNOUNCERS` per language, English for the rest; found
+   by search until the first use copies them into the account; `GET /media/voices?format=`).
 
 - Rap battles (`soundtrack="music"`, `jobs._build_battle`): the MC's intro and the verdict are
   voiced by ElevenLabs TTS (`_synthesize_turn`, cached per turn); then `media/music.build_plan`
@@ -725,7 +740,8 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   name) or before the verdict ends, and `make_room` cuts the director's scenes around it.
   Formats whose judge scores every round (`verdict_scores`, rap battle) get it even without
   scenes, with `rounds` (the score sheet: `ScoreSheetView`, rows revealed one by one, totals,
-  crown) shown to the end of the verdict.
+  crown) up from the verdict's first word to its end; the crown comes on the judge's last call
+  of the result (`final_call_index` → `ScoreboardScene.decide_ms`).
 - `map` scenes take ISO alpha-3 codes (`schemas/geo.py`: alpha-2, a few English names and `EU`
   are normalized; countries missing from the 110m atlas are dropped). `frontend/.../geo.ts`
   holds the same `COUNTRY_TABLE`, draws `world-atlas` 110m with d3-geo (Natural Earth, zoomed to

@@ -157,7 +157,7 @@ const CreateDebate = () => {
   const premiumUsable = elevenlabsKey.length > 0 || (billing.elevenlabs_available && !premiumLocked);
   // A premium-only format always asks for ElevenLabs (its lock says why it cannot run).
   const provider = spec.premiumOnly ? 'elevenlabs' : state.provider === 'elevenlabs' && !premiumUsable ? 'edge' : state.provider;
-  const catalogue = useVoices(provider, state.language, debaters, state.step >= 2, provider === 'elevenlabs' ? elevenlabsKey : '');
+  const catalogue = useVoices(provider, state.language, debaters, state.step >= 2, provider === 'elevenlabs' ? elevenlabsKey : '', state.format);
   // Without a catalogue the server picks the voices (the Speakers step says so).
   const resolvedVoices = catalogue.error ? {} : resolveVoices(state, catalogue.voices, catalogue.defaults);
 

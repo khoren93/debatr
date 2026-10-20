@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import { getErrorMessage, getErrorStatus } from '../../api/client';
 import { useAuth } from '../../auth/AuthContext';
-import { deleteMedia, generateMedia, getMediaCapabilities, getVoices } from '../../api/media';
+import { deleteMedia, ELEVENLABS_MODEL, generateMedia, getMediaCapabilities, getVoices } from '../../api/media';
 import type { DebateDetail, DebateMedia, ImageSource, MediaCapabilities, TTSProviderName, VoiceInfo } from '../../api/types';
 import { useBillingConfig } from '../../hooks/useBillingConfig';
 import { ttsKeyUsable, useElevenLabsKeyStatus } from '../../hooks/useElevenLabsKeyStatus';
@@ -14,7 +14,8 @@ import { accountPath } from '../account/tabs';
 import { Button, ConfirmDialog, Dropdown, ErrorBox, Hint, Input, Label, Modal, useToast } from '../ui';
 
 const MODEL_LABELS: Record<string, string> = {
-  eleven_v3: 'eleven_v3 — most expressive, understands [emotion] tags',
+  eleven_v4: 'eleven_v4 — newest, most emotive, understands [emotion] tags',
+  eleven_v3: 'eleven_v3 — previous expressive model, understands tags',
   eleven_multilingual_v2: 'eleven_multilingual_v2 — stable, no tags',
   eleven_flash_v2_5: 'eleven_flash_v2_5 — cheap draft',
 };
@@ -79,7 +80,7 @@ export const RegenerateAudioDialog = ({ open, onClose, debate, media, onQueued }
   const provider: TTSProviderName = spec.premiumOnly
     ? 'elevenlabs'
     : (providerChoice ?? media?.options?.provider ?? (plannedProvider === 'elevenlabs' && caps?.elevenlabs ? 'elevenlabs' : (caps?.default_provider ?? 'edge')));
-  const modelId = modelChoice ?? media?.options?.model_id ?? debate.media_plan?.model_id ?? caps?.default_model_id ?? 'eleven_v3';
+  const modelId = modelChoice ?? media?.options?.model_id ?? debate.media_plan?.model_id ?? caps?.default_model_id ?? ELEVENLABS_MODEL;
   const rows = useMemo<SpeakerRow[]>(
     () => [
       ...debate.participants.map((p, i) => ({ id: p.id || `participant_${i}`, name: p.name ?? `Speaker ${i + 1}`, flow: spec.music && p.role === 'debater' })),

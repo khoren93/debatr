@@ -18,6 +18,7 @@ from app.schemas.visuals import (
     RebuttalScene,
     ScaleScene,
     Scene,
+    ScoreboardRound,
     ScoreboardScene,
     StatScene,
     TimelineVisual,
@@ -36,6 +37,7 @@ from app.services.media.visuals import (
     build_director_messages,
     debater_label,
     diversify,
+    final_call_index,
     is_grounded,
     make_room,
     parse_scenes,
@@ -869,3 +871,40 @@ def test_tiny_charts_from_requests_are_rescued() -> None:
     assert isinstance(stat, StatScene) and stat.value == 30 and stat.suffix == "%"
     assert stat.label == "Transit use" and stat.anchor == "rose by over 30 percent"
     assert isinstance(bars, BarsScene) and [i.value for i in bars.items] == [10, 12]
+
+
+SHEET_VERDICT = (
+    "[shouts] Round two was a war! Atlas wins nothing tonight. The totals: Atlas 15, Nova 16... "
+    "and the winner is... NOVA!"
+)
+
+
+def test_a_score_sheet_is_up_for_the_whole_verdict_and_crowns_on_the_last_call() -> None:
+    seg = _verdict_segment(SHEET_VERDICT)
+    rounds = [
+        ScoreboardRound(round=1, scores={"a": 8, "b": 7}),
+        ScoreboardRound(round=2, scores={"a": 7, "b": 9}),
+    ]
+    board = scoreboard_visual(seg, ["a", "b"], winner_id="b", winner_name="Nova", rounds=rounds)
+    assert isinstance(board.scene, ScoreboardScene) and board.anchored
+    assert board.start_ms == seg.start_ms and board.end_ms > seg.end_ms
+    words = seg.words
+    last_nova = max(i for i, w in enumerate(words) if w.w.strip("!.").lower() == "nova")
+    assert board.scene.decide_ms == words[last_nova].s
+    # No call found: crowned after the totals, as before.
+    quiet = scoreboard_visual(
+        _verdict_segment("Scores are in."),
+        ["a", "b"],
+        winner_id="b",
+        winner_name="Nova",
+        rounds=rounds,
+    )
+    assert isinstance(quiet.scene, ScoreboardScene)
+    assert quiet.scene.decide_ms is None and not quiet.anchored
+
+
+def test_final_call_index_takes_the_last_announcement() -> None:
+    words = _untimed("Nova wins round one, Atlas wins round two, and the winner is... NOVA!")
+    assert final_call_index(words, "Nova") == len(words) - 1
+    assert final_call_index(_untimed("A draw! Yes, a DRAW!"), None) == 4
+    assert final_call_index(_untimed("Nova was great"), "Nova") is None

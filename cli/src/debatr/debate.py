@@ -16,7 +16,8 @@ from urllib.parse import urljoin, urlsplit
 FREE_MODEL = "openrouter/free"  # OpenRouter's router over the free models
 HOST_NAME = "The Host"
 DEBATER_NAMES = ("Nova", "Atlas", "Quill", "Sage", "Echo", "Juno", "Rook", "Vega")
-LENGTHS = ("very_short", "short", "medium", "long")
+# The site calls them short / medium / long (~50 / ~100 / ~250 words a turn).
+LENGTHS = ("very_short", "short", "medium")
 STYLES = ("markdown", "spoken")
 VOICE_ENGINES = ("edge", "elevenlabs")
 # Show formats (`GET /api/formats`): a debate, or a rap battle of an MC and two rappers voiced by

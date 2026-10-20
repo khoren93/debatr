@@ -83,11 +83,11 @@ class DebaterSpec(BaseModel):
     )
 
 
-Length = Literal["very_short", "short", "medium", "long"]
+Length = Literal["very_short", "short", "medium"]  # ~50 / ~100 / ~250 words a turn
 Show = Literal["debate", "rap_battle"]
 SHOW_HELP = (
     "debate, or rap_battle: an MC and exactly two rappers trade verses over one beat for 1-3 "
-    "rounds (rounds of 4/8/12/16 lines by length); with audio the track is made by ElevenLabs "
+    "rounds (verses of 4/8/12 lines by length); with audio the track is made by ElevenLabs "
     "Music and is paid from the user's credits."
 )
 FLOWS_HELP = (

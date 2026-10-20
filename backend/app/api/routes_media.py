@@ -161,16 +161,18 @@ async def media_voices(
     language: str = Query("English"),
     debate_id: str | None = Query(None),
     participants: int = Query(0, ge=0, le=8, description="debaters, when no debate id is given"),
+    format: str | None = Query(None, max_length=40, description="show format, without a debate"),
     x_tts_key: str | None = Header(default=None, alias="X-TTS-Key"),
     db: AsyncSession = Depends(get_db),
 ) -> VoicesResponse:
     """Voices for a provider, plus a default assignment for the debate's speakers.
 
     Without a debate id (the create wizard) pass `participants` = number of debaters to get
-    defaults for a moderator, that many debaters and the judge."""
+    defaults for a moderator, that many debaters and the judge, and the show `format`."""
     if provider not in PROVIDER_NAMES:
         raise HTTPException(status_code=400, detail="Unknown provider")
     refs: list[SpeakerRef] = []
+    fmt = format_of({"format": format})
     if debate_id:
         debate = await db.get(Debate, _parse_uuid(debate_id))
         if not debate:
@@ -178,6 +180,7 @@ async def media_voices(
         conf = debate.config_json or {}
         refs = speaker_refs(conf.get("participants", []))
         language = conf.get("language") or language
+        fmt = format_of(conf)
     elif participants > 0:
         refs = speaker_refs(
             [{"role": "moderator"}] + [{"role": "debater"} for _ in range(participants)]
@@ -193,8 +196,13 @@ async def media_voices(
             status_code=409, detail="ElevenLabs key is not configured (send X-TTS-Key or use Edge)"
         )
     try:
-        voices = await run_in_threadpool(tts.list_voices, code)
-        defaults = await run_in_threadpool(tts.default_voices, code, refs) if refs else {}
+        announcers = fmt.announcer_voices
+        voices = await run_in_threadpool(lambda: tts.list_voices(code, announcers=announcers))
+        defaults = (
+            await run_in_threadpool(lambda: tts.default_voices(code, refs, announcers=announcers))
+            if refs
+            else {}
+        )
     except TTSError as e:
         raise HTTPException(status_code=502, detail=str(e)) from e
     own_key = provider == "elevenlabs" and bool(x_tts_key)
@@ -232,8 +240,10 @@ async def get_debate_media(
 
 async def _spoken_chars(db: AsyncSession, debate: Debate) -> int:
     turns = (await db.execute(select(Turn).where(Turn.debate_id == debate.id))).scalars().all()
+    conf = debate.config_json or {}
+    fmt = format_of(conf)
     return sum(
-        len(clean_markdown(t.text or ""))
+        len(clean_markdown(fmt.spoken_text(conf, t.turn_type, t.text)))
         for t in turns
         if t.text and not t.error and not t.text.strip().startswith("[Error")
     )

@@ -82,7 +82,8 @@ interface Pending {
 
 const loadSettings = () => getSettings();
 
-const LENGTH_LABELS: Record<string, string> = { very_short: 'very short', short: 'short', medium: 'medium', long: 'long' };
+// The site's names of the presets (ids very_short / short / medium; long was retired).
+const LENGTH_LABELS: Record<string, string> = { very_short: 'short', short: 'medium', medium: 'long' };
 const CHOICE_LABELS: Record<string, string> = { off: 'off', paid: 'paid runs', all_public: 'all public debates' };
 
 // Text and model lists take the row's whole width under the description.

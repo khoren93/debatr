@@ -11,13 +11,17 @@ import type {
 export const getMediaCapabilities = () =>
   api.get<MediaCapabilities>('/media/capabilities').then((r) => r.data);
 
+/** The ElevenLabs model new debates are voiced with (backend TTS_DEFAULT_MODEL_ID). */
+export const ELEVENLABS_MODEL = 'eleven_v4';
+
 /**
  * Voice catalogue for a provider. Pass a debate id for an existing debate, or the debate
- * language plus the number of debaters (create wizard) to get default voice assignments.
+ * language, the number of debaters and the show format (create wizard: a battle's host and
+ * judge default to announcer voices) to get default voice assignments.
  */
 export const getVoices = (
   provider: TTSProviderName,
-  target: { debateId: string } | { language: string; participants: number },
+  target: { debateId: string } | { language: string; participants: number; format?: string },
   ttsKey?: string,
 ) =>
   api
@@ -25,7 +29,7 @@ export const getVoices = (
       params:
         'debateId' in target
           ? { provider, debate_id: target.debateId }
-          : { provider, language: target.language, participants: target.participants },
+          : { provider, language: target.language, participants: target.participants, format: target.format },
       headers: ttsKey ? { 'X-TTS-Key': ttsKey } : undefined,
       timeout: 60_000,
     })

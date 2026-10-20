@@ -659,6 +659,21 @@ def announcement_index(words: list[tuple[str, int, int]], winner: str | None) ->
     return None
 
 
+def final_call_index(words: list[tuple[str, int, int]], winner: str | None) -> int | None:
+    """Index of the word where the judge names the result for the last time: the winner's name
+    next to a win word ("...and the winner is... NOVA!"), or the last draw word."""
+    tokens = [normalize_token(w[0]) for w in words]
+    if winner is None:
+        return next(
+            (i for i in reversed(range(len(tokens))) if _DRAW_RE.fullmatch(tokens[i])), None
+        )
+    name = next((normalize_token(t) for t in winner.split() if normalize_token(t)), "")
+    for i in reversed(range(len(tokens))):
+        if tokens[i] == name and any(_WIN_RE.fullmatch(t) for t in tokens[max(0, i - 6) : i + 3]):
+            return i
+    return None
+
+
 def scoreboard_visual(
     segment: TimelineSegment,
     debater_ids: list[str],
@@ -670,11 +685,20 @@ def scoreboard_visual(
 ) -> TimelineVisual:
     """The judge's result on the stage, from the structured verdict (no LLM): shown when the
     judge announces it, otherwise shortly before the verdict ends. A score sheet (`rounds`, rap
-    battles) stays to the end of the verdict, which goes through the rounds one by one."""
+    battles) is up for the whole verdict and crowns the winner on the judge's last call."""
     words = [(w.w, w.s, w.e) for w in segment.words]
     duration = segment.end_ms - segment.start_ms
-    at = announcement_index(words, winner_name if winner_id else None)
-    if at is not None:
+    winner = winner_name if winner_id else None
+    at = announcement_index(words, winner)
+    decide_ms: int | None = None
+    if rounds:
+        # The judge reads the score sheet out: it is up from the first word, and the winner is
+        # crowned when the judge calls the result.
+        start = 0
+        call = final_call_index(words, winner)
+        decide_ms = words[call][1] if call is not None else None
+        at = call
+    elif at is not None:
         start = max(0, words[at][1] - LEAD_MS)
     else:
         start = max(0, duration - SCOREBOARD_MS - SCOREBOARD_TAIL_MS)
@@ -685,6 +709,7 @@ def scoreboard_visual(
         winner_id=winner_id,
         headline=headline,
         rounds=list(rounds),
+        decide_ms=decide_ms,
     )
     return TimelineVisual(
         id=f"v{segment.seq_index}_score",

@@ -20,14 +20,23 @@ from app.services.media.tts import SpeakerRef, SynthRequest, SynthResult, TTSErr
 logger = logging.getLogger(__name__)
 
 OUTPUT_FORMAT = "mp3_44100_128"
-MODELS: tuple[str, ...] = ("eleven_v3", "eleven_multilingual_v2", "eleven_flash_v2_5")
+MODELS: tuple[str, ...] = (
+    "eleven_v4",
+    "eleven_v3",
+    "eleven_multilingual_v2",
+    "eleven_flash_v2_5",
+)
 # Only these accept language_code; v2/v3 detect the language themselves.
-LANGUAGE_CODE_MODELS = frozenset({"eleven_flash_v2_5", "eleven_turbo_v2_5"})
-# Only v3 understands [audio tags]; for other models they are stripped.
-TAG_MODELS = frozenset({"eleven_v3"})
+LANGUAGE_CODE_MODELS = frozenset({"eleven_v4", "eleven_flash_v2_5", "eleven_turbo_v2_5"})
+# Only v3 and v4 understand [audio tags]; for other models they are stripped.
+TAG_MODELS = frozenset({"eleven_v4", "eleven_v3"})
 # v3 rejects previous_text / next_text ("not yet supported with the 'eleven_v3' model").
 NO_CONTEXT_TEXT_MODELS = frozenset({"eleven_v3"})
+# Models whose delivery follows `voice_settings.stability` (lower = a wider emotional range).
+STABILITY_MODELS = frozenset({"eleven_v4", "eleven_v3"})
+DEFAULT_STABILITY = 0.5
 USD_PER_1K_CHARS: dict[str, float] = {
+    "eleven_v4": 0.10,
     "eleven_v3": 0.10,
     "eleven_multilingual_v2": 0.10,
     "eleven_flash_v2_5": 0.05,
@@ -39,6 +48,26 @@ USD_PER_1K_CHARS: dict[str, float] = {
 LIBRARY_PAGE_SIZE = 60
 _VOICES_TTL = 300.0
 _voices_cache: dict[tuple[str, str], tuple[float, list[VoiceInfo]]] = {}
+
+# Show formats (Format.announcer_voices): Voice Library voices for the host and the judge, as
+# (voice id, search words that find it in the library). Languages without their own take the
+# English ones (v3 / v4 speak every language with them). A library voice is copied into the
+# account's voices on its first use (no voice slot); until then it is found by its words.
+ANNOUNCERS: dict[str, dict[str, tuple[str, str]]] = {
+    "en": {
+        "moderator": ("DduhIyyKkOosbP8VefhP", "Sports Arena Announcer"),
+        "judge": ("JJCR1UICgHnHljtvu5uF", "Movie Trailer Narrator"),
+    },
+    "ru": {
+        "moderator": ("txnCCHHGKmYIwrn7HfHQ", "Alexandr Vlasov"),
+        "judge": ("hU3rD0Yk7DoiYULTX1pD", "Dmitry Energetic and Confident"),
+    },
+}
+
+
+def announcers_for(language_code: str) -> dict[str, tuple[str, str]]:
+    return ANNOUNCERS.get(language_code) or ANNOUNCERS["en"]
+
 
 _ROLE_PREFERENCES: dict[str, list[str]] = {
     "moderator": ["George", "Daniel", "Brian", "Roger"],
@@ -95,11 +124,13 @@ class ElevenLabsProvider:
 
     # --- voices ------------------------------------------------------------
 
-    def list_voices(self, language_code: str) -> list[VoiceInfo]:
-        """The account's voices plus, on paid plans, library voices native to the language.
+    def list_voices(self, language_code: str, *, announcers: bool = False) -> list[VoiceInfo]:
+        """The account's voices plus, on paid plans, library voices native to the language
+        (and the announcers of show formats, first).
 
         Voices verified for the language come first. Cached per key and language."""
-        cache_key = (hashlib.sha256(self._api_key.encode()).hexdigest()[:16], language_code)
+        digest = hashlib.sha256(self._api_key.encode()).hexdigest()[:16]
+        cache_key = (digest, f"{language_code}:announcers" if announcers else language_code)
         cached = _voices_cache.get(cache_key)
         if cached and time.monotonic() - cached[0] < _VOICES_TTL:
             return list(cached[1])
@@ -119,9 +150,38 @@ class ElevenLabsProvider:
                 voices += [
                     v for v in self._library_voices(client, language_code) if v.id not in known
                 ]
-        voices.sort(key=lambda v: 0 if language_code in v.languages else 1)
+            voices.sort(key=lambda v: 0 if language_code in v.languages else 1)
+            if announcers and paid:
+                voices = self._announcers(client, language_code, voices) + voices
         _voices_cache[cache_key] = (time.monotonic(), voices)
         return list(voices)
+
+    def _announcers(
+        self, client: httpx.Client, language_code: str, voices: list[VoiceInfo]
+    ) -> list[VoiceInfo]:
+        """The announcer voices for the language, taken out of `voices` when the account has
+        them already, else found in the library (a bare entry when the search misses)."""
+        out: list[VoiceInfo] = []
+        for role, (voice_id, words) in announcers_for(language_code).items():
+            own = next((v for v in voices if v.id == voice_id), None)
+            if own is not None:
+                voices.remove(own)
+                out.append(own)
+                continue
+            response = self._request(
+                client,
+                "GET",
+                f"{self.base_url}/v1/shared-voices",
+                params={"search": words, "page_size": 30},
+                attempts=1,
+            )
+            found = (
+                [v for v in response.json().get("voices") or [] if v.get("voice_id") == voice_id]
+                if response.status_code == 200
+                else []
+            )
+            out.append(_voice_info(found[0]) if found else VoiceInfo(id=voice_id, name=role))
+        return out
 
     def _paid_plan(self, client: httpx.Client) -> bool:
         """Whether the key's plan may use Voice Library voices (unknown counts as no)."""
@@ -149,9 +209,16 @@ class ElevenLabsProvider:
             if v.get("voice_id") and (v.get("rate") or 1.0) <= 1.0 and not v.get("fiat_rate")
         ]
 
-    def default_voices(self, language_code: str, speakers: list[SpeakerRef]) -> dict[str, str]:
-        voices = self.list_voices(language_code)
-        return pick_default_voices(voices, speakers, language_code)
+    def default_voices(
+        self, language_code: str, speakers: list[SpeakerRef], *, announcers: bool = False
+    ) -> dict[str, str]:
+        voices = self.list_voices(language_code, announcers=announcers)
+        fixed = (
+            {role: voice_id for role, (voice_id, _) in announcers_for(language_code).items()}
+            if announcers
+            else {}
+        )
+        return pick_default_voices(voices, speakers, language_code, fixed=fixed)
 
     # --- synthesis ---------------------------------------------------------
 
@@ -169,8 +236,9 @@ class ElevenLabsProvider:
                 body["next_text"] = strip_audio_tags(request.next_text)[:500]
         if request.model_id in LANGUAGE_CODE_MODELS:
             body["language_code"] = request.language_code
-        if request.model_id == "eleven_v3":
-            body["voice_settings"] = {"stability": 0.5}
+        if request.model_id in STABILITY_MODELS:
+            stability = DEFAULT_STABILITY if request.stability is None else request.stability
+            body["voice_settings"] = {"stability": stability}
 
         with self._client() as client:
             url = f"{self.base_url}/v1/text-to-speech/{request.voice_id}/with-timestamps"
@@ -281,20 +349,34 @@ def _error_message(response: httpx.Response) -> str:
 
 
 def pick_default_voices(
-    voices: list[VoiceInfo], speakers: list[SpeakerRef], language_code: str = "en"
+    voices: list[VoiceInfo],
+    speakers: list[SpeakerRef],
+    language_code: str = "en",
+    *,
+    fixed: dict[str, str] | None = None,
 ) -> dict[str, str]:
     """Assign distinct voices by role preference, falling back to unused voices (pure).
 
     For non-English debates with native voices only those are used, alternating genders so
-    neighbouring speakers are easy to tell apart."""
+    neighbouring speakers are easy to tell apart. `fixed`: role -> voice id taken first (show
+    formats' announcers), when the list has it."""
     native = [v for v in voices if language_code in v.languages]
     pool = native if language_code != "en" and native else voices
     by_name = {v.name.split(" - ")[0].lower(): v.id for v in pool}
     gender = {v.id: (v.gender or "").lower() for v in voices}
-    used: set[str] = set()
+    listed = {v.id for v in voices}
     out: dict[str, str] = {}
+    # The fixed voices are reserved for their roles before anyone else picks.
+    for speaker in speakers:
+        wanted = (fixed or {}).get(speaker.role)
+        if wanted in listed and wanted not in out.values():
+            out[speaker.id] = wanted
+    used: set[str] = set(out.values())
     last_gender = ""
     for speaker in speakers:
+        if speaker.id in out:
+            last_gender = gender.get(out[speaker.id], "")
+            continue
         prefs = _ROLE_PREFERENCES.get(speaker.role, _ROLE_PREFERENCES["debater"])
         if speaker.role == "debater":
             prefs = prefs[speaker.index % len(prefs) :] + prefs[: speaker.index % len(prefs)]

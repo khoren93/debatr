@@ -17,6 +17,8 @@ class SynthRequest:
     language_code: str
     previous_text: str | None = None
     next_text: str | None = None
+    # How expressive the delivery is (ElevenLabs stability, 0-1); None: the provider's default.
+    stability: float | None = None
 
 
 @dataclass
@@ -56,9 +58,12 @@ class TTSProvider(Protocol):
 
     def available(self) -> bool: ...
 
-    def list_voices(self, language_code: str) -> list[VoiceInfo]: ...
+    # `announcers`: the host and the judge of a show format get announcer voices (ElevenLabs).
+    def list_voices(self, language_code: str, *, announcers: bool = False) -> list[VoiceInfo]: ...
 
-    def default_voices(self, language_code: str, speakers: list[SpeakerRef]) -> dict[str, str]: ...
+    def default_voices(
+        self, language_code: str, speakers: list[SpeakerRef], *, announcers: bool = False
+    ) -> dict[str, str]: ...
 
     def synthesize(self, request: SynthRequest) -> SynthResult: ...
 

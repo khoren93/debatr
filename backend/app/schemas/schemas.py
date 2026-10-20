@@ -12,6 +12,8 @@ from pydantic import (
 
 from app.schemas.visuals import Scene, SceneCheck
 
+# The site calls them short / medium / long; "long" (~500 words) is only in configs saved before
+# it was retired (`DebateConfig` runs a new one as medium).
 LengthPreset = Literal["very_short", "short", "medium", "long"]
 ParticipantRole = Literal["moderator", "debater"]
 # Show formats (services/formats); a new one is added to this list and to the registry.
@@ -105,7 +107,7 @@ class MediaPlan(BaseModel):
     """What to produce automatically once the debate finishes (chosen in the wizard)."""
 
     provider: TTSProvider = "edge"
-    model_id: str = Field(default="eleven_v3", max_length=100)
+    model_id: str = Field(default="eleven_v4", max_length=100)
     voices: dict[str, str] = Field(default_factory=dict)  # speaker id -> provider voice id
     outputs: list[MediaOutput] = Field(default_factory=lambda: ["audio", "video", "short"])
     quality: VideoQuality = "1080p"
@@ -183,6 +185,15 @@ class DebateConfig(BaseModel):
     def _topic_fits_the_video(cls, value: str, info: ValidationInfo) -> str:
         if len(value) > TOPIC_MAX_LENGTH and not (info.context or {}).get("stored"):
             raise ValueError(f"The topic must be at most {TOPIC_MAX_LENGTH} characters")
+        return value
+
+    @field_validator("length_preset")
+    @classmethod
+    def _retired_length(cls, value: LengthPreset, info: ValidationInfo) -> LengthPreset:
+        """ "long" (~500 words a turn) was retired: nobody watches that long. Old clients that
+        still send it get the longest preset left; saved configs keep theirs."""
+        if value == "long" and not (info.context or {}).get("stored"):
+            return "medium"
         return value
 
     @classmethod
