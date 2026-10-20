@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { apiInternalUrl, forwardedHeaders, serverApi, type ApiErrorData } from './server.server';
+import type { ApiErrorData } from './route';
+import { apiInternalUrl, forwardedHeaders, serverApi } from './server.server';
 
 /** What `serverApi` threw: React Router's route error data (status, headers, body). */
 const thrown = async (promise: Promise<unknown>) => {
@@ -32,6 +33,7 @@ describe('forwardedHeaders', () => {
     const headers = forwardedHeaders(visitor());
     expect(Object.fromEntries(headers)).toEqual({
       accept: 'application/json',
+      'x-debatr-render': 'server',
       cookie: '__Host-session=signed',
       'x-forwarded-for': '203.0.113.7',
       'user-agent': 'Mozilla/5.0 (Test)',
@@ -41,7 +43,7 @@ describe('forwardedHeaders', () => {
 
   it('leaves out headers the visitor did not send', () => {
     const headers = forwardedHeaders(new Request('http://site.test/'));
-    expect([...headers.keys()]).toEqual(['accept']);
+    expect([...headers.keys()]).toEqual(['accept', 'x-debatr-render']);
   });
 });
 
@@ -64,6 +66,9 @@ describe('serverApi', () => {
   it('reads the internal URL from the environment', () => {
     expect(apiInternalUrl()).toBe('http://api:8000');
     vi.stubEnv('API_INTERNAL_URL', '');
+    vi.stubEnv('VITE_DEV_API_TARGET', 'http://localhost');
+    expect(apiInternalUrl()).toBe('http://localhost');
+    vi.stubEnv('VITE_DEV_API_TARGET', '');
     expect(apiInternalUrl()).toBe('http://localhost:8000');
   });
 

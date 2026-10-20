@@ -1,74 +1,17 @@
-import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router';
-import { Layers, Plus } from 'lucide-react';
-import { getErrorMessage, getErrorStatus } from '../api/client';
-import { getMotion } from '../api/motions';
+import { Plus } from 'lucide-react';
 import type { MotionPage } from '../api/types';
 import { Page, PageTitle } from '../components/layout/AppShell';
 import { CardStats, CoverBadge, DebateCard, DebateCover } from '../components/cards';
-import { Avatar, Button, EmptyState, ErrorBox, LinkButton, PageLoader } from '../components/ui';
+import { Avatar, LinkButton } from '../components/ui';
 
 /** Language of a version when the topic is debated in more than one. */
 const LanguageBadge = ({ code }: { code: string }) => (
   <span className="inline-block rounded-md bg-black/55 px-2 py-[3px] font-mono text-[10px] uppercase tracking-[0.06em] text-text backdrop-blur-sm">{code}</span>
 );
 
-/** `/t/:slug`: one topic and every published version of it (other models, other languages). */
-const Topic = () => {
-  const { slug = '' } = useParams<{ slug: string }>();
-  const navigate = useNavigate();
-  const [attempt, setAttempt] = useState(0);
-  const key = `${slug}#${attempt}`;
-  const [loaded, setLoaded] = useState<{ key: string; page: MotionPage } | null>(null);
-  const [failure, setFailure] = useState<{ key: string; message: string; missing: boolean } | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    getMotion(slug)
-      .then((page) => {
-        if (cancelled) return;
-        // A topic merged into another one answers with that one: show its own address.
-        if (page.slug !== slug) navigate(`/t/${page.slug}`, { replace: true });
-        else setLoaded({ key, page });
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) setFailure({ key, message: getErrorMessage(err), missing: getErrorStatus(err) === 404 });
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [slug, key, navigate]);
-
-  const page = loaded?.key === key ? loaded.page : null;
-  const error = failure?.key === key ? failure : null;
-
-  if (error?.missing) {
-    return (
-      <Page>
-        <EmptyState className="mt-6" icon={<Layers className="size-5" />} title="Nothing published on this topic" text="Its debates are private or were taken down." action={<LinkButton to="/gallery">Browse the gallery</LinkButton>} />
-      </Page>
-    );
-  }
-  if (error) {
-    return (
-      <Page>
-        <div className="mt-6 flex flex-col items-start gap-3">
-          <ErrorBox className="w-full">Could not load the topic: {error.message}</ErrorBox>
-          <Button variant="secondary" onClick={() => setAttempt((n) => n + 1)}>
-            Try again
-          </Button>
-        </div>
-      </Page>
-    );
-  }
-  if (!page) {
-    return (
-      <Page>
-        <PageLoader label="Loading the topic…" />
-      </Page>
-    );
-  }
-
+/** `/t/:slug`: one topic and every published version of it (other models, other languages);
+ *  the route loads it (a merged topic redirects to the one it went into). */
+const Topic = ({ page }: { page: MotionPage }) => {
   const languages = new Set(page.items.map((item) => item.language_code));
   // The remix starts from the most liked version (the list comes most liked first).
   const best = page.items[0];

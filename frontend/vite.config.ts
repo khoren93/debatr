@@ -1,8 +1,12 @@
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { defineConfig, type Plugin } from 'vite';
-import react from '@vitejs/plugin-react';
+import { reactRouter } from '@react-router/dev/vite';
 import tailwindcss from '@tailwindcss/vite';
+import { defineConfig, type Plugin } from 'vite';
+
+/** React Router's Fast Refresh preamble: its plugin adds refresh code to every module of src/,
+ *  the console's included, and the site's pages load this in <Scripts />. */
+const REFRESH_PREAMBLE = '<script type="module" src="/@id/__x00__virtual:react-router/inject-hmr-runtime"></script>';
 
 /** `npm run dev`: the admin console is its own SPA (admin.html, built by vite.admin.config.ts);
  *  page loads under /admin get its document, so it runs on this port like it does on the site's
@@ -17,6 +21,7 @@ const consolePage = (): Plugin => ({
       if (!page) return next();
       readFile(resolve(server.config.root, 'admin.html'), 'utf8')
         .then((html) => server.transformIndexHtml(url, html))
+        .then((html) => html.replace('<script type="module" src="/src/admin-main.tsx">', `${REFRESH_PREAMBLE}\n    <script type="module" src="/src/admin-main.tsx">`))
         .then((html) => {
           res.setHeader('Content-Type', 'text/html; charset=utf-8');
           res.setHeader('Cache-Control', 'no-cache');
@@ -27,9 +32,9 @@ const consolePage = (): Plugin => ({
   },
 });
 
-// https://vite.dev/config/
+// https://vite.dev/config/ — the console's page goes before React Router's server rendering.
 export default defineConfig({
-  plugins: [react(), tailwindcss(), consolePage()],
+  plugins: [tailwindcss(), consolePage(), reactRouter()],
   server: {
     port: 5173,
     // Local dev: proxy API (incl. SSE) to the backend so no CORS setup is needed.

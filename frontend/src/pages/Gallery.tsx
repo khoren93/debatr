@@ -1,62 +1,31 @@
-import { useEffect, useState } from 'react';
-import { Link, useSearchParams } from 'react-router';
+import { Link, useNavigation, useSearchParams } from 'react-router';
 import { AudioLines, MicVocal, Play, Trophy, X } from 'lucide-react';
-import { getErrorMessage } from '../api/client';
-import { listGallery } from '../api/gallery';
-import { GALLERY_CATEGORIES, type FormatId, type GalleryCategory, type GalleryItem, type GalleryPeriod, type GallerySort } from '../api/types';
+import type { GalleryItem } from '../api/types';
 import { Page, PageTitle } from '../components/layout/AppShell';
 import { CardStats, CoverBadge, DebateCard, DebateCover, VersionsBadge } from '../components/cards';
-import { Avatar, Button, Chip, EmptyState, ErrorBox, LinkButton, ModelIcon, PageLoader, Segmented } from '../components/ui';
+import { Avatar, Button, Chip, EmptyState, LinkButton, ModelIcon, Segmented } from '../components/ui';
 import { shortModelName } from '../lib/format';
-
-type CategoryFilter = 'all' | GalleryCategory;
+import { CATEGORY_OPTIONS, FORMAT_OPTIONS, PERIOD_OPTIONS, SORT_OPTIONS, type GalleryFilters } from '../lib/gallery';
 
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
-const CATEGORY_OPTIONS: { value: CategoryFilter; label: string }[] = [
-  { value: 'all', label: 'All' },
-  ...GALLERY_CATEGORIES.map((c) => ({ value: c, label: capitalize(c) })),
-];
-
-const SORT_OPTIONS: { value: GallerySort; label: string }[] = [
-  { value: 'trending', label: 'Trending' },
-  { value: 'new', label: 'New' },
-  { value: 'top', label: 'Top' },
-];
-
-const PERIOD_OPTIONS: { value: GalleryPeriod; label: string }[] = [
-  { value: 'week', label: 'Week' },
-  { value: 'month', label: 'Month' },
-  { value: 'year', label: 'Year' },
-  { value: 'all', label: 'All time' },
-];
-
-type FormatFilter = 'all' | FormatId;
-
-const FORMAT_OPTIONS: { value: FormatFilter; label: string }[] = [
-  { value: 'all', label: 'All shows' },
-  { value: 'debate', label: 'Debates' },
-  { value: 'rap_battle', label: 'Rap battles' },
-];
-
-const oneOf = <T extends string>(value: string | null, options: { value: T }[], fallback: T): T => options.find((o) => o.value === value)?.value ?? fallback;
+interface Props {
+  filters: GalleryFilters;
+  items: GalleryItem[];
+}
 
 /**
  * Public gallery: one card per topic, whose cover is the version that earned it its place (the
- * most trending, newest or most liked one matching the filters). Sort, period, format and the
- * model / voice filters live in the URL (`?sort=top&period=week&format=rap_battle&model=…&voices=premium`).
+ * most trending, newest or most liked one matching the filters). Every filter lives in the URL
+ * (`?sort=top&period=week&format=rap_battle&category=tech&model=…&voices=premium`): changing one is
+ * a navigation, and the route's loaders bring the cards (lib/gallery.ts).
  */
-const Gallery = () => {
-  const [params, setParams] = useSearchParams();
-  const sort = oneOf(params.get('sort'), SORT_OPTIONS, 'trending');
-  const period = oneOf(params.get('period'), PERIOD_OPTIONS, 'all');
-  const model = params.get('model')?.trim() || null;
-  const premium = params.get('voices') === 'premium';
-  const format = oneOf(params.get('format'), FORMAT_OPTIONS, 'all');
-  const [category, setCategory] = useState<CategoryFilter>('all');
-  const [attempt, setAttempt] = useState(0);
-  const [result, setResult] = useState<{ key: string; items: GalleryItem[] } | null>(null);
-  const [failure, setFailure] = useState<{ key: string; message: string } | null>(null);
+const Gallery = ({ filters, items }: Props) => {
+  const { sort, period, format, category, model, premium } = filters;
+  const [, setParams] = useSearchParams();
+  const navigation = useNavigation();
+  // While other filters load keep this grid on screen, dimmed.
+  const loading = navigation.state === 'loading' && navigation.location.pathname === '/gallery';
 
   const setParam = (name: string, value: string | null) =>
     setParams(
@@ -66,53 +35,11 @@ const Gallery = () => {
         else next.set(name, value);
         return next;
       },
-      { replace: true },
+      { replace: true, preventScrollReset: true },
     );
 
-  // One key per (filters, retry) so responses for a stale request are ignored.
-  const key = `${category}|${sort}|${period}|${format}|${model ?? ''}|${premium}#${attempt}`;
-
-  useEffect(() => {
-    let cancelled = false;
-    listGallery({
-      category: category === 'all' ? undefined : category,
-      sort,
-      period: sort === 'top' ? period : undefined,
-      model: model ?? undefined,
-      premium_voices: premium || undefined,
-      format: format === 'all' ? undefined : format,
-      group: 'motion',
-    })
-      .then((res) => {
-        if (!cancelled) setResult({ key, items: res.items });
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) setFailure({ key, message: getErrorMessage(err) });
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [category, sort, period, format, model, premium, key]);
-
-  const items = result?.key === key ? result.items : null;
-  const error = failure?.key === key ? failure.message : null;
-  const loading = items === null && error === null;
-  // While a new category loads keep the previous grid on screen, dimmed.
-  const shown = items ?? (loading ? (result?.items ?? null) : null);
-
   const renderBody = () => {
-    if (error !== null) {
-      return (
-        <div className="mt-6 flex flex-col items-start gap-3">
-          <ErrorBox className="w-full">Could not load the gallery: {error}</ErrorBox>
-          <Button variant="secondary" onClick={() => setAttempt((n) => n + 1)}>
-            Try again
-          </Button>
-        </div>
-      );
-    }
-    if (shown === null) return <PageLoader label="Loading the gallery…" />;
-    if (shown.length === 0) {
+    if (items.length === 0) {
       if (format === 'rap_battle') {
         return (
           <EmptyState
@@ -183,7 +110,7 @@ const Gallery = () => {
           title={`No ${capitalize(category)} debates yet`}
           text="Nobody has published a debate in this category so far."
           action={
-            <Button variant="secondary" onClick={() => setCategory('all')}>
+            <Button variant="secondary" onClick={() => setParam('category', null)}>
               Show all categories
             </Button>
           }
@@ -192,7 +119,7 @@ const Gallery = () => {
     }
     return (
       <div className={`mt-[22px] grid grid-cols-[repeat(auto-fill,minmax(min(100%,320px),1fr))] gap-5 transition-opacity ${loading ? 'pointer-events-none opacity-50' : ''}`} aria-busy={loading}>
-        {shown.map((item, i) => {
+        {items.map((item, i) => {
           const author = item.author_name?.trim() || 'Anonymous';
           return (
             <DebateCard
@@ -259,7 +186,7 @@ const Gallery = () => {
         aria-label="Categories"
       >
         {CATEGORY_OPTIONS.map((opt) => (
-          <Chip key={opt.value} className="shrink-0" active={opt.value === category} onClick={() => setCategory(opt.value)}>
+          <Chip key={opt.value} className="shrink-0" active={opt.value === category} onClick={() => setParam('category', opt.value === 'all' ? null : opt.value)}>
             {opt.label}
           </Chip>
         ))}

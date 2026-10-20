@@ -64,7 +64,7 @@ from app.services.moderation import publish_async
 from app.services.openrouter_client import openrouter_client
 from app.services.queue_manager import enqueue_debate_start
 from app.services.resume import reset_for_resume, resume_point
-from app.services.views import count_view
+from app.services.views import count_view, counts_as_view
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -644,7 +644,8 @@ async def get_debate(
     debate = await load_debate(db, debate_id, full=True)
     if not can_view(debate, viewer):
         raise HTTPException(status_code=403, detail="This debate is private")
-    await count_view(db, debate, viewer, request)
+    if counts_as_view(request):
+        await count_view(db, debate, viewer, request)
     motion, remix_of = await topic_context(db, debate)
     return detail_out(
         debate,

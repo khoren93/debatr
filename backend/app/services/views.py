@@ -14,6 +14,16 @@ logger = logging.getLogger(__name__)
 
 VIEW_COOLDOWN_SECONDS = 6 * 3600
 
+#: Sent by the page renderer (frontend/src/api/server.server.ts). Its loads are not views: the
+#: page counts itself after hydration (`POST /api/debates/{id}/view`), so crawlers without
+#: JavaScript and pages served from the renderer's micro-cache neither add views nor hide them.
+RENDER_HEADER = "x-debatr-render"
+
+
+def counts_as_view(request: Request) -> bool:
+    """Whether this request for a debate is someone looking at it (not the page renderer)."""
+    return request.headers.get(RENDER_HEADER) != "server"
+
 
 async def count_view(
     db: AsyncSession, debate: Debate, viewer: User | None, request: Request

@@ -1,4 +1,5 @@
 import { data } from 'react-router';
+import { UNAVAILABLE, type ApiErrorData, type ApiGet } from './route';
 
 /**
  * The SSR server's FastAPI client, for route loaders. The `.server` suffix keeps it out of the
@@ -21,11 +22,13 @@ export const API_TIMEOUT_MS = 3000;
 /** Seconds a browser or crawler should wait after a 503. */
 const RETRY_AFTER_S = 30;
 
-export const apiInternalUrl = (): string => (process.env.API_INTERNAL_URL || 'http://localhost:8000').replace(/\/+$/, '');
+/** compose sets http://api:8000; `npm run dev` against the Docker stack reuses VITE_DEV_API_TARGET. */
+export const apiInternalUrl = (): string => (process.env.API_INTERNAL_URL || process.env.VITE_DEV_API_TARGET || 'http://localhost:8000').replace(/\/+$/, '');
 
-/** The headers of the visitor's request that go along to the API. */
+/** The headers of the visitor's request that go along to the API, marked as the renderer's
+ *  (backend views.RENDER_HEADER: its loads count no views, the page's beacon does). */
 export const forwardedHeaders = (request: Request): Headers => {
-  const headers = new Headers({ accept: 'application/json' });
+  const headers = new Headers({ accept: 'application/json', 'x-debatr-render': 'server' });
   for (const name of FORWARDED_HEADERS) {
     const value = request.headers.get(name);
     if (value) headers.set(name, value);
@@ -33,14 +36,7 @@ export const forwardedHeaders = (request: Request): Headers => {
   return headers;
 };
 
-/** What the error boundary gets: the API's `detail` when it is a sentence. */
-export interface ApiErrorData {
-  status: number;
-  detail: string;
-}
-
-const unavailable = () =>
-  data<ApiErrorData>({ status: 503, detail: 'The service is unavailable right now. Try again in a minute.' }, { status: 503, headers: { 'Retry-After': String(RETRY_AFTER_S) } });
+const unavailable = () => data<ApiErrorData>({ status: 503, detail: UNAVAILABLE }, { status: 503, headers: { 'Retry-After': String(RETRY_AFTER_S) } });
 
 const detailOf = async (response: Response): Promise<string> => {
   try {
@@ -77,3 +73,9 @@ export async function serverApi<T>(request: Request, path: string, { timeoutMs =
   await response.body?.cancel();
   throw unavailable();
 }
+
+/** `serverApi` bound to the visitor's request: the `ApiGet` of server loaders. */
+export const serverGet =
+  (request: Request): ApiGet =>
+  <T>(path: string) =>
+    serverApi<T>(request, path);

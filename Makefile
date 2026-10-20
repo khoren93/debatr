@@ -43,7 +43,7 @@ scheduler: ## Run the periodic jobs (hourly trending-topics check)
 trending: ## Build a fresh batch of trending topics now
 	cd backend && uv run python -m app.scheduler --refresh-trending
 
-web: ## Run the Vite dev server on :5173
+web: ## Run the React Router dev server (SSR + HMR) on :5173
 	cd frontend && npm run dev
 
 migrate: ## Apply database migrations

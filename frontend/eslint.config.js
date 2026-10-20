@@ -47,7 +47,7 @@ const CONSOLE_IMPORTS = [
 ]
 
 export default defineConfig([
-  globalIgnores(['dist', 'build']),
+  globalIgnores(['dist', 'build', '.react-router']),
   {
     files: ['**/*.{ts,tsx}'],
     extends: [
@@ -72,6 +72,16 @@ export default defineConfig([
     files: CLIENT_ONLY,
     rules: {
       '@typescript-eslint/no-restricted-imports': ['error', { patterns: CONSOLE_IMPORTS }],
+    },
+  },
+  {
+    // Route modules export React Router's hooks next to the component.
+    files: ['src/root.tsx', 'src/routes/**/*.{ts,tsx}'],
+    rules: {
+      'react-refresh/only-export-components': [
+        'error',
+        { allowExportNames: ['loader', 'clientLoader', 'action', 'clientAction', 'middleware', 'clientMiddleware', 'headers', 'links', 'meta', 'handle', 'shouldRevalidate', 'ErrorBoundary', 'HydrateFallback', 'Layout'] },
+      ],
     },
   },
   {

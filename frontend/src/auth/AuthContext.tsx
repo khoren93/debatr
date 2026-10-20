@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { getMe, logout as apiLogout } from '../api/auth';
 import type { User } from '../api/types';
+import type { Viewer } from './viewer';
 
 interface AuthState {
   user: User | null;
@@ -15,9 +16,12 @@ interface AuthState {
 
 const AuthContext = createContext<AuthState | null>(null);
 
-export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+/** `viewer`: what the server rendered the page for (the `_site` loader). When it is not final
+ *  (a visit from another site, see Viewer) the browser asks `/auth/me` after hydration. */
+export const AuthProvider = ({ children, viewer }: { children: ReactNode; viewer?: Viewer }) => {
+  const known = viewer?.known ?? false;
+  const [user, setUser] = useState<User | null>(viewer?.user ?? null);
+  const [loading, setLoading] = useState(!known);
 
   const refresh = useCallback(async () => {
     try {
@@ -32,8 +36,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   }, []);
 
-  // Initial probe of the session cookie (setState only inside the promise callbacks).
+  // Probe of the session cookie when the server could not tell (setState only inside the promise callbacks).
   useEffect(() => {
+    if (known) return;
     let cancelled = false;
     getMe()
       .then((me) => {
@@ -48,7 +53,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [known]);
 
   const signOut = useCallback(async () => {
     try {

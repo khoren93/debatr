@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useState } from 'react';
 import { getSiteStatus } from '../api/status';
 import type { SiteStatus } from '../api/types';
 
@@ -25,11 +25,17 @@ const load = (): Promise<SiteStatus> => {
   return inflight;
 };
 
+/** The status the server rendered the page with (the `_site` loader), so the banner is in the HTML. */
+const ServerStatus = createContext<SiteStatus | null>(null);
+export const SiteStatusProvider = ServerStatus.Provider;
+
 /** Sign-ups and maintenance mode (levers of the admin console); open until it answers. */
 export const useSiteStatus = () => {
-  const [status, setStatus] = useState<SiteStatus>(cached?.status ?? OPEN);
+  const served = useContext(ServerStatus);
+  const [status, setStatus] = useState<SiteStatus>(cached?.status ?? served ?? OPEN);
 
   useEffect(() => {
+    if (served && !cached) cached = { at: Date.now(), status: served };
     if (cached && Date.now() - cached.at < FRESH_MS) return;
     let cancelled = false;
     load()
@@ -40,7 +46,7 @@ export const useSiteStatus = () => {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [served]);
 
   return status;
 };

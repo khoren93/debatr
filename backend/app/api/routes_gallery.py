@@ -32,7 +32,7 @@ from app.services.engagement import engagement_out
 from app.services.formats import DEFAULT_FORMAT
 from app.services.free_router import is_free_router
 from app.services.openrouter_client import openrouter_client
-from app.services.views import count_view
+from app.services.views import count_view, counts_as_view
 
 router = APIRouter()
 
@@ -321,7 +321,8 @@ async def get_public_debate(
     debate = (await db.execute(stmt)).scalar_one_or_none()
     if debate is None:
         raise HTTPException(status_code=404, detail="This debate is not public")
-    await count_view(db, debate, viewer, request)
+    if counts_as_view(request):
+        await count_view(db, debate, viewer, request)
     motion, remix_of = await topic_context(db, debate)
     return detail_out(
         debate,

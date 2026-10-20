@@ -163,17 +163,23 @@ export const SegmentBar = ({ segments, head = null, onSeek, onPick, onKeyDown, a
 // --- Placeholders ----------------------------------------------------------------
 
 interface PendingProps {
-  timeline: Timeline;
+  /** null until the audio's timeline is loaded: the bar then shows `turns` over `durationMs`. */
+  timeline: Timeline | null;
   format: VideoFormat;
   highlightIndex: number;
+  turns?: BarSegment[];
+  durationMs?: number;
 }
 
-/** The ready player's layout without the player: server HTML and the moment its chunk loads, so
- *  nothing moves when the video appears. */
-export const PlayerPending = ({ timeline, format, highlightIndex }: PendingProps) => {
+/** The ready player's layout without the player: server HTML, the wait for the media and for the
+ *  player's chunk, so nothing moves when the video appears. */
+export const PlayerPending = ({ timeline, format, highlightIndex, turns = [], durationMs = 0 }: PendingProps) => {
   const vertical = format !== 'long';
-  const { chapters, totalMs } = videoChapters(timeline, format, highlightIndex);
-  const segments: BarSegment[] = chapters.map((ch) => ({ key: ch.seq, flex: Math.max(1, ch.endMs - ch.startMs), color: ch.color, title: `${ch.speaker} · ${ch.label}`, time: msLabel(ch.startMs), fill: 0 }));
+  const video = timeline ? videoChapters(timeline, format, highlightIndex) : null;
+  const totalMs = video?.totalMs ?? durationMs;
+  const segments: BarSegment[] = video
+    ? video.chapters.map((ch) => ({ key: ch.seq, flex: Math.max(1, ch.endMs - ch.startMs), color: ch.color, title: `${ch.speaker} · ${ch.label}`, time: msLabel(ch.startMs), fill: 0 }))
+    : turns.map((t) => ({ ...t, fill: 0 }));
   return (
     <PlayerShell
       vertical={vertical}

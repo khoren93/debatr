@@ -1,15 +1,15 @@
 import type { PlayerRef } from '@remotion/player';
 import { Fragment, lazy, useEffect, useRef, useState } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router';
-import { ArrowLeft, Lock, MicVocal, Repeat2, RotateCcw, ShieldAlert } from 'lucide-react';
-import { getErrorMessage, getErrorStatus } from '../api/client';
-import { deleteDebate, getDebate, resumeDebate, stopDebate } from '../api/debates';
+import { Link, useNavigate } from 'react-router';
+import { ArrowLeft, MicVocal, Repeat2, RotateCcw, ShieldAlert } from 'lucide-react';
+import { getErrorMessage } from '../api/client';
+import { countView, deleteDebate, getDebate, resumeDebate, stopDebate } from '../api/debates';
 import { getPublicDebate } from '../api/gallery';
 import { debateFilesBase } from '../api/media';
 import { ACTIVE_STATUSES, type Audience, type DebateDetail, type Turn } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { Page } from '../components/layout/AppShell';
-import { Button, ClientOnly, ConfirmDialog, EmptyState, ErrorBox, LinkButton, PageLoader, Pill, RelativeDate, useToast } from '../components/ui';
+import { Button, ClientOnly, ConfirmDialog, EmptyState, ErrorBox, LinkButton, Pill, RelativeDate, useToast } from '../components/ui';
 import { CardStats } from '../components/cards';
 import { AudienceVote } from '../components/debate/AudienceVote';
 import { DebateActions } from '../components/debate/DebateActions';
@@ -35,6 +35,11 @@ const DebatePlayer = lazy(() => import('../components/debate/DebatePlayer'));
 const ExportRail = lazy(() => import('../components/debate/ExportRail'));
 
 interface Props {
+  /** The debate as the route loaded it (server or client loader). */
+  initial: DebateDetail;
+  /** Whom the server personalised `initial` for (user id, null = anonymous); undefined = the
+   *  browser loaded it, so it is the current viewer's. */
+  viewer?: string | null;
   id?: string;
   slug?: string;
 }
@@ -74,15 +79,19 @@ const DebaterChips = ({ debaters }: { debaters: SpeakerInfo[] }) => (
   </div>
 );
 
-/** Debate page for owners (`/debate/:id`) and public viewers (`/d/:slug`). */
-const DebateView = ({ id, slug }: Props) => {
+/** Debate page for owners (`/debate/:id`) and public viewers (`/d/:slug`). The route loads the
+ *  debate (and shows not found / private); live turns, likes and votes update it here. */
+const DebateView = ({ initial, viewer, id, slug }: Props) => {
   const navigate = useNavigate();
-  const location = useLocation();
   const toast = useToast();
   const { user, loading: authLoading } = useAuth();
 
-  const [debate, setDebate] = useState<DebateDetail | null>(null);
-  const [loadError, setLoadError] = useState<{ status: number | null; message: string } | null>(null);
+  const [debate, setDebate] = useState<DebateDetail>(initial);
+  const viewerId = user?.id ?? null;
+  // Whose copy `debate` is (likes, vote, owner buttons): the server's guess may be anonymous for
+  // a visit from another site whose session the browser only knows after hydration.
+  const [loadedFor, setLoadedFor] = useState<string | null | undefined>(viewer);
+  const stale = !authLoading && loadedFor !== undefined && loadedFor !== viewerId;
   const [reloadKey, setReloadKey] = useState(0);
   const [streaming, setStreaming] = useState<StreamingTurn | null>(null);
   const [tab, setTab] = useState<Tab>('transcript');
@@ -103,28 +112,46 @@ const DebateView = ({ id, slug }: Props) => {
 
   const refetch = () => setReloadKey((k) => k + 1);
 
-  // Wait for the auth probe so the session cookie is settled before the first request.
+  // The page came from the server, whose load counted no view: count this one.
+  const serverRendered = viewer !== undefined;
+  const isPublic = debate.is_public;
   useEffect(() => {
-    if (authLoading) return;
+    if (serverRendered && isPublic) countView(debate.id);
+  }, [serverRendered, isPublic, debate.id]);
+
+  // Reload on demand: live events, resume, a finished audio build.
+  useEffect(() => {
+    if (reloadKey === 0) return;
     let cancelled = false;
-    const request = slug ? getPublicDebate(slug) : getDebate(id ?? '');
-    request
+    (slug ? getPublicDebate(slug) : getDebate(id ?? ''))
       .then((d) => {
-        if (cancelled) return;
-        setDebate(d);
-        setLoadError(null);
+        if (!cancelled) setDebate(d);
       })
-      .catch((err: unknown) => {
-        if (!cancelled) setLoadError({ status: getErrorStatus(err), message: getErrorMessage(err) });
-      });
+      .catch(() => undefined);
     return () => {
       cancelled = true;
     };
-  }, [id, slug, reloadKey, authLoading]);
+  }, [id, slug, reloadKey]);
 
-  const debateId = debate?.id;
-  const isActive = !!debate && ACTIVE_STATUSES.includes(debate.status);
-  const isOwner = !!debate?.is_owner;
+  // The copy belongs to another viewer (signed in after an anonymous render, or signed out).
+  useEffect(() => {
+    if (!stale) return;
+    let cancelled = false;
+    (slug ? getPublicDebate(slug) : getDebate(id ?? ''))
+      .then((d) => {
+        if (cancelled) return;
+        setDebate(d);
+        setLoadedFor(viewerId);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [id, slug, stale, viewerId]);
+
+  const debateId = debate.id;
+  const isActive = ACTIVE_STATUSES.includes(debate.status);
+  const isOwner = debate.is_owner;
   const { media, timeline, refresh: refreshMedia } = useDebateMedia(debateId);
 
   // When the audio build finishes, reload the debate (outputs, duration, verdict winner).
@@ -142,7 +169,7 @@ const DebateView = ({ id, slug }: Props) => {
   }, [mediaStatus, debateId, toast]);
 
   useDebateStream(debateId, isActive, {
-    onDebateStarted: () => setDebate((d) => (d ? { ...d, status: 'running' } : d)),
+    onDebateStarted: () => setDebate((d) => ({ ...d, status: 'running' })),
     onTurnStarted: (e) => setStreaming({ ...e, text: '' }),
     onTurnDelta: (e) =>
       setStreaming((prev) =>
@@ -151,15 +178,15 @@ const DebateView = ({ id, slug }: Props) => {
           : { seq_index: e.seq_index, speaker_name: e.speaker_name ?? 'Speaker', speaker_role: 'debater', turn_type: 'argument', round_id: '', text: e.delta },
       ),
     onTurnCompleted: (turn) => {
-      setDebate((d) => (d ? { ...d, turns: insertTurn(d.turns, turn), participants: pinRoutedModel(d.participants, turn) } : d));
+      setDebate((d) => ({ ...d, turns: insertTurn(d.turns, turn), participants: pinRoutedModel(d.participants, turn) }));
       setStreaming(null);
     },
     onTurnError: (turn) => {
-      setDebate((d) => (d ? { ...d, turns: insertTurn(d.turns, turn) } : d));
+      setDebate((d) => ({ ...d, turns: insertTurn(d.turns, turn) }));
       setStreaming(null);
     },
-    onVerdictReady: (e) => setDebate((d) => (d ? { ...d, verdict: e.verdict } : d)),
-    onTurnVisuals: (e) => setDebate((d) => (d ? { ...d, turns: d.turns.map((t) => (t.seq_index === e.seq_index ? { ...t, visuals: e.visuals } : t)) } : d)),
+    onVerdictReady: (e) => setDebate((d) => ({ ...d, verdict: e.verdict })),
+    onTurnVisuals: (e) => setDebate((d) => ({ ...d, turns: d.turns.map((t) => (t.seq_index === e.seq_index ? { ...t, visuals: e.visuals } : t)) })),
     onDebateCompleted: () => {
       setStreaming(null);
       refetch();
@@ -167,19 +194,19 @@ const DebateView = ({ id, slug }: Props) => {
     },
     onDebateError: (e) => {
       setStreaming(null);
-      setDebate((d) => (d ? { ...d, status: 'error', error_message: e.message ?? d.error_message } : d));
+      setDebate((d) => ({ ...d, status: 'error', error_message: e.message ?? d.error_message }));
       refetch();
     },
     onDebateStopped: () => {
       setStreaming(null);
-      setDebate((d) => (d ? { ...d, status: 'stopped' } : d));
+      setDebate((d) => ({ ...d, status: 'stopped' }));
       window.setTimeout(refetch, 3000);
     },
     onReconnect: refetch,
   });
 
   // Auto-scroll while live: always on a new turn, only when near the bottom while streaming.
-  const turnCount = debate?.turns.length ?? 0;
+  const turnCount = debate.turns.length;
   useEffect(() => {
     if (isActive) bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
   }, [turnCount, isActive]);
@@ -189,7 +216,6 @@ const DebateView = ({ id, slug }: Props) => {
   }, [streamingLength]);
 
   const stop = async () => {
-    if (!debateId) return;
     setBusy(true);
     try {
       await stopDebate(debateId);
@@ -204,7 +230,6 @@ const DebateView = ({ id, slug }: Props) => {
 
   /** Browser-only keys go along like on the wizard's start (a rejected ElevenLabs key is not sent). */
   const resume = async () => {
-    if (!debate) return;
     setResuming(true);
     try {
       const keys: { user_provider_key?: string; user_tts_key?: string } = {};
@@ -223,7 +248,6 @@ const DebateView = ({ id, slug }: Props) => {
   };
 
   const remove = async () => {
-    if (!debateId) return;
     setBusy(true);
     try {
       await deleteDebate(debateId);
@@ -237,10 +261,10 @@ const DebateView = ({ id, slug }: Props) => {
 
   const updateAudience = (audience: Audience) => {
     if (audience.my_vote) setRevealed(true);
-    setDebate((d) => (d ? { ...d, engagement: { ...d.engagement, audience } } : d));
+    setDebate((d) => ({ ...d, engagement: { ...d.engagement, audience } }));
   };
 
-  const updateLikes = (likes: number, liked: boolean) => setDebate((d) => (d ? { ...d, engagement: { ...d.engagement, likes, liked } } : d));
+  const updateLikes = (likes: number, liked: boolean) => setDebate((d) => ({ ...d, engagement: { ...d.engagement, likes, liked } }));
 
   const changeFormat = (f: VideoFormat) => {
     if (f === format) return;
@@ -280,36 +304,6 @@ const DebateView = ({ id, slug }: Props) => {
 
   // --- states ------------------------------------------------------------------
 
-  if (loadError && !debate) {
-    const next = encodeURIComponent(location.pathname + location.search);
-    if (loadError.status === 401) {
-      navigate(`/login?next=${next}`, { replace: true });
-      return null;
-    }
-    return (
-      <Page>
-        {loadError.status === 403 ? (
-          <EmptyState icon={<Lock className="size-5" />} title="This debate is private" text={user ? 'Only its owner can open it.' : 'Sign in if it is yours.'} action={!user ? <LinkButton to={`/login?next=${next}`}>Sign in</LinkButton> : <LinkButton to="/library" variant="secondary">Your library</LinkButton>} />
-        ) : loadError.status === 404 ? (
-          <EmptyState title="Debate not found" text="It may have been deleted or unpublished." action={<LinkButton to={slug ? '/gallery' : '/library'} variant="secondary">Back</LinkButton>} />
-        ) : (
-          <ErrorBox>
-            {loadError.message}{' '}
-            <button type="button" onClick={refetch} className="ml-2 font-semibold underline underline-offset-2 cursor-pointer">
-              Retry
-            </button>
-          </ErrorBox>
-        )}
-      </Page>
-    );
-  }
-  if (!debate) {
-    return (
-      <Page>
-        <PageLoader label="Loading debate…" />
-      </Page>
-    );
-  }
   if (debate.status === 'draft') {
     return (
       <Page>
@@ -335,6 +329,7 @@ const DebateView = ({ id, slug }: Props) => {
   const reveal = () => setRevealed(true);
   const topic = debate.settings.topic || debate.title || 'Debate';
   const playable = !isActive && !!timeline && !!media?.urls;
+  const voiced = !isActive && (media?.media_status ?? debate.media_status) === 'ready';
   const canExport = completed && (!!timeline || isOwner);
   const markdown = debate.settings.output_style === 'markdown';
 
@@ -455,7 +450,7 @@ const DebateView = ({ id, slug }: Props) => {
               format={playable ? format : undefined}
               onFormat={changeFormat}
               onLikes={updateLikes}
-              onPatch={(patch) => setDebate((d) => (d ? { ...d, ...patch } : d))}
+              onPatch={(patch) => setDebate((d) => ({ ...d, ...patch }))}
               onGenerate={openRegenerate}
               onStop={() => setConfirm('stop')}
               onDelete={() => setConfirm('delete')}
@@ -478,6 +473,9 @@ const DebateView = ({ id, slug }: Props) => {
             <ClientOnly fallback={<PlayerPending timeline={timeline} format={format} highlightIndex={highlightIndex} />}>
               {() => <DebatePlayer timeline={timeline} mediaBase={mediaBase} format={format} highlightIndex={highlightIndex} startSeq={startSeq} playerRef={playerRef} onActiveSeq={setActiveSeq} />}
             </ClientOnly>
+          ) : voiced ? (
+            // Voiced, its media still loading (and in the server's HTML): the player's layout.
+            <PlayerPending timeline={null} format={format} highlightIndex={highlightIndex} turns={overview} durationMs={debate.duration_ms ?? 0} />
           ) : (
             <PlayerPlaceholder media={media} isOwner={isOwner} completed={completed} onGenerate={openRegenerate} overview={overviewStrip} />
           )}

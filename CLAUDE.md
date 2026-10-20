@@ -78,28 +78,46 @@ backend/            FastAPI API + RQ worker (Python 3.12+, managed with uv)
   app/schemas/        Pydantic request/response schemas (schemas, auth, billing, media, admin)
   migrations/         Alembic (async env)
   tests/              pytest (pure unit tests, no DB/Redis needed)
-frontend/           React 19 + Vite 8 + Tailwind 4 + TypeScript + React Router 8 (`<BrowserRouter>` for now)
-  index.html, src/main.tsx   the site (`vite build` → dist)
+frontend/           React 19 + React Router 8 (framework mode, server rendering) + Vite 8 + Tailwind 4 + TypeScript
+  react-router.config.ts  `ssr: true`, `appDirectory: src`, `routeDiscovery: initial` (the route
+                      manifest comes with the page: navigations never ask the Node server)
+  src/root.tsx        the HTML document (head, fonts, ToastProvider, last-resort ErrorBoundary)
+  src/routes.ts       route tree: `_site` (AppShell; session + site status from the server) →
+                      public pages (home, gallery, leaderboard, d/:slug, t/:slug: rendered on the
+                      server) | `_client` (login, register, debate/:id: browser only,
+                      HydrateFallback) → `_private` (library, create, account, device: also a
+                      session) | `*` (a real 404); `healthz` (resource route, Docker health check)
+  src/routes/         route modules: one `load(get)` per public page serves the server `loader`
+                      (`serverGet`, the visitor's cookie) and the `clientLoader` (`routeGet`,
+                      straight to the API); ErrorBoundary = RouteError / DebateError; public pages
+                      add the `microcache` middleware
+  src/server/         `*.server.ts`: microcache (cookie-less GETs of public pages, LRU 200 entries /
+                      32 MB / 30 s; key = URL + whether the session is known), siteStatus (30 s memo)
   admin.html, src/admin-main.tsx  the admin console, a separate SPA (vite.admin.config.ts →
                       build/admin with its own admin-assets/; `npm run dev` serves admin.html on
                       /admin* through a plugin in vite.config.ts); vitest.config.ts = unit tests
   src/index.css       Tailwind theme tokens (colors ink/surface/accent/pro/con/host…, fonts, radii)
   src/api/            axios client, typed API functions per area (auth, billing, debates,
                       gallery, media, models, topics), shared types.ts, timeline.ts;
-                      status (site levers); server.server.ts = the SSR server's API client for
-                      route loaders (API_INTERNAL_URL; forwards cookie, X-Forwarded-For,
-                      User-Agent, Accept-Language; 3 s timeout; 4xx → same status, failure → 503
-                      with Retry-After; never in the browser bundle); admin/ = the console's own client (CSRF header,
+                      status (site levers); route.ts = route data (`ApiGet`, `routeGet` /
+                      `routeError` for client loaders, `toQuery`, `routeErrorOf`); server.server.ts
+                      = the SSR server's API client for route loaders (`serverApi` / `serverGet`:
+                      API_INTERNAL_URL, else VITE_DEV_API_TARGET, else localhost:8000; forwards
+                      cookie, X-Forwarded-For, User-Agent, Accept-Language; 3 s timeout; 4xx → the
+                      same status, failure → 503 with Retry-After; never in the browser bundle);
+                      admin/ = the console's own client (CSRF header,
                       401 → sign-in), types, auth (+ passkeys), webauthn (navigator.credentials
                       ⇄ JSON), audit, settings
-  src/auth/           AuthContext (useAuth), RequireAuth route guard; AdminAuthContext
-                      (useAdminAuth, RequireAdmin) for the console
+  src/auth/           AuthContext (useAuth; starts from the server's `Viewer`), RequireAuth route
+                      guard; viewer.ts (`Viewer`, `viewerContext`) + viewer.server.ts (`readViewer`,
+                      `firstParty`); AdminAuthContext (useAdminAuth, RequireAdmin) for the console
   src/hooks/          useDebateStream (SSE), useDebateMedia (polling), useTrendingTopics,
                       useModels, useBillingConfig, useVoices (wizard voice catalogue),
                       useLeaderboard (cached model ranking), useElevenLabsKeyStatus (checks
                       the browser's ElevenLabs key), useEstimate (debounced wizard estimate),
                       useSiteStatus (sign-ups closed / maintenance banner, cached a minute),
                       useMotionSuggestions (debounced: the topic the wizard's text joins),
+                      useSiteStatus (+ SiteStatusProvider: the status the server rendered with),
                       useHydrated (false on the server and during hydration)
   src/components/ui/  design-system primitives (Button, Card, Chip, Segmented, Field, Pill,
                       Progress, Modal/ConfirmDialog, Toast, Avatar/SpeakerBadge, Thumb, Logo,
@@ -151,7 +169,9 @@ frontend/           React 19 + Vite 8 + Tailwind 4 + TypeScript + React Router 8
                       visuals/ = scene renderer (SceneStage, 22 scene views, rough.js strokes,
                       drawn Lucide pictograms in icons.ts, lazy world map in geo.ts,
                       PictureScenes: sketch strokes + Ken Burns pictures)
-  src/pages/          Landing (/), Library (/library), Gallery (/gallery), Leaderboard (/leaderboard),
+  src/pages/          page components (routes in src/routes wrap them; Landing, Gallery,
+                      Leaderboard, Topic render from route data, DebateView starts from it):
+                      Landing (/), Library (/library), Gallery (/gallery), Leaderboard (/leaderboard),
                       CreateDebate (/create, `?draft=<id>`, `?remix=<id>`),
                       DebateView (/debate/:id and public /d/:slug), Topic (/t/:slug: a topic's
                       public versions), Account (/account?tab=…),
@@ -175,6 +195,7 @@ frontend/           React 19 + Vite 8 + Tailwind 4 + TypeScript + React Router 8
                       LineChart, StackedColumns, ChartCard (legend + table view), palette.ts =
                       validated chart colours)
   src/lib/cli.ts      install / login / MCP setup snippets shown on the Account page
+  src/lib/gallery.ts  the gallery's URL filters (sort, period, format, category, model, voices) and its API path
   src/lib/formats.ts  show formats as the wizard runs them (mirrors backend services/formats:
                       seats, limits, premium-only, music, length / rounds wording, default
                       prompts) and the rappers' flows (mirrors media/music.FLOWS)
@@ -229,11 +250,12 @@ Frontend (run from `frontend/`):
 
 ```bash
 npm install
-npm run dev        # Vite on :5173 (site + console on /admin), proxies /api -> http://localhost:8000 (incl. SSE)
-                   # VITE_DEV_API_TARGET=http://localhost: proxy to the Docker stack instead
-npm run check      # tsc + eslint + vitest
+npm run dev        # react-router dev on :5173: SSR + HMR, the console on /admin, /api -> http://localhost:8000 (incl. SSE)
+                   # VITE_DEV_API_TARGET=http://localhost: the Docker stack instead (proxy and SSR loaders)
+npm run check      # react-router typegen + tsc + eslint + vitest
 npm test           # vitest (pure modules, src/**/*.test.ts)
-npm run build      # site → dist, console → build/admin
+npm run build      # site → build/client + build/server, console → build/admin
+npm start          # the built server (react-router-serve, :3000; API_INTERNAL_URL)
 ```
 
 CLI (run from `cli/`; `make cli a="…"` runs it against the local stack):
@@ -263,8 +285,11 @@ docker compose exec api python -m app.manage credits user@example.com 5 --reason
 0. Accounts: `POST /api/auth/register|login` set `request.session["uid"]` and `["epoch"]` in the
    signed session cookie (`SameSite=Strict`, `__Host-session` in production so sibling
    subdomains can neither read nor plant it, `session` over plain-http dev:
-   `core/auth.session_cookie_options`; the SPA reads the session with same-site
-   requests, so links from other sites still arrive signed in). `get_current_user` drops a
+   `core/auth.session_cookie_options`). Document requests forward it to the API (`_site`
+   middleware → `Viewer`), so pages render signed in; a link from another site arrives without
+   it (Strict), so such a page renders anonymously with `Viewer.known=false` and the browser asks
+   `/auth/me` itself (DebateView then reloads its personal copy). `_private` redirects to
+   `/login` on the server only when the session is known to be missing. `get_current_user` drops a
    cookie whose epoch is not `users.session_epoch`: a password change (this browser is signed in
    again), "sign out everywhere", a temporary password or disabling in the console end every
    other cookie at once.
@@ -939,8 +964,15 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   never raw axios. No `alert`/`confirm`: use `useToast` and `ConfirmDialog`; no native `<select>`:
   use `Dropdown` (the design wants no system popups). Styling uses the
   theme tokens from `src/index.css` (`bg-surface`, `text-muted`, `font-display`, `rounded-panel`…).
-- SSR-safe frontend (public pages are going to render on the server, Stage C): router imports
-  come from `react-router` (v8 dropped `react-router-dom`). Browser-only modules — Remotion
+- Routes (React Router 8 framework mode): every route with a server `loader` also has a
+  `clientLoader` over the same load function, so client navigations never hit the Node server
+  (no `.data` requests); `_site` never revalidates (the session lives in AuthProvider); filters
+  live in the URL and change with `setSearchParams(…, { replace: true, preventScrollReset: true })`,
+  loading = `useNavigation()`; loaders throw route error data (`data({status, detail})`) and the
+  route's ErrorBoundary renders it with the same status code. A new public page = a route
+  module with `load(get)`, `loader` + `clientLoader`, `ErrorBoundary`, `microcache`.
+- SSR-safe frontend (public pages render on the server): router imports come from
+  `react-router` (v8 dropped `react-router-dom`). Browser-only modules — Remotion
   (`src/video/**` except constants / timing), rough.js, d3-geo, the MP4 renderer, canvas work:
   the `CLIENT_ONLY` list in `eslint.config.js` (DebatePlayer, SceneStill, ExportRail,
   ExportCard, PublishKit, youtubeKit) — reach other code only through `lazy()` inside
@@ -977,6 +1009,15 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   a data directory of another major, so a bump needs the data moved (dump + restore or pg_upgrade;
   15 → 18 started from an empty database). The redis:8 image declares no `VOLUME`: `redis_data`
   keeps its RDB snapshot.
+- Pages come from the `web` service (Node, react-router-serve :3000, `mem_limit: 256m`,
+  `--max-old-space-size=160`; ~50 MB idle, ~100 MB under load). `frontend/Caddyfile`: `/api*` →
+  api, `/assets/*` and other build files → `/srv`, the console → `/srv/admin`, everything else →
+  `web:3000`; 502/503/504 from it → `offline.html` (503 + Retry-After); `/path/` → `/path` (301).
+  Views: the renderer's API calls carry `X-Debatr-Render: server` (`services/views.RENDER_HEADER`)
+  and count nothing; a server-rendered debate page sends `POST /api/debates/{id}/view` (a beacon,
+  `api/debates.countView`) after hydration, so crawlers without JavaScript and micro-cached pages
+  neither add nor hide views (one per IP in 6 h as before; browser loads of `GET /gallery/{slug}`
+  and `GET /debates/{id}` still count).
 - The `frontend` container name (`ai-debates-frontend-1`) is referenced by the external Caddy
   on the production host via the `caddy_net` network. `frontend/Caddyfile` trusts private-range
   proxies (`trusted_proxies`) so the external Caddy's `X-Forwarded-Proto: https` and client IP

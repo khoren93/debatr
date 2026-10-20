@@ -1,10 +1,9 @@
 import { useState } from 'react';
-import { Link, useSearchParams } from 'react-router';
+import { Link, useNavigation, useSearchParams } from 'react-router';
 import { MicVocal, Trophy } from 'lucide-react';
-import type { FormatId, LeaderboardEntry } from '../api/types';
+import type { FormatId, Leaderboard as Ranking, LeaderboardEntry } from '../api/types';
 import { Page, PageTitle } from '../components/layout/AppShell';
-import { Button, EmptyState, ErrorBox, LinkButton, ModelIcon, PageLoader, Segmented, Tag } from '../components/ui';
-import { useLeaderboard } from '../hooks/useLeaderboard';
+import { EmptyState, LinkButton, ModelIcon, Segmented, Tag } from '../components/ui';
 import { formatCount, providerOf } from '../lib/format';
 
 type PriceFilter = 'all' | 'free' | 'paid';
@@ -90,14 +89,21 @@ const Row = ({ entry, rank, format }: { entry: LeaderboardEntry; rank: number | 
   );
 };
 
-/** Models ranked by audience votes on public debates; rap battles rank apart (`?format=`). */
-const Leaderboard = () => {
-  const [params, setParams] = useSearchParams();
-  const format: FormatId = params.get('format') === 'rap_battle' ? 'rap_battle' : 'debate';
+interface Props {
+  /** `?format=` (debates unless `rap_battle`). */
+  format: FormatId;
+  data: Ranking;
+}
+
+/** Models ranked by audience votes on public debates; rap battles rank apart (`?format=`, the
+ *  route's loaders bring the ranking). */
+const Leaderboard = ({ format, data }: Props) => {
+  const [, setParams] = useSearchParams();
+  const navigation = useNavigation();
+  const loading = navigation.state === 'loading' && navigation.location.pathname === '/leaderboard';
   const battles = format === 'rap_battle';
-  const { data, error, loading, retry } = useLeaderboard(true, format);
   const [price, setPrice] = useState<PriceFilter>('all');
-  const setFormat = (next: FormatId) => setParams(next === 'debate' ? {} : { format: next }, { replace: true });
+  const setFormat = (next: FormatId) => setParams(next === 'debate' ? {} : { format: next }, { replace: true, preventScrollReset: true });
 
   const entries = (data?.entries ?? []).filter((e) => price === 'all' || (price === 'free') === e.is_free);
   // The API lists rated models first; the rest only argued in debates nobody voted on yet.
@@ -105,17 +111,6 @@ const Leaderboard = () => {
   const unrated = entries.filter((e) => !e.rated);
 
   const renderBody = () => {
-    if (error) {
-      return (
-        <div className="mt-6 flex flex-col items-start gap-3">
-          <ErrorBox className="w-full">Could not load the ranking: {error}</ErrorBox>
-          <Button variant="secondary" onClick={retry}>
-            Try again
-          </Button>
-        </div>
-      );
-    }
-    if (loading || !data) return <PageLoader label="Counting the votes…" />;
     if (data.entries.length === 0) {
       return battles ? (
         <EmptyState
@@ -139,7 +134,7 @@ const Leaderboard = () => {
       return <EmptyState className="mt-6" icon={<Trophy className="size-5" />} title={`No ${price} models ranked yet`} text="None of the public debates used one so far." />;
     }
     return (
-      <div className="mt-5 overflow-hidden rounded-panel border border-line bg-surface">
+      <div className={`mt-5 overflow-hidden rounded-panel border border-line bg-surface transition-opacity ${loading ? 'pointer-events-none opacity-50' : ''}`} aria-busy={loading}>
         <div className={`grid ${COLS} gap-3 px-4 py-2.5 font-mono text-[10px] uppercase tracking-[0.08em] text-muted`}>
           <span>#</span>
           <span>Model</span>
@@ -188,15 +183,13 @@ const Leaderboard = () => {
       <p className="mt-3 max-w-[720px] text-sm leading-[1.55] text-muted text-pretty">
         {battles ? 'Which model raps best' : 'Which model argues best'} — by audience votes, not the AI judge. Elo-like ratings, 1000 is average.
         {battles && ' Rap battles rank apart from debates.'}
-        {data && (
-          <span className="text-text-3">
-            {' '}
-            {formatCount(data.total_debates)} public {battles ? 'battle' : 'debate'}
-            {data.total_debates === 1 ? '' : 's'} · {formatCount(data.total_votes)} {data.total_votes === 1 ? 'vote' : 'votes'} so far.
-          </span>
-        )}
+        <span className="text-text-3">
+          {' '}
+          {formatCount(data.total_debates)} public {battles ? 'battle' : 'debate'}
+          {data.total_debates === 1 ? '' : 's'} · {formatCount(data.total_votes)} {data.total_votes === 1 ? 'vote' : 'votes'} so far.
+        </span>
       </p>
-      {data && data.entries.length > 0 && !data.entries.some((e) => e.rated) && (
+      {data.entries.length > 0 && !data.entries.some((e) => e.rated) && (
         <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-panel border border-line bg-surface px-4 py-3.5 text-sm text-text-3">
           <span>
             No audience votes yet, so no model has a rating. Open a public {battles ? 'battle' : 'debate'}, watch it and pick who {battles ? 'rapped' : 'argued'} better — the ranking starts with the

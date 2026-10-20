@@ -104,7 +104,7 @@ Users sign up, run free models or bring their own OpenRouter key, buy credits wi
   revocable at any time. A token runs debates but can never touch your password, keys or payments.
 
 ### 🐳 Self-host it
-- One `docker compose up`: Postgres, Redis, API, workers and a Caddy-served frontend.
+- One `docker compose up`: Postgres, Redis, API, workers, the page renderer and Caddy in front.
 
 ## 🗺️ Roadmap
 
@@ -143,9 +143,9 @@ Users sign up, run free models or bring their own OpenRouter key, buy credits wi
 - **Quality**: ruff, pyright, pytest
 
 ### Frontend
-- **Framework**: [React 19](https://react.dev/) + [Vite 8](https://vite.dev/) + TypeScript
+- **Framework**: [React 19](https://react.dev/) + [React Router 8](https://reactrouter.com/) (server rendering of the public pages) + [Vite 8](https://vite.dev/) + TypeScript
 - **Styling**: Tailwind CSS 4 with the Debatr design tokens (dark studio theme)
-- **State/Routing**: React Router, Axios
+- **Data/Routing**: React Router loaders (the server's first render, then the browser calls the API directly), Axios
 - **Streaming**: Server-Sent Events (SSE)
 - **Video**: Remotion Player + `@remotion/web-renderer` (MP4 encoded in the visitor's browser)
 
@@ -156,7 +156,7 @@ Users sign up, run free models or bring their own OpenRouter key, buy credits wi
 - **Auth**: personal API tokens (`Authorization: Bearer debatr_…`) and a browser device login
 
 ### DevOps
-- **Containers**: Docker Compose (Postgres, Redis, API, debate workers, media worker, scheduler, Caddy)
+- **Containers**: Docker Compose (Postgres, Redis, API, debate workers, media worker, scheduler, Node page renderer, Caddy)
 - **CI**: GitHub Actions (lint, type-check, tests, build)
 
 ---
@@ -207,7 +207,7 @@ make migrate   # apply database migrations
 
 make api       # backend API with reload (http://localhost:8000/api/docs)
 make worker    # second terminal: RQ worker for every queue (SimpleWorker, safe on macOS)
-make web       # third terminal: Vite on http://localhost:5173, proxies /api to the backend
+make web       # third terminal: React Router dev server (SSR) on http://localhost:5173, proxies /api
 ```
 
 Leave `DATABASE_URL` and `REDIS_URL` unset in `.env`: the defaults point at localhost, and

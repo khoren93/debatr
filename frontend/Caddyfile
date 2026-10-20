@@ -37,21 +37,46 @@
         }
     }
 
+    # One address per page: /gallery/ → /gallery (the API and the console keep their own rules).
+    @trailing {
+        path_regexp trailing ^(/.+)/$
+        not path /api/* /admin/*
+    }
+    redir @trailing {re.trailing.1}{?query} 301
+
     # Hashed build output: cached for good, and a missing chunk is a real 404 (an old tab after a
-    # deploy then fails loudly instead of receiving index.html as JavaScript).
+    # deploy then fails loudly instead of receiving a page as JavaScript).
     handle /assets/* {
         encode gzip zstd
         header Cache-Control "public, max-age=31536000, immutable"
         file_server
     }
 
-    # React SPA with client-side routing. The HTML is revalidated on every load so a deploy is
-    # picked up at once (it points at the new hashed assets).
-    handle {
+    # Other files of the build (favicon, model logos, the offline page).
+    @static {
+        not path /
+        file
+    }
+    handle @static {
         encode gzip zstd
-        try_files {path} /index.html
-        header Cache-Control "no-cache"
+        header Cache-Control "public, max-age=3600"
         file_server
+    }
+
+    # Every page: the server renderer (service web, react-router-serve). It compresses on its own
+    # and sets the pages' caching headers.
+    handle {
+        reverse_proxy web:3000
+    }
+
+    # The renderer is down or restarting: a static page instead of Caddy's error.
+    handle_errors 502 503 504 {
+        rewrite * /offline.html
+        header Retry-After "30"
+        header Cache-Control "no-store"
+        file_server {
+            status 503
+        }
     }
 
     header {

@@ -7,21 +7,25 @@
     "node": ">=22.22"
   },
   "scripts": {
-    "dev": "vite",
-    "build": "tsc -b && vite build && vite build -c vite.admin.config.ts",
-    "typecheck": "tsc -b",
+    "dev": "react-router dev",
+    "build": "react-router typegen && tsc -b && react-router build && vite build -c vite.admin.config.ts",
+    "start": "react-router-serve ./build/server/index.js",
+    "typecheck": "react-router typegen && tsc -b",
     "lint": "eslint .",
     "test": "vitest run",
-    "check": "npm run typecheck && npm run lint && npm run test",
-    "preview": "vite preview"
+    "check": "npm run typecheck && npm run lint && npm run test"
   },
   "dependencies": {
+    "@react-router/node": "^8.5.0",
+    "@react-router/serve": "^8.5.0",
     "@remotion/captions": "^4.0.536",
     "@remotion/media": "^4.0.536",
     "@remotion/player": "^4.0.536",
     "@remotion/web-renderer": "^4.0.536",
     "axios": "^1.20.0",
     "d3-geo": "^3.1.1",
+    "isbot": "^5.2.2",
+    "lru-cache": "^11.5.3",
     "lucide-react": "^1.59.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
@@ -35,6 +39,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@react-router/dev": "^8.5.0",
     "@tailwindcss/typography": "^0.5.20",
     "@tailwindcss/vite": "^4.3.3",
     "@types/d3-geo": "^3.1.1",

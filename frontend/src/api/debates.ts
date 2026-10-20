@@ -14,6 +14,13 @@ export const listDebates = (params: { status?: string; q?: string; limit?: numbe
 
 export const getDebate = (id: string) => api.get<DebateDetail>(`/debates/${id}`).then((r) => r.data);
 
+/** One view of a public debate whose page came from the server (its loader counts none): a
+ *  beacon, so leaving the page does not cancel it. */
+export const countView = (id: string) => {
+  const url = `${api.defaults.baseURL ?? '/api'}/debates/${id}/view`;
+  if (!navigator.sendBeacon?.(url)) void fetch(url, { method: 'POST', keepalive: true, credentials: 'same-origin' }).catch(() => undefined);
+};
+
 export const createDebate = (config: DebateConfig) =>
   api.post<CreateDebateResponse>('/debates', config).then((r) => r.data);
 

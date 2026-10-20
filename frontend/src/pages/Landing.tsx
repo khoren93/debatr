@@ -1,6 +1,4 @@
-import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
-import { listGallery } from '../api/gallery';
 import type { GalleryItem, Participant } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { Page } from '../components/layout/AppShell';
@@ -66,32 +64,13 @@ const HeroPlayer = () => (
   </div>
 );
 
-/** Debates in the "Trending in the gallery" row. */
-const FEATURED = 3;
+interface Props {
+  /** The "Trending in the gallery" row (route data; empty when the gallery is unavailable). */
+  featured: GalleryItem[];
+}
 
-const Landing = () => {
+const Landing = ({ featured }: Props) => {
   const { user } = useAuth();
-  const [featured, setFeatured] = useState<GalleryItem[]>([]);
-
-  useEffect(() => {
-    let cancelled = false;
-    // The landing is the first impression: debates with premium voices come first, the
-    // general trending list only fills the free places.
-    // One card per topic in both lists; a topic in both shows its premium version.
-    Promise.all([listGallery({ limit: FEATURED, sort: 'trending', premium_voices: true, group: 'motion' }), listGallery({ limit: FEATURED, sort: 'trending', group: 'motion' })])
-      .then(([premium, all]) => {
-        if (cancelled) return;
-        const topicOf = (item: GalleryItem) => item.motion?.slug ?? item.id;
-        const topics = new Set(premium.items.map(topicOf));
-        setFeatured([...premium.items, ...all.items.filter((item) => !topics.has(topicOf(item)))].slice(0, FEATURED));
-      })
-      .catch(() => {
-        // The "Trending in the gallery" section is optional: it stays hidden when the gallery is unavailable.
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   return (
     <Page className="relative" fit>

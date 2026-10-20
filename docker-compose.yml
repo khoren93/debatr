@@ -140,11 +140,31 @@ services:
       redis:
         condition: service_healthy
 
+  # The server renderer: the HTML of every page (React Router 8, react-router-serve on :3000).
+  # Its loaders call the API over the internal network with the visitor's cookie.
+  web:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: web
+      args:
+        - VITE_API_URL=/api
+    restart: always
+    environment:
+      - API_INTERNAL_URL=http://api:8000
+      - SITE_URL=${SITE_URL:-http://localhost}
+      - NODE_OPTIONS=--max-old-space-size=160
+    mem_limit: 256m
+    depends_on:
+      - api
+
+  # Caddy: static files, the admin console, /api → api, every page → web.
   frontend:
     container_name: ai-debates-frontend-1
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      target: caddy
       args:
         - VITE_API_URL=/api
     restart: always
@@ -160,6 +180,7 @@ services:
       - ADMIN_ON_SITE=${ADMIN_HOST:+off}
     depends_on:
       - api
+      - web
 
 volumes:
   postgresql_data:
