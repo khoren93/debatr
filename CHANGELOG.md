@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-10-20
+
 ### Changed
 
 - **Rap battles sound like a show**: the MC calls the rappers into the ring like a ring announcer
