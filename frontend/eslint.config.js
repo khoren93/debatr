@@ -85,6 +85,11 @@ export default defineConfig([
     },
   },
   {
+    // Server JSX (the preview cards, src/server/og) is drawn by Takumi, never hot-refreshed.
+    files: ['src/server/**/*.tsx'],
+    rules: { 'react-refresh/only-export-components': 'off' },
+  },
+  {
     // Node globals only in server modules and tests (the app's tsconfig has Node's types for them).
     files: ['src/**/*.{ts,tsx}'],
     ignores: ['src/**/*.server.ts', 'src/**/*.server.tsx', 'src/**/*.test.ts'],

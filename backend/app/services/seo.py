@@ -97,6 +97,17 @@ def topic_path(slug: str, title: str) -> str:
     return _with_kebab("/t", slug, title)
 
 
+def debate_image_path(slug: str) -> str:
+    """The link preview picture of a public debate, drawn by the site's renderer (frontend
+    lib/og.ts `OG_PATHS`). Pages add its version (`?v=`); sitemaps name the stable address."""
+    return f"/og/d/{slug}.png"
+
+
+def topic_image_path(slug: str) -> str:
+    """The link preview picture of a topic page (see `debate_image_path`)."""
+    return f"/og/t/{slug}.png"
+
+
 def absolute(site_url: str, path: str) -> str:
     return f"{site_url.rstrip('/')}{path}"
 

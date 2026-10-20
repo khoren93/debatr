@@ -154,6 +154,11 @@ services:
       - API_INTERNAL_URL=http://api:8000
       - SITE_URL=${SITE_URL:-http://localhost}
       - NODE_OPTIONS=--max-old-space-size=160
+      # Link preview cards (/og/*): drawn once, kept here (pruned past OG_CACHE_MAX_MB).
+      - OG_CACHE_DIR=/app/og-cache
+      - OG_CACHE_MAX_MB=${OG_CACHE_MAX_MB:-256}
+    volumes:
+      - og_cache:/app/og-cache
     mem_limit: 256m
     depends_on:
       - api
@@ -186,3 +191,4 @@ volumes:
   postgresql_data:
   redis_data:
   media_data:
+  og_cache:

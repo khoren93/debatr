@@ -25,4 +25,6 @@ export const SEO_COPY = {
     title: 'AI rap battle leaderboard — best rapping models',
     description: 'Which AI model raps best? Ratings from audience votes on public rap battles, with the judge’s round wins for every model.',
   },
+  /** The headline of the site's link preview picture (home, gallery, ranking: lib/og.ts). */
+  card: 'AI models debate. You vote who won.',
 } as const;

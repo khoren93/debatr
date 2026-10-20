@@ -92,14 +92,18 @@ frontend/           React 19 + React Router 8 (framework mode, server rendering)
                       t/:slug/:kebab?: rendered on the server) | `_client` (login, register,
                       debate/:id: browser only, HydrateFallback, `X-Robots-Tag: noindex`) →
                       `_private` (library, create, account, device: also a session) | `*` (a real
-                      404); `healthz` (resource route, Docker health check)
+                      404); resource routes `og/d/:file`, `og/t/:file`, `og/site.png` (link preview
+                      pictures, see "Search engines") and `healthz` (Docker health check)
   src/routes/         route modules: one `load(get)` per public page serves the server `loader`
                       (`serverGet`, the visitor's cookie) and the `clientLoader` (`routeGet`,
                       straight to the API); ErrorBoundary = RouteError / DebateError; public pages
                       add the `microcache` middleware
   src/server/         `*.server.ts`: microcache (cookie-less GETs of public pages, LRU 200 entries /
                       32 MB / 30 s; key = URL + whether the session is known), siteStatus (30 s memo),
-                      site (`siteOrigin`: SITE_URL, else the request's origin)
+                      site (`siteOrigin`: SITE_URL, else the request's origin); og/ = the link preview
+                      cards (Takumi): card.server.tsx (the card's JSX), fonts (bundled + fetched
+                      scripts), logos (public/model-icons in the bundle), cache (disk), render
+                      (memory LRU, drawing, `ogRoute` for the image routes)
   admin.html, src/admin-main.tsx  the admin console, a separate SPA (vite.admin.config.ts →
                       build/admin with its own admin-assets/; `npm run dev` serves admin.html on
                       /admin* through a plugin in vite.config.ts); vitest.config.ts = unit tests
@@ -209,6 +213,8 @@ frontend/           React 19 + React Router 8 (framework mode, server rendering)
                       its API path (24 cards a page) / page address (`galleryHref`)
   src/lib/seo.ts      search and preview metadata of every page (pure, vitest): title / description
                       templates, canonical redirects, robots rules, JSON-LD (see "Search engines")
+  src/lib/og.ts       link preview cards (pure, vitest): the card data of a debate / topic / the site,
+                      its version (`?v=`), alt text and image URL (`OG_DESIGN`: bump on a redesign)
   src/lib/formats.ts  show formats as the wizard runs them (mirrors backend services/formats:
                       seats, limits, premium-only, music, length / rounds wording, default
                       prompts) and the rappers' flows (mirrors media/music.FLOWS)
@@ -492,7 +498,24 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   `Article` + `BreadcrumbList` (Gallery › topic › debate); topic "{topic}: N AI debates" with a
   `CollectionPage`; home `WebSite` + `Organization`; gallery / ranking texts in
   `brand.SEO_COPY`. Titles ≤ 60, descriptions ≤ 160. No preview, description or JSON-LD names a
-  winner (blind voting). `og:image` waits for stage C3 (the component takes `image`).
+  winner (blind voting).
+- Link preview pictures (`og:image`, `twitter:image`, JSON-LD `image` / `primaryImageOfPage`,
+  sitemap `<image:image>`): 1200×630 cards drawn by the `web` server with Takumi (`takumi-js`,
+  Rust, no browser, ~20–40 ms) from `lib/og.ts` card data: the long video's first frame —
+  the debaters face off on slanted sides in their speaker colours (logos, VS, names), the brand,
+  the format chip ("AI DEBATE", "RAP BATTLE"; a topic: "N VERSIONS" over the models of its
+  versions) and the question; never the winner. `/og/d/{slug}.png`, `/og/t/{slug}.png` (from the
+  API's public copy, fetched without the cookie: not public → 404 / 410, API down → the site's
+  card for a minute), `/og/site.png` (home, gallery, ranking). Pages add `?v=` = `ogVersion`
+  (hash of the card + `OG_DESIGN`): a matching `v` is cached for good (`immutable`), none or an
+  old one for an hour (sitemaps name the address without it: `seo.debate_image_path`). Cards are
+  kept by `cardKey` (same data = one file) in memory (64) and in `OG_CACHE_DIR` (volume
+  `og_cache`, pruned past `OG_CACHE_MAX_MB`); PNG, or JPEG q90 past 300 KB (gradients make PNGs
+  heavy; WhatsApp wants ≤ 300 KB). Fonts: Takumi reads no system fonts — the site's families and
+  Noto (Cyrillic, Greek, Devanagari, Armenian, Arabic, Hebrew) from node_modules, Twemoji's COLR
+  font for emoji; Chinese / Japanese / Korean / Thai / other Indic scripts are fetched from
+  Google Fonts per headline (only the subsets it uses, `scriptFamilies`; kept in the cache's
+  `fonts/`); a failed fetch draws the card with gaps and keeps it 5 minutes only.
 - Robots: public pages `index, follow, max-image-preview:large…`; gallery views other than the
   plain list, its rap-battle view and their `?page=N` (sort, category, model, premium voices) are
   `noindex, follow` with the plain list as canonical; topics with one public version are
@@ -507,7 +530,8 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   the private prefixes, AI crawlers refused only with `SEO_ALLOW_AI_CRAWLERS=false`, `Sitemap:`
   line; elsewhere `Disallow: /`), `sitemap.xml` (index) → `sitemaps/pages.xml` (home, gallery,
   ranking and their battle views), `sitemaps/topics.xml`, `sitemaps/debates-{n}.xml` (10 000 per
-  file, `lastmod` = latest of published / ended); only `public_clause`; `max-age=3600`.
+  file, `lastmod` = latest of published / ended; topics and debates name their preview picture);
+  only `public_clause`; `max-age=3600`.
 - IndexNow (`services/indexnow`, production with an https SITE_URL and `INDEXNOW_KEY`, key file
   `/{key}.txt`): publish / unpublish / delete (owner or console), approve / reject, topic moves,
   disabling an account with "unpublish" and deleting one note the debate's URL and `motion:{id}`
@@ -1115,6 +1139,13 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   of LobeHub Icons SVGs (MIT, see its README), mapped by model author in `src/lib/modelIcons.ts`;
   files without `-color` are drawn as a CSS mask in `currentColor`. Add a mapping (and the SVG)
   when a new provider appears; unknown authors get a letter tile.
+- Preview cards (`src/server/og`): `takumi-js/node` exports a JS wrapper around the native
+  `Renderer`, whose `registerFont(font)` takes one argument (`key` inside the descriptor) and
+  `unregisterFont({ name })`. Register fonts only that way (pinned): a render's `fonts` option
+  goes through the binding's `cacheFont`, which the 2.17 native build lacks. Inline `<svg>` in the
+  card's JSX becomes an image; logos are image sources keyed by `src`. Check a redesign with a
+  Vite harness (`createServer` + `ssrLoadModule('/src/server/og/render.server.tsx')`, `ogImage`)
+  and bump `OG_DESIGN`.
 - Browser MP4 export: `@remotion/web-renderer` rounds scaled sizes up and H.264 needs even
   sides, so 720p uses exactly `SCALE_720P = 2 / 3` (0.6667 gave 1281×721 and failed).
 - Scene pictures: Homebrew's ffmpeg has no libwebp encoder, so native builds store JPEG

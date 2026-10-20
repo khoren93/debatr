@@ -1,6 +1,7 @@
 import type { DebateDetail, FormatId, MotionPage, Participant } from '../api/types';
 import { APP_DESCRIPTION, APP_NAME, APP_PROFILES, APP_TAGLINE, SEO_COPY } from './brand';
 import type { GalleryFilters } from './gallery';
+import { SITE_OG_IMAGE, debateOgImage, topicOgImage } from './og';
 
 /**
  * What search engines and link previews read about a page: its title, description, canonical
@@ -27,6 +28,7 @@ export const ROBOTS: Record<Robots, string> = {
 };
 
 export interface SeoImage {
+  /** Absolute, or a path on the site (lib/og.ts): `<Seo>` makes it absolute. */
   url: string;
   width: number;
   height: number;
@@ -178,6 +180,7 @@ export const homeSeo = (): SeoData => ({
   path: '/',
   robots: 'index',
   type: 'website',
+  image: SITE_OG_IMAGE,
   lang: 'en',
   jsonLd: (site) => [
     {
@@ -206,12 +209,12 @@ export const gallerySeo = (filters: GalleryFilters): SeoData => {
   const search = query.toString();
   const filtered = filters.sort !== 'trending' || filters.category !== 'all' || !!filters.model || filters.premium;
   const title = filters.page > 1 ? `${copy.title} · page ${filters.page}` : copy.title;
-  return { title: withBrand(title), description: copy.description, path: `/gallery${search ? `?${search}` : ''}`, robots: filtered ? 'noindex' : 'index', type: 'website', lang: 'en' };
+  return { title: withBrand(title), description: copy.description, path: `/gallery${search ? `?${search}` : ''}`, robots: filtered ? 'noindex' : 'index', type: 'website', image: SITE_OG_IMAGE, lang: 'en' };
 };
 
 export const leaderboardSeo = (format: FormatId): SeoData => {
   const copy = format === 'rap_battle' ? SEO_COPY.leaderboardBattles : SEO_COPY.leaderboard;
-  return { title: withBrand(copy.title), description: copy.description, path: format === 'rap_battle' ? '/leaderboard?format=rap_battle' : '/leaderboard', robots: 'index', type: 'website', lang: 'en' };
+  return { title: withBrand(copy.title), description: copy.description, path: format === 'rap_battle' ? '/leaderboard?format=rap_battle' : '/leaderboard', robots: 'index', type: 'website', image: SITE_OG_IMAGE, lang: 'en' };
 };
 
 const debaterNames = (participants: Participant[]) => participants.filter((p) => p.role === 'debater' && p.name).map((p) => String(p.name));
@@ -237,12 +240,14 @@ export const debateSeo = (debate: DebateDetail): SeoData => {
   const published = debate.published_at ?? debate.created_at;
   const modified = [debate.published_at, debate.ended_at].filter((d): d is string => !!d).sort().at(-1) ?? published;
   const motion = debate.motion && debate.motion.versions >= TOPIC_INDEX_MIN_VERSIONS ? debate.motion : null;
+  const image = debateOgImage(debate);
   return {
     title,
     description,
     path,
     robots: 'index',
     type: 'article',
+    image,
     lang,
     publishedAt: published,
     modifiedAt: modified,
@@ -257,6 +262,7 @@ export const debateSeo = (debate: DebateDetail): SeoData => {
         inLanguage: lang,
         datePublished: published,
         dateModified: modified,
+        ...(image ? { image: [canonicalUrl(site, image.url)] } : {}),
         author: organization(site),
         publisher: organization(site),
         ...(versus ? { about: debaterNames(debate.participants).map((name) => ({ '@type': 'Thing', name })) } : {}),
@@ -277,12 +283,14 @@ export const topicSeo = (page: MotionPage): SeoData => {
   const description = clip(`${page.versions === 1 ? 'One version' : `${page.versions} versions`} of “${topic}” argued${who}. Compare the lineups, watch and vote who argued better.`, DESCRIPTION_MAX);
   const languages = new Set(page.items.map((item) => item.language_code));
   const lang = languages.size === 1 ? [...languages][0] : 'en';
+  const image = topicOgImage(page);
   return {
     title,
     description,
     path: page.path,
     robots: page.versions >= TOPIC_INDEX_MIN_VERSIONS ? 'index' : 'noindex',
     type: 'website',
+    image,
     lang,
     jsonLd: (site) => [
       {
@@ -291,6 +299,7 @@ export const topicSeo = (page: MotionPage): SeoData => {
         name: topic,
         description,
         url: canonicalUrl(site, page.path),
+        primaryImageOfPage: { '@type': 'ImageObject', url: canonicalUrl(site, image.url), width: image.width, height: image.height },
         inLanguage: lang,
         isPartOf: { '@type': 'WebSite', name: APP_NAME, url: `${site}/` },
         mainEntity: {

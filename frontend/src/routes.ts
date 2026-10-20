@@ -28,5 +28,9 @@ export default [
     ]),
     route('*', 'routes/not-found.tsx'),
   ]),
+  // Link preview pictures (lib/og.ts, src/server/og): `{slug}.png` of a debate or a topic.
+  route('og/d/:file', 'routes/og.debate.ts'),
+  route('og/t/:file', 'routes/og.topic.ts'),
+  route('og/site.png', 'routes/og.site.ts'),
   route('healthz', 'routes/healthz.ts'),
 ] satisfies RouteConfig;

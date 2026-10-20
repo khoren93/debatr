@@ -123,7 +123,11 @@ async def sitemap_topics(db: AsyncSession = Depends(get_db)) -> Response:
     site = _site()
     return _xml(
         seo.urlset(
-            SitemapUrl(seo.absolute(site, seo.topic_path(row.slug, row.title)), row.changed)
+            SitemapUrl(
+                seo.absolute(site, seo.topic_path(row.slug, row.title)),
+                row.changed,
+                images=(seo.absolute(site, seo.topic_image_path(row.slug)),),
+            )
             for row in rows
         )
     )
@@ -147,7 +151,11 @@ async def sitemap_debates(page: int, db: AsyncSession = Depends(get_db)) -> Resp
     site = _site()
     return _xml(
         seo.urlset(
-            SitemapUrl(seo.absolute(site, seo.debate_path(row.slug or "", row.topic)), row.changed)
+            SitemapUrl(
+                seo.absolute(site, seo.debate_path(row.slug or "", row.topic)),
+                row.changed,
+                images=(seo.absolute(site, seo.debate_image_path(row.slug or "")),),
+            )
             for row in rows
         )
     )

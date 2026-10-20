@@ -45,6 +45,12 @@ describe('forwardedHeaders', () => {
     const headers = forwardedHeaders(new Request('http://site.test/'));
     expect([...headers.keys()]).toEqual(['accept', 'x-debatr-render']);
   });
+
+  it('drops the cookie for what must look the same to everyone', () => {
+    const headers = forwardedHeaders(visitor(), { anonymous: true });
+    expect(headers.has('cookie')).toBe(false);
+    expect(headers.get('x-forwarded-for')).toBe('203.0.113.7');
+  });
 });
 
 describe('serverApi', () => {

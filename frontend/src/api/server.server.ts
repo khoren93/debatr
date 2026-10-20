@@ -26,10 +26,12 @@ const RETRY_AFTER_S = 30;
 export const apiInternalUrl = (): string => (process.env.API_INTERNAL_URL || process.env.VITE_DEV_API_TARGET || 'http://localhost:8000').replace(/\/+$/, '');
 
 /** The headers of the visitor's request that go along to the API, marked as the renderer's
- *  (backend views.RENDER_HEADER: its loads count no views, the page's beacon does). */
-export const forwardedHeaders = (request: Request): Headers => {
+ *  (backend views.RENDER_HEADER: its loads count no views, the page's beacon does). `anonymous`:
+ *  without the cookie, for what must look the same to everyone (link preview pictures). */
+export const forwardedHeaders = (request: Request, { anonymous = false }: { anonymous?: boolean } = {}): Headers => {
   const headers = new Headers({ accept: 'application/json', 'x-debatr-render': 'server' });
   for (const name of FORWARDED_HEADERS) {
+    if (anonymous && name === 'cookie') continue;
     const value = request.headers.get(name);
     if (value) headers.set(name, value);
   }
@@ -53,11 +55,11 @@ const detailOf = async (response: Response): Promise<string> => {
  * data with the same status (404 → "not found", 403 → private, 401 → sign in), a 5xx, a timeout or
  * an unreachable API as a 503 with Retry-After. A request the visitor abandoned rethrows its abort.
  */
-export async function serverApi<T>(request: Request, path: string, { timeoutMs = API_TIMEOUT_MS }: { timeoutMs?: number } = {}): Promise<T> {
+export async function serverApi<T>(request: Request, path: string, { timeoutMs = API_TIMEOUT_MS, anonymous = false }: { timeoutMs?: number; anonymous?: boolean } = {}): Promise<T> {
   let response: Response;
   try {
     response = await fetch(`${apiInternalUrl()}/api${path}`, {
-      headers: forwardedHeaders(request),
+      headers: forwardedHeaders(request, { anonymous }),
       signal: AbortSignal.any([request.signal, AbortSignal.timeout(timeoutMs)]),
     });
   } catch (err) {

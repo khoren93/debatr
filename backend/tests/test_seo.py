@@ -36,6 +36,9 @@ def test_paths() -> None:
     assert seo.debate_path("abc123", "?!") == "/d/abc123"
     assert seo.topic_path("t0p1c", "Cats or dogs") == "/t/t0p1c/cats-or-dogs"
     assert seo.absolute("https://example.com/", "/d/x") == "https://example.com/d/x"
+    # Preview pictures (frontend lib/og.ts OG_PATHS), without the version pages add.
+    assert seo.debate_image_path("abc123") == "/og/d/abc123.png"
+    assert seo.topic_image_path("t0p1c") == "/og/t/t0p1c.png"
 
 
 def test_encoded_escapes_only_non_ascii() -> None:

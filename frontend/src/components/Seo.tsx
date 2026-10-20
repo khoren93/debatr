@@ -11,6 +11,7 @@ import { ROBOTS, canonicalUrl, jsonLdText, ogLocale, type SeoData } from '../lib
 export function Seo({ title, description, path, robots, type = 'website', image, lang, publishedAt, modifiedAt, jsonLd }: SeoData) {
   const site = useSiteUrl();
   const url = path !== undefined ? canonicalUrl(site, path) : undefined;
+  const imageUrl = image && (image.url.startsWith('/') ? canonicalUrl(site, image.url) : image.url);
   const locale = ogLocale(lang);
   return (
     <>
@@ -28,13 +29,14 @@ export function Seo({ title, description, path, robots, type = 'website', image,
           {locale && <meta property="og:locale" content={locale} />}
           {type === 'article' && publishedAt && <meta property="article:published_time" content={publishedAt} />}
           {type === 'article' && modifiedAt && <meta property="article:modified_time" content={modifiedAt} />}
-          {image && (
+          {image && imageUrl && (
             <>
-              <meta property="og:image" content={image.url} />
+              <meta property="og:image" content={imageUrl} />
               <meta property="og:image:width" content={String(image.width)} />
               <meta property="og:image:height" content={String(image.height)} />
               <meta property="og:image:alt" content={image.alt} />
               {image.type && <meta property="og:image:type" content={image.type} />}
+              <meta name="twitter:image" content={imageUrl} />
               <meta name="twitter:image:alt" content={image.alt} />
             </>
           )}

@@ -29,6 +29,8 @@ COPY package.json ./
 COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=build /app/build/server ./build/server
 COPY --from=build /app/build/client ./build/client
+# Link preview cards drawn so far (src/server/og; the og_cache volume keeps them across deploys).
+RUN mkdir -p /app/og-cache && chown node:node /app/og-cache
 USER node
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 CMD wget -qO /dev/null http://127.0.0.1:3000/healthz || exit 1

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { DebateDetail, GalleryItem, MotionPage, Participant, Turn } from '../api/types';
 import { galleryFilters } from './gallery';
-import { DESCRIPTION_MAX, TITLE_MAX, canonicalRedirect, clip, clipSentences, debateSeo, gallerySeo, jsonLdText, leaderboardSeo, ogLocale, plainText, topicSeo } from './seo';
+import { DESCRIPTION_MAX, TITLE_MAX, canonicalRedirect, clip, clipSentences, debateSeo, gallerySeo, homeSeo, jsonLdText, leaderboardSeo, ogLocale, plainText, topicSeo } from './seo';
 
 const SITE = 'https://debatr.example';
 
@@ -97,6 +97,8 @@ describe('debateSeo', () => {
     expect(seo.description?.length).toBeLessThanOrEqual(DESCRIPTION_MAX);
     expect(seo.description).not.toContain('Winner');
     expect(seo).toMatchObject({ path: '/d/abc123/is-remote-work-better-than-the-office', robots: 'index', type: 'article', lang: 'en', publishedAt: '2026-10-18T11:00:00Z', modifiedAt: '2026-10-18T11:00:00Z' });
+    // The preview picture shows the lineup and the question, never the winner.
+    expect(seo.image).toMatchObject({ width: 1200, height: 630, alt: 'Claude vs Gemini: Is remote work better than the office?' });
   });
 
   it('shortens a long topic before it drops the lineup', () => {
@@ -125,6 +127,7 @@ describe('debateSeo', () => {
     const motion = { slug: 't1', title: 'Remote work?', versions: 3, items: [], path: '/t/t1/remote-work' };
     const [article, crumbs] = debateSeo(debate({ motion })).jsonLd?.(SITE) ?? [];
     expect(article).toMatchObject({ '@type': 'Article', url: `${SITE}/d/abc123/is-remote-work-better-than-the-office`, inLanguage: 'en', datePublished: '2026-10-18T11:00:00Z', author: { '@type': 'Organization', name: 'Debatr' } });
+    expect(article.image).toEqual([expect.stringMatching(new RegExp(`^${SITE}/og/d/abc123\\.png\\?v=`))]);
     expect(JSON.stringify(article)).not.toContain('Winner');
     expect((crumbs.itemListElement as { item: string }[]).map((c) => c.item)).toEqual([`${SITE}/gallery`, `${SITE}/t/t1/remote-work`, `${SITE}/d/abc123/is-remote-work-better-than-the-office`]);
     // A topic with a single version is not a page of its own in the index.
@@ -142,6 +145,8 @@ describe('topicSeo', () => {
     expect(seo.title).toBe('Cats or dogs? — 2 AI debates');
     expect(seo.description).toBe('2 versions of “Cats or dogs?” argued by Claude, Gemini and Grok. Compare the lineups, watch and vote who argued better.');
     expect(seo).toMatchObject({ path: '/t/t1/cats-or-dogs', robots: 'index', lang: 'en' });
+    expect(seo.image?.url).toMatch(/^\/og\/t\/t1\.png\?v=/);
+    expect(seo.jsonLd?.(SITE)[0].primaryImageOfPage).toMatchObject({ url: expect.stringMatching(new RegExp(`^${SITE}/og/t/t1\\.png`)), width: 1200 });
   });
 
   it('keeps a single version out of the index and reads a shared language', () => {
@@ -169,5 +174,9 @@ describe('listing pages', () => {
       expect(seo.description?.length ?? 0).toBeLessThanOrEqual(DESCRIPTION_MAX);
     }
     expect(leaderboardSeo('rap_battle').path).toBe('/leaderboard?format=rap_battle');
+  });
+
+  it("share the site's preview picture", () => {
+    for (const seo of [homeSeo(), gallerySeo(galleryFilters(new URLSearchParams())), leaderboardSeo('debate')]) expect(seo.image?.url).toMatch(/^\/og\/site\.png\?v=/);
   });
 });
