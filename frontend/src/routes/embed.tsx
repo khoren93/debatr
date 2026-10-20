@@ -24,12 +24,14 @@ async function load(get: ApiGet, request: Request, slug: string) {
   return { debate: embedDebate(debate), options: parseEmbedQuery(new URL(request.url).searchParams) };
 }
 
-/** Any site may frame it (the rest of the site: only itself, frontend/Caddyfile); no index wants
- *  it (the debate's page is the one to find); shared caches may keep it a few minutes. */
+/** Any page may frame it (the rest of the site: only itself, frontend/Caddyfile): no
+ *  `frame-ancestors` at all, since `*` still refuses parents without a network scheme — editors'
+ *  `srcdoc` previews (WordPress shows oEmbed players in one), desktop apps (`app://`), local files.
+ *  No index wants it (the debate's page is the one to find); shared caches may keep it a while. */
 const embedHeaders: Route.MiddlewareFunction = async (_args, next) => {
   const response = await next();
   response.headers.delete('X-Frame-Options');
-  response.headers.set('Content-Security-Policy', 'frame-ancestors *');
+  response.headers.delete('Content-Security-Policy');
   response.headers.set('X-Robots-Tag', 'noindex');
   const status = response.status;
   if (!response.headers.has('Cache-Control')) response.headers.set('Cache-Control', status === 200 ? 'public, max-age=300' : status < 500 ? 'public, max-age=60' : 'no-store');

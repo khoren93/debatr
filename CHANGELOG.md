@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Embeds in editors and apps**: the player sent `frame-ancestors *`, which browsers read as
+  "any http(s) page" and so refused inside `srcdoc` previews (WordPress shows oEmbed players in
+  one), desktop apps and local files. It now sends no frame restriction at all.
+
 ## [1.4.0] - 2026-10-20
 
 ### Added

@@ -581,8 +581,9 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
 
 - `/embed/{slug}` (`?format=short` = the Short's first highlight, `?t=` = start in seconds,
   `parseEmbedQuery`): outside `_site` — no AppShell, no session (the API is asked without the
-  cookie: a third-party frame never gets the SameSite=Strict one), `sharedMicrocache`, headers
-  `frame-ancestors *`, `X-Robots-Tag: noindex`, `Cache-Control: public, max-age=300` (60 s for
+  cookie: a third-party frame never gets the SameSite=Strict one), `sharedMicrocache`, no
+  `X-Frame-Options` and no `frame-ancestors` (`*` would still refuse `srcdoc` / `about:` parents —
+  WordPress previews oEmbed players in one — and `app://` / `file://`), `X-Robots-Tag: noindex`, `Cache-Control: public, max-age=300` (60 s for
   errors). The loader keeps only `EmbedDebate` (no transcript in the HTML). `handle.framed`
   drops `<ScrollRestoration>` (WebKit leaves `history.state` empty in third-party frames).
 - The server's HTML is the facade (`pages/Embed.tsx`): the AI cover with the question on top (or
@@ -1253,7 +1254,7 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   `/robots.txt`, `/sitemap.xml`, `/sitemaps/*` and `/<8-128 chars>.txt` (the IndexNow key) → api
   (`npm run dev` proxies the first three too). Every response but `/embed/*` gets
   `X-Frame-Options: SAMEORIGIN` + `Content-Security-Policy: frame-ancestors 'self'` (deferred
-  `header @framed`); the embed route sends `frame-ancestors *` itself.
+  `header @framed`); the embed route sends no `frame-ancestors` (any parent).
   Views come only from the page's beacon after hydration (see "Statistics data"), so crawlers
   without JavaScript and micro-cached pages neither add nor hide views.
 - The `frontend` container name (`ai-debates-frontend-1`) is referenced by the external Caddy
