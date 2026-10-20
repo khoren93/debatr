@@ -88,8 +88,13 @@ backend/            FastAPI API + RQ worker (Python 3.12+, managed with uv)
 frontend/           React 19 + React Router 8 (framework mode, server rendering) + Vite 8 + Tailwind 4 + TypeScript
   react-router.config.ts  `ssr: true`, `appDirectory: src`, `routeDiscovery: initial` (the route
                       manifest comes with the page: navigations never ask the Node server)
-  src/root.tsx        the HTML document (fonts, `<html lang>` from the page's `handle.lang`,
-                      ToastProvider, last-resort ErrorBoundary; no title: every page has `<Seo>`)
+  src/root.tsx        the HTML document (`<html lang>` from the page's `handle.lang`, the fonts'
+                      preloads, ToastProvider, last-resort ErrorBoundary; no title: every page
+                      has `<Seo>`)
+  src/fonts.ts        the site's and the console's fonts from our own origin (fontsource variable
+                      files with the opsz axis, families "… Variable"; no Google Fonts), the latin
+                      files to preload; index.css adds Arial fallbacks with their metrics
+                      (`size-adjust` etc., latin only) so the swap moves nothing
   src/routes.ts       route tree: `_site` (AppShell; session + site status + `siteUrl` from the
                       server) → public pages (home, gallery, leaderboard, d/:slug/:kebab?,
                       t/:slug/:kebab?: rendered on the server) | `_client` (login, register,
@@ -112,7 +117,9 @@ frontend/           React 19 + React Router 8 (framework mode, server rendering)
                       build/admin with its own admin-assets/; `npm run dev` serves admin.html on
                       /admin* through a plugin in vite.config.ts); vitest.config.ts = unit tests
   src/index.css       Tailwind theme tokens (colors ink/surface/accent/pro/con/host…, fonts, radii)
-  src/api/            axios client, typed API functions per area (auth, billing, debates,
+  src/api/            client.ts = the site's fetch client in axios' shape (`api.get<T>(path,
+                      { params })` → `{ data }`, `ApiError.response`; the console keeps axios,
+                      `getErrorMessage` reads both), typed API functions per area (auth, billing, debates,
                       gallery, media, models, topics), shared types.ts, timeline.ts;
                       status (site levers); route.ts = route data (`ApiGet`, `routeGet` /
                       `routeError` for client loaders, `toQuery`, `routeErrorOf`); server.server.ts
@@ -147,7 +154,10 @@ frontend/           React 19 + React Router 8 (framework mode, server rendering)
   src/components/cards/    DebateCard (library / gallery / landing; title under the cover, CardStats =
                            likes / views / length), DebateCover (face-off cover: each debater's logo
                            on a half in its speaker colour, slanted seams, VS; markup, never the winner),
-                           CardCover (a card's 16:9 cover: the AI cover when there is one, else DebateCover)
+                           CardCover (a card's 16:9 cover: the AI cover when there is one, else DebateCover;
+                           `priority` for a page's first card), VideoPoster (the long video's first
+                           frame in markup: brand, format chip, face-off, question; the landing's
+                           hero and the player's poster)
   src/components/create/   three-step wizard + wizardState.ts (state, persistence, config mapping;
                            `applyFormat` / `fitFormat`: seats, prompts, rounds follow the format):
                            StepTopic (format cards on top, a locked one says why; TrendingBrowser =
@@ -163,17 +173,21 @@ frontend/           React 19 + React Router 8 (framework mode, server rendering)
                            filter), VoicePicker (voice list with previews, debate-language / all scope),
                            PresetPicker (short preset list: PersonaPicker = persona presets + Custom,
                            rappers' flows), PickerFace, usePickerPopover
-  src/components/debate/   DebatePlayer (Remotion Player with own controls; browser-only, lazy),
-                           PlayerShell (frame, SegmentBar = seek bar by turns, PlayerPending = the
-                           ready player's layout while its chunk loads, PlayerPlaceholder = no audio
-                           yet / voicing), LiveCard (live frame: cast, speaker,
+  src/components/debate/   DebatePlayer (Remotion Player with own controls; browser-only, lazy;
+                           `usePlaying` = play state as an external store, `deferred` = play asked
+                           before the chunk), PlayerShell (frame, SegmentBar = seek bar by turns,
+                           PlayerPoster = the AI cover or VideoPoster until the first play,
+                           PosterFace = it with the play button, PlayerPending = the ready player's
+                           layout in the server's HTML and while its chunk loads, PlayerPlaceholder
+                           = no audio yet / voicing), LiveCard (lazy; live frame: cast, speaker,
                            streamed captions), DebateActions (16:9 / 9:16 format icons + Like/Share/Remix/Export/… toolbar,
                            SharePopover = link + gallery switch + moderation), ExportRail
                            (slide-over: ExportCard browser MP4 render, MP3, CoverCard = the owner's AI
                            cover and versions, PublishKit = YouTube
                            title/description with chapters/tags + canvas thumbnails, youtubeKit.ts),
-                           Transcript (row click = seek, ● NOW), VerdictTab, DetailsTab (lineup,
-                           facts), AudienceVote (blind vote), RegenerateAudioDialog, TurnScenes
+                           Transcript (row click = seek, ● NOW; Markdown via lib/markdown),
+                           VerdictTab (lazy; VerdictGate = the blind-vote cover), DetailsTab (lineup,
+                           facts), AudienceVote (blind vote), RegenerateAudioDialog (lazy), TurnScenes
                            (scene board under each turn: SceneStill = lazy Remotion stills + replay
                            modal, fact-check/dispute badges), VersionsStrip (the topic's other public
                            versions, no winners); helpers.ts: speakerLineup, videoChapters,
@@ -219,6 +233,8 @@ frontend/           React 19 + React Router 8 (framework mode, server rendering)
                       its API path (24 cards a page) / page address (`galleryHref`)
   src/lib/seo.ts      search and preview metadata of every page (pure, vitest): title / description
                       templates, canonical redirects, robots rules, JSON-LD (see "Search engines")
+  src/lib/markdown.ts the models' Markdown as HTML (micromark + GFM, raw HTML escaped, dangerous
+                      link targets dropped; same output on the server and in the browser)
   src/lib/og.ts       link preview cards (pure, vitest): the card data of a debate / topic / the site,
                       its version (`?v=`), alt text and image URL (`OG_DESIGN`: bump on a redesign)
   src/lib/formats.ts  show formats as the wizard runs them (mirrors backend services/formats:
@@ -599,7 +615,13 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
 8. Files are served by `MediaStaticFiles` at `/api/media/files/{debate_id}/...` (Range
    requests work). The debate page plays the video in the Remotion Player with its own controls
    (`DebatePlayer`; transcript rows jump to their turn, `helpers.videoChapters` maps turns to the
-   long video / Short clock) and renders MP4s **in the visitor's browser** (`ExportRail` →
+   long video / Short clock). The player is a facade: the server's HTML has its layout with the
+   poster (the AI cover, else `VideoPoster`) and a play button, the page's largest paint; the
+   Remotion chunk (~290 KB gzip) loads on hover / focus, in idle time after the page's load (not
+   on Save-Data / 2G) or on the first click, mounts under the poster, and the poster goes on the
+   first play. A click on the poster or a transcript row before the chunk is there spins and
+   plays once it is (`deferred`; Apple's WebKit waits for the next click, audio needs the
+   gesture) and renders MP4s **in the visitor's browser** (`ExportRail` →
    `components/debate/ExportCard.tsx` +
    `@remotion/web-renderer`) — the server never encodes video; finished renders are reported to
    `POST /api/debates/{id}/renders` for the usage stats. Premium voices on the system ElevenLabs
@@ -1110,7 +1132,7 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   setState in effects — fetch in effects with a `cancelled` flag and set state in the promise
   callbacks; no mutation of props/state, use refs for imperative DOM like seeking `<audio>`;
   no manual `useMemo` that the compiler cannot preserve). API calls go through `src/api/*`,
-  never raw axios. No `alert`/`confirm`: use `useToast` and `ConfirmDialog`; no native `<select>`:
+  never raw fetch or axios. No `alert`/`confirm`: use `useToast` and `ConfirmDialog`; no native `<select>`:
   use `Dropdown` (the design wants no system popups). Styling uses the
   theme tokens from `src/index.css` (`bg-surface`, `text-muted`, `font-display`, `rounded-panel`…).
 - Routes (React Router 8 framework mode): every route with a server `loader` also has a
@@ -1128,7 +1150,10 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   (`src/video/**` except constants / timing), rough.js, d3-geo, the MP4 renderer, canvas work:
   the `CLIENT_ONLY` list in `eslint.config.js` (DebatePlayer, SceneStill, ExportRail,
   ExportCard, PublishKit, youtubeKit) — reach other code only through `lazy()` inside
-  `<ClientOnly fallback=…>` with a fallback of the same size; `no-restricted-imports` refuses
+  `<ClientOnly fallback=…>` with a fallback of the same size (the debate player is the
+  exception: its facade state is false on the server and while hydrating, and only the lazy
+  player sits in a Suspense — React streams a large boundary after the shell, which sent its
+  markup twice); `no-restricted-imports` refuses
   static imports (type imports are fine) and any import of console code (`admin/`) from the
   site. What differs between the server and the viewer (time zone, the current moment,
   `window` / `document`, browser storage) waits for `useHydrated()` or lives in effects and
@@ -1217,6 +1242,16 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   card's JSX becomes an image; logos are image sources keyed by `src`. Check a redesign with a
   Vite harness (`createServer` + `ssrLoadModule('/src/server/og/render.server.tsx')`, `ogImage`)
   and bump `OG_DESIGN`.
+- Tailwind 4's `translate-x-*` / `-translate-y-*` set the CSS `translate` property, not
+  `transform`: animate them with `transition-[translate,…]` (a `transition-[transform]` jumps).
+- React 19 server rendering streams a Suspense boundary with large content after the shell (the
+  fallback first, the content later with a swap script) even when nothing suspends: keep
+  server-rendered markup that matters for the first paint out of Suspense boundaries.
+- Fonts stay files in both builds (`build.assetsInlineLimit` refuses woff2): an inlined `data:`
+  font weighs down the render-blocking stylesheet and the console's CSP (`font-src 'self'`)
+  blocks it. The fallback faces' metrics in index.css were computed from the woff2 files
+  (fontTools: average width of English text against Arial / Arial Bold at the weights and
+  optical sizes in use); recompute them when a family changes.
 - Browser MP4 export: `@remotion/web-renderer` rounds scaled sizes up and H.264 needs even
   sides, so 720p uses exactly `SCALE_720P = 2 / 3` (0.6667 gave 1281×721 and failed).
 - Scene pictures: Homebrew's ffmpeg has no libwebp encoder, so native builds store JPEG

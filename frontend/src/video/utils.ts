@@ -30,5 +30,3 @@ export const captionPages = (seg: TimelineSegment, combineMs: number): TikTokPag
 export const roundLabel = (roundId: string, label?: string | null): string =>
   label || (roundId === 'verdict' ? 'Verdict' : roundId.replace(/^round_(\d+)$/, 'Round $1'));
 
-/** Display size that keeps a headline within about three lines. */
-export const headlineSize = (text: string, base: number) => (text.length <= 60 ? base : text.length <= 100 ? base * 0.84 : base * 0.7);

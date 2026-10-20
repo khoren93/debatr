@@ -1,4 +1,4 @@
-import { api } from './client';
+import { api, API_BASE } from './client';
 import type {
   Audience,
   Cover,
@@ -18,7 +18,7 @@ export const getDebate = (id: string) => api.get<DebateDetail>(`/debates/${id}`)
 /** One view of a public debate whose page came from the server (its loader counts none): a
  *  beacon, so leaving the page does not cancel it. */
 export const countView = (id: string) => {
-  const url = `${api.defaults.baseURL ?? '/api'}/debates/${id}/view`;
+  const url = `${API_BASE}/debates/${id}/view`;
   if (!navigator.sendBeacon?.(url)) void fetch(url, { method: 'POST', keepalive: true, credentials: 'same-origin' }).catch(() => undefined);
 };
 
@@ -60,7 +60,7 @@ export const castVote = (id: string, participantId: string) =>
 
 export const retractVote = (id: string) => api.delete<Audience>(`/debates/${id}/vote`).then((r) => r.data);
 
-export const debateStreamUrl = (id: string) => `${api.defaults.baseURL}/debates/${id}/stream`;
+export const debateStreamUrl = (id: string) => `${API_BASE}/debates/${id}/stream`;
 
 /** A new AI cover version (backend services/media/cover.py); `hook` replaces the art director's. */
 export const generateCover = (id: string, body: { hook?: string; user_provider_key?: string } = {}) =>

@@ -2,9 +2,9 @@ import { Link } from 'react-router';
 import type { GalleryItem, Participant } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { Page } from '../components/layout/AppShell';
-import { CardCover, CardStats, CoverBadge, DebateCard, DebateCover, VersionsBadge } from '../components/cards';
-import { Avatar, Bars, LinkButton, LogoMark } from '../components/ui';
-import { APP_DESCRIPTION, APP_NAME } from '../lib/brand';
+import { CardCover, CardStats, CoverBadge, DebateCard, VersionsBadge, VideoPoster } from '../components/cards';
+import { Avatar, Bars, LinkButton } from '../components/ui';
+import { APP_DESCRIPTION } from '../lib/brand';
 
 const FACTS = ['60+ models', 'Neural voices', '16:9 + 9:16', 'No install'];
 
@@ -33,26 +33,12 @@ const HERO_LINEUP: Participant[] = [
 ];
 const HERO_TOPIC = 'Will smart contracts replace banks?';
 
-/** The long video's first frame (brand bar, face-off, question), sized in `cqw` of the poster. */
+/** The long video's first frame (brand bar, face-off, question). */
 const HeroPlayer = () => (
   <div className="group relative animate-rise" style={{ animationDuration: '0.7s', animationDelay: '0.1s' }}>
     <div className="overflow-hidden rounded-panel border border-line-2 shadow-[0_40px_80px_-30px_rgba(0,0,0,0.8)]">
-      <DebateCover
-        layout="poster"
-        participants={HERO_LINEUP}
-        topLeft={
-          <span className="flex items-center gap-[1.3cqw]">
-            <span className="block size-[max(18px,4.4cqw)] [&>svg]:size-full">
-              <LogoMark />
-            </span>
-            <span className="font-display text-[max(10px,2.2cqw)] font-bold tracking-[-0.025em]">{APP_NAME}</span>
-          </span>
-        }
-        topRight={<span className="flex h-[max(18px,4.4cqw)] items-center rounded-full border-2 border-white/14 bg-ink/70 px-[1.5cqw] font-mono text-[max(8px,1.25cqw)] tracking-[0.1em] text-accent">AI DEBATE</span>}
-      >
-        {/* Kept above the floating render card. */}
-        <div className="absolute inset-x-[7%] bottom-[max(46px,8cqw)] text-center font-display text-[4cqw] font-extrabold leading-[1.06] tracking-[-0.03em] text-balance">{HERO_TOPIC}</div>
-      </DebateCover>
+      {/* The question is kept above the floating render card. */}
+      <VideoPoster participants={HERO_LINEUP} topic={HERO_TOPIC} label="AI DEBATE" questionBottom="max(46px,8cqw)" />
     </div>
     <div className="absolute -bottom-[22px] right-0 flex items-center gap-3 rounded-[14px] border border-line-2 bg-surface-2 px-3.5 py-3 shadow-[0_20px_40px_-20px_rgba(0,0,0,0.8)] sm:-right-2">
       <Bars />

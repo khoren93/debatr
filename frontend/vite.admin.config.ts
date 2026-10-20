@@ -11,6 +11,8 @@ export default defineConfig({
     outDir: 'build/admin',
     emptyOutDir: true,
     assetsDir: 'admin-assets',
+    // Fonts stay files: the console's CSP takes fonts from 'self' only, not data: URIs.
+    assetsInlineLimit: (file) => (file.endsWith('.woff2') ? false : undefined),
     rollupOptions: { input: 'admin.html' },
   },
 });

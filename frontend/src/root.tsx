@@ -3,7 +3,9 @@ import { Links, Meta, Outlet, Scripts, ScrollRestoration, useMatches, useRouteEr
 import { routeErrorOf } from './api/route';
 import { Seo } from './components/Seo';
 import { ToastProvider } from './components/ui';
+import { PRELOAD_FONTS } from './fonts';
 import { errorSeo, type PageHandle } from './lib/seo';
+import type { Route } from './+types/root';
 import './index.css';
 
 /** The page's language for `<html lang>`: the deepest route that knows it (`handle.lang`). */
@@ -17,6 +19,9 @@ const usePageLang = (): string => {
   return 'en';
 };
 
+/** The fonts (src/fonts.ts, bundled into the root stylesheet) start with the stylesheet, not after it. */
+export const links: Route.LinksFunction = () => PRELOAD_FONTS.map((href) => ({ rel: 'preload', href, as: 'font', type: 'font/woff2', crossOrigin: 'anonymous' }));
+
 /** The HTML document of every page (the server renders it; the browser hydrates it). Titles and
  *  the rest of the head come from each page's `<Seo>`. */
 export function Layout({ children }: { children: ReactNode }) {
@@ -27,12 +32,6 @@ export function Layout({ children }: { children: ReactNode }) {
         <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
         <meta name="theme-color" content="#0A0B0F" />
         <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=DM+Sans:opsz,wght@9..40,400..700&family=JetBrains+Mono:wght@400;500&display=swap"
-          rel="stylesheet"
-        />
         <Meta />
         <Links />
       </head>

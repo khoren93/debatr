@@ -35,6 +35,9 @@ const consolePage = (): Plugin => ({
 // https://vite.dev/config/ — the console's page goes before React Router's server rendering.
 export default defineConfig({
   plugins: [tailwindcss(), consolePage(), reactRouter()],
+  // Fonts (src/fonts.ts) stay files: a small subset inlined as data: would weigh down the
+  // render-blocking stylesheet.
+  build: { assetsInlineLimit: (file) => (file.endsWith('.woff2') ? false : undefined) },
   server: {
     port: 5173,
     // Local dev: proxy API (incl. SSE) to the backend so no CORS setup is needed.

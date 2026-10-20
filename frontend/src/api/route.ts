@@ -1,6 +1,7 @@
-import { isAxiosError } from 'axios';
 import { data, isRouteErrorResponse } from 'react-router';
-import { api } from './client';
+import { api, apiFailure } from './client';
+
+export { toQuery } from './client';
 
 /**
  * Route data: one load function per page serves the server `loader` (with `serverGet`, the
@@ -20,19 +21,12 @@ export interface ApiErrorData {
 
 export const UNAVAILABLE = 'The service is unavailable right now. Try again in a minute.';
 
-/** `?a=1&b=x` from the defined values (axios' param rules: undefined and null are left out). */
-export const toQuery = (params: Record<string, string | number | boolean | null | undefined>): string => {
-  const search = new URLSearchParams();
-  for (const [key, value] of Object.entries(params)) if (value !== undefined && value !== null) search.set(key, String(value));
-  const text = search.toString();
-  return text ? `?${text}` : '';
-};
-
-/** The route error data of an axios failure: its status (a network failure counts as 503). */
+/** The route error data of a failed API call: its status (a network failure counts as 503). */
 export const routeError = (err: unknown) => {
-  const answered = isAxiosError(err) && err.response ? err.response.status : 503;
+  const response = apiFailure(err)?.response;
+  const answered = response ? response.status : 503;
   const status = answered >= 500 ? 503 : answered;
-  const detail = isAxiosError(err) ? err.response?.data?.detail : undefined;
+  const detail = (response?.data as { detail?: unknown } | undefined)?.detail;
   return data<ApiErrorData>({ status, detail: status === 503 ? UNAVAILABLE : typeof detail === 'string' ? detail : 'Request failed' }, { status });
 };
 

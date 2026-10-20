@@ -2,8 +2,8 @@ import { interpolate, useCurrentFrame, useVideoConfig } from 'remotion';
 import type { Timeline } from '../../api/timeline';
 import { APP_NAME } from '../../lib/brand';
 import { timelineFormat } from '../../lib/formats';
-import { ACCENT, DISPLAY_FONT, FONT, INTRO_MS, MONO_FONT, barHeight } from '../constants';
-import { headlineSize, roundLabel } from '../utils';
+import { ACCENT, DISPLAY_FONT, FONT, INTRO_MS, MONO_FONT, barHeight, headlineSize } from '../constants';
+import { roundLabel } from '../utils';
 import { FaceOff } from './FaceOff';
 import { LogoTile } from './ModelLogo';
 

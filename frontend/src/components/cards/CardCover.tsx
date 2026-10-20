@@ -8,6 +8,8 @@ interface CardCoverProps {
   participants: Participant[];
   topLeft?: ReactNode;
   topRight?: ReactNode;
+  /** The page's first card (its largest paint): loaded at once and first, not lazily. */
+  priority?: boolean;
 }
 
 /**
@@ -15,7 +17,7 @@ interface CardCoverProps {
  * else the markup face-off; both 16:9. An AI cover carries its own format badge (top-left), so
  * the site's badges stack in its top-right corner, which its prompt keeps free of text.
  */
-export const CardCover = ({ cover, participants, topLeft, topRight }: CardCoverProps) => {
+export const CardCover = ({ cover, participants, topLeft, topRight, priority = false }: CardCoverProps) => {
   if (!cover) return <DebateCover participants={participants} topLeft={topLeft} topRight={topRight} />;
   return (
     <div className="relative aspect-video overflow-hidden bg-ink">
@@ -24,7 +26,8 @@ export const CardCover = ({ cover, participants, topLeft, topRight }: CardCoverP
         srcSet={`${cover.small_url} 768w, ${cover.url} 1536w`}
         sizes="(max-width: 700px) 100vw, 420px"
         alt=""
-        loading="lazy"
+        loading={priority ? 'eager' : 'lazy'}
+        fetchPriority={priority ? 'high' : undefined}
         decoding="async"
         className="absolute inset-0 size-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
       />

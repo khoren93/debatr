@@ -126,3 +126,5 @@ export const LiveCard = ({ status, topic, roundLabel, debaters, speaker, text, s
     />
   );
 };
+
+export default LiveCard;

@@ -131,8 +131,8 @@ export const thumbnailVariants = (topic: string, debaters: SpeakerInfo[], timeli
   ];
 };
 
-const DISPLAY = '"Bricolage Grotesque", "DM Sans", system-ui, sans-serif';
-const MONO = '"JetBrains Mono", ui-monospace, monospace';
+const DISPLAY = '"Bricolage Grotesque Variable", "Bricolage Grotesque", "DM Sans Variable", system-ui, sans-serif';
+const MONO = '"JetBrains Mono Variable", "JetBrains Mono", ui-monospace, monospace';
 
 const wrap = (ctx: CanvasRenderingContext2D, text: string, maxWidth: number) => {
   const lines: string[] = [];

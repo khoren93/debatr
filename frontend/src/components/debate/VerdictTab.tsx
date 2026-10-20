@@ -1,10 +1,10 @@
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 import type { Turn, Verdict } from '../../api/types';
 import { JUDGE_COLOR, shortModelName } from '../../lib/format';
-import { Button, EmptyState } from '../ui';
+import { markdownHtml } from '../../lib/markdown';
+import { EmptyState } from '../ui';
 import type { SpeakerInfo } from './helpers';
 import { SpeakerTile } from './SpeakerTile';
+import { VerdictGate } from './VerdictGate';
 
 interface Props {
   verdict: Verdict | null;
@@ -18,19 +18,6 @@ interface Props {
   show?: string;
   onReveal?: () => void;
 }
-
-/** Placeholder shown instead of the judge's ruling while the audience vote is still blind. */
-export const VerdictGate = ({ onReveal, compact = false }: { onReveal?: () => void; compact?: boolean }) => (
-  <div className={`rounded-panel border border-dashed border-accent/30 text-center ${compact ? 'p-4' : 'mt-[18px] p-[clamp(20px,3vw,32px)]'}`}>
-    <div className="font-mono text-[11px] tracking-[0.12em] text-accent">JUDGE · VERDICT HIDDEN</div>
-    <p className={`mx-auto max-w-[460px] text-text-3 ${compact ? 'mt-1.5 text-[13px]' : 'mt-2.5 text-[15px]'}`}>The judge has ruled. Vote for the debater who argued better first — then see whether you agree.</p>
-    {onReveal && (
-      <Button variant="ghost" size="sm" onClick={onReveal} className="mt-2.5">
-        Reveal the verdict
-      </Button>
-    )}
-  </div>
-);
 
 /** The judge's scores round by round (rap battles), the totals last; the round's better score bright. */
 const ScoreSheet = ({ rounds, lineup, winnerId }: { rounds: NonNullable<Verdict['rounds']>; lineup: SpeakerInfo[]; winnerId: string | null }) => {
@@ -128,9 +115,7 @@ export const VerdictTab = ({ verdict, verdictTurn, lineup, isActive, markdown, h
             Full verdict <span className="inline-block transition-transform group-open:rotate-90">›</span>
           </summary>
           {markdown ? (
-            <div className="prose prose-invert prose-sm mt-3 max-w-none text-text-2 prose-p:my-1.5 prose-headings:my-2 prose-strong:text-text">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{fullText}</ReactMarkdown>
-            </div>
+            <div className="prose prose-invert prose-sm mt-3 max-w-none text-text-2 prose-p:my-1.5 prose-headings:my-2 prose-strong:text-text" dangerouslySetInnerHTML={{ __html: markdownHtml(fullText) }} />
           ) : (
             <p className="mt-3 whitespace-pre-line text-[15px] leading-[1.6] text-text-2">{fullText.replace(/^\s*\[[^\]]{1,30}\]\s*/, '')}</p>
           )}
@@ -139,3 +124,5 @@ export const VerdictTab = ({ verdict, verdictTurn, lineup, isActive, markdown, h
     </div>
   );
 };
+
+export default VerdictTab;

@@ -146,10 +146,10 @@ Disallow: /
         file_server
     }
 
-    # The console has no inline script and loads nothing from other origins but Google Fonts; it is
-    # never framed. media-src data: is the debate player's silent track that unlocks audio on the
+    # The console has no inline script and loads nothing from other origins (its fonts are its own
+    # files); it is never framed. media-src data: is the debate player's silent track that unlocks audio on the
     # first click (Remotion's shared audio tags).
-    header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; media-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'"
+    header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; media-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'"
     header {
         Strict-Transport-Security "max-age=31536000; includeSubDomains"
         X-Frame-Options "DENY"

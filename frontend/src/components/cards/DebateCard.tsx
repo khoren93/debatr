@@ -29,7 +29,7 @@ interface DebateCardProps {
 export const DebateCard = ({ id, to, title, topLeft, topRight, cover, footerLeft, footerRight, index = 0, className = '', style }: DebateCardProps) => (
   <Link
     to={to}
-    className={`group block overflow-hidden rounded-card border border-line bg-surface transition-[transform,border-color] duration-200 hover:-translate-y-[3px] hover:border-line-3 animate-rise ${className}`}
+    className={`group block overflow-hidden rounded-card border border-line bg-surface transition-[translate,border-color] duration-200 hover:-translate-y-[3px] hover:border-line-3 animate-rise ${className}`}
     style={{ animationDelay: `${Math.min(index, 10) * 40}ms`, ...style }}
   >
     {cover ? (

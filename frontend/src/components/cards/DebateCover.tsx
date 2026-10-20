@@ -30,9 +30,9 @@ interface CoverLayout {
 const LAYOUTS = {
   /** Gallery / library cards: 16:9 like the AI covers they sit next to (CardCover). */
   card: { aspect: 'aspect-video', logoY: 50, logo: { 2: 17, 3: 13, 4: 10.5 }, vs: [9, 7.2], name: [3.2, 2.4], gap: 2.2, corners: 'p-3', shade: 'h-1/3 from-black/45' },
-  /** The long video's first frame (`video/components/FaceOff` in the intro card): logos higher up,
-   *  room for the question below, a pulsing VS mark. */
-  poster: { aspect: 'aspect-video', logoY: 36, logo: { 2: 13, 3: 9.4, 4: 7.3 }, vs: [7.2, 5.6], name: [1.7, 1.4], nameMin: 9, gap: 2.2, corners: 'px-[2.4cqw] py-[2.2cqw]', shade: 'h-3/5 from-ink/90', vsClass: 'motion-safe:animate-vs-pulse' },
+  /** The long video's first frame (`video/components/FaceOff` in the intro card): logos as high
+   *  as there (the player's button sits below the VS), room for the question, a pulsing VS mark. */
+  poster: { aspect: 'aspect-video', logoY: 31, logo: { 2: 13, 3: 9.4, 4: 7.3 }, vs: [7.2, 5.6], name: [1.7, 1.4], nameMin: 9, gap: 2.2, corners: 'px-[2.4cqw] py-[2.2cqw]', shade: 'h-3/5 from-ink/90', vsClass: 'motion-safe:animate-vs-pulse' },
 } satisfies Record<string, CoverLayout>;
 
 const sideClip = (i: number, n: number) => {
@@ -45,8 +45,9 @@ const sideClip = (i: number, n: number) => {
   return `polygon(${lt}% 0, ${rt}% 0, ${rb}% 100%, ${lb}% 100%)`;
 };
 
-/** A provider logo sized in container units (the cover scales with its card). */
-const BigLogo = ({ modelId, color, size }: { modelId: string; color: string; size: number }) => {
+/** A provider logo sized in container units (the cover scales with its card). `eager` above the
+ *  fold (the poster), lazy in card grids. */
+const BigLogo = ({ modelId, color, size, eager }: { modelId: string; color: string; size: number; eager: boolean }) => {
   const icon = modelIcon(modelId);
   const box: CSSProperties = { width: `${size}cqw`, height: `${size}cqw`, filter: `drop-shadow(0 0 ${size / 5}cqw ${color}aa)` };
   if (!icon) {
@@ -61,7 +62,7 @@ const BigLogo = ({ modelId, color, size }: { modelId: string; color: string; siz
     const mask = `url(${icon.src}) center / contain no-repeat`;
     return <span className="block bg-white" style={{ ...box, mask, WebkitMask: mask }} />;
   }
-  return <img src={icon.src} alt="" loading="lazy" decoding="async" className="block" style={box} />;
+  return <img src={icon.src} alt="" loading={eager ? 'eager' : 'lazy'} decoding="async" className="block" style={box} />;
 };
 
 interface DebateCoverProps {
@@ -122,7 +123,7 @@ export const DebateCover = ({ participants, layout = 'card', topLeft, topRight, 
         const name = n > 2 ? look.name[1] : look.name[0];
         return (
           <div key={i} className="absolute flex -translate-x-1/2 -translate-y-1/2 flex-col items-center" style={{ left: `${cx}%`, top: `${look.logoY}%`, width: `${100 / n - 4}%` }}>
-            <span className="transition-transform duration-300 group-hover:scale-[1.06]">{p ? <BigLogo modelId={p.model} color={color} size={logo} /> : <span className="block rounded-full bg-white/10" style={{ width: `${logo}cqw`, height: `${logo}cqw` }} />}</span>
+            <span className="transition-transform duration-300 group-hover:scale-[1.06]">{p ? <BigLogo modelId={p.model} color={color} size={logo} eager={layout === 'poster'} /> : <span className="block rounded-full bg-white/10" style={{ width: `${logo}cqw`, height: `${logo}cqw` }} />}</span>
             <span className="max-w-full truncate font-mono font-semibold uppercase" style={{ color, marginTop: `${look.gap}cqw`, fontSize: look.nameMin ? `max(${look.nameMin}px, ${name}cqw)` : `${name}cqw`, letterSpacing: n > 2 ? '0.03em' : '0.12em' }}>
               {p ? names[i] : '—'}
             </span>

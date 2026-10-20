@@ -170,6 +170,7 @@ const Gallery = ({ filters, items, total }: Props) => {
                 <CardCover
                   cover={item.cover}
                   participants={item.participants}
+                  priority={i === 0}
                   topLeft={<VersionsBadge motion={item.motion} participants={item.participants} />}
                   // An AI cover shows its format itself.
                   topRight={<CoverBadge format={item.cover ? undefined : item.format} premiumVoices={item.premium_voices} />}

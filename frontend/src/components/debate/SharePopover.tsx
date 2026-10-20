@@ -141,3 +141,5 @@ export const SharePopover = ({ debate, onChange }: Props) => {
     </div>
   );
 };
+
+export default SharePopover;

@@ -2,13 +2,60 @@
 @plugin "@tailwindcss/typography";
 
 /*
+ * Fallbacks with the web fonts' metrics: until DM Sans and Bricolage arrive, Latin text is drawn
+ * in Arial scaled to their average width and line metrics (computed from the woff2 files at the
+ * weights and optical sizes the site uses, as Next.js does), so lines wrap the same and nothing
+ * shifts when the fonts swap in (CLS). Other scripts keep the system font, as before.
+ */
+@font-face {
+  font-family: "DM Sans Fallback";
+  src: local("Arial"), local("ArialMT");
+  font-weight: 100 599;
+  size-adjust: 105.35%;
+  ascent-override: 94.16%;
+  descent-override: 29.42%;
+  line-gap-override: 0%;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+2000-206F, U+20AC, U+2122, U+2212;
+}
+@font-face {
+  font-family: "DM Sans Fallback";
+  src: local("Arial Bold"), local("Arial-BoldMT");
+  font-weight: 600 900;
+  size-adjust: 103.25%;
+  ascent-override: 96.08%;
+  descent-override: 30.02%;
+  line-gap-override: 0%;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+2000-206F, U+20AC, U+2122, U+2212;
+}
+@font-face {
+  font-family: "Bricolage Grotesque Fallback";
+  src: local("Arial"), local("ArialMT");
+  font-weight: 100 599;
+  size-adjust: 105.8%;
+  ascent-override: 87.91%;
+  descent-override: 25.52%;
+  line-gap-override: 0%;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+2000-206F, U+20AC, U+2122, U+2212;
+}
+@font-face {
+  font-family: "Bricolage Grotesque Fallback";
+  src: local("Arial Bold"), local("Arial-BoldMT");
+  font-weight: 600 900;
+  size-adjust: 100.3%;
+  ascent-override: 92.7%;
+  descent-override: 26.9%;
+  line-gap-override: 0%;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+2000-206F, U+20AC, U+2122, U+2212;
+}
+
+/*
  * Debatr design tokens (dark studio theme from the Claude Design mockup).
- * Fonts are loaded from Google Fonts in index.html.
+ * Fonts come from our own origin (src/fonts.ts, fontsource's "… Variable" families).
  */
 @theme {
-  --font-sans: "DM Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --font-display: "Bricolage Grotesque", "DM Sans", system-ui, sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-sans: "DM Sans Variable", "DM Sans Fallback", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-display: "Bricolage Grotesque Variable", "Bricolage Grotesque Fallback", "DM Sans Variable", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 
   --color-ink: #0a0b0f; /* page background */
   --color-ink-2: #0c0d12; /* sidebar / player background */

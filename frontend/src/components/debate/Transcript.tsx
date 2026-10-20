@@ -1,15 +1,14 @@
 import type { MouseEvent, ReactNode } from 'react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 import type { Timeline } from '../../api/timeline';
 import type { Participant, Turn, TurnStartedEvent } from '../../api/types';
 import { hideStudioMarkers, isErrorTurn, roundHeading, shortModelName, splitEmotionTag, turnErrorMessage } from '../../lib/format';
+import { markdownHtml } from '../../lib/markdown';
 import { EmptyState, ErrorBox } from '../ui';
 import { msLabel, speakerOfTurn, speakerTitle, turnColor, type SpeakerInfo } from './helpers';
 import { disputesByKey, sceneCast } from './sceneBoard';
 import { SpeakerTile } from './SpeakerTile';
 import { TurnScenes } from './TurnScenes';
-import { VerdictGate } from './VerdictTab';
+import { VerdictGate } from './VerdictGate';
 
 export interface StreamingTurn extends TurnStartedEvent {
   text: string;
@@ -90,9 +89,7 @@ const Row = ({ turn, participants, lineup, time, markdown, streaming = false, ac
         {error ? (
           <ErrorBox className="mt-2">{turnErrorMessage({ error: turn.error ?? null, text: turn.text })}</ErrorBox>
         ) : markdown && !streaming ? (
-          <div className={`prose prose-invert prose-sm mt-1.5 max-w-none prose-p:my-1.5 prose-headings:my-2 prose-strong:text-text ${highlighted ? 'text-text' : 'text-text-3'}`}>
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{body}</ReactMarkdown>
-          </div>
+          <div className={`prose prose-invert prose-sm mt-1.5 max-w-none prose-p:my-1.5 prose-headings:my-2 prose-strong:text-text ${highlighted ? 'text-text' : 'text-text-3'}`} dangerouslySetInnerHTML={{ __html: markdownHtml(body) }} />
         ) : (
           <p className={`mt-1.5 whitespace-pre-line text-[15px] leading-[1.6] text-pretty ${highlighted ? 'text-text' : 'text-text-3'}`}>
             {body || (streaming ? <span className="italic text-muted">Thinking…</span> : null)}

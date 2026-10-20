@@ -1,5 +1,5 @@
 import { Download, Sparkles, X } from 'lucide-react';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Timeline } from '../../api/timeline';
 import type { Cover, DebateDetail, DebateMedia } from '../../api/types';
 import { formatDuration } from '../../lib/format';
@@ -29,15 +29,25 @@ interface Props {
 }
 
 /** Slide-over "Export & publish" panel: browser renders, the audio track and the YouTube kit.
- *  It stays mounted while hidden so a render keeps running when the panel is closed. */
+ *  The page mounts it on the first open (its chunk is not part of the page's first JavaScript); it
+ *  stays mounted while hidden so a render keeps running when the panel is closed. */
 export const ExportRail = ({ open, onClose, debate, lineup, media, timeline, mediaBase, format, onFormat, highlightIndex, onHighlightChange, onGenerate, onCover, focusCover }: Props) => {
   const closeRef = useRef<HTMLButtonElement>(null);
+  // Mounted already open: drawn closed for a frame first, so it slides in as on later opens.
+  const [entered, setEntered] = useState(false);
+  useEffect(() => {
+    let frame = requestAnimationFrame(() => {
+      frame = requestAnimationFrame(() => setEntered(true));
+    });
+    return () => cancelAnimationFrame(frame);
+  }, []);
+  const shown = open && entered;
 
   useEffect(() => {
-    if (!open) return;
+    if (!shown) return;
     closeRef.current?.focus();
     if (focusCover) document.getElementById('cover-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }, [open, focusCover]);
+  }, [shown, focusCover]);
 
   useEffect(() => {
     if (!open) return;
@@ -55,11 +65,13 @@ export const ExportRail = ({ open, onClose, debate, lineup, media, timeline, med
 
   return (
     <>
-      <div onClick={onClose} className={`fixed inset-0 z-[55] bg-[rgba(5,6,9,0.55)] backdrop-blur-[3px] transition-opacity duration-300 ${open ? 'opacity-100' : 'pointer-events-none opacity-0'}`} aria-hidden="true" />
+      <div onClick={onClose} className={`fixed inset-0 z-[55] bg-[rgba(5,6,9,0.55)] backdrop-blur-[3px] transition-opacity duration-300 ${shown ? 'opacity-100' : 'pointer-events-none opacity-0'}`} aria-hidden="true" />
+      {/* Visible at once when opening (the close button takes the focus), hidden only after
+          sliding out. */}
       <aside
-        inert={!open}
+        inert={!shown}
         aria-label="Export and publish"
-        className={`fixed top-3 right-3 bottom-3 z-[58] grid w-[min(440px,calc(100vw-24px))] content-start gap-3.5 overflow-y-auto overscroll-contain rounded-[22px] border border-white/9 bg-ink-2 px-4 pt-[18px] pb-7 shadow-[-30px_0_80px_-20px_rgba(0,0,0,0.85)] transition-[transform,opacity,visibility] duration-[420ms] ease-[cubic-bezier(.22,1,.36,1)] ${open ? 'visible translate-x-0 opacity-100' : 'invisible translate-x-[calc(100%+24px)] opacity-0'}`}
+        className={`fixed top-3 right-3 bottom-3 z-[58] grid w-[min(440px,calc(100vw-24px))] content-start gap-3.5 overflow-y-auto overscroll-contain rounded-[22px] border border-white/9 bg-ink-2 px-4 pt-[18px] pb-7 shadow-[-30px_0_80px_-20px_rgba(0,0,0,0.85)] duration-[420ms] ease-[cubic-bezier(.22,1,.36,1)] ${shown ? 'visible translate-x-0 opacity-100 transition-[translate,opacity]' : 'invisible translate-x-[calc(100%+24px)] opacity-0 transition-[translate,opacity,visibility]'}`}
       >
         <div className="flex items-center justify-between gap-2.5">
           <h2 className="font-display text-lg font-bold tracking-[-0.02em]">Export &amp; publish</h2>

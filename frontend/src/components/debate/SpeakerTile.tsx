@@ -7,7 +7,7 @@ export const ModelLogo = ({ model, className = '' }: { model: string | null | un
     const letter = (modelAuthor(model ?? '') || model || '?').charAt(0).toUpperCase();
     return (
       <svg viewBox="0 0 10 10" className={`size-[56%] ${className}`} aria-hidden="true">
-        <text x="5" y="7.6" textAnchor="middle" fontSize="7.5" fontWeight="700" fill="#B4B8C6" fontFamily="DM Sans, sans-serif">
+        <text x="5" y="7.6" textAnchor="middle" fontSize="7.5" fontWeight="700" fill="#B4B8C6" fontFamily="DM Sans Variable, DM Sans, sans-serif">
           {letter}
         </text>
       </svg>

@@ -8,8 +8,8 @@ import { BrandMark, EndCard, LabelChip, RoundChip } from './components/Chrome';
 import { FaceOff } from './components/FaceOff';
 import { SpeakerRowCard, SpeakingChip } from './components/SpeakerCard';
 import { debaterTag } from './speakers';
-import { ACCENT, DISPLAY_FONT, FONT, SHORT_H, SHORT_HOOK_MS, SHORT_W, barHeight } from './constants';
-import { frameToMs, headlineSize, highlightRange, msToFrame } from './utils';
+import { ACCENT, DISPLAY_FONT, FONT, SHORT_H, SHORT_HOOK_MS, SHORT_W, barHeight, headlineSize } from './constants';
+import { frameToMs, highlightRange, msToFrame } from './utils';
 import { SceneStage } from './visuals/SceneStage';
 
 export interface ShortProps {

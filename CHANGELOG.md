@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Faster public pages**: the debate player is a facade — the page arrives with the poster (the
+  AI cover, or the video's first frame drawn in markup) and a play button, and the video player
+  loads in idle time, on hover or on the first click (a click before it is there plays once it
+  is, from the chosen turn). The page's first JavaScript is ~20 % smaller (Markdown through
+  micromark, the export panel, the verdict tab and the owner's dialogs load when opened, the site
+  calls the API with `fetch` instead of axios), fonts come from the site itself instead of Google
+  Fonts with size-matched fallbacks, and nothing shifts while a page loads. On a throttled phone
+  a debate page with a video and an AI cover paints its largest element in 3.1 s instead of 8.8 s.
+
 ## [1.3.0] - 2026-10-20
 
 ### Added

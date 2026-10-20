@@ -1,5 +1,5 @@
 import { Captions, Copy, Ellipsis, FileText, ImagePlus, PanelRight, RectangleHorizontal, RectangleVertical, Repeat2, Share, Sparkles, Square, Trash2 } from 'lucide-react';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { Suspense, lazy, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import type { Timeline } from '../../api/timeline';
 import type { DebateDetail } from '../../api/types';
@@ -7,8 +7,10 @@ import { formatCost, formatTokens } from '../../lib/format';
 import { useToast } from '../ui';
 import { debateMarkdown, downloadText, timelineSrt, transcriptText, type VideoFormat } from './helpers';
 import { LikeButton } from './LikeButton';
-import { SharePopover } from './SharePopover';
 import { ICON_ON_PHONES, TOOL_BUTTON } from './toolButton';
+
+// Opens on a click: not part of the page's first JavaScript.
+const SharePopover = lazy(() => import('./SharePopover'));
 
 interface Props {
   debate: DebateDetail;
@@ -140,7 +142,9 @@ export const DebateActions = ({ debate, timeline, isActive, completed, voicing, 
 
       {open === 'share' && (
         <div className={`${POPOVER} w-[min(360px,calc(100vw-32px))] p-4`} role="dialog" aria-label="Share this debate">
-          <SharePopover debate={debate} onChange={onPatch} />
+          <Suspense fallback={<div className="h-24" />}>
+            <SharePopover debate={debate} onChange={onPatch} />
+          </Suspense>
         </div>
       )}
       {open === 'menu' && (

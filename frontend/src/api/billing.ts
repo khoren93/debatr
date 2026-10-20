@@ -15,7 +15,7 @@ export const listTransactions = (limit = 50, offset = 0) =>
 /** The whole ledger as CSV text, with the server's file name. */
 export const exportTransactions = () =>
   api.get<string>('/billing/transactions.csv', { responseType: 'text' }).then((r) => {
-    const disposition = String(r.headers['content-disposition'] ?? '');
+    const disposition = r.headers.get('content-disposition') ?? '';
     const name = /filename="([^"]+)"/.exec(disposition)?.[1] ?? 'ledger.csv';
     return { text: r.data, name };
   });

@@ -402,3 +402,5 @@ export const RegenerateAudioDialog = ({ open, onClose, debate, media, onQueued }
     </>
   );
 };
+
+export default RegenerateAudioDialog;

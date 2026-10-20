@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router';
 import { ToastProvider } from './components/ui';
 import AdminApp from './pages/admin/AdminApp';
+import './fonts';
 import './index.css';
 
 /** The admin console: a static SPA of its own (admin.html, vite.admin.config.ts), served on

@@ -1,5 +1,5 @@
 import type { PlayerRef } from '@remotion/player';
-import { Fragment, lazy, useEffect, useRef, useState } from 'react';
+import { Fragment, Suspense, lazy, startTransition, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { ArrowLeft, MicVocal, Repeat2, RotateCcw, ShieldAlert } from 'lucide-react';
 import { getErrorMessage } from '../api/client';
@@ -14,12 +14,9 @@ import { CardStats } from '../components/cards';
 import { AudienceVote } from '../components/debate/AudienceVote';
 import { DebateActions } from '../components/debate/DebateActions';
 import { DetailsTab } from '../components/debate/DetailsTab';
-import { LiveCard } from '../components/debate/LiveCard';
-import { PlayerPending, PlayerPlaceholder, SegmentBar, type BarSegment } from '../components/debate/PlayerShell';
-import { RegenerateAudioDialog } from '../components/debate/RegenerateAudioDialog';
+import { PlayerFrame, PlayerPending, PlayerPlaceholder, PlayerPoster, PlayerShell, SegmentBar, type BarSegment } from '../components/debate/PlayerShell';
 import { SpeakerTile } from '../components/debate/SpeakerTile';
 import { Transcript, type StreamingTurn } from '../components/debate/Transcript';
-import { VerdictTab } from '../components/debate/VerdictTab';
 import { VersionsStrip } from '../components/debate/VersionsStrip';
 import { isJudgeTurn, pinRoutedModel, resumePoint, speakerLineup, speakerOfTurn, speakerTitle, turnColor, turnTypeLabel, videoChapters, type SpeakerInfo, type VideoFormat } from '../components/debate/helpers';
 import { useDebateMedia } from '../hooks/useDebateMedia';
@@ -30,9 +27,21 @@ import { STAGE_COLORS, STAGE_LABELS, roundLabel, shortModelName, stageOf } from 
 import { formatSpec } from '../lib/formats';
 import { msToFrame } from '../video/timing';
 
-// Browser-only (Remotion, the MP4 renderer): loaded after hydration, see ClientOnly.
+// Browser-only (Remotion, the MP4 renderer): loaded after hydration (see ClientOnly; the player:
+// the facade below).
 const DebatePlayer = lazy(() => import('../components/debate/DebatePlayer'));
 const ExportRail = lazy(() => import('../components/debate/ExportRail'));
+// Not in the server's HTML of a public page (a folded tab, the owner's dialog, a live run): loaded
+// when shown, so the page's first JavaScript stays small.
+const VerdictTab = lazy(() => import('../components/debate/VerdictTab'));
+const RegenerateAudioDialog = lazy(() => import('../components/debate/RegenerateAudioDialog'));
+const LiveCard = lazy(() => import('../components/debate/LiveCard'));
+
+/** Save-Data or a 2G connection: the player's chunk waits for the viewer's intent. */
+const saveData = () => {
+  const connection = (navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string } }).connection;
+  return Boolean(connection?.saveData) || /2g/.test(connection?.effectiveType ?? '');
+};
 
 interface Props {
   /** The debate as the route loaded it (server or client loader). */
@@ -104,6 +113,8 @@ const DebateView = ({ initial, viewer, id, slug }: Props) => {
   const [startSeq, setStartSeq] = useState<number | null>(null);
   const [activeSeq, setActiveSeq] = useState<number | null>(null);
   const [railOpen, setRailOpen] = useState(false);
+  // The export panel (and its chunk) exists from its first open on.
+  const [railUsed, setRailUsed] = useState(false);
   const [coverFocus, setCoverFocus] = useState(false);
   const [confirm, setConfirm] = useState<'stop' | 'delete' | null>(null);
   const [resuming, setResuming] = useState(false);
@@ -111,6 +122,12 @@ const DebateView = ({ initial, viewer, id, slug }: Props) => {
   const [regenOpen, setRegenOpen] = useState(false);
   // Blind voting: the judge's ruling stays covered until the viewer votes or peeks.
   const [revealed, setRevealed] = useState(false);
+  // The player's facade: the server's HTML has the poster and the play button; the Remotion chunk
+  // comes on intent (hover, focus), in idle time after the page's load, or on the first click.
+  const [wantPlayer, setWantPlayer] = useState(false);
+  // Play was asked for before the player was there (it plays once mounted, see DebatePlayer).
+  const [deferred, setDeferred] = useState(false);
+  const [played, setPlayed] = useState(false);
   const playerRef = useRef<PlayerRef | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -193,6 +210,27 @@ const DebateView = ({ initial, viewer, id, slug }: Props) => {
       if (mediaStatus === 'ready') toast.success('Audio is ready — the video can be rendered now');
     }
   }, [mediaStatus, debateId, toast]);
+
+  // The facade's background load: once the page has loaded, in idle time (the poster is the page's
+  // largest paint and the player's chunk is not needed for it), unless the viewer saves data.
+  const hasVideo = !isActive && (media?.media_status ?? debate.media_status) === 'ready';
+  useEffect(() => {
+    if (!hasVideo || saveData()) return;
+    let idle: number | undefined;
+    let timer: number | undefined;
+    const warm = () => startTransition(() => setWantPlayer(true));
+    const schedule = () => {
+      if (typeof window.requestIdleCallback === 'function') idle = window.requestIdleCallback(warm, { timeout: 4000 });
+      else timer = window.setTimeout(warm, 1500);
+    };
+    if (document.readyState === 'complete') schedule();
+    else window.addEventListener('load', schedule, { once: true });
+    return () => {
+      window.removeEventListener('load', schedule);
+      if (idle !== undefined) window.cancelIdleCallback(idle);
+      window.clearTimeout(timer);
+    };
+  }, [hasVideo]);
 
   useDebateStream(debateId, isActive, {
     onDebateStarted: () => setDebate((d) => ({ ...d, status: 'running' })),
@@ -297,6 +335,8 @@ const DebateView = ({ initial, viewer, id, slug }: Props) => {
     setFormat(f);
     setStartSeq(null);
     setActiveSeq(null);
+    setDeferred(false);
+    warmPlayer();
   };
 
   const changeHighlight = (i: number) => {
@@ -304,7 +344,24 @@ const DebateView = ({ initial, viewer, id, slug }: Props) => {
     setActiveSeq(null);
   };
 
-  /** Transcript click: jump the player to the turn (the long video when the Short lacks it). */
+  /** Kept in the background (a transition): the poster stays until the chunk is there. */
+  const warmPlayer = () => {
+    if (!wantPlayer) startTransition(() => setWantPlayer(true));
+  };
+
+  /** A click before the player is there: load it and play once it is. */
+  const requestPlay = () => {
+    setDeferred(true);
+    setWantPlayer(true);
+  };
+
+  const onPlayed = () => {
+    setPlayed(true);
+    setDeferred(false);
+  };
+
+  /** Transcript click: jump the player to the turn (the long video when the Short lacks it).
+   *  Before the player is loaded the turn is remembered and the video starts there. */
   const seekToSeq = (seq: number) => {
     if (!timeline) return;
     const chapter = videoChapters(timeline, format, highlightIndex).chapters.find((c) => c.seq === seq);
@@ -314,6 +371,7 @@ const DebateView = ({ initial, viewer, id, slug }: Props) => {
       player.play();
       return;
     }
+    if (!player) requestPlay();
     setFormat('long');
     setStartSeq(seq);
   };
@@ -326,6 +384,12 @@ const DebateView = ({ initial, viewer, id, slug }: Props) => {
   const openCover = () => {
     setCoverFocus(true);
     setRailOpen(true);
+    setRailUsed(true);
+  };
+
+  /** Hover or focus on the toolbar: fetch the export panel's chunk before the click. */
+  const warmRail = () => {
+    if (!railUsed) void import('../components/debate/ExportRail');
   };
 
   const scrollToTurn = (seq: number) => {
@@ -360,8 +424,9 @@ const DebateView = ({ initial, viewer, id, slug }: Props) => {
   const reveal = () => setRevealed(true);
   const topic = debate.settings.topic || debate.title || 'Debate';
   const playable = !isActive && !!timeline && !!media?.urls;
-  const voiced = !isActive && (media?.media_status ?? debate.media_status) === 'ready';
-  const canExport = completed && (!!timeline || isOwner);
+  const voiced = hasVideo;
+  // Known from the debate itself, so the toolbar is complete in the server's HTML (nothing moves).
+  const canExport = completed && (voiced || !!timeline || isOwner);
   const markdown = debate.settings.output_style === 'markdown';
 
   // Turns so far as a bar (live, or before the audio exists).
@@ -387,15 +452,23 @@ const DebateView = ({ initial, viewer, id, slug }: Props) => {
     </>
   );
 
-  // With the video ready its poster shows the question and the debaters, so the header keeps only
-  // the meta line (the question stays the page's heading for screen readers).
-  const posterHeader = !isActive && (media?.media_status ?? debate.media_status) === 'ready';
+  // With the video ready its markup poster shows the question and the debaters, so the header
+  // keeps only the meta line (the question stays the page's heading for screen readers). An AI
+  // cover carries a hook, not the question: the header stays.
+  const cover = debate.cover.current;
+  const posterHeader = voiced && !cover;
   const backLink = (
     <Link to={backTo.to} className="inline-flex w-max items-center gap-2 text-[13px] font-medium text-muted hover:text-text">
       <ArrowLeft className="size-4" /> {backTo.label}
     </Link>
   );
   const show = formatSpec(debate.settings.format);
+  // The long video's poster until its first play (a transcript click starts at a turn instead).
+  const posterOn = format === 'long' && !played && startSeq === null;
+  const poster = <PlayerPoster cover={cover} participants={participants} topic={topic} label={show.label} />;
+  const pending = (
+    <PlayerPending timeline={timeline} format={format} highlightIndex={highlightIndex} turns={overview} durationMs={debate.duration_ms ?? 0} poster={posterOn ? poster : null} onPlay={requestPlay} waiting={deferred} />
+  );
   const meta = (
     <div className="flex flex-wrap items-center gap-x-3.5 gap-y-1.5 text-xs text-muted">
       {/* A finished debate needs no status: that is what the gallery shows. */}
@@ -430,7 +503,9 @@ const DebateView = ({ initial, viewer, id, slug }: Props) => {
     <Page>
       <article className="mx-auto grid w-full max-w-[1180px] gap-[22px]">
         {posterHeader ? (
-          <header className="flex min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-2">
+          // Phones: the meta line has a row of its own, so the server's UTC date turning into
+          // "Today" after hydration cannot pull it up next to the back link (a layout shift).
+          <header className="flex min-w-0 flex-col items-start gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-x-4">
             <h1 className="sr-only">{topic}</h1>
             {backLink}
             {meta}
@@ -468,7 +543,7 @@ const DebateView = ({ initial, viewer, id, slug }: Props) => {
         )}
 
         <div className="grid min-w-0 gap-3">
-          <div className="flex flex-wrap items-center gap-3 sm:justify-end">
+          <div className="flex flex-wrap items-center gap-3 sm:justify-end" onPointerEnter={warmRail} onFocus={warmRail}>
             <DebateActions
               debate={debate}
               timeline={timeline}
@@ -480,8 +555,9 @@ const DebateView = ({ initial, viewer, id, slug }: Props) => {
               onToggleRail={() => {
                 setCoverFocus(false);
                 setRailOpen((v) => !v);
+                setRailUsed(true);
               }}
-              format={playable ? format : undefined}
+              format={voiced ? format : undefined}
               onFormat={changeFormat}
               onLikes={updateLikes}
               onPatch={(patch) => setDebate((d) => ({ ...d, ...patch }))}
@@ -493,24 +569,45 @@ const DebateView = ({ initial, viewer, id, slug }: Props) => {
           </div>
 
           {isActive ? (
-            <LiveCard
-              status={debate.status === 'queued' ? 'queued' : 'running'}
-              topic={topic}
-              roundLabel={liveRound ? roundLabel(liveRound.id, liveRound.label).toUpperCase() : null}
-              debaters={debaters}
-              speaker={liveSpeaker}
-              text={streaming?.text ?? ''}
-              started={debate.turns.length > 0}
-              studio={studio}
-              overview={overviewStrip}
-            />
-          ) : playable && timeline ? (
-            <ClientOnly fallback={<PlayerPending timeline={timeline} format={format} highlightIndex={highlightIndex} />}>
-              {() => <DebatePlayer timeline={timeline} mediaBase={mediaBase} format={format} highlightIndex={highlightIndex} startSeq={startSeq} playerRef={playerRef} onActiveSeq={setActiveSeq} />}
-            </ClientOnly>
+            <Suspense fallback={<PlayerShell frame={<PlayerFrame vertical={false} />} controls={overviewStrip} />}>
+              <LiveCard
+                status={debate.status === 'queued' ? 'queued' : 'running'}
+                topic={topic}
+                roundLabel={liveRound ? roundLabel(liveRound.id, liveRound.label).toUpperCase() : null}
+                debaters={debaters}
+                speaker={liveSpeaker}
+                text={streaming?.text ?? ''}
+                started={debate.turns.length > 0}
+                studio={studio}
+                overview={overviewStrip}
+              />
+            </Suspense>
           ) : voiced ? (
-            // Voiced, its media still loading (and in the server's HTML): the player's layout.
-            <PlayerPending timeline={null} format={format} highlightIndex={highlightIndex} turns={overview} durationMs={debate.duration_ms ?? 0} />
+            // The facade: the server's HTML and the wait show the player's layout with the poster;
+            // the Remotion player replaces it once wanted and its media is loaded (wantPlayer is
+            // false on the server and while hydrating, so no ClientOnly is needed). No Suspense
+            // around the server's markup: React streams a large boundary after the shell, which
+            // would send the poster twice and swap it by script.
+            <div className="min-w-0" onPointerEnter={warmPlayer} onFocus={warmPlayer}>
+              {wantPlayer && playable && timeline ? (
+                <Suspense fallback={pending}>
+                  <DebatePlayer
+                    timeline={timeline}
+                    mediaBase={mediaBase}
+                    format={format}
+                    highlightIndex={highlightIndex}
+                    startSeq={startSeq}
+                    deferred={deferred}
+                    poster={posterOn ? poster : null}
+                    onPlay={onPlayed}
+                    playerRef={playerRef}
+                    onActiveSeq={setActiveSeq}
+                  />
+                </Suspense>
+              ) : (
+                pending
+              )}
+            </div>
           ) : (
             <PlayerPlaceholder media={media} isOwner={isOwner} completed={completed} onGenerate={openRegenerate} overview={overviewStrip} />
           )}
@@ -548,12 +645,16 @@ const DebateView = ({ initial, viewer, id, slug }: Props) => {
               markdown={markdown}
               isActive={isActive}
               activeSeq={playable ? activeSeq : null}
-              onSeek={playable ? seekToSeq : undefined}
+              onSeek={voiced && timeline ? seekToSeq : undefined}
               hideVerdict={verdictHidden}
               onRevealVerdict={reveal}
             />
           )}
-          {tab === 'verdict' && <VerdictTab verdict={debate.verdict} verdictTurn={verdictTurn} lineup={lineup} isActive={isActive} markdown={markdown} hidden={verdictHidden} onReveal={reveal} show={show.show} />}
+          {tab === 'verdict' && (
+            <Suspense fallback={<div className="min-h-40" />}>
+              <VerdictTab verdict={debate.verdict} verdictTurn={verdictTurn} lineup={lineup} isActive={isActive} markdown={markdown} hidden={verdictHidden} onReveal={reveal} show={show.show} />
+            </Suspense>
+          )}
           {/* In the page even when folded: the lineup, models and facts for search engines. */}
           <div hidden={tab !== 'details'}>
             <DetailsTab debate={debate} lineup={lineup} timeline={timeline} />
@@ -562,8 +663,8 @@ const DebateView = ({ initial, viewer, id, slug }: Props) => {
         </div>
       </article>
 
-      {/* A hidden slide-over until opened: nothing of it goes into the server's HTML. */}
-      {completed && (
+      {/* A slide-over from its first open on: nothing of it goes into the server's HTML. */}
+      {completed && railUsed && (
         <ClientOnly>
           {() => (
             <ExportRail
@@ -586,7 +687,11 @@ const DebateView = ({ initial, viewer, id, slug }: Props) => {
         </ClientOnly>
       )}
 
-      {isOwner && <RegenerateAudioDialog open={regenOpen} onClose={() => setRegenOpen(false)} debate={debate} media={media} onQueued={refreshMedia} />}
+      {isOwner && regenOpen && (
+        <Suspense>
+          <RegenerateAudioDialog open onClose={() => setRegenOpen(false)} debate={debate} media={media} onQueued={refreshMedia} />
+        </Suspense>
+      )}
       <ConfirmDialog open={confirm === 'stop'} title="Stop this debate?" body="The current turn is cut short and no verdict is given. Credits are charged for what has been generated." confirmLabel="Stop debate" danger busy={busy} onConfirm={stop} onClose={() => setConfirm(null)} />
       <ConfirmDialog open={confirm === 'delete'} title="Delete this debate?" body="The transcript, the verdict and all generated audio are removed permanently." confirmLabel="Delete" danger busy={busy} onConfirm={remove} onClose={() => setConfirm(null)} />
     </Page>

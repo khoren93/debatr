@@ -1,6 +1,6 @@
 import { Player, type PlayerRef } from '@remotion/player';
 import { Maximize, Minimize, Pause, Play, Volume2, VolumeX } from 'lucide-react';
-import { useEffect, useRef, useState, type KeyboardEvent, type RefObject } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent, type ReactNode, type RefObject } from 'react';
 import { absoluteMediaBase } from '../../api/media';
 import type { Timeline } from '../../api/timeline';
 import { FPS, LONG_H, LONG_W, SHORT_H, SHORT_W } from '../../video/constants';
@@ -8,12 +8,31 @@ import { DebateLong } from '../../video/DebateLong';
 import { DebateShort } from '../../video/DebateShort';
 import { msToFrame } from '../../video/timing';
 import { chapterAt, msLabel, videoChapters, type Chapter, type VideoFormat } from './helpers';
-import { PlayBadge, PlayerFrame, PlayerShell, SegmentBar, type BarSegment } from './PlayerShell';
+import { PlayBadge, PlayerFrame, PlayerShell, PosterFace, SegmentBar, type BarSegment } from './PlayerShell';
 
 /** The debate video (Remotion Player) with the studio's own controls. Browser-only: pages load it
- *  with `lazy()` inside `<ClientOnly>` and show `PlayerPending` until it is there. */
+ *  with `lazy()` inside `<ClientOnly>` and show `PlayerPending` (the poster) until it is there. */
+
+/** Safari and every iOS browser: audio starts only inside the click itself, not after a load. */
+const appleWebKit = () => navigator.vendor.startsWith('Apple');
 
 // --- Ready player ----------------------------------------------------------------
+
+const PLAY_STATE_EVENTS = ['play', 'pause', 'ended'] as const;
+
+/** Whether the player plays, as an external store: an autoplay can start before a component's
+ *  listeners exist, and the store's check after subscribing catches it. */
+const usePlaying = (playerRef: RefObject<PlayerRef | null>): boolean => {
+  const subscribe = useCallback(
+    (onChange: () => void) => {
+      const player = playerRef.current;
+      PLAY_STATE_EVENTS.forEach((name) => player?.addEventListener(name, onChange));
+      return () => PLAY_STATE_EVENTS.forEach((name) => player?.removeEventListener(name, onChange));
+    },
+    [playerRef],
+  );
+  return useSyncExternalStore(subscribe, () => playerRef.current?.isPlaying() ?? false, () => false);
+};
 
 interface ControlsProps {
   playerRef: RefObject<PlayerRef | null>;
@@ -29,7 +48,7 @@ interface ControlsProps {
 /** Control strip of the ready player: seek bar by turns, play, mute, time, speaker, fullscreen. */
 const PlayerControls = ({ playerRef, chapters, totalMs, initialMs, fullscreen, canFullscreen, onFullscreen, onActiveSeq }: ControlsProps) => {
   const [ms, setMs] = useState(initialMs);
-  const [playing, setPlaying] = useState(false);
+  const playing = usePlaying(playerRef);
   const [muted, setMuted] = useState(false);
   const engaged = useRef(false);
   const lastSeq = useRef<number | null>(null);
@@ -47,15 +66,15 @@ const PlayerControls = ({ playerRef, chapters, totalMs, initialMs, fullscreen, c
     };
     const onFrame = ({ detail }: { detail: { frame: number } }) => {
       const frameMs = (detail.frame / FPS) * 1000;
+      // Playing counts as engaged even when the play event came before this listener (autoplay).
+      if (player.isPlaying()) engaged.current = true;
       setMs(frameMs);
       report(frameMs);
     };
     const onPlay = () => {
       engaged.current = true;
-      setPlaying(true);
       report((player.getCurrentFrame() / FPS) * 1000);
     };
-    const onPause = () => setPlaying(false);
     const onSeeked = ({ detail }: { detail: { frame: number } }) => {
       engaged.current = true;
       const frameMs = (detail.frame / FPS) * 1000;
@@ -65,15 +84,11 @@ const PlayerControls = ({ playerRef, chapters, totalMs, initialMs, fullscreen, c
     const onMute = ({ detail }: { detail: { isMuted: boolean } }) => setMuted(detail.isMuted);
     player.addEventListener('frameupdate', onFrame);
     player.addEventListener('play', onPlay);
-    player.addEventListener('pause', onPause);
-    player.addEventListener('ended', onPause);
     player.addEventListener('seeked', onSeeked);
     player.addEventListener('mutechange', onMute);
     return () => {
       player.removeEventListener('frameupdate', onFrame);
       player.removeEventListener('play', onPlay);
-      player.removeEventListener('pause', onPause);
-      player.removeEventListener('ended', onPause);
       player.removeEventListener('seeked', onSeeked);
       player.removeEventListener('mutechange', onMute);
     };
@@ -133,23 +148,13 @@ const PlayerControls = ({ playerRef, chapters, totalMs, initialMs, fullscreen, c
   );
 };
 
-/** Big play button over the paused video (clicks go through to the player). */
-const PausedOverlay = ({ playerRef }: { playerRef: RefObject<PlayerRef | null> }) => {
-  const [playing, setPlaying] = useState(false);
+/** Big play button over the paused video (clicks go through to the player); tells the page once
+ *  the video plays (the poster goes for good). */
+const PausedOverlay = ({ playerRef, onPlay }: { playerRef: RefObject<PlayerRef | null>; onPlay?: () => void }) => {
+  const playing = usePlaying(playerRef);
   useEffect(() => {
-    const player = playerRef.current;
-    if (!player) return;
-    const on = () => setPlaying(true);
-    const off = () => setPlaying(false);
-    player.addEventListener('play', on);
-    player.addEventListener('pause', off);
-    player.addEventListener('ended', off);
-    return () => {
-      player.removeEventListener('play', on);
-      player.removeEventListener('pause', off);
-      player.removeEventListener('ended', off);
-    };
-  }, [playerRef]);
+    if (playing) onPlay?.();
+  }, [playing, onPlay]);
   return playing ? null : <PlayBadge />;
 };
 
@@ -161,18 +166,26 @@ interface PlayerProps {
   highlightIndex: number;
   /** Turn to start at (a transcript click that needed the long video); playback starts there. */
   startSeq: number | null;
+  /** Play was asked for before this chunk was there (the poster or a transcript click): play once
+   *  mounted — except on Apple's WebKit, where the next click plays (audio needs the click). */
+  deferred?: boolean;
+  /** Over the frame until the first play (PlayerPoster); null: frame 0 shows. */
+  poster?: ReactNode;
+  /** The video started playing (hides the poster for good). */
+  onPlay?: () => void;
   playerRef: RefObject<PlayerRef | null>;
   onActiveSeq?: (seq: number | null) => void;
 }
 
-export const DebatePlayer = ({ timeline, mediaBase, format, highlightIndex, startSeq, playerRef, onActiveSeq }: PlayerProps) => {
+export const DebatePlayer = ({ timeline, mediaBase, format, highlightIndex, startSeq, deferred = false, poster = null, onPlay, playerRef, onActiveSeq }: PlayerProps) => {
   const shellRef = useRef<HTMLDivElement>(null);
   const [fullscreen, setFullscreen] = useState(false);
   const isLong = format === 'long';
   const { chapters, totalMs } = videoChapters(timeline, format, highlightIndex);
   const start = startSeq !== null ? chapters.find((c) => c.seq === startSeq) : undefined;
-  // Frame 0 is the intro's face-off (or the Short's hook card), fully drawn: it is the poster.
+  // Frame 0 is the intro's face-off (or the Short's hook card), fully drawn.
   const initialFrame = start ? msToFrame(start.startMs) : 0;
+  const autoPlay = (Boolean(start) || deferred) && !(deferred && appleWebKit());
   const key = `${format}-${highlightIndex}-${start?.seq ?? ''}`;
 
   useEffect(() => {
@@ -188,7 +201,7 @@ export const DebatePlayer = ({ timeline, mediaBase, format, highlightIndex, star
 
   // Remotion fetches the audio and pictures by full URL.
   const base = absoluteMediaBase(mediaBase);
-  const common = { ref: playerRef, fps: FPS, controls: false, clickToPlay: true, acknowledgeRemotionLicense: true, initialFrame, autoPlay: Boolean(start), style: { width: '100%', height: '100%' } } as const;
+  const common = { ref: playerRef, fps: FPS, controls: false, clickToPlay: true, acknowledgeRemotionLicense: true, initialFrame, autoPlay, style: { width: '100%', height: '100%' } } as const;
   return (
     <PlayerShell
       shellRef={shellRef}
@@ -201,7 +214,9 @@ export const DebatePlayer = ({ timeline, mediaBase, format, highlightIndex, star
           ) : (
             <Player key={`player-${key}`} {...common} component={DebateShort} inputProps={{ timeline, mediaBase: base, highlightIndex }} durationInFrames={msToFrame(totalMs)} compositionWidth={SHORT_W} compositionHeight={SHORT_H} />
           )}
-          <PausedOverlay key={`overlay-${key}`} playerRef={playerRef} />
+          <PausedOverlay key={`overlay-${key}`} playerRef={playerRef} onPlay={onPlay} />
+          {/* The click plays right here: a user gesture, so the audio starts on every browser. */}
+          {poster && <PosterFace poster={poster} onPlay={(e) => playerRef.current?.play(e)} />}
         </PlayerFrame>
       }
       controls={<PlayerControls key={key} playerRef={playerRef} chapters={chapters} totalMs={totalMs} initialMs={(initialFrame / FPS) * 1000} fullscreen={fullscreen} canFullscreen={document.fullscreenEnabled} onFullscreen={toggleFullscreen} onActiveSeq={onActiveSeq} />}

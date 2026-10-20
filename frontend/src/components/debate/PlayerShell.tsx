@@ -1,12 +1,13 @@
 import { Play, Sparkles } from 'lucide-react';
-import { useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode, type RefObject } from 'react';
+import { useRef, useState, type KeyboardEvent, type MouseEvent, type PointerEvent, type ReactNode, type RefObject } from 'react';
 import type { Timeline } from '../../api/timeline';
-import type { DebateMedia } from '../../api/types';
-import { Button, Progress } from '../ui';
+import type { CoverImage, DebateMedia, Participant } from '../../api/types';
+import { VideoPoster } from '../cards';
+import { Button, Progress, Spinner } from '../ui';
 import { msLabel, videoChapters, type VideoFormat } from './helpers';
 
-/** The player's frame, seek bar and placeholders: plain markup that also renders on the server.
- *  The Remotion player itself (DebatePlayer) is browser-only and loaded lazily. */
+/** The player's frame, seek bar, poster and placeholders: plain markup that also renders on the
+ *  server. The Remotion player itself (DebatePlayer) is browser-only and loaded lazily. */
 
 const GAP = 3; // px between the segments of the seek bar
 
@@ -29,7 +30,7 @@ export const PlayerShell = ({ frame, controls, vertical = false, fullscreen = fa
 );
 
 /** Frame with the video's aspect ratio (a phone-sized column for the Short). */
-export const PlayerFrame = ({ vertical, fullscreen, children, className = '' }: { vertical: boolean; fullscreen?: boolean; children: ReactNode; className?: string }) => (
+export const PlayerFrame = ({ vertical, fullscreen, children, className = '' }: { vertical: boolean; fullscreen?: boolean; children?: ReactNode; className?: string }) => (
   <div
     className={`@container relative w-full overflow-hidden ${vertical && !fullscreen ? 'max-w-[340px] rounded-[16px]' : ''} ${className}`}
     style={{
@@ -42,13 +43,53 @@ export const PlayerFrame = ({ vertical, fullscreen, children, className = '' }: 
   </div>
 );
 
-/** Big play button in the middle of the frame (over the paused video, and on the pending one). */
-export const PlayBadge = () => (
+/** Big play button in the middle of the frame (over the paused video and the poster); `waiting`:
+ *  play was asked for and the player is still loading. */
+export const PlayBadge = ({ waiting = false }: { waiting?: boolean }) => (
   <div className="pointer-events-none absolute inset-0 grid place-items-center">
     <div className="grid size-[clamp(40px,9cqw,84px)] place-items-center rounded-full bg-accent/92 text-ink shadow-[0_20px_50px_-10px_rgba(217,255,61,0.45)]">
-      <Play className="ml-[6%] size-[42%] fill-current" />
+      {waiting ? <Spinner className="size-[46%]" /> : <Play className="ml-[6%] size-[42%] fill-current" />}
     </div>
   </div>
+);
+
+// --- Poster ----------------------------------------------------------------------
+
+interface PosterProps {
+  /** The debate's AI cover; null: the video's first frame in markup. */
+  cover: CoverImage | null;
+  participants: Participant[];
+  topic: string;
+  /** The format chip of the markup poster ("AI DEBATE"). */
+  label: string;
+}
+
+/** What the long video shows until its first play: the AI cover where the debate has one, else
+ *  the video's first frame in markup. In the server's HTML and the page's largest paint (LCP),
+ *  so it loads first; the player's chunk comes later (DebateView). */
+export const PlayerPoster = ({ cover, participants, topic, label }: PosterProps) =>
+  cover ? (
+    <img
+      src={cover.url}
+      srcSet={`${cover.small_url} 768w, ${cover.url} 1536w`}
+      sizes="(max-width: 1240px) 100vw, 1180px"
+      alt=""
+      fetchPriority="high"
+      decoding="async"
+      className="absolute inset-0 size-full object-cover"
+    />
+  ) : (
+    <VideoPoster participants={participants} topic={topic} label={label} />
+  );
+
+/** The poster over the frame with the play button on it. */
+export const PosterFace = ({ poster, onPlay, waiting = false }: { poster: ReactNode; onPlay?: (e: MouseEvent<HTMLButtonElement>) => void; waiting?: boolean }) => (
+  <>
+    <div className="absolute inset-0">{poster}</div>
+    <button type="button" onClick={onPlay} aria-label="Play the video" aria-busy={waiting} className="absolute inset-0 cursor-pointer rounded-none outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/70">
+      <PlayBadge waiting={waiting} />
+    </button>
+  </>
 );
 
 // --- Seek bar --------------------------------------------------------------------
@@ -169,11 +210,17 @@ interface PendingProps {
   highlightIndex: number;
   turns?: BarSegment[];
   durationMs?: number;
+  /** Over the frame until the first play (PlayerPoster); null: an empty frame with the button. */
+  poster?: ReactNode;
+  /** The poster's button or the strip's: ask for the player (and to play once it is there). */
+  onPlay?: () => void;
+  /** Play was asked for: the buttons spin until the player is there. */
+  waiting?: boolean;
 }
 
-/** The ready player's layout without the player: server HTML, the wait for the media and for the
- *  player's chunk, so nothing moves when the video appears. */
-export const PlayerPending = ({ timeline, format, highlightIndex, turns = [], durationMs = 0 }: PendingProps) => {
+/** The ready player's layout without the player: server HTML (the facade: poster + play), the
+ *  wait for the media and for the player's chunk, so nothing moves when the video appears. */
+export const PlayerPending = ({ timeline, format, highlightIndex, turns = [], durationMs = 0, poster = null, onPlay, waiting = false }: PendingProps) => {
   const vertical = format !== 'long';
   const video = timeline ? videoChapters(timeline, format, highlightIndex) : null;
   const totalMs = video?.totalMs ?? durationMs;
@@ -183,18 +230,20 @@ export const PlayerPending = ({ timeline, format, highlightIndex, turns = [], du
   return (
     <PlayerShell
       vertical={vertical}
-      frame={
-        <PlayerFrame vertical={vertical}>
-          <PlayBadge />
-        </PlayerFrame>
-      }
+      frame={<PlayerFrame vertical={vertical}>{onPlay ? <PosterFace poster={poster} onPlay={onPlay} waiting={waiting} /> : <PlayBadge />}</PlayerFrame>}
       controls={
         <>
           <SegmentBar segments={segments} ariaLabel="Turns" />
           <div className="flex items-center gap-3">
-            <span className="grid size-9 shrink-0 place-items-center rounded-full bg-text/60 text-ink" aria-hidden="true">
-              <Play className="ml-0.5 size-4 fill-current" />
-            </span>
+            {onPlay ? (
+              <button type="button" onClick={onPlay} className="grid size-9 shrink-0 place-items-center rounded-full bg-text text-ink hover:bg-white cursor-pointer" aria-label="Play" aria-busy={waiting}>
+                {waiting ? <Spinner className="size-4" /> : <Play className="ml-0.5 size-4 fill-current" />}
+              </button>
+            ) : (
+              <span className="grid size-9 shrink-0 place-items-center rounded-full bg-text/60 text-ink" aria-hidden="true">
+                <Play className="ml-0.5 size-4 fill-current" />
+              </span>
+            )}
             <div className="whitespace-nowrap font-mono text-xs text-text-3">
               {msLabel(0)} / {msLabel(totalMs)}
             </div>

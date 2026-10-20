@@ -1,11 +1,8 @@
-import { AxiosError, AxiosHeaders } from 'axios';
 import { describe, expect, it } from 'vitest';
+import { ApiError } from './client';
 import { routeError, routeErrorOf, toQuery } from './route';
 
-const answer = (status: number, data: unknown) => {
-  const config = { headers: new AxiosHeaders() };
-  return new AxiosError('failed', 'ERR_BAD_RESPONSE', config, null, { status, statusText: '', data, headers: {}, config });
-};
+const answer = (status: number, data: unknown) => new ApiError('failed', { status, data, headers: new Headers() });
 
 describe('toQuery', () => {
   it('drops undefined and null, keeps false and zero', () => {
@@ -23,7 +20,7 @@ describe('routeError', () => {
 
   it('turns server errors and lost connections into 503', () => {
     expect(routeError(answer(502, { detail: 'Bad gateway' })).init?.status).toBe(503);
-    expect(routeError(new AxiosError('Network Error', 'ERR_NETWORK')).data.status).toBe(503);
+    expect(routeError(new ApiError('Failed to fetch', null)).data.status).toBe(503);
     expect(routeError(new Error('boom')).init?.status).toBe(503);
   });
 });
