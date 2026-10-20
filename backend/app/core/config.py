@@ -87,7 +87,7 @@ class Settings(BaseSettings):
     )
     # The same job for a debate whose participants all argue on free models, so it costs
     # nothing: a `:free` model (empty = VERDICT_MODEL). The console's lever overrides it.
-    FREE_VERDICT_MODEL: str = "nvidia/nemotron-3-super-120b-a12b:free"
+    FREE_VERDICT_MODEL: str = "minimax/minimax-m3.1-flash:free"
     # Model that designs the visual scenes (charts, drawn schemes) per turn; empty =
     # VERDICT_MODEL. Runs on the system key and is not billed to the user (~$0.01/debate).
     MEDIA_VISUALS_MODEL: str = "google/gemini-2.5-flash"
