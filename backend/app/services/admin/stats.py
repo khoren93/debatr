@@ -4,7 +4,8 @@ deltas, the "needs attention" list).
 Periods end now and compare with the period just before (`all` has none). Series are bucketed
 by UTC hour (24 h), day (up to 120 days) or ISO week, with empty buckets filled in. Costs come
 from `provider_usage`, which only exists since migration 0012: `cost_tracked_since` tells the
-page when a period reaches further back than that.
+page when a period reaches further back than that. Views by source come from `view_days` (UTC
+days, since migration 0016): no hourly series, and the 24 h tile counts today.
 """
 
 from dataclasses import dataclass, field
@@ -27,7 +28,9 @@ from app.models.models import (
     TrendingBatch,
     User,
     UserActivityDay,
+    ViewDay,
 )
+from app.services.views import SOURCES
 
 Bucket = Literal["hour", "day", "week"]
 PERIODS: dict[str, timedelta | None] = {
@@ -478,6 +481,23 @@ async def debate_tiles(db: AsyncSession, window: Window) -> dict[str, Any]:
         {"start": window.start, "end": window.end},
     )
     previous = window.previous_start
+
+    def whole_days(start: datetime, end: datetime) -> ColumnElement[bool]:
+        """The UTC days after `start`'s, up to `end`'s: a period's whole days."""
+        return and_(ViewDay.day > start.date(), ViewDay.day <= end.date())
+
+    async def views(start: datetime, end: datetime) -> int:
+        return await _count(
+            db, select(func.coalesce(func.sum(ViewDay.views), 0)).where(whole_days(start, end))
+        )
+
+    source_rows = await db.execute(
+        select(ViewDay.source, func.sum(ViewDay.views))
+        .where(whole_days(window.start, window.end))
+        .group_by(ViewDay.source)
+    )
+    views_by_source = {str(source): int(n or 0) for source, n in source_rows.all()}
+
     running = await _count(
         db, select(func.count()).select_from(Debate).where(Debate.status.in_(("queued", "running")))
     )
@@ -513,6 +533,11 @@ async def debate_tiles(db: AsyncSession, window: Window) -> dict[str, Any]:
             if previous
             else None,
         ),
+        "views": tile(
+            await views(window.start, window.end),
+            await views(previous, window.start) if previous else None,
+        ),
+        "views_by_source": views_by_source,
     }
 
 
@@ -607,6 +632,8 @@ async def series(db: AsyncSession, window: Window, *, with_money: bool) -> list[
         columns["active"] = {_aware(t): float(n) for t, n in rows.all()}
     for status in FINISHED:
         columns[status] = await _series(db, Debate.created_at, window, Debate.status == status)
+    if window.bucket != "hour":
+        columns.update(await views_by_source(db, window))
     if with_money:
         charge = func.sum(-CreditTransaction.amount_usd)
         columns["charged"] = await _series(
@@ -634,7 +661,34 @@ async def series(db: AsyncSession, window: Window, *, with_money: bool) -> list[
     if window.bucket == "hour":
         for point in points:
             point["active"] = None  # activity is kept per day
+            point.update(dict.fromkeys(view_columns(), None))  # and so are views
     return points
+
+
+async def views_since(db: AsyncSession) -> Any:
+    """The first UTC day with views by source (they are kept since migration 0016)."""
+    return await db.scalar(select(func.min(ViewDay.day)))
+
+
+def view_columns() -> list[str]:
+    """The series' view columns, one per source: `views_search`, `views_ai`…"""
+    return [f"views_{source}" for source in SOURCES]
+
+
+async def views_by_source(db: AsyncSession, window: Window) -> dict[str, dict[datetime, float]]:
+    """Views per bucket and source (from whole UTC days)."""
+    bucket = func.date_trunc(window.bucket, cast(ViewDay.day, DateTime)).label("bucket")
+    rows = await db.execute(
+        select(bucket, ViewDay.source, func.sum(ViewDay.views))
+        .where(ViewDay.day >= window.start.date(), ViewDay.day <= window.end.date())
+        .group_by(bucket, ViewDay.source)
+    )
+    columns: dict[str, dict[datetime, float]] = {name: {} for name in view_columns()}
+    for t, source, n in rows.all():
+        name = f"views_{source}"
+        if name in columns:
+            columns[name][_aware(t)] = float(n or 0)
+    return columns
 
 
 async def top_models(db: AsyncSession, window: Window, limit: int = 8) -> list[dict[str, Any]]:

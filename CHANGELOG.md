@@ -16,8 +16,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   at the moment you are watching; `GET /api/oembed` turns a pasted debate or topic link into the
   player in apps that read oEmbed, and the pages name the endpoint. Only the player may be framed
   by other sites: the rest of the site now also sends `frame-ancestors 'self'`.
+- **Where views come from**: the admin console's overview has an Audience section (views of the
+  period, the share from search, AI assistants, social networks and embeds, a chart of views by
+  source per day and the sites that embed debates), and the debate card a Views panel. Only
+  counts are kept per day, source and place (the page or a player elsewhere): no IP, address or
+  account. Visitors see the total as before.
 
 ### Changed
+
+- **Honest view counts**: a view is counted only by the page itself once it has loaded (or by an
+  embedded player when it starts), never by bots or by reading a debate through the API (the
+  CLI, agents, the page renderer); one per visitor and debate in six hours, as before.
 
 - **Faster public pages**: the debate player is a facade — the page arrives with the poster (the
   AI cover, or the video's first frame drawn in markup) and a play button, and the video player

@@ -182,6 +182,8 @@ class DebateTiles(BaseModel):
     published: Tile
     likes: Tile
     votes: Tile
+    views: Tile = Field(default_factory=lambda: Tile(value=0))  # whole UTC days (view_days)
+    views_by_source: dict[str, int] = Field(default_factory=dict)  # the same days, by source
 
 
 class MoneyOut(BaseModel):
@@ -215,6 +217,14 @@ class SeriesPoint(BaseModel):
     charged: float | None = None
     topups: float | None = None
     cost: float | None = None
+    # Views by source (services/views.SOURCES), per whole UTC day: None in hourly series.
+    views_search: float | None = None
+    views_ai: float | None = None
+    views_social: float | None = None
+    views_embed: float | None = None
+    views_other: float | None = None
+    views_direct: float | None = None
+    views_internal: float | None = None
 
 
 class AttentionItem(BaseModel):
@@ -251,6 +261,11 @@ class TopDebate(BaseModel):
     votes: int
 
 
+class EmbedSite(BaseModel):
+    host: str
+    views: int  # views of players embedded there, last 90 days
+
+
 class OverviewOut(BaseModel):
     period: OverviewPeriod
     start: datetime
@@ -266,6 +281,8 @@ class OverviewOut(BaseModel):
     top_models: list[TopModel]
     top_spenders: list[TopSpender] | None
     top_debates: list[TopDebate]
+    views_since: date | None = None  # the first day with views by source (migration 0016)
+    embeds: list[EmbedSite] = Field(default_factory=list)  # sites embedding debates, 90 days
 
 
 # --- users ------------------------------------------------------------------------------------
@@ -699,6 +716,20 @@ class CoverSelectRequest(ReasonRequest):
     version: str | None = Field(default=None, max_length=32)  # None: back to the markup cover
 
 
+class ViewSourceRow(BaseModel):
+    source: str  # services/views.SOURCES
+    page: int  # on the debate's page
+    embed: int  # in players on other sites
+
+
+class AdminDebateViews(BaseModel):
+    total: int  # the debate's counter, views before sources were kept included
+    sources: list[ViewSourceRow] = Field(default_factory=list)
+    untracked: int = 0  # counted before migration 0016 (no source)
+    last_7d: int = 0
+    embeds: list[EmbedSite] = Field(default_factory=list)  # sites with its player, 90 days
+
+
 class AdminDebateCard(BaseModel):
     debate: AdminDebateRow
     motion: AdminDebateMotion | None = None
@@ -717,6 +748,7 @@ class AdminDebateCard(BaseModel):
     refundable: float | None  # net charged, what a refund may still give back (`money`)
     resume_from: int | None  # the turn a resume starts from, when it can be resumed
     audit: list[AuditEntryOut]
+    views: AdminDebateViews = Field(default_factory=lambda: AdminDebateViews(total=0))
 
 
 class ModerationItem(BaseModel):

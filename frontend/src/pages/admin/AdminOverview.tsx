@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { CheckCircle2, RefreshCw } from 'lucide-react';
 import { getOverview } from '../../api/admin/overview';
-import type { Overview, OverviewPeriod, SeriesPoint } from '../../api/admin/types';
+import { VIEW_SOURCES, type Overview, type OverviewPeriod, type SeriesPoint } from '../../api/admin/types';
 import { getErrorMessage } from '../../api/client';
 import { useAdminAuth } from '../../auth/AdminAuthContext';
 import { Page, PageTitle } from '../../components/layout/AppShell';
@@ -11,11 +11,11 @@ import { StatTile } from '../../components/admin/StatTile';
 import { ChartCard } from '../../components/admin/charts/ChartCard';
 import { LineChart } from '../../components/admin/charts/LineChart';
 import { StackedColumns } from '../../components/admin/charts/StackedColumns';
-import { SERIES, STATUS_COLORS } from '../../components/admin/charts/palette';
+import { SERIES, SOURCE_COLORS, SOURCE_LABELS, STATUS_COLORS } from '../../components/admin/charts/palette';
 import { bucketLabel, type Bucket } from '../../components/admin/charts/scale';
 import { formatPercent, formatSeconds, formatTime, formatUsd, formatUsdTick } from '../../components/admin/helpers';
 import { Button, Card, ErrorBox, ModelIcon, SectionLabel, Segmented, Spinner } from '../../components/ui';
-import { formatCount, shortModelName } from '../../lib/format';
+import { formatCount, formatDateShort, shortModelName } from '../../lib/format';
 
 const PERIODS: { value: OverviewPeriod; label: string; previous: string }[] = [
   { value: '24h', label: '24 h', previous: 'vs previous 24 h' },
@@ -113,6 +113,65 @@ const Charts = ({ data }: { data: Overview }) => {
         </ChartCard>
       )}
     </div>
+  );
+};
+
+/** Views by where they came from (whole UTC days): the stacked chart and its table. */
+const ViewsChart = ({ data }: { data: Overview }) => {
+  const points: SeriesPoint[] = data.series;
+  const bucket = data.bucket;
+  const series = VIEW_SOURCES.map((source) => ({ key: source, label: SOURCE_LABELS[source], color: SOURCE_COLORS[source], values: points.map((p) => p[`views_${source}`] ?? 0) }));
+  const labels = points.map((p) => pointLabel(p.t, bucket));
+  return (
+    <ChartCard
+      title="Views by source"
+      subtitle="Debate pages and players on other sites, per UTC day"
+      legend={series.map((s) => ({ label: s.label, color: s.color, shape: 'square' as const }))}
+      table={{ rowLabels: labels, columns: series.map((s) => ({ label: s.label, values: s.values.map(count) })) }}
+    >
+      <StackedColumns series={series} labels={labels} axisLabels={points.map((p) => bucketLabel(p.t, bucket))} format={count} ariaLabel="Views by source over time" />
+    </ChartCard>
+  );
+};
+
+/** Views of the period (whole UTC days), the share of the main sources, the chart and the sites
+ *  that embed debates. */
+const Audience = ({ data, previous }: { data: Overview; previous: string }) => {
+  const d = data.debates;
+  const by = d.views_by_source;
+  const total = d.views.value;
+  const share = (n: number) => (total ? `${formatPercent(n / total)} of views` : undefined);
+  const of = (...sources: string[]) => sources.reduce((sum, s) => sum + (by[s] ?? 0), 0);
+  return (
+    <>
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <StatTile label="Views" value={count(total)} current={total} previous={d.views.previous} previousLabel={previous} hint={data.period === '24h' ? 'today, UTC' : 'whole UTC days'} />
+        <StatTile label="Search · AI assistants" value={`${count(of('search'))} · ${count(of('ai'))}`} hint={share(of('search', 'ai'))} />
+        <StatTile label="Social and messengers" value={count(of('social'))} hint={share(of('social'))} />
+        <StatTile label="Embeds" value={count(of('embed'))} hint={data.embeds.length ? `${data.embeds.length} ${data.embeds.length === 1 ? 'site' : 'sites'} in 90 days` : share(of('embed'))} />
+      </div>
+      <div className="mt-4 grid items-start gap-4 xl:grid-cols-[2fr_1fr]">
+        {data.bucket === 'hour' ? (
+          <Card padding="sm" className="text-sm text-muted">
+            Views are kept per UTC day: pick 7 days or longer for the chart.
+          </Card>
+        ) : (
+          <ViewsChart data={data} />
+        )}
+        <TableCard
+          title="Embedded on"
+          subtitle="Sites whose players were watched, last 90 days"
+          head={['Site', 'Views']}
+          empty="No player has been watched on another site yet."
+          rows={data.embeds.map((row) => [
+            <a key="h" href={`https://${row.host}`} target="_blank" rel="noreferrer noopener" className="block max-w-64 truncate hover:text-text" title={row.host}>
+              {row.host}
+            </a>,
+            count(row.views),
+          ])}
+        />
+      </div>
+    </>
   );
 };
 
@@ -314,6 +373,13 @@ const AdminOverview = () => {
               </div>
             </Section>
           )}
+
+          <Section
+            title="Audience"
+            aside={data.views_since && new Date(data.start) < new Date(data.views_since) ? `≈ sources are kept since ${formatDateShort(data.views_since, 'UTC')}` : !data.views_since ? '≈ no views with a source yet' : undefined}
+          >
+            <Audience data={data} previous={previous} />
+          </Section>
 
           <Section title="Over time">
             <Charts data={data} />

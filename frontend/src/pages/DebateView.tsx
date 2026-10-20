@@ -3,7 +3,7 @@ import { Fragment, Suspense, lazy, startTransition, useEffect, useRef, useState 
 import { Link, useNavigate } from 'react-router';
 import { ArrowLeft, MicVocal, Repeat2, RotateCcw, ShieldAlert } from 'lucide-react';
 import { getErrorMessage } from '../api/client';
-import { countView, deleteDebate, getDebate, resumeDebate, stopDebate } from '../api/debates';
+import { countView, deleteDebate, getDebate, isLandingPage, referrerHost, resumeDebate, stopDebate } from '../api/debates';
 import { getPublicDebate } from '../api/gallery';
 import { debateFilesBase } from '../api/media';
 import { ACTIVE_STATUSES, type Audience, type DebateDetail, type Turn } from '../api/types';
@@ -133,12 +133,13 @@ const DebateView = ({ initial, viewer, id, slug }: Props) => {
 
   const refetch = () => setReloadKey((k) => k + 1);
 
-  // The page came from the server, whose load counted no view: count this one.
-  const serverRendered = viewer !== undefined;
+  // Loading the debate counted no view: the page counts one, with where the visitor came from.
   const isPublic = debate.is_public;
   useEffect(() => {
-    if (serverRendered && isPublic) countView(debate.id);
-  }, [serverRendered, isPublic, debate.id]);
+    if (!isPublic) return;
+    const landed = isLandingPage();
+    countView(debate.id, { place: 'page', referrer: landed ? referrerHost() : '', internal: !landed, ref: new URLSearchParams(window.location.search).get('ref') ?? '' });
+  }, [isPublic, debate.id]);
 
   // Reload on demand: live events, resume, a finished audio build.
   useEffect(() => {

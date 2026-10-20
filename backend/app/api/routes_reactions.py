@@ -1,11 +1,16 @@
 """Views, likes and audience votes ("who argued better?") on public debates."""
 
+from typing import Literal
+from urllib.parse import urlsplit
+
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.routes_debates import load_debate
 from app.api.serializers import debater_models
 from app.core.auth import get_current_user, require_user
+from app.core.config import settings
 from app.core.db import get_db
 from app.models.models import User
 from app.schemas.schemas import AudienceOut, LikeOut, VoteRequest
@@ -17,9 +22,33 @@ from app.services.engagement import (
     set_like,
     vote_blocker,
 )
-from app.services.views import count_view
+from app.services.views import classify, count_view, host_of, is_bot
 
 router = APIRouter()
+
+#: Longest beacon body read (it is a few fields).
+BEACON_MAX_BYTES = 2048
+
+
+class ViewBeacon(BaseModel):
+    """What the page tells about a view (frontend api/debates.countView). Sent as text/plain, so
+    the browser sends it without a preflight; an empty or unreadable body is a page view with no
+    known referrer."""
+
+    place: Literal["page", "embed"] = "page"
+    referrer: str = Field(
+        default="", max_length=512
+    )  # the referrer's host (never the whole address)
+    internal: bool = False  # a navigation inside the site
+    ref: str = Field(default="", max_length=32)  # the page's ?ref= ("embed": a player's link)
+
+
+def _beacon(body: bytes) -> ViewBeacon:
+    try:
+        return ViewBeacon.model_validate_json(body[:BEACON_MAX_BYTES] or b"{}")
+    except ValidationError:
+        return ViewBeacon()
+
 
 _BLOCKED = {
     "not_public": (404, "This debate is not public"),
@@ -41,9 +70,22 @@ async def view_debate(
     viewer: User | None = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
-    """The page of a public debate was shown (its beacon after hydration): one view per IP in
-    six hours, never the owner's. Private debates count nothing and answer the same."""
-    await count_view(db, await load_debate(db, debate_id), viewer, request)
+    """The page of a public debate was shown (its beacon after hydration) or its embedded player
+    started: one view per IP in six hours, never the owner's, never a bot's, kept with where it
+    came from (services/views). Private debates count nothing and answer the same."""
+    debate = await load_debate(db, debate_id)
+    if is_bot(request.headers.get("user-agent")):
+        return Response(status_code=204)
+    beacon = _beacon(await request.body())
+    host = host_of(beacon.referrer)
+    site_host = host_of(urlsplit(settings.SITE_URL).netloc) or ""
+    source = classify(
+        host, site_host=site_host, place=beacon.place, ref=beacon.ref, internal=beacon.internal
+    )
+    client = request.client.host if request.client else "unknown"
+    await count_view(
+        db, debate, viewer, client=client, place=beacon.place, source=source, embed_host=host
+    )
     return Response(status_code=204)
 
 

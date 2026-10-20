@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import type { AdminDebateCard, UsageByPurpose } from '../../../api/admin/types';
-import { formatDuration } from '../../../lib/format';
+import { formatCount, formatDuration } from '../../../lib/format';
+import { SOURCE_COLORS, SOURCE_LABELS } from '../charts/palette';
 import { DataTable, type Column } from '../DataTable';
 import { formatTime, formatUsd } from '../helpers';
 import { Panel } from '../users/UserSections';
@@ -10,7 +11,7 @@ const text = (value: unknown): string | null => (typeof value === 'string' && va
 const num = (value: unknown): number | null => (typeof value === 'number' && Number.isFinite(value) ? value : null);
 const record = (value: unknown): Record<string, unknown> => (value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {});
 
-const Row = ({ label, children }: { label: string; children: ReactNode }) => (
+const Row = ({ label, children }: { label: ReactNode; children: ReactNode }) => (
   <div className="flex items-baseline justify-between gap-4 py-1.5 text-xs">
     <span className="shrink-0 text-muted">{label}</span>
     <span className="min-w-0 text-right text-text-2 [overflow-wrap:anywhere]">{children}</span>
@@ -43,6 +44,50 @@ export const ModerationPanel = ({ card }: { card: AdminDebateCard }) => {
         <Row label="Verdict">{text(verdict.headline) ?? <span className="text-muted">none</span>}</Row>
         {text(verdict.winner_name) && <Row label="Winner">{text(verdict.winner_name)}</Row>}
       </div>
+    </Panel>
+  );
+};
+
+/** Views by where they came from (its page and players on other sites) and the sites that embed
+ *  it. Views counted before sources were kept show as one line. */
+export const ViewsPanel = ({ card }: { card: AdminDebateCard }) => {
+  const v = card.views;
+  return (
+    <Panel title="Views" aside={`${formatCount(v.total)} in all · ${formatCount(v.last_7d)} in 7 days`}>
+      {v.total === 0 ? (
+        <p className="px-4 py-4 text-sm text-muted">Nobody has watched it yet.</p>
+      ) : (
+        <div className="divide-y divide-line/70 px-4 py-2">
+          {v.sources.map((row) => (
+            <Row
+              key={row.source}
+              label={
+                <span className="inline-flex items-center gap-2">
+                  <span className="size-2 rounded-[2px]" style={{ background: SOURCE_COLORS[row.source] }} aria-hidden="true" />
+                  {SOURCE_LABELS[row.source]}
+                </span>
+              }
+            >
+              {formatCount(row.page + row.embed)}
+              {row.embed > 0 && <span className="text-muted"> · {row.page ? `${formatCount(row.embed)} in players elsewhere` : 'in players elsewhere'}</span>}
+            </Row>
+          ))}
+          {v.untracked > 0 && <Row label="Before sources were kept">{formatCount(v.untracked)}</Row>}
+          {v.embeds.length > 0 && (
+            <Row label="Embedded on">
+              {v.embeds.map((site, i) => (
+                <span key={site.host}>
+                  {i > 0 && ', '}
+                  <a href={`https://${site.host}`} target="_blank" rel="noreferrer noopener" className="hover:text-text">
+                    {site.host}
+                  </a>
+                  <span className="text-muted"> · {formatCount(site.views)}</span>
+                </span>
+              ))}
+            </Row>
+          )}
+        </div>
+      )}
     </Panel>
   );
 };

@@ -1,7 +1,7 @@
 import type { PlayerRef } from '@remotion/player';
 import { ArrowUpRight, FileText } from 'lucide-react';
 import { Suspense, lazy, useRef, useState, type ReactNode } from 'react';
-import { countView } from '../api/debates';
+import { countView, referrerHost } from '../api/debates';
 import { fetchTimeline, getDebateMedia } from '../api/media';
 import type { Timeline } from '../api/timeline';
 import { ShortPoster, VideoPoster } from '../components/cards';
@@ -166,7 +166,8 @@ export default function Embed({ debate, options }: { debate: EmbedDebate; option
     setDeferred(false);
     if (!counted.current) {
       counted.current = true;
-      countView(debate.id);
+      // The frame's referrer is the page it is embedded in.
+      countView(debate.id, { place: 'embed', referrer: referrerHost(), internal: false, ref: '' });
     }
   };
 

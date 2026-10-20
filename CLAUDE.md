@@ -51,7 +51,8 @@ backend/            FastAPI API + RQ worker (Python 3.12+, managed with uv)
                       events (pub/sub), queue_manager, credits (ledger),
                       ledger (row category/title, monthly usage per day, CSV export),
                       estimate (pre-run cost), verdict (structured verdict), moderation (AI gallery
-                      check + auto-publish), views (view counter), motions (topics: versions,
+                      check + auto-publish), views (view counter by source: beacon, bots, referrer
+                      classes, `view_days`, embedding sites), motions (topics: versions,
                       grouping rules, gallery groups, suggestions, admin move / merge),
                       engagement (likes/audience votes), ranking (trending score, model leaderboard),
                       studio (live scenes per turn, disputes, judge evidence), factcheck (web
@@ -84,7 +85,7 @@ backend/            FastAPI API + RQ worker (Python 3.12+, managed with uv)
   app/schemas/timeline.py  Timeline contract shared with frontend/src/api/timeline.ts;
                       visuals.py = scene specs shared with frontend/src/api/visuals.ts
   app/models/         SQLAlchemy ORM models (User, CreditTransaction, Debate, Turn, ProviderUsage,
-                      UserActivityDay, AdminAuditLog, …)
+                      UserActivityDay, ViewDay, AdminAuditLog, …)
   app/schemas/        Pydantic request/response schemas (schemas, auth, billing, media, admin)
   migrations/         Alembic (async env)
   tests/              pytest (pure unit tests, no DB/Redis needed)
@@ -978,7 +979,7 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
 - A personal OpenRouter key (`PUT /api/auth/me/openrouter-key`) is validated against OpenRouter,
   stored encrypted with `SECRET_KEY` (`core/security.py`) and shown masked (`…last4`).
 
-### Statistics data (provider costs, activity)
+### Statistics data (provider costs, activity, views)
 
 - `provider_usage` (`services/usage`): one row per paid provider call or try — purpose (`turn |
   verdict | verdict_structure | moderation | factcheck | director | sketch | image |
@@ -998,6 +999,18 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
 - Activity (`services/activity.note_activity`, called by `get_current_user` for cookies and
   tokens): `users.last_seen_at` at most every 10 min and one `user_activity_days` row per UTC day
   (migration 0012 backfilled days from sign-ups, logins, debates, likes, votes and tokens).
+- Views (`services/views`): only the beacon `POST /api/debates/{id}/view` counts (reading a
+  debate through the API never does: the renderer, client navigations, the CLI, agents). The
+  debate page sends it on every mount of a public debate (`api/debates.countView`; the referrer's
+  host only when it is the page the browser loaded, `isLandingPage`, else `internal`, plus
+  `?ref=`); the embed on its first play (`place=embed`, the frame's referrer = the embedding
+  site). Body: text/plain JSON (`ViewBeacon`, no preflight; unreadable = a page view, direct).
+  Bots by User-Agent (`is_bot`) count nothing; one view per IP and debate in 6 h, never the
+  owner's. `classify`: search | ai | social | embed (a player elsewhere or its `?ref=embed` link)
+  | other | direct | internal (the site's own host, a navigation inside the site, the Share
+  preview). Stored as counts only: `debates.views` + `view_days` (UTC day, debate, place, source;
+  migration 0016) — no IP, address or account; embedding hosts in Redis sorted sets
+  (`views:embeds:{id}` and `views:embeds`, 90 days since the last view).
 
 ### Admin console (`/admin`, `/api/admin/*`)
 
@@ -1088,7 +1101,12 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   (Redis 60 s per period and permission scope) built in a read-only transaction with a 5 s
   statement timeout (`access.read_only_db`). Tiles carry the previous period for deltas; series
   are UTC buckets (hour / day / week, gaps filled); money and top spenders need the `money`
-  permission; `cost_tracked_since` marks periods older than `provider_usage`. The attention list
+  permission; `cost_tracked_since` marks periods older than `provider_usage`. Audience: views of
+  the period's whole UTC days (`debates.views` / `views_by_source`; 24 h = today), the stacked
+  "Views by source" chart (`series.views_<source>`, none hourly, `SOURCE_COLORS` validated) and
+  "Embedded on" (`embeds`, 90 days); `views_since` marks periods older than `view_days`. The
+  debate card has a Views panel (by source and place, before sources were kept, its embedding
+  sites). The attention list
   (`stats.attention_items`, pure) covers runs without a heartbeat, OpenRouter balance (cached
   5 min), ElevenLabs key and character quota (`tts/elevenlabs.system_quota`), the last backup
   (Redis `backup:last`, production only), flagged / failed debates, failed audio, negative
@@ -1236,11 +1254,8 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   (`npm run dev` proxies the first three too). Every response but `/embed/*` gets
   `X-Frame-Options: SAMEORIGIN` + `Content-Security-Policy: frame-ancestors 'self'` (deferred
   `header @framed`); the embed route sends `frame-ancestors *` itself.
-  Views: the renderer's API calls carry `X-Debatr-Render: server` (`services/views.RENDER_HEADER`)
-  and count nothing; a server-rendered debate page sends `POST /api/debates/{id}/view` (a beacon,
-  `api/debates.countView`) after hydration, so crawlers without JavaScript and micro-cached pages
-  neither add nor hide views (one per IP in 6 h as before; browser loads of `GET /gallery/{slug}`
-  and `GET /debates/{id}` still count).
+  Views come only from the page's beacon after hydration (see "Statistics data"), so crawlers
+  without JavaScript and micro-cached pages neither add nor hide views.
 - The `frontend` container name (`ai-debates-frontend-1`) is referenced by the external Caddy
   on the production host via the `caddy_net` network. `frontend/Caddyfile` trusts private-range
   proxies (`trusted_proxies`) so the external Caddy's `X-Forwarded-Proto: https` and client IP

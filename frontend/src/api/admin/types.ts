@@ -111,6 +111,10 @@ export interface OverviewDebates {
   published: Tile;
   likes: Tile;
   votes: Tile;
+  /** Whole UTC days (backend view_days); the 24 h period counts today. */
+  views: Tile;
+  /** The same days' views by source. */
+  views_by_source: Partial<Record<string, number>>;
 }
 
 export interface OverviewMoney {
@@ -144,6 +148,24 @@ export interface SeriesPoint {
   charged: number | null;
   topups: number | null;
   cost: number | null;
+  /** Views by source per whole UTC day (null in hourly series). */
+  views_search: number | null;
+  views_ai: number | null;
+  views_social: number | null;
+  views_embed: number | null;
+  views_other: number | null;
+  views_direct: number | null;
+  views_internal: number | null;
+}
+
+/** Where a view came from (backend services/views.SOURCES), in the order charts stack them. */
+export const VIEW_SOURCES = ['search', 'ai', 'social', 'embed', 'other', 'direct', 'internal'] as const;
+export type ViewSource = (typeof VIEW_SOURCES)[number];
+
+/** A site whose embedded players were watched (last 90 days). */
+export interface EmbedSite {
+  host: string;
+  views: number;
 }
 
 export interface AttentionItem {
@@ -196,6 +218,9 @@ export interface Overview {
   top_models: TopModel[];
   top_spenders: TopSpender[] | null;
   top_debates: TopDebate[];
+  /** The first day with views by source (they are kept since then). */
+  views_since: string | null;
+  embeds: EmbedSite[];
 }
 
 // --- users (backend/app/schemas/admin.py, routes_users.py) ------------------------------------
@@ -529,6 +554,17 @@ export interface AdminDebateCard {
   /** The turn a resume starts from (0-based), when the debate can be resumed. */
   resume_from: number | null;
   audit: AuditEntry[];
+  views: AdminDebateViews;
+}
+
+/** A debate's views: the counter, by source (its page / players elsewhere) and the sites that
+ *  embed it. `untracked`: views counted before sources were kept. */
+export interface AdminDebateViews {
+  total: number;
+  sources: { source: ViewSource; page: number; embed: number }[];
+  untracked: number;
+  last_7d: number;
+  embeds: EmbedSite[];
 }
 
 /** A debate's AI cover in the console (backend services/media/cover.py). */

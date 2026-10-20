@@ -27,3 +27,13 @@ export const AXIS_TEXT = '#8b90a0';
  * reference's yellow beside violet (CVD ΔE 27.3, normal 27.5; all five adjacent pairs pass).
  */
 export const SPEND_COLORS = { models: '#3987e5', voices: '#d95926', pictures: '#199e70', music: '#9085e9', cover: '#c98500' } as const;
+
+/**
+ * Where views came from, stacked search → AI assistants → social → embeds → other sites → direct →
+ * the site's own pages: the reference categorical order's first seven dark steps in order (blue,
+ * orange, aqua, yellow, magenta, green, violet), validated against the card surface: every check
+ * passes (worst adjacent CVD ΔE 8.4 aqua↔yellow, normal vision 19.3 magenta↔yellow).
+ */
+export const SOURCE_COLORS = { search: '#3987e5', ai: '#d95926', social: '#199e70', embed: '#c98500', other: '#d55181', direct: '#008300', internal: '#9085e9' } as const;
+
+export const SOURCE_LABELS = { search: 'Search', ai: 'AI assistants', social: 'Social', embed: 'Embeds', other: 'Other sites', direct: 'Direct', internal: 'On the site' } as const;

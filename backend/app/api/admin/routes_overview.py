@@ -27,6 +27,7 @@ from app.services.admin import stats
 from app.services.admin.stats import Signals
 from app.services.media.tts.elevenlabs import system_key_status, system_quota
 from app.services.openrouter_client import openrouter_client
+from app.services.views import embedding_sites
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -122,6 +123,8 @@ async def build_overview(
             "top_models": await stats.top_models(db, window),
             "top_spenders": await stats.top_spenders(db, window) if with_money else None,
             "top_debates": await stats.top_debates(db, window),
+            "views_since": await stats.views_since(db),
+            "embeds": await embedding_sites(),
         }
     )
 

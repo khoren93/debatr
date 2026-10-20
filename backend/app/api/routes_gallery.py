@@ -7,7 +7,7 @@ the most liked one among those matching the filters — and topics rank by that 
 from datetime import timedelta
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import ColumnElement, Float, Select, and_, case, cast, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import load_only, selectinload
@@ -38,7 +38,6 @@ from app.services.engagement import engagement_out
 from app.services.formats import DEFAULT_FORMAT
 from app.services.free_router import is_free_router
 from app.services.openrouter_client import openrouter_client
-from app.services.views import count_view, counts_as_view
 
 router = APIRouter()
 
@@ -311,7 +310,6 @@ async def leaderboard(
 @router.get("/{slug}", response_model=DebateDetail)
 async def get_public_debate(
     slug: str,
-    request: Request,
     viewer: User | None = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> DebateDetail:
@@ -330,8 +328,6 @@ async def get_public_debate(
         if await db.scalar(select(Debate.id).where(Debate.slug == slug)) is not None:
             raise HTTPException(status_code=410, detail="This debate is no longer public")
         raise HTTPException(status_code=404, detail="This debate is not public")
-    if counts_as_view(request):
-        await count_view(db, debate, viewer, request)
     motion, remix_of = await topic_context(db, debate)
     return detail_out(
         debate,

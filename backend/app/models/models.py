@@ -383,6 +383,25 @@ class UserActivityDay(Base):
     __table_args__ = (Index("ix_user_activity_days_day", "day"),)
 
 
+class ViewDay(Base):
+    """Views of a public debate per UTC day, by where it was watched (`place`: its page or a
+    player embedded on another site) and where the viewer came from (`source`: search, ai,
+    social, embed, other, direct, internal; app.services.views). No IP, no address, no user:
+    only counts, written by the view beacon."""
+
+    __tablename__ = "view_days"
+
+    day: Mapped[date] = mapped_column(Date, primary_key=True)
+    debate_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("debates.id", ondelete="CASCADE"), primary_key=True
+    )
+    place: Mapped[str] = mapped_column(String(8), primary_key=True)
+    source: Mapped[str] = mapped_column(String(16), primary_key=True)
+    views: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+
+    __table_args__ = (Index("ix_view_days_debate_id", "debate_id"),)
+
+
 class ProviderUsage(Base):
     """One paid provider call (or try): what it was for, on whose key, what it cost.
 

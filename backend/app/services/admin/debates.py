@@ -37,6 +37,8 @@ from app.models.models import (
     TrendingTopic,
     Turn,
     User,
+    ViewDay,
+    utcnow,
 )
 from app.schemas.admin import DebateFilters, DebateSort
 from app.services import motions
@@ -47,6 +49,7 @@ from app.services.media import cover as covers
 from app.services.moderation import wants_public
 from app.services.resume import resume_point
 from app.services.studio import turn_visuals_out
+from app.services.views import SOURCES, embedding_sites
 
 AUDIT_ROWS = 50
 DECISIONS = ("moderation.approved", "moderation.rejected")
@@ -453,6 +456,46 @@ async def debate_card(
         "refundable": refundable(row["charged"] or 0.0) if with_money else None,
         "resume_from": resume_point(turns) if can_resume(debate, own_key) else None,
         "audit": await debate_audit(db, debate.id),
+        "views": await views_card(db, debate),
+    }
+
+
+def view_breakdown(counts: Mapping[tuple[str, str], int], total: int) -> dict[str, Any]:
+    """Views by source (page / embed) in SOURCES order, without empty sources; `untracked`:
+    the counter's views from before sources were kept."""
+    sources = [
+        {
+            "source": source,
+            "page": counts.get((source, "page"), 0),
+            "embed": counts.get((source, "embed"), 0),
+        }
+        for source in SOURCES
+    ]
+    tracked = sum(counts.values())
+    return {
+        "total": total,
+        "sources": [row for row in sources if row["page"] or row["embed"]],
+        "untracked": max(0, total - tracked),
+    }
+
+
+async def views_card(db: AsyncSession, debate: Debate) -> dict[str, Any]:
+    rows = await db.execute(
+        select(ViewDay.source, ViewDay.place, func.sum(ViewDay.views))
+        .where(ViewDay.debate_id == debate.id)
+        .group_by(ViewDay.source, ViewDay.place)
+    )
+    counts = {(str(source), str(place)): int(n or 0) for source, place, n in rows.all()}
+    week = utcnow().date() - timedelta(days=6)
+    last_7d = await db.scalar(
+        select(func.coalesce(func.sum(ViewDay.views), 0)).where(
+            ViewDay.debate_id == debate.id, ViewDay.day >= week
+        )
+    )
+    return {
+        **view_breakdown(counts, int(debate.views or 0)),
+        "last_7d": int(last_7d or 0),
+        "embeds": await embedding_sites(debate.id),
     }
 
 

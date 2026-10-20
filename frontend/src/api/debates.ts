@@ -15,11 +15,40 @@ export const listDebates = (params: { status?: string; q?: string; limit?: numbe
 
 export const getDebate = (id: string) => api.get<DebateDetail>(`/debates/${id}`).then((r) => r.data);
 
-/** One view of a public debate whose page came from the server (its loader counts none): a
- *  beacon, so leaving the page does not cancel it. */
-export const countView = (id: string) => {
+/** What a view tells the server (backend routes_reactions.ViewBeacon): where it happened, the
+ *  referrer's host (never the whole address), whether it is a navigation inside the site and the
+ *  page's `?ref=`. The server turns it into a source (search, social, embed…). */
+export interface ViewBeacon {
+  place: 'page' | 'embed';
+  referrer: string;
+  internal: boolean;
+  ref: string;
+}
+
+/** The host of the page that sent the visitor here ('' without one). */
+export const referrerHost = (): string => {
+  try {
+    return document.referrer ? new URL(document.referrer).hostname : '';
+  } catch {
+    return '';
+  }
+};
+
+/** Whether the current page is the one the browser loaded, not a navigation inside the site: only
+ *  then does `document.referrer` tell where the visitor came from. */
+export const isLandingPage = (): boolean => {
+  const entry = performance.getEntriesByType?.('navigation')[0];
+  return !entry || entry.name.split('#')[0] === window.location.href.split('#')[0];
+};
+
+/** One view of a public debate (reading it through the API counts none): a beacon, so leaving the
+ *  page does not cancel it. Plain text, so the browser sends it without a preflight. */
+export const countView = (id: string, beacon: ViewBeacon) => {
   const url = `${API_BASE}/debates/${id}/view`;
-  if (!navigator.sendBeacon?.(url)) void fetch(url, { method: 'POST', keepalive: true, credentials: 'same-origin' }).catch(() => undefined);
+  const body = JSON.stringify(beacon);
+  if (!navigator.sendBeacon?.(url, new Blob([body], { type: 'text/plain' }))) {
+    void fetch(url, { method: 'POST', body, headers: { 'Content-Type': 'text/plain' }, keepalive: true, credentials: 'same-origin' }).catch(() => undefined);
+  }
 };
 
 export const createDebate = (config: DebateConfig) =>

@@ -33,7 +33,6 @@ describe('forwardedHeaders', () => {
     const headers = forwardedHeaders(visitor());
     expect(Object.fromEntries(headers)).toEqual({
       accept: 'application/json',
-      'x-debatr-render': 'server',
       cookie: '__Host-session=signed',
       'x-forwarded-for': '203.0.113.7',
       'user-agent': 'Mozilla/5.0 (Test)',
@@ -43,7 +42,7 @@ describe('forwardedHeaders', () => {
 
   it('leaves out headers the visitor did not send', () => {
     const headers = forwardedHeaders(new Request('http://site.test/'));
-    expect([...headers.keys()]).toEqual(['accept', 'x-debatr-render']);
+    expect([...headers.keys()]).toEqual(['accept']);
   });
 
   it('drops the cookie for what must look the same to everyone', () => {

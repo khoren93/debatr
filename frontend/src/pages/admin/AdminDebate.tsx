@@ -9,7 +9,7 @@ import { Page } from '../../components/layout/AppShell';
 import { DebateActions } from '../../components/admin/debates/DebateActions';
 import { DebateFlags, DebateStatusText, ModerationText } from '../../components/admin/debates/DebateBits';
 import { CoverPanel } from '../../components/admin/debates/CoverPanel';
-import { ConfigPanel, MediaPanel, ModerationPanel, RecoveryPanel, UsagePanel } from '../../components/admin/debates/DebateSections';
+import { ConfigPanel, MediaPanel, ModerationPanel, RecoveryPanel, UsagePanel, ViewsPanel } from '../../components/admin/debates/DebateSections';
 import { Transcript } from '../../components/admin/debates/Transcript';
 import { AuditPanel, LedgerTable, Panel } from '../../components/admin/users/UserSections';
 import { formatTime, formatUsd } from '../../components/admin/helpers';
@@ -162,6 +162,7 @@ const AdminDebate = () => {
             <div className="grid gap-4">
               <ModerationPanel card={card} />
               <CoverPanel card={card} permissions={me.permissions} onChanged={reload} />
+              <ViewsPanel card={card} />
               <MediaPanel card={card} />
               <RecoveryPanel card={card} />
             </div>

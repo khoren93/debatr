@@ -25,11 +25,11 @@ const RETRY_AFTER_S = 30;
 /** compose sets http://api:8000; `npm run dev` against the Docker stack reuses VITE_DEV_API_TARGET. */
 export const apiInternalUrl = (): string => (process.env.API_INTERNAL_URL || process.env.VITE_DEV_API_TARGET || 'http://localhost:8000').replace(/\/+$/, '');
 
-/** The headers of the visitor's request that go along to the API, marked as the renderer's
- *  (backend views.RENDER_HEADER: its loads count no views, the page's beacon does). `anonymous`:
- *  without the cookie, for what must look the same to everyone (link preview pictures). */
+/** The headers of the visitor's request that go along to the API (reading a debate counts no
+ *  view: the page's beacon does, backend services/views). `anonymous`: without the cookie, for
+ *  what must look the same to everyone (link preview pictures, the embedded player). */
 export const forwardedHeaders = (request: Request, { anonymous = false }: { anonymous?: boolean } = {}): Headers => {
-  const headers = new Headers({ accept: 'application/json', 'x-debatr-render': 'server' });
+  const headers = new Headers({ accept: 'application/json' });
   for (const name of FORWARDED_HEADERS) {
     if (anonymous && name === 'cookie') continue;
     const value = request.headers.get(name);
