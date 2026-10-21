@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.9.0] - 2026-10-21
+
 ### Added
 
 - **Gallery by language.** The gallery shows English debates by default; a language dropdown
@@ -16,6 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Gallery cards show the debate's language.
 - Admin console: an Audience page with visit statistics.
 - A privacy page (`/privacy`).
+- **CLI 0.6.0**: `debatr gallery --language ru` and the MCP `search_gallery` tool's `language`;
+  the gallery table shows each debate's language.
 
 ### Changed
 
@@ -477,7 +481,8 @@ First public release of **AI Debates**.
 - Admin panel for debates, participants, turns and sessions.
 - Docker Compose setup with FastAPI, PostgreSQL, Redis + RQ and a React + Vite frontend.
 
-[Unreleased]: https://github.com/khoren93/debatr/compare/v1.8.1...HEAD
+[Unreleased]: https://github.com/khoren93/debatr/compare/v1.9.0...HEAD
+[1.9.0]: https://github.com/khoren93/debatr/compare/v1.8.1...v1.9.0
 [1.8.1]: https://github.com/khoren93/debatr/compare/v1.8.0...v1.8.1
 [1.8.0]: https://github.com/khoren93/debatr/compare/v1.7.0...v1.8.0
 [1.7.0]: https://github.com/khoren93/debatr/compare/v1.6.1...v1.7.0

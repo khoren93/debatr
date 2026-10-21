@@ -77,7 +77,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(
     title=settings.PROJECT_NAME,
     description="API for AI-driven debates using OpenRouter",
-    version="1.8.1",
+    version="1.9.0",
     openapi_url="/api/openapi.json",
     docs_url="/api/docs",
     redoc_url="/api/redoc",
