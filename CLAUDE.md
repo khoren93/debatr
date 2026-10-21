@@ -719,7 +719,16 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   also take the captions' place, `SceneStage verseExtend`). `video/lyrics.ts` (pure, vitest)
   times the lines by matching the verse text to the track's words (LCS; stray direction words
   dropped, missing ones interpolated, by position when under 30 % match) and marks rhymes by
-  spelling (`rhymes`: the ending, the last two letters, or the coda after a shared vowel). `provider_usage` purpose `music` (cost estimated at $0.15 a minute);
+  spelling (`rhymes`: the ending, the last two letters, or the coda after a shared vowel).
+  The battle's video moves on its beat: the media build measures `Timeline.beat`
+  (`media/beats.py`: the track's bass onsets, `ffmpeg.bass_envelope`, fit to a `music.BPM` grid
+  over the whole track — sections do not start on a beat; `offset_ms`, `accent` = the kick's
+  half of the beats; none when unclear) and `video/groove.ts` (pure, vitest) turns it into a
+  pulse (older timelines: the track's loudness): club lights in the background
+  (`Background` `StageLights`: four beams in the rappers' colours and the accent, swinging over
+  two bars, flaring on beats, a floor glow), the active logo's bounce, the verse's logo, the
+  camera's bounce and the "ROUND N" card that slams on a kick before a round's first verse (after
+  the MC, in the break; flash + shake; `roundCards`). `provider_usage` purpose `music` (cost estimated at $0.15 a minute);
   the owner pays `music_price_per_min` (lever, default $0.30) after the build (ledger category
   `music`, every console summary counts it); the estimate adds the track's minutes
   (`Format.track_ms`). An own ElevenLabs key needs a paid plan (`elevenlabs.music_allowed`,
@@ -766,6 +775,11 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   `start_ms`/`end_ms`/`item_ms`, non-overlapping, recomputed on every audio build. `item_ms`
   follows the order of the scene's lists; `UNORDERED_ITEMS` (ranking, scale, map) search every
   element on its own, since a countdown or the two pans are not said in list order.
+- Motion in both formats (`video/groove.ts`): the background's glows drift on slow sine paths
+  and turn from one speaker's colour to the next over 700 ms (`glowColorAt`); the camera breathes
+  (`cameraAt`: ≤ 0.6 % over 18 s); the speaking logo bounces with the voice's loudness; a debate
+  gets a quiet "ROUND N" card from round 2. Keep it deterministic (no `Math.random`) and on
+  gradients / transforms (the web renderer draws them; no `filter: blur`).
 - Rendering (`src/video/visuals/`): the frame follows the mockup's player (unit = 1% of the
   width): the brand (`BrandLockup`: the favicon mark + wordmark) top-left, the speaking chip
   (logo, name, model, level bars) top-centre, the round chip top-right, all three as tall as

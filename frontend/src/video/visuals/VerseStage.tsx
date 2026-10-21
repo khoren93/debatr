@@ -42,9 +42,10 @@ const Words = ({ line, ms, size, color, live }: { line: LyricLine; ms: number; s
 };
 
 /** The stage during a rap verse: the line being rapped big in the middle, the one before it
- *  small above, the rapper's logo faint behind; before the first line, the rapper's name. A tall
+ *  small above, the rapper's logo faint behind (thumping with `pulse`, the beat); before the
+ *  first line, the rapper's name. A tall
  *  box (the Short) takes bigger type over up to four lines, closer to the middle. */
-export const VerseStage = ({ timeline, seg, ms, w, h, k }: { timeline: Timeline; seg: TimelineSegment; ms: number; w: number; h: number; k: number }) => {
+export const VerseStage = ({ timeline, seg, ms, w, h, k, pulse = 0 }: { timeline: Timeline; seg: TimelineSegment; ms: number; w: number; h: number; k: number; pulse?: number }) => {
   const lines = verseLines(seg);
   const speaker = timeline.speakers.find((s) => s.id === seg.speaker_id);
   const color = speaker?.color ?? ACCENT;
@@ -65,7 +66,7 @@ export const VerseStage = ({ timeline, seg, ms, w, h, k }: { timeline: Timeline;
   return (
     <div style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
       {speaker && (
-        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.07 }}>
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.07 + 0.05 * pulse, transform: `scale(${1 + 0.05 * pulse})` }}>
           <ModelLogo modelId={speakerModelId(speaker)} size={h * 0.62} color={color} />
         </div>
       )}

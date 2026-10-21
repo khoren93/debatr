@@ -57,6 +57,14 @@ export interface TimelineVerdict {
   winner_name: string | null;
 }
 
+/** The beat grid of a generated soundtrack (rap battle): beat k at offset_ms + k * 60000 / bpm. */
+export interface TimelineBeat {
+  bpm: number;
+  offset_ms: number;
+  /** Beats k with k % 2 === accent carry the kick (the stronger ones). */
+  accent: number;
+}
+
 export interface Timeline {
   version: 1;
   debate_id: string;
@@ -80,4 +88,6 @@ export interface Timeline {
   /** Charts / drawn scenes synced with the speech; missing in timelines built before them. */
   visuals?: TimelineVisual[];
   stats: { chars: number; tts_ms: number; estimated_usd: number | null; cached_turns: number; visuals_usd?: number | null; images_usd?: number | null };
+  /** Only a battle's generated track has one (older battle timelines too: not). */
+  beat?: TimelineBeat | null;
 }

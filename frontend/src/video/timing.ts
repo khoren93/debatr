@@ -44,3 +44,7 @@ export const levelAt = (seg: TimelineSegment | null, ms: number): number => {
   const b = seg.levels[clamp(i + 1)] ?? a;
   return a + (b - a) * (pos % 1);
 };
+
+/** The segment's own label from the format, else derived from the round id (older timelines). */
+export const roundLabel = (roundId: string, label?: string | null): string =>
+  label || (roundId === 'verdict' ? 'Verdict' : roundId.replace(/^round_(\d+)$/, 'Round $1'));

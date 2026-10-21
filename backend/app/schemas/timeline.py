@@ -64,6 +64,16 @@ class TimelineVerdict(BaseModel):
     winner_name: str | None = None
 
 
+class TimelineBeat(BaseModel):
+    """The beat grid of a generated soundtrack (rap battle): beat k sits at
+    `offset_ms + k * 60000 / bpm` on the track, for the video to move on."""
+
+    bpm: float
+    offset_ms: int
+    # Beats k with k % 2 == accent carry the kick: the stronger ones.
+    accent: int = 0
+
+
 class TimelineStats(BaseModel):
     chars: int = 0
     tts_ms: int = 0
@@ -100,3 +110,5 @@ class Timeline(BaseModel):
     # Charts / drawn schemes synced with the speech (schemas/visuals.py), sorted by start_ms.
     visuals: list[TimelineVisual] = Field(default_factory=list)
     stats: TimelineStats = Field(default_factory=TimelineStats)
+    # Only a generated soundtrack has one (and only when the track's beat is clear).
+    beat: TimelineBeat | None = None

@@ -9,7 +9,8 @@ import { FaceOff } from './components/FaceOff';
 import { SpeakerRowCard, SpeakingChip } from './components/SpeakerCard';
 import { debaterTag } from './speakers';
 import { ACCENT, DISPLAY_FONT, FONT, SHORT_H, SHORT_HOOK_MS, SHORT_W, barHeight, headlineSize } from './constants';
-import { frameToMs, highlightRange, msToFrame } from './utils';
+import { cameraAt, flashAt, glowColorAt, grooveAt, roundCardAt } from './groove';
+import { frameToMs, highlightRange, levelAt, msToFrame } from './utils';
 import { SceneStage } from './visuals/SceneStage';
 
 export interface ShortProps {
@@ -60,17 +61,24 @@ export const DebateShort = ({ timeline, mediaBase, highlightIndex }: ShortProps)
   const offsetMs = SHORT_HOOK_MS - h.start_ms;
   const rows = [debaters.slice(0, 2), debaters.slice(2, 4)];
   const stageH = rows[1].length > 0 ? STAGE_H : STAGE_END - STAGE_Y;
+  // A battle moves on its beat (lights, logos, the camera's bounce); a debate's logo on the voice.
+  const groove = timelineFormat(timeline).id === 'rap_battle' ? grooveAt(timeline, current, absMs) : null;
+  const pulse = groove ? groove.pulse * (groove.strong ? 1 : 0.5) : 0.6 * levelAt(seg, absMs);
+  const card = inside ? roundCardAt(timeline, absMs) : null;
+  const cam = cameraAt(absMs, groove, card);
+  const flash = flashAt(card, absMs);
+  const lights = groove && debaters.length >= 2 ? { colors: [debaters[0].color, debaters[1].color] as [string, string], active: speaker?.role === 'debater' ? speaker.color : null, groove } : null;
   const row = (speakers: typeof debaters, y: number) => (
     <div style={{ position: 'absolute', top: y, left: X, width: W, display: 'flex', justifyContent: 'center', gap: GAP }}>
       {speakers.map((d) => (
-        <SpeakerRowCard key={d.id} speaker={d} tag={debaterTag(d, debaters)} active={seg?.speaker_id === d.id} width={ROW_W} height={ROW_H} />
+        <SpeakerRowCard key={d.id} speaker={d} tag={debaterTag(d, debaters)} active={seg?.speaker_id === d.id} width={ROW_W} height={ROW_H} pulse={pulse} />
       ))}
     </div>
   );
 
   return (
     <AbsoluteFill style={{ overflow: 'hidden' }}>
-      <Background accent={speaker?.color ?? HOST_COLOR} />
+      <Background accent={glowColorAt(timeline, absMs, HOST_COLOR)} ms={absMs} lights={lights} />
       <Sequence from={msToFrame(SHORT_HOOK_MS)} durationInFrames={msToFrame(len) + 2} premountFor={fps}>
         <Audio src={`${mediaBase}/${timeline.full_audio_wav}`} trimBefore={msToFrame(h.start_ms)} trimAfter={msToFrame(h.end_ms)} />
       </Sequence>
@@ -90,7 +98,7 @@ export const DebateShort = ({ timeline, mediaBase, highlightIndex }: ShortProps)
       )}
 
       {!inHook && !inEnd && (
-        <div style={{ position: 'absolute', inset: 0, opacity: interpolate(localMs, [0, 400], [0, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }) }}>
+        <div style={{ position: 'absolute', inset: 0, opacity: interpolate(localMs, [0, 400], [0, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }), transform: `translate(${cam.x}px, ${cam.y}px) scale(${cam.scale})` }}>
           <div style={{ position: 'absolute', top: 2.2 * U, left: 2.4 * U, right: 2.4 * U, height: barHeight(BAR_U), display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <BrandMark u={BAR_U} />
             <div>{current && <RoundChip roundId={current.round_id} label={current.round_label} u={BAR_U} />}</div>
@@ -101,7 +109,7 @@ export const DebateShort = ({ timeline, mediaBase, highlightIndex }: ShortProps)
             </div>
           )}
           {row(rows[0], ROW_A_Y)}
-          <SceneStage timeline={timeline} mediaBase={mediaBase} seg={current} ms={absMs} x={X} y={STAGE_Y} w={W} h={stageH} k={STAGE_K} verseExtend={VERSE_BOTTOM - STAGE_Y - stageH} />
+          <SceneStage timeline={timeline} mediaBase={mediaBase} seg={current} ms={absMs} x={X} y={STAGE_Y} w={W} h={stageH} k={STAGE_K} verseExtend={VERSE_BOTTOM - STAGE_Y - stageH} card={card} pulse={groove ? pulse : 0} />
           {rows[1].length > 0 && row(rows[1], ROW_B_Y)}
           <div style={{ position: 'absolute', left: 3 * U, right: 3 * U, top: CAPTIONS_Y, height: SHORT_H - CAPTIONS_Y - 60, display: 'flex', alignItems: 'flex-start', justifyContent: 'center' }}>
             {seg?.turn_type !== 'verse' && <Captions seg={seg} offsetMs={offsetMs} fontSize={2.8 * U} maxWidth={SHORT_W - 6 * U} combineMs={900} />}
@@ -109,6 +117,7 @@ export const DebateShort = ({ timeline, mediaBase, highlightIndex }: ShortProps)
         </div>
       )}
 
+      {flash > 0 && <AbsoluteFill style={{ background: '#FFFFFF', opacity: flash }} />}
       {inEnd && <EndCard big={false} text="Who won? Full debate on the channel" sinceMs={localMs - len} />}
     </AbsoluteFill>
   );

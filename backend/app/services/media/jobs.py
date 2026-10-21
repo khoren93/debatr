@@ -24,6 +24,7 @@ from app.models.models import Debate, Turn
 from app.schemas.media import MediaOptions
 from app.schemas.timeline import (
     Timeline,
+    TimelineBeat,
     TimelineHighlight,
     TimelineSegment,
     TimelineSpeaker,
@@ -43,7 +44,7 @@ from app.services.credits import (
 from app.services.formats import format_of
 from app.services.free_router import resolved_participants
 from app.services.heartbeat import beating
-from app.services.media import ffmpeg, music
+from app.services.media import beats, ffmpeg, music
 from app.services.media.alignment import WordTiming, clamp_words, merge_chunks
 from app.services.media.highlights import (
     HighlightPick,
@@ -960,6 +961,7 @@ def _build_battle(
 
     set_media_state(db, debate, step="mix", message="Mixing the MC and the judge over the beat…")
     ffmpeg.normalize_music(paths.music_dir / f"{key}.mp3", paths.music_wav)
+    beat = _beat_of(paths.music_wav)
     wins = music.windows(sections)
     starts: dict[int, int] = {}
     if intro:
@@ -1044,8 +1046,19 @@ def _build_battle(
         options=options,
         stats=stats,
         steps=len(tasks) + 1,
+        beat=beat,
     )
     return BuildResult(chars=char_cost, music_ms=billed_ms)
+
+
+def _beat_of(track: Path) -> TimelineBeat | None:
+    """The generated track's beat grid (the video moves on it); none when unclear or unreadable:
+    the video then moves on the loudness."""
+    try:
+        return beats.beat_grid(ffmpeg.bass_envelope(track), bpm=music.BPM)
+    except Exception as e:
+        logger.warning("No beat grid for %s: %s", track, e)
+        return None
 
 
 def _lyrics(text: str) -> str:
@@ -1077,6 +1090,7 @@ def _finish(
     options: MediaOptions,
     stats: TimelineStats,
     steps: int,
+    beat: TimelineBeat | None = None,
 ) -> None:
     """Shared by every soundtrack: the Short picks, the verdict, timeline.json and the ready
     state."""
@@ -1132,6 +1146,7 @@ def _finish(
         highlights=highlights,
         visuals=visuals,
         stats=stats,
+        beat=beat,
     )
     paths.timeline.write_text(timeline.model_dump_json(indent=2))
 

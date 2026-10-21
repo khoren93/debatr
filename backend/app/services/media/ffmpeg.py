@@ -125,7 +125,7 @@ def normalize_turn(src: Path, dst: Path, *, target_lufs: float | None = None) ->
             )
 
 
-def envelope_from_pcm(pcm: bytes, *, rate: int, window_ms: int) -> list[float]:
+def envelope_from_pcm(pcm: bytes, *, rate: int, window_ms: int, digits: int = 2) -> list[float]:
     """RMS per window, normalized to 0..1 (pure)."""
     count = len(pcm) // 2
     if count == 0:
@@ -138,13 +138,35 @@ def envelope_from_pcm(pcm: bytes, *, rate: int, window_ms: int) -> list[float]:
         acc = sum((s / 32768.0) ** 2 for s in chunk)
         levels.append((acc / len(chunk)) ** 0.5)
     peak = max(0.05, max(levels))
-    return [round(v / peak, 2) for v in levels]
+    return [round(v / peak, digits) for v in levels]
 
 
 def envelope(path: Path, *, window_ms: int = 50) -> list[float]:
     rate = 8000
     pcm = ffmpeg(["-i", str(path), "-f", "s16le", "-ac", "1", "-ar", str(rate), "-"], timeout_s=120)
     return envelope_from_pcm(pcm, rate=rate, window_ms=window_ms)
+
+
+def bass_envelope(path: Path, *, window_ms: int = 10, cutoff_hz: int = 150) -> list[float]:
+    """RMS per window of the low end only (kick drum, bass), 0..1: where the beat is."""
+    rate = 4000
+    pcm = ffmpeg(
+        [
+            "-i",
+            str(path),
+            "-af",
+            f"lowpass=f={cutoff_hz}",
+            "-f",
+            "s16le",
+            "-ac",
+            "1",
+            "-ar",
+            str(rate),
+            "-",
+        ],
+        timeout_s=120,
+    )
+    return envelope_from_pcm(pcm, rate=rate, window_ms=window_ms, digits=4)
 
 
 def concat_wavs(files: list[Path], dst: Path) -> None:

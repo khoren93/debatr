@@ -15,6 +15,8 @@ import type { SceneCtx } from './scene';
 import { BulletsView, HeadlineView, QuoteView, RebuttalView, VersusView } from './TextScenes';
 import { relativeItems, scenesAt, type ActiveScene } from './timing';
 import { VerseStage } from './VerseStage';
+import { RoundCardView } from './RoundCard';
+import { stageHush, type RoundCard } from '../groove';
 
 const NUMERIC = new Set<Scene['type']>(['stat', 'bars', 'line', 'pie', 'proportion']);
 const UNTITLED = new Set<Scene['type']>(['headline', 'quote', 'definition', 'scoreboard']);
@@ -189,10 +191,11 @@ const Spotlight = ({ timeline, seg, w, k, align }: { timeline: Timeline; seg: Ti
   );
 };
 
-/** Centre of the frame: the active visual scene(s), else a rap verse's lines or the spotlight.
- *  `seg` is the turn being spoken (or the last one, during a pause). A verse's lines may take
- *  `verseExtend` px more below the stage (the captions' place, empty during a verse). */
-export const SceneStage = ({ timeline, mediaBase, seg, ms, x, y, w, h, k, idleAlign = 'center', verseExtend = 0 }: { timeline: Timeline; mediaBase: string; seg: TimelineSegment | null; ms: number; x: number; y: number; w: number; h: number; k: number; idleAlign?: 'center' | 'end'; verseExtend?: number }) => {
+/** Centre of the frame: the active visual scene(s), else a rap verse's lines or the spotlight,
+ *  and a "ROUND N" card over them as a round begins. `seg` is the turn being spoken (or the last
+ *  one, during a pause). A verse's lines may take `verseExtend` px more below the stage (the
+ *  captions' place, empty during a verse); `pulse` (0..1, the battle's beat) moves them. */
+export const SceneStage = ({ timeline, mediaBase, seg, ms, x, y, w, h, k, idleAlign = 'center', verseExtend = 0, card = null, pulse = 0 }: { timeline: Timeline; mediaBase: string; seg: TimelineSegment | null; ms: number; x: number; y: number; w: number; h: number; k: number; idleAlign?: 'center' | 'end'; verseExtend?: number; card?: RoundCard | null; pulse?: number }) => {
   const { active, cover } = scenesAt(timeline.visuals, ms);
   const needsMap = hasMapScene(timeline);
   useEffect(() => {
@@ -201,10 +204,11 @@ export const SceneStage = ({ timeline, mediaBase, seg, ms, x, y, w, h, k, idleAl
   const verse = seg?.turn_type === 'verse' && ms >= seg.start_ms ? seg : null;
   const lyrics = verse ? 1 - ramp(ms, verse.end_ms, VERSE_OUT_MS) : 0;
   const spotlight = verse ? ramp(ms, verse.end_ms + VERSE_OUT_MS, VERSE_OUT_MS) : 1;
+  const carded = stageHush(card, ms);
   return (
     <div style={{ position: 'absolute', left: x, top: y, width: w, height: h }}>
-      {cover < 1 && (
-        <div style={{ position: 'absolute', inset: 0, opacity: 1 - cover }}>
+      {cover < 1 && carded < 1 && (
+        <div style={{ position: 'absolute', inset: 0, opacity: (1 - cover) * (1 - carded) }}>
           {spotlight > 0 && (
             <div style={{ position: 'absolute', inset: 0, opacity: spotlight }}>
               <Spotlight timeline={timeline} seg={seg} w={w} k={k} align={idleAlign} />
@@ -212,7 +216,7 @@ export const SceneStage = ({ timeline, mediaBase, seg, ms, x, y, w, h, k, idleAl
           )}
           {verse && lyrics > 0 && (
             <div style={{ position: 'absolute', left: 0, top: 0, width: w, height: h + verseExtend, opacity: lyrics }}>
-              <VerseStage timeline={timeline} seg={verse} ms={ms} w={w} h={h + verseExtend} k={k} />
+              <VerseStage timeline={timeline} seg={verse} ms={ms} w={w} h={h + verseExtend} k={k} pulse={pulse} />
             </div>
           )}
         </div>
@@ -220,6 +224,7 @@ export const SceneStage = ({ timeline, mediaBase, seg, ms, x, y, w, h, k, idleAl
       {active.map((a) => (
         <ScenePanel key={a.visual.id} active={a} cast={timeline} mediaBase={mediaBase} w={w} h={h} k={k} />
       ))}
+      {card && carded > 0 && <RoundCardView card={card} ms={ms} w={w} k={k} plate={cover > 0} />}
     </div>
   );
 };

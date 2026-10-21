@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { useCurrentFrame, useVideoConfig } from 'remotion';
 import type { TimelineSegment, TimelineSpeaker } from '../../api/timeline';
 import { DISPLAY_FONT, FONT, MONO_FONT, barHeight } from '../constants';
@@ -7,8 +8,12 @@ import { LogoTile } from './ModelLogo';
 const MUTED = '#8B90A0';
 const DIM = '#5C6170';
 
+/** The logo of the one speaking bounces with `pulse` (0..1: the beat in a battle, the voice's
+ *  loudness in a debate). */
+const Bounce = ({ pulse, children }: { pulse: number; children: ReactNode }) => <div style={{ transform: pulse ? `scale(${1 + 0.09 * pulse})` : undefined }}>{children}</div>;
+
 /** A debater's card: model logo, name, model, and SPEAKING (or the side) under it. */
-export const SpeakerCard = ({ speaker, tag, active, width }: { speaker: TimelineSpeaker; tag: string; active: boolean; width: number }) => {
+export const SpeakerCard = ({ speaker, tag, active, width, pulse = 0 }: { speaker: TimelineSpeaker; tag: string; active: boolean; width: number; pulse?: number }) => {
   const name = width * 0.112;
   return (
     <div
@@ -28,7 +33,9 @@ export const SpeakerCard = ({ speaker, tag, active, width }: { speaker: Timeline
         textAlign: 'center',
       }}
     >
-      <LogoTile speaker={speaker} size={width * 0.33} framed={active} />
+      <Bounce pulse={active ? pulse : 0}>
+        <LogoTile speaker={speaker} size={width * 0.33} framed={active} />
+      </Bounce>
       <div style={{ marginTop: width * 0.02, maxWidth: '100%', fontFamily: DISPLAY_FONT, fontWeight: 700, fontSize: name, lineHeight: 1.1, letterSpacing: -0.02 * name, color: '#F2F3F7', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{speaker.name}</div>
       <div style={{ maxWidth: '100%', fontFamily: MONO_FONT, fontSize: width * 0.059, color: MUTED, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{speaker.model}</div>
       <div style={{ fontFamily: MONO_FONT, fontSize: width * 0.053, letterSpacing: 0.12 * width * 0.053, color: active ? speaker.color : DIM }}>{active ? 'SPEAKING' : tag}</div>
@@ -37,7 +44,7 @@ export const SpeakerCard = ({ speaker, tag, active, width }: { speaker: Timeline
 };
 
 /** A debater in the Short's rows: logo on the left; name, model and SPEAKING (or the side) beside it. */
-export const SpeakerRowCard = ({ speaker, tag, active, width, height }: { speaker: TimelineSpeaker; tag: string; active: boolean; width: number; height: number }) => {
+export const SpeakerRowCard = ({ speaker, tag, active, width, height, pulse = 0 }: { speaker: TimelineSpeaker; tag: string; active: boolean; width: number; height: number; pulse?: number }) => {
   const logo = height * 0.64;
   const pad = (height - logo) / 2;
   const name = height * 0.26;
@@ -59,7 +66,9 @@ export const SpeakerRowCard = ({ speaker, tag, active, width, height }: { speake
         gap: pad * 0.8,
       }}
     >
-      <LogoTile speaker={speaker} size={logo} framed={active} />
+      <Bounce pulse={active ? pulse : 0}>
+        <LogoTile speaker={speaker} size={logo} framed={active} />
+      </Bounce>
       <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: height * 0.025 }}>
         <div style={{ fontFamily: DISPLAY_FONT, fontWeight: 700, fontSize: name, lineHeight: 1.1, letterSpacing: -0.02 * name, color: '#F2F3F7', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{speaker.name}</div>
         <div style={{ fontFamily: MONO_FONT, fontSize: height * 0.135, color: MUTED, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{speaker.model}</div>
