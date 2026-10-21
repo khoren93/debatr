@@ -36,6 +36,17 @@ debatr --help
 No install needed for a one-off: `uvx debatr run "Tabs or spaces?"`. Python 3.10+ is required
 (uv fetches one if you have none).
 
+### Update
+
+```bash
+debatr --version              # the version you have
+uv tool upgrade debatr        # or: pipx upgrade debatr
+```
+
+`uvx debatr …` keeps using the version it fetched first, and so do MCP configs that start
+`uvx debatr mcp`: write `uvx debatr@latest …` to follow new releases (or run
+`uvx --refresh debatr …` once).
+
 ## Sign in
 
 ```bash

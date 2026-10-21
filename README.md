@@ -341,7 +341,7 @@ Run `make` to list every target. The most useful ones:
 The [`debatr` CLI](cli/README.md) talks to any Debatr server over its public API:
 
 ```bash
-uv tool install debatr
+uv tool install debatr                        # later: uv tool upgrade debatr
 debatr login                                  # approve this computer in the browser
 debatr run "Should cities ban cars?" -d anthropic/claude-sonnet-4.5 -d openai/gpt-5
 debatr show <id> --format markdown -o debate.md
