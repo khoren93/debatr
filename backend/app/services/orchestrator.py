@@ -971,11 +971,16 @@ def finish_debate_job(debate_id: str) -> None:
         _charge(db, debate)
         cover = _cover_plan(debate)
         _cleanup_keys(debate_id, keep_tts_key=True, keep_provider_key=cover == "own")
-        publish_event(
-            debate_id,
-            "debate_completed",
-            {"debate_id": debate_id, "status": "completed", "totals": debate.totals_json},
-        )
-        _auto_media(db, debate)
-        if cover is not None:
-            queue_auto_cover(db, debate, cover, debate_prices(debate).as_dict())
+        try:
+            _auto_media(db, debate)
+            if cover is not None:
+                queue_auto_cover(db, debate, cover, debate_prices(debate).as_dict())
+        finally:
+            # After the builds are queued: the page reloads the debate and its media on this
+            # event and polls only a build it sees queued, so an earlier event left it at
+            # "No audio yet" (and without the cover) until a reload.
+            publish_event(
+                debate_id,
+                "debate_completed",
+                {"debate_id": debate_id, "status": "completed", "totals": debate.totals_json},
+            )
