@@ -38,6 +38,8 @@ const ROW_B_Y = STAGE_END - ROW_H;
 const STAGE_H = ROW_B_Y - GAP - STAGE_Y;
 const STAGE_K = Math.min(W / 1160, STAGE_H / 700);
 const CAPTIONS_Y = STAGE_END + 36;
+// A rap verse's lines (no captions then) reach down to here, clear of the platform's UI.
+const VERSE_BOTTOM = SHORT_H - 300;
 
 export const DebateShort = ({ timeline, mediaBase, highlightIndex }: ShortProps) => {
   const frame = useCurrentFrame();
@@ -99,10 +101,10 @@ export const DebateShort = ({ timeline, mediaBase, highlightIndex }: ShortProps)
             </div>
           )}
           {row(rows[0], ROW_A_Y)}
-          <SceneStage timeline={timeline} mediaBase={mediaBase} seg={current} ms={absMs} x={X} y={STAGE_Y} w={W} h={stageH} k={STAGE_K} />
+          <SceneStage timeline={timeline} mediaBase={mediaBase} seg={current} ms={absMs} x={X} y={STAGE_Y} w={W} h={stageH} k={STAGE_K} verseExtend={VERSE_BOTTOM - STAGE_Y - stageH} />
           {rows[1].length > 0 && row(rows[1], ROW_B_Y)}
           <div style={{ position: 'absolute', left: 3 * U, right: 3 * U, top: CAPTIONS_Y, height: SHORT_H - CAPTIONS_Y - 60, display: 'flex', alignItems: 'flex-start', justifyContent: 'center' }}>
-            <Captions seg={seg} offsetMs={offsetMs} fontSize={2.8 * U} maxWidth={SHORT_W - 6 * U} combineMs={900} />
+            {seg?.turn_type !== 'verse' && <Captions seg={seg} offsetMs={offsetMs} fontSize={2.8 * U} maxWidth={SHORT_W - 6 * U} combineMs={900} />}
           </div>
         </div>
       )}

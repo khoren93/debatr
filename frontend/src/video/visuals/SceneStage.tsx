@@ -14,11 +14,14 @@ import { FlowView, IconsView, TimelineView } from './SchemeScenes';
 import type { SceneCtx } from './scene';
 import { BulletsView, HeadlineView, QuoteView, RebuttalView, VersusView } from './TextScenes';
 import { relativeItems, scenesAt, type ActiveScene } from './timing';
+import { VerseStage } from './VerseStage';
 
 const NUMERIC = new Set<Scene['type']>(['stat', 'bars', 'line', 'pie', 'proportion']);
 const UNTITLED = new Set<Scene['type']>(['headline', 'quote', 'definition', 'scoreboard']);
 const CHECK_COLORS: Record<SceneCheck['verdict'], string> = { verified: '#34D399', disputed: '#FF7A66', unverified: '#ffffff8c' };
 const DISPUTE_COLOR = '#FFB020';
+/** A rap verse's lines fade out this long after it ends, then the spotlight fades in as long. */
+const VERSE_OUT_MS = 300;
 
 /** Scenes showing numbers the speaker said get the "claim" note (they are not fact-checked). */
 const isNumeric = (scene: Scene) =>
@@ -186,19 +189,32 @@ const Spotlight = ({ timeline, seg, w, k, align }: { timeline: Timeline; seg: Ti
   );
 };
 
-/** Centre of the frame: the active visual scene(s), or the spotlight between scenes. `seg` is the
- *  turn being spoken (or the last one, during a pause). */
-export const SceneStage = ({ timeline, mediaBase, seg, ms, x, y, w, h, k, idleAlign = 'center' }: { timeline: Timeline; mediaBase: string; seg: TimelineSegment | null; ms: number; x: number; y: number; w: number; h: number; k: number; idleAlign?: 'center' | 'end' }) => {
+/** Centre of the frame: the active visual scene(s), else a rap verse's lines or the spotlight.
+ *  `seg` is the turn being spoken (or the last one, during a pause). A verse's lines may take
+ *  `verseExtend` px more below the stage (the captions' place, empty during a verse). */
+export const SceneStage = ({ timeline, mediaBase, seg, ms, x, y, w, h, k, idleAlign = 'center', verseExtend = 0 }: { timeline: Timeline; mediaBase: string; seg: TimelineSegment | null; ms: number; x: number; y: number; w: number; h: number; k: number; idleAlign?: 'center' | 'end'; verseExtend?: number }) => {
   const { active, cover } = scenesAt(timeline.visuals, ms);
   const needsMap = hasMapScene(timeline);
   useEffect(() => {
     if (needsMap) void loadGeo().catch(() => undefined); // warm up before the first map scene
   }, [needsMap]);
+  const verse = seg?.turn_type === 'verse' && ms >= seg.start_ms ? seg : null;
+  const lyrics = verse ? 1 - ramp(ms, verse.end_ms, VERSE_OUT_MS) : 0;
+  const spotlight = verse ? ramp(ms, verse.end_ms + VERSE_OUT_MS, VERSE_OUT_MS) : 1;
   return (
     <div style={{ position: 'absolute', left: x, top: y, width: w, height: h }}>
       {cover < 1 && (
         <div style={{ position: 'absolute', inset: 0, opacity: 1 - cover }}>
-          <Spotlight timeline={timeline} seg={seg} w={w} k={k} align={idleAlign} />
+          {spotlight > 0 && (
+            <div style={{ position: 'absolute', inset: 0, opacity: spotlight }}>
+              <Spotlight timeline={timeline} seg={seg} w={w} k={k} align={idleAlign} />
+            </div>
+          )}
+          {verse && lyrics > 0 && (
+            <div style={{ position: 'absolute', left: 0, top: 0, width: w, height: h + verseExtend, opacity: lyrics }}>
+              <VerseStage timeline={timeline} seg={verse} ms={ms} w={w} h={h + verseExtend} k={k} />
+            </div>
+          )}
         </div>
       )}
       {active.map((a) => (

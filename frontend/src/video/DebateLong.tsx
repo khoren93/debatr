@@ -77,7 +77,8 @@ export const DebateLong = ({ timeline, mediaBase }: DebateProps) => {
 
           <SceneStage timeline={timeline} mediaBase={mediaBase} seg={current} ms={ms} x={STAGE.x} y={STAGE.y} w={STAGE.w} h={STAGE.h} k={1} />
 
-          {!showVerdict && (
+          {/* A rap verse's lines are on the stage (VerseStage): no captions under them. */}
+          {!showVerdict && seg?.turn_type !== 'verse' && (
             <div style={{ position: 'absolute', left: 4 * U, right: 4 * U, bottom: 3 * U, display: 'flex', justifyContent: 'center' }}>
               <Captions seg={seg} offsetMs={INTRO_MS} fontSize={2.4 * U} maxWidth={LONG_W - 8 * U} />
             </div>
