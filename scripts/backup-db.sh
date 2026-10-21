@@ -37,6 +37,10 @@ REMOTE_KEEP_DAYS="$(setting BACKUP_REMOTE_KEEP_DAYS 60)"
 read -r -a COMPOSE <<< "${COMPOSE:-docker compose}"
 
 SCRATCH_DB="backup_restore_check"
+# Dump files: debatr-<UTC stamp>.dump. Dumps from before the rename (ai_debates-*) are still
+# pruned and checked; the new prefix sorts after the old one, so the newest stays last.
+DUMP_PREFIX="debatr"
+DUMP_NAMES=(-name "$DUMP_PREFIX-*.dump" -o -name "ai_debates-*.dump")
 # Tables whose row counts the check compares (the money and the content).
 CHECK_TABLES=(users credit_transactions api_tokens debates turns debate_participants
   debate_likes debate_votes trending_batches trending_topics)
@@ -60,7 +64,7 @@ backup() {
   mkdir -p "$BACKUP_DIR"
   local stamp file
   stamp="$(date -u +%Y%m%d-%H%M%S)"
-  file="$BACKUP_DIR/ai_debates-$stamp.dump"
+  file="$BACKUP_DIR/$DUMP_PREFIX-$stamp.dump"
 
   log "Dumping the database to $file"
   "${COMPOSE[@]}" exec -T db sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc --no-owner' \
@@ -72,7 +76,7 @@ backup() {
   size="$(wc -c < "$file" | tr -d ' ')"
   log "Dump ready: $size bytes"
 
-  find "$BACKUP_DIR" -maxdepth 1 -name 'ai_debates-*.dump' -mtime "+$KEEP_DAYS" -print -delete \
+  find "$BACKUP_DIR" -maxdepth 1 \( "${DUMP_NAMES[@]}" \) -mtime "+$KEEP_DAYS" -print -delete \
     | sed 's/^/  pruned /'
 
   local remote_status="off"
@@ -80,7 +84,8 @@ backup() {
     command -v rclone > /dev/null || fail "BACKUP_RCLONE_REMOTE is set but rclone is not installed"
     log "Uploading to $REMOTE"
     rclone copy "$file" "$REMOTE" || fail "upload to $REMOTE failed (the local dump is kept)"
-    rclone delete "$REMOTE" --min-age "${REMOTE_KEEP_DAYS}d" --include 'ai_debates-*.dump' \
+    rclone delete "$REMOTE" --min-age "${REMOTE_KEEP_DAYS}d" \
+      --include "$DUMP_PREFIX-*.dump" --include 'ai_debates-*.dump' \
       || log "WARNING: could not prune old remote dumps"
     remote_status="ok"
   fi
@@ -96,7 +101,7 @@ backup() {
 check() {
   local file="${1:-}"
   if [[ -z "$file" ]]; then
-    file="$(find "$BACKUP_DIR" -maxdepth 1 -name 'ai_debates-*.dump' -print 2>/dev/null | sort | tail -n 1)"
+    file="$(find "$BACKUP_DIR" -maxdepth 1 \( "${DUMP_NAMES[@]}" \) -print 2>/dev/null | sort | tail -n 1)"
   fi
   [[ -n "$file" && -f "$file" ]] || fail "no dump to check (looked in $BACKUP_DIR)"
 

@@ -1,4 +1,4 @@
-# AI Debates (Debatr) — shortcuts for the commands in CLAUDE.md. `make` lists them.
+# Debatr — shortcuts for the commands in CLAUDE.md. `make` lists them.
 
 COMPOSE      := docker compose
 DEV_COMPOSE  := docker compose -f docker-compose.dev.yml

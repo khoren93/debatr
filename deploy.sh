@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# AI Debates - deployment script: pull latest code and rebuild containers.
+# Debatr - deployment script: pull latest code and rebuild containers.
 set -euo pipefail
 cd "$(dirname "$0")"
 

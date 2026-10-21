@@ -127,5 +127,5 @@ def test_csv_escapes_formulas_in_titles():
 
 
 def test_slug():
-    assert slug("AI Debates") == "ai-debates"
+    assert slug("Debatr Studio") == "debatr-studio"
     assert slug("!!!") == "ledger"

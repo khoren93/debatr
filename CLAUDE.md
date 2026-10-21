@@ -1,4 +1,4 @@
-# AI Debates (Debatr) — developer guide
+# Debatr — developer guide
 
 Full-stack service that orchestrates structured debates between LLMs via OpenRouter, streams
 them to the browser in real time, voices them and renders videos in the browser. Users have

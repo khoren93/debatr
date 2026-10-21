@@ -1,7 +1,7 @@
 [project]
-name = "ai-debates-backend"
+name = "debatr-backend"
 version = "1.9.0"
-description = "AI Debates API and worker: orchestrates LLM debates via OpenRouter"
+description = "Debatr API and worker: orchestrates LLM debates via OpenRouter"
 readme = "../README.md"
 requires-python = ">=3.12"
 license = { text = "MIT" }

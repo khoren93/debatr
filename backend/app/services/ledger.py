@@ -134,7 +134,7 @@ def text_cell(value: str) -> str:
 
 
 def slug(text: str) -> str:
-    """File-name-safe lowercase slug ("AI Debates" -> "ai-debates")."""
+    """File-name-safe lowercase slug ("Debatr Studio" -> "debatr-studio")."""
     return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-") or "ledger"
 
 

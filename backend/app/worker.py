@@ -23,7 +23,7 @@ def parse_queue_names(raw: str | None) -> list[str]:
 
 
 def main(argv: list[str] | None = None) -> None:
-    parser = argparse.ArgumentParser(description="AI Debates RQ worker")
+    parser = argparse.ArgumentParser(description="Debatr RQ worker")
     parser.add_argument("--queues", default=None, help="comma-separated queue names")
     parser.add_argument("--simple", action="store_true", help="run jobs in-process (no fork)")
     args = parser.parse_args(argv)

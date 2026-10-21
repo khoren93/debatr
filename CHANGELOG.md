@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- The server calls itself Debatr instead of AI Debates: the API docs' title, the Stripe product
+  ("Debatr credits"), CSV exports (`debatr-ledger-….csv` and the console's), the app name sent to
+  OpenRouter, the backend and frontend package names.
+- Database backups are named `debatr-<stamp>.dump`; older `ai_debates-*` dumps are still pruned
+  and checked.
+
 ## [1.9.0] - 2026-10-21
 
 ### Added

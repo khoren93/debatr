@@ -72,7 +72,7 @@ def build_scheduler(conn: Redis) -> CronScheduler:
 
 
 def main(argv: list[str] | None = None) -> None:
-    parser = argparse.ArgumentParser(description="AI Debates periodic jobs")
+    parser = argparse.ArgumentParser(description="Debatr periodic jobs")
     parser.add_argument(
         "--refresh-trending", action="store_true", help="build a trending batch now and exit"
     )

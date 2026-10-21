@@ -131,7 +131,7 @@ app.mount(
 
 @app.get("/api", tags=["meta"])
 def read_root() -> dict[str, str]:
-    return {"message": "Welcome to AI Debates API", "docs": "/api/docs"}
+    return {"message": "Welcome to the Debatr API", "docs": "/api/docs"}
 
 
 async def _connectivity() -> dict[str, str]:

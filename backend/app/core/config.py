@@ -16,7 +16,7 @@ def bare_host(raw: str) -> str:
 
 
 class Settings(BaseSettings):
-    PROJECT_NAME: str = "AI Debates"
+    PROJECT_NAME: str = "Debatr"
     # The commit the image was built from (Docker build-arg GIT_SHA, set by deploy.sh).
     APP_VERSION: str = "dev"
     ENVIRONMENT: Literal["development", "production"] = "development"
