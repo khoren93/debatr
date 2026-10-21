@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Gallery by language.** The gallery shows English debates by default; a language dropdown
+  switches to another language (only the languages with debates, with their counts) or to all of
+  them (`?lang=ru`, `?lang=all`). The API takes `language=<code>` and answers how many cards each
+  language has.
+
+### Changed
+
+- The gallery's filters take less room: the format and premium voices on the left, the order
+  (trending, new, top this week … of all time, one dropdown) and the language on the right,
+  smaller category chips under them; two compact rows on phones.
+
 ## [1.8.1] - 2026-10-21
 
 ### Fixed

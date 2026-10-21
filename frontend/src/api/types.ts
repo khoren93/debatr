@@ -627,11 +627,20 @@ export interface GalleryItem {
   cover: CoverImage | null;
 }
 
+export interface GalleryLanguage {
+  /** Two-letter code, as `GalleryItem.language_code`. */
+  code: string;
+  /** Cards in this language under the request's other filters. */
+  count: number;
+}
+
 export interface GalleryResponse {
   items: GalleryItem[];
   /** Debates, or topics with `group=motion`. */
   total: number;
   categories: string[];
+  /** Every language with cards under the other filters, most cards first. */
+  languages: GalleryLanguage[];
 }
 
 export interface LeaderboardEntry {

@@ -12,10 +12,10 @@ import type { Route } from './+types/gallery';
 
 async function load(get: ApiGet, request: Request) {
   const filters = galleryFilters(new URL(request.url).searchParams);
-  const { items, total } = await get<GalleryResponse>(galleryPath(filters));
+  const { items, total, languages = [] } = await get<GalleryResponse>(galleryPath(filters));
   // A page past the last one does not exist (an old link after debates were unpublished).
   if (filters.page > 1 && items.length === 0) throw data({ status: 404, detail: 'No such page' }, { status: 404 });
-  return { filters, items, total };
+  return { filters, items, total, languages };
 }
 
 export const middleware: Route.MiddlewareFunction[] = [microcache];
@@ -26,7 +26,7 @@ export default function GalleryRoute({ loaderData }: Route.ComponentProps) {
   return (
     <>
       <Seo {...gallerySeo(loaderData.filters)} />
-      <Gallery filters={loaderData.filters} items={loaderData.items} total={loaderData.total} />
+      <Gallery filters={loaderData.filters} items={loaderData.items} total={loaderData.total} languages={loaderData.languages} />
     </>
   );
 }

@@ -9,6 +9,8 @@ export interface DropdownOption<T extends string | number> {
   text?: string;
   /** Second line in the list (voice description, price…). */
   hint?: ReactNode;
+  /** Shown at the row's end in the list only (a count…). */
+  aside?: ReactNode;
   disabled?: boolean;
 }
 
@@ -21,6 +23,8 @@ interface DropdownProps<T extends string | number> {
   disabled?: boolean;
   /** Trigger text when the value matches no option. */
   placeholder?: ReactNode;
+  /** Before the trigger's text. */
+  icon?: ReactNode;
   size?: 'xs' | 'sm' | 'md';
   className?: string;
   /** The list may be wider than the trigger (long voice names). */
@@ -72,6 +76,7 @@ export function Dropdown<T extends string | number>({
   id,
   disabled = false,
   placeholder = 'Select…',
+  icon,
   size = 'md',
   className = '',
   menuWidth = 0,
@@ -204,6 +209,7 @@ export function Dropdown<T extends string | number>({
           open ? 'border-accent' : 'border-line-2 enabled:hover:border-line-3'
         } ${className}`}
       >
+        {icon && <span className="flex shrink-0 text-muted">{icon}</span>}
         <span className={`min-w-0 flex-1 truncate ${selected ? '' : 'text-dim'}`}>{selected?.label ?? placeholder}</span>
         <ChevronDown className={`shrink-0 text-muted transition-transform duration-200 ${size === 'xs' ? 'size-3' : 'size-3.5'} ${open ? 'rotate-180' : ''}`} strokeWidth={2.5} />
       </button>
@@ -238,6 +244,7 @@ export function Dropdown<T extends string | number>({
                     <span className={`block truncate text-[13px] font-semibold ${isSelected ? 'text-accent' : 'text-text'}`}>{o.label}</span>
                     {o.hint && <span className="mt-px block truncate text-[11.5px] text-muted">{o.hint}</span>}
                   </span>
+                  {o.aside !== undefined && <span className="shrink-0 font-mono text-[11px] text-muted">{o.aside}</span>}
                   <span className="grid w-4 shrink-0 place-items-center text-accent">{isSelected && <Check className="size-3.5" strokeWidth={2.5} />}</span>
                 </div>
               );

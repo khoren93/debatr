@@ -19,6 +19,7 @@ import { ELEVENLABS_MODEL } from '../../api/media';
 import { STYLE_PRESETS, applyStyle, type PersonaStyle } from '../../data/styles';
 import { HOST_COLOR, debaterColor } from '../../lib/format';
 import { FLOWS, FORMAT_IDS, FORMATS, flowOf, formatSpec, type FormatSpec } from '../../lib/formats';
+import { LANGUAGES as SITE_LANGUAGES } from '../../lib/languages';
 import { getLocalKey, setLocalKey } from '../../lib/localKeys';
 import { FREE_ROUTER_ID, speakerNames } from '../../lib/modelNames';
 
@@ -110,25 +111,7 @@ export interface WizardState {
 
 // --- Static option lists -----------------------------------------------------
 
-export const LANGUAGES: { value: string; label: string }[] = [
-  { value: 'English', label: 'English' },
-  { value: 'Russian', label: 'Русский' },
-  { value: 'Spanish', label: 'Español' },
-  { value: 'French', label: 'Français' },
-  { value: 'German', label: 'Deutsch' },
-  { value: 'Italian', label: 'Italiano' },
-  { value: 'Portuguese', label: 'Português' },
-  { value: 'Chinese', label: '中文' },
-  { value: 'Japanese', label: '日本語' },
-  { value: 'Korean', label: '한국어' },
-  { value: 'Ukrainian', label: 'Українська' },
-  { value: 'Armenian', label: 'Հայերեն' },
-  { value: 'Polish', label: 'Polski' },
-  { value: 'Turkish', label: 'Türkçe' },
-  { value: 'Arabic', label: 'العربية' },
-  { value: 'Hindi', label: 'हिन्दी' },
-  { value: 'Dutch', label: 'Nederlands' },
-];
+export const LANGUAGES: { value: string; label: string }[] = SITE_LANGUAGES.map((l) => ({ value: l.name, label: l.label }));
 
 export const languageLabel = (value: string) => LANGUAGES.find((l) => l.value === value)?.label ?? value;
 

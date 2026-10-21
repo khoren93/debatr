@@ -23,6 +23,7 @@ from app.schemas.admin import MotionMoveRequest
 from app.schemas.schemas import DebateConfig
 from app.services import motions, ranking
 from app.services.admin.sessions import AdminSession
+from app.services.media.languages import LANGUAGE_CODES, language_code
 from app.services.motions import MotionInfo, joins_parent, normalize_topic, parse_target
 
 NOW = datetime(2026, 10, 19, 12, 0, tzinfo=UTC)
@@ -219,6 +220,24 @@ def test_grouped_gallery_picks_one_cover_per_topic() -> None:
     assert "anon_1.likes DESC NULLS LAST, anon_1.votes DESC NULLS LAST" in top
     new = _sql(routes_gallery.covers_query(conditions, "new"))
     assert "coalesce(debates.published_at, debates.created_at) DESC NULLS LAST" in new
+
+
+def test_gallery_language_mirrors_language_code() -> None:
+    sql = _sql(routes_gallery.language_sql() == "ru")
+    key = "lower(trim(coalesce(CAST((debates.config_json ->> 'language') AS VARCHAR), '')))"
+    assert sql.startswith(f"CASE {key} WHEN '' THEN 'en' WHEN 'english' THEN 'en'")
+    for name, code in LANGUAGE_CODES.items():
+        assert f"WHEN '{name}' THEN '{code}'" in sql
+    # Codes ("ru", "pt-BR") keep their first two letters; any other name counts as English.
+    assert f"char_length({key}) IN (2, 5)" in sql and "~ '^[[:alpha:]]{2}$'" in sql
+    assert sql.endswith("ELSE 'en' END END = 'ru'")
+    assert [language_code(v) for v in ("", "Russian", "pt-BR", "ru", "Swahili")] == [
+        "en",
+        "ru",
+        "pt",
+        "ru",
+        "en",
+    ]
 
 
 # --- the debate page ----------------------------------------------------------------------------

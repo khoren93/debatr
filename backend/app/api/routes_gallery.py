@@ -27,6 +27,7 @@ from app.schemas.schemas import (
     DebateDetail,
     FormatId,
     GalleryGroup,
+    GalleryLanguage,
     GalleryPeriod,
     GalleryResponse,
     GallerySort,
@@ -37,6 +38,7 @@ from app.services import motions, ranking
 from app.services.engagement import engagement_out
 from app.services.formats import DEFAULT_FORMAT
 from app.services.free_router import is_free_router
+from app.services.media.languages import LANGUAGE_CODES
 from app.services.openrouter_client import openrouter_client
 
 router = APIRouter()
@@ -78,6 +80,18 @@ def trending_sql() -> ColumnElement[Any]:
 def format_sql() -> ColumnElement[str]:
     """A debate's show format (configs from before formats are debates)."""
     return func.coalesce(Debate.config_json["format"].as_string(), DEFAULT_FORMAT)
+
+
+def language_sql() -> ColumnElement[str]:
+    """SQL twin of `languages.language_code`: the debate's language as a two-letter code."""
+    key = func.lower(func.trim(func.coalesce(Debate.config_json["language"].as_string(), "")))
+    prefix = func.substr(key, 1, 2)
+    # Already a code such as "en" or "ru-RU"; any other name counts as English.
+    code = case(
+        (and_(func.char_length(key).in_((2, 5)), prefix.regexp_match("^[[:alpha:]]{2}$")), prefix),
+        else_="en",
+    )
+    return case({"": "en", **LANGUAGE_CODES}, value=key, else_=code)
 
 
 def _public() -> list[ColumnElement[bool]]:
@@ -131,6 +145,24 @@ def covers_query(conditions: list[ColumnElement[bool]], sort: GallerySort) -> Se
     return select(ranked.c.id).where(ranked.c.rn == 1).order_by(*order, ranked.c.id)
 
 
+async def _languages(
+    db: AsyncSession, conditions: list[ColumnElement[bool]], group: GalleryGroup
+) -> list[GalleryLanguage]:
+    """Cards per language under the other filters (topics with `group=motion`), most first."""
+    rows = (
+        select(language_sql().label("code"), _group().label("grp"), Debate.id.label("id"))
+        .where(*conditions)
+        .subquery()
+    )
+    counted = func.count(func.distinct(rows.c.grp)) if group == "motion" else func.count(rows.c.id)
+    result = await db.execute(
+        select(rows.c.code, counted.label("count"))
+        .group_by(rows.c.code)
+        .order_by(counted.desc(), rows.c.code)
+    )
+    return [GalleryLanguage(code=code, count=int(count)) for code, count in result.all()]
+
+
 async def _grouped(
     db: AsyncSession,
     conditions: list[ColumnElement[bool]],
@@ -162,6 +194,9 @@ async def list_gallery(
     model: str | None = Query(None, max_length=200, description="Debates this model argued in"),
     premium_voices: bool = Query(False, description="Only debates voiced by ElevenLabs"),
     format: FormatId | None = Query(None, description="Only debates of this show format"),
+    language: str | None = Query(
+        None, pattern=r"^[a-z]{2}$", description="Only debates in this language (ISO 639-1)"
+    ),
     sort: GallerySort = Query("new"),
     group: GalleryGroup = Query("none", description="motion: one card per topic"),
     period: GalleryPeriod = Query("all", description="Publication window for sort=top"),
@@ -189,6 +224,10 @@ async def list_gallery(
         conditions.append(format_sql() == format)
     if sort == "top" and period in PERIODS:
         conditions.append(_published_at() >= utcnow() - PERIODS[period])
+    # Counted before the language filter, so the gallery can offer the other languages.
+    languages = await _languages(db, conditions, group)
+    if language:
+        conditions.append(language_sql() == language)
 
     if group == "motion":
         debates, total = await _grouped(db, conditions, sort, limit, offset)
@@ -199,6 +238,7 @@ async def list_gallery(
                 for d in debates
             ],
             total=total,
+            languages=languages,
         )
 
     newest = (Debate.published_at.desc().nulls_last(), Debate.created_at.desc())
@@ -230,6 +270,7 @@ async def list_gallery(
             gallery_item_out(d, infos.get(d.motion_id) if d.motion_id else None) for d in debates
         ],
         total=int(total),
+        languages=languages,
     )
 
 

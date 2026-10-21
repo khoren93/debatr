@@ -247,8 +247,12 @@ frontend/           React 19 + React Router 8 (framework mode, server rendering)
                       LineChart, StackedColumns, ChartCard (legend + table view), palette.ts =
                       validated chart colours)
   src/lib/cli.ts      install / login / MCP setup snippets shown on the Account page
-  src/lib/gallery.ts  the gallery's URL filters (sort, period, format, category, model, voices, page) and
-                      its API path (24 cards a page) / page address (`galleryHref`)
+  src/lib/gallery.ts  the gallery's URL filters (sort, period, format, lang — English unless `?lang=`
+                      names another code or `all` —, category, model, voices, page; `orderOf` /
+                      `orderParams` = sort + period as one dropdown choice) and its API path (24
+                      cards a page) / page address (`galleryHref`)
+  src/lib/languages.ts  the debate languages (code, the stored English name, the native label):
+                      the wizard's list and the gallery's language names
   src/lib/seo.ts      search and preview metadata of every page (pure, vitest): title / description
                       templates, canonical redirects, robots rules, JSON-LD (see "Search engines")
   src/lib/embed.ts    the player for other sites (pure, vitest; mirrors backend services/embed):
@@ -576,7 +580,8 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   Google Fonts per headline (only the subsets it uses, `scriptFamilies`; kept in the cache's
   `fonts/`); a failed fetch draws the card with gaps and keeps it 5 minutes only.
 - Robots: public pages `index, follow, max-image-preview:large…`; gallery views other than the
-  plain list, its rap-battle view and their `?page=N` (sort, category, model, premium voices) are
+  plain list (English), its rap-battle view and their `?page=N` (sort, language, category, model,
+  premium voices) are
   `noindex, follow` with the plain list as canonical; topics with one public version are
   `noindex` (a thin copy of that debate) and stay out of the sitemap
   (`TOPIC_INDEX_MIN_VERSIONS`, mirrored); `_client` pages `noindex, nofollow` (meta +
@@ -644,8 +649,11 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
 - Blind voting is a frontend rule: for a viewer who could vote, the judge's verdict (Verdict tab,
   verdict turn in the transcript) and the split stay hidden until they vote or click reveal;
   gallery/landing cards show likes instead of the winner.
-- `GET /api/gallery?sort=new|trending|top&period=week|month|year|all&model=<id>&premium_voices=true`;
-  trending is `services/ranking.trending_score` mirrored in SQL by `routes_gallery.trending_sql`.
+- `GET /api/gallery?sort=new|trending|top&period=week|month|year|all&model=<id>&premium_voices=true&language=<code>`;
+  `language` (ISO 639-1; none = every language, the site sends `en` by default) compares
+  `routes_gallery.language_sql`, the SQL twin of `media/languages.language_code`; `languages` in
+  the answer = cards per language under the other filters (the gallery's language dropdown).
+  Trending is `services/ranking.trending_score` mirrored in SQL by `routes_gallery.trending_sql`.
   Anyone may publish (free models and Edge voices too); quality is a ranking signal, not a gate:
   ready ElevenLabs audio (`serializers.has_premium_voices` / `premium_voices_sql`) counts like two
   likes (`PREMIUM_VOICES_BONUS`), cards mark it (`GalleryItem.premium_voices`), the gallery has a

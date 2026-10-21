@@ -656,10 +656,17 @@ class GalleryItem(BaseModel):
     cover: CoverImageOut | None = None  # the AI cover (null: the markup cover)
 
 
+class GalleryLanguage(BaseModel):
+    code: str  # ISO 639-1, as `GalleryItem.language_code`
+    count: int  # cards in this language under the other filters
+
+
 class GalleryResponse(BaseModel):
     items: list[GalleryItem]
     total: int  # debates, or topics with group=motion
     categories: list[str] = Field(default_factory=lambda: list(GALLERY_CATEGORIES))
+    # Every language with cards under the request's other filters, most cards first.
+    languages: list[GalleryLanguage] = Field(default_factory=list)
 
 
 class MotionPage(BaseModel):

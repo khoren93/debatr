@@ -165,6 +165,8 @@ describe('listing pages', () => {
     expect(gallerySeo(galleryFilters(new URLSearchParams('format=rap_battle&page=2')))).toMatchObject({ path: '/gallery?format=rap_battle&page=2', robots: 'index', title: 'AI rap battles — models trade verses · page 2 | Debatr' });
     expect(gallerySeo(galleryFilters(new URLSearchParams('sort=new&category=tech')))).toMatchObject({ path: '/gallery', robots: 'noindex' });
     expect(gallerySeo(galleryFilters(new URLSearchParams('voices=premium')))).toMatchObject({ robots: 'noindex' });
+    expect(gallerySeo(galleryFilters(new URLSearchParams('lang=ru&format=rap_battle')))).toMatchObject({ path: '/gallery?format=rap_battle', robots: 'noindex' });
+    expect(gallerySeo(galleryFilters(new URLSearchParams('lang=all')))).toMatchObject({ path: '/gallery', robots: 'noindex' });
   });
 
   it('keeps titles and descriptions within the limits', () => {

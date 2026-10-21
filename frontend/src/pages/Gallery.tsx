@@ -1,11 +1,24 @@
 import { Link, useNavigation, useSearchParams } from 'react-router';
-import { ArrowLeft, ArrowRight, AudioLines, MicVocal, Play, Trophy, X } from 'lucide-react';
-import type { GalleryItem } from '../api/types';
+import type { ReactNode } from 'react';
+import { ArrowLeft, ArrowRight, AudioLines, Flame, Globe, Languages, MicVocal, Play, Sparkles, Trophy, X } from 'lucide-react';
+import type { GalleryItem, GalleryLanguage } from '../api/types';
 import { Page, PageTitle } from '../components/layout/AppShell';
 import { CardCover, CardStats, CoverBadge, DebateCard, VersionsBadge } from '../components/cards';
-import { Avatar, Button, Chip, EmptyState, LinkButton, ModelIcon, Segmented } from '../components/ui';
+import { Avatar, Button, Chip, Dropdown, EmptyState, LinkButton, ModelIcon, Segmented, type DropdownOption } from '../components/ui';
 import { shortModelName } from '../lib/format';
-import { CATEGORY_OPTIONS, FORMAT_OPTIONS, GALLERY_PAGE_SIZE, PERIOD_OPTIONS, SORT_OPTIONS, galleryHref, type GalleryFilters } from '../lib/gallery';
+import {
+  CATEGORY_OPTIONS,
+  DEFAULT_LANGUAGE,
+  GALLERY_PAGE_SIZE,
+  galleryHref,
+  orderOf,
+  orderParams,
+  type FormatFilter,
+  type GalleryFilters,
+  type GalleryOrder,
+  type LanguageFilter,
+} from '../lib/gallery';
+import { languageName } from '../lib/languages';
 
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
@@ -14,7 +27,56 @@ interface Props {
   items: GalleryItem[];
   /** Cards (topics) across every page. */
   total: number;
+  /** Cards per language under the other filters. */
+  languages: GalleryLanguage[];
 }
+
+/** Shorter words on phones, where the format, the voices and the order share two rows. */
+const short = (wide: string, narrow: string) => (
+  <>
+    <span className="sm:hidden">{narrow}</span>
+    <span className="max-sm:hidden">{wide}</span>
+  </>
+);
+
+const FORMAT_TABS: { value: FormatFilter; label: ReactNode }[] = [
+  { value: 'all', label: short('All shows', 'All') },
+  { value: 'debate', label: 'Debates' },
+  { value: 'rap_battle', label: short('Rap battles', 'Battles') },
+];
+
+const withIcon = (icon: ReactNode, text: string) => (
+  <span className="inline-flex items-center gap-2">
+    {icon}
+    {text}
+  </span>
+);
+
+const ORDER_OPTIONS: DropdownOption<GalleryOrder>[] = [
+  { value: 'trending', text: 'Trending', label: withIcon(<Flame className="size-3.5" />, 'Trending') },
+  { value: 'new', text: 'New', label: withIcon(<Sparkles className="size-3.5" />, 'New') },
+  { value: 'top:week', text: 'Top this week', label: withIcon(<Trophy className="size-3.5" />, 'Top this week') },
+  { value: 'top:month', text: 'Top this month', label: withIcon(<Trophy className="size-3.5" />, 'Top this month') },
+  { value: 'top:year', text: 'Top this year', label: withIcon(<Trophy className="size-3.5" />, 'Top this year') },
+  { value: 'top:all', text: 'Top of all time', label: withIcon(<Trophy className="size-3.5" />, 'Top of all time') },
+];
+
+/** "All languages" and every language with cards (the chosen one and English always). */
+const languageOptions = (languages: GalleryLanguage[], current: LanguageFilter): DropdownOption<LanguageFilter>[] => {
+  const counts = new Map(languages.map((l) => [l.code, l.count]));
+  const codes = languages.map((l) => l.code);
+  for (const code of [DEFAULT_LANGUAGE, current]) if (code !== 'all' && !counts.has(code)) codes.push(code);
+  // No count for every language: a topic with versions in two languages is a card in both.
+  return [
+    { value: 'all', label: 'All languages' },
+    ...codes.map((code) => ({ value: code, label: languageName(code), aside: counts.get(code) ?? 0 })),
+  ];
+};
+
+/** The toggles' look: as high as the format tabs beside them. */
+const TOGGLE = 'inline-flex h-[38px] shrink-0 cursor-pointer items-center gap-1.5 rounded-[10px] border px-2.5 text-[13px] font-semibold whitespace-nowrap transition-colors';
+const TOGGLE_ON = 'border-accent/40 bg-accent/10 text-accent hover:bg-accent/15';
+const TOGGLE_OFF = 'border-line-2 bg-ink text-muted hover:border-line-3 hover:text-text';
 
 const PAGE_LINK = 'inline-flex items-center gap-1.5 rounded-full border border-line-2 bg-surface px-3.5 py-2 text-[13px] font-semibold transition-colors hover:border-line-3 hover:bg-surface-2';
 
@@ -57,24 +119,28 @@ const Pager = ({ filters, total }: { filters: GalleryFilters; total: number }) =
  * one is a navigation (back to the first page), and the route's loaders bring the cards
  * (lib/gallery.ts).
  */
-const Gallery = ({ filters, items, total }: Props) => {
-  const { sort, period, format, category, model, premium } = filters;
+const Gallery = ({ filters, items, total, languages }: Props) => {
+  const { sort, period, format, language, category, model, premium } = filters;
   const [, setParams] = useSearchParams();
   const navigation = useNavigation();
   // While other filters load keep this grid on screen, dimmed.
   const loading = navigation.state === 'loading' && navigation.location.pathname === '/gallery';
 
-  const setParam = (name: string, value: string | null) =>
+  const update = (changes: Record<string, string | null>) =>
     setParams(
       (prev) => {
         const next = new URLSearchParams(prev);
-        if (value === null) next.delete(name);
-        else next.set(name, value);
+        for (const [name, value] of Object.entries(changes)) {
+          if (value === null) next.delete(name);
+          else next.set(name, value);
+        }
         next.delete('page');
         return next;
       },
       { replace: true, preventScrollReset: true },
     );
+  const setParam = (name: string, value: string | null) => update({ [name]: value });
+  const setLanguage = (value: LanguageFilter) => setParam('lang', value === DEFAULT_LANGUAGE ? null : value);
 
   const renderBody = () => {
     if (items.length === 0) {
@@ -126,8 +192,23 @@ const Gallery = ({ filters, items, total }: Props) => {
             icon={<Play className="size-5" />}
             title="Nothing published in this period"
             action={
-              <Button variant="secondary" onClick={() => setParam('period', 'all')}>
+              <Button variant="secondary" onClick={() => setParam('period', null)}>
                 Show all time
+              </Button>
+            }
+          />
+        );
+      }
+      if (language !== 'all') {
+        return (
+          <EmptyState
+            className="mt-6"
+            icon={<Languages className="size-5" />}
+            title={`No debates in ${languageName(language)} here yet`}
+            text="Run one in this language and publish it to be the first, or look through every language."
+            action={
+              <Button variant="secondary" onClick={() => setLanguage('all')}>
+                Show all languages
               </Button>
             }
           />
@@ -202,32 +283,54 @@ const Gallery = ({ filters, items, total }: Props) => {
           </Link>
         }
       />
-      <div className="mt-5 flex flex-wrap items-center gap-2.5">
-        <Segmented options={SORT_OPTIONS} value={sort} onChange={(v) => setParam('sort', v === 'trending' ? null : v)} size="sm" />
-        {sort === 'top' && <Segmented options={PERIOD_OPTIONS} value={period} onChange={(v) => setParam('period', v === 'all' ? null : v)} size="sm" />}
-        <Segmented options={FORMAT_OPTIONS} value={format} onChange={(v) => setParam('format', v === 'all' ? null : v)} size="sm" />
-        <Chip size="sm" active={premium} onClick={() => setParam('voices', premium ? null : 'premium')} title="Only debates voiced with premium (ElevenLabs) voices">
-          <AudioLines className="size-3.5" /> Premium voices
-        </Chip>
+      {/* What (format, voices, a model) on the left, the order and the language on the right;
+          on phones two rows. */}
+      <div className="mt-5 flex flex-wrap items-center gap-2">
+        <Segmented options={FORMAT_TABS} value={format} onChange={(v) => setParam('format', v === 'all' ? null : v)} size="sm" />
+        <button
+          type="button"
+          onClick={() => setParam('voices', premium ? null : 'premium')}
+          aria-pressed={premium}
+          title="Only debates voiced with premium (ElevenLabs) voices"
+          className={`${TOGGLE} ${premium ? TOGGLE_ON : TOGGLE_OFF}`}
+        >
+          <AudioLines className="size-3.5" /> {short('Premium voices', 'Premium')}
+        </button>
         {model && (
-          <button
-            type="button"
-            onClick={() => setParam('model', null)}
-            className="inline-flex items-center gap-1.5 rounded-full border border-accent/40 bg-accent/10 px-3 py-1.5 text-xs font-semibold text-accent hover:bg-accent/15 cursor-pointer"
-            title="Remove the model filter"
-          >
-            <ModelIcon modelId={model} size={14} /> With {shortModelName(model)} <X className="size-3.5" />
+          <button type="button" onClick={() => setParam('model', null)} className={`${TOGGLE} ${TOGGLE_ON}`} title="Remove the model filter">
+            <ModelIcon modelId={model} size={14} /> {shortModelName(model)} <X className="size-3.5" />
           </button>
         )}
+        <div className="flex w-full gap-2 sm:ml-auto sm:w-auto">
+          <Dropdown
+            aria-label="Order"
+            options={ORDER_OPTIONS}
+            value={orderOf({ sort, period })}
+            onChange={(v) => update(orderParams(v))}
+            size="sm"
+            menuWidth={190}
+            className="max-sm:flex-1 sm:w-[168px]"
+          />
+          <Dropdown
+            aria-label="Language"
+            icon={<Globe className="size-3.5" />}
+            options={languageOptions(languages, language)}
+            value={language}
+            onChange={setLanguage}
+            size="sm"
+            menuWidth={200}
+            className="max-sm:flex-1 sm:w-[160px]"
+          />
+        </div>
       </div>
       {/* One swipeable row on phones (edge to edge), wrapped on wider screens. */}
       <div
-        className="-mx-[clamp(18px,4vw,48px)] mt-3.5 flex gap-2 overflow-x-auto px-[clamp(18px,4vw,48px)] [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:px-0 [&::-webkit-scrollbar]:hidden"
+        className="-mx-[clamp(18px,4vw,48px)] mt-3 flex gap-1.5 overflow-x-auto px-[clamp(18px,4vw,48px)] [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:px-0 [&::-webkit-scrollbar]:hidden"
         role="tablist"
         aria-label="Categories"
       >
         {CATEGORY_OPTIONS.map((opt) => (
-          <Chip key={opt.value} className="shrink-0" active={opt.value === category} onClick={() => setParam('category', opt.value === 'all' ? null : opt.value)}>
+          <Chip key={opt.value} size="sm" className="shrink-0" active={opt.value === category} onClick={() => setParam('category', opt.value === 'all' ? null : opt.value)}>
             {opt.label}
           </Chip>
         ))}

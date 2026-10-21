@@ -1,6 +1,6 @@
 import type { DebateDetail, FormatId, MotionPage, Participant } from '../api/types';
 import { APP_DESCRIPTION, APP_NAME, APP_PROFILES, APP_TAGLINE, SEO_COPY } from './brand';
-import type { GalleryFilters } from './gallery';
+import { DEFAULT_LANGUAGE, type GalleryFilters } from './gallery';
 import { SITE_OG_IMAGE, debateOgImage, topicOgImage } from './og';
 
 /**
@@ -203,8 +203,8 @@ export const homeSeo = (): SeoData => ({
   ],
 });
 
-/** Indexed: the gallery, its rap-battle view and their pages; every other filter is a view of
- *  the same debates (noindex, follow) that points at the plain list. */
+/** Indexed: the gallery (English debates), its rap-battle view and their pages; every other
+ *  filter, another language included, is a view (noindex, follow) that points at the plain list. */
 export const gallerySeo = (filters: GalleryFilters): SeoData => {
   const battles = filters.format === 'rap_battle';
   const copy = battles ? SEO_COPY.galleryBattles : SEO_COPY.gallery;
@@ -212,7 +212,7 @@ export const gallerySeo = (filters: GalleryFilters): SeoData => {
   if (filters.format !== 'all') query.set('format', filters.format);
   if (filters.page > 1) query.set('page', String(filters.page));
   const search = query.toString();
-  const filtered = filters.sort !== 'trending' || filters.category !== 'all' || !!filters.model || filters.premium;
+  const filtered = filters.sort !== 'trending' || filters.language !== DEFAULT_LANGUAGE || filters.category !== 'all' || !!filters.model || filters.premium;
   const title = filters.page > 1 ? `${copy.title} · page ${filters.page}` : copy.title;
   return { title: withBrand(title), description: copy.description, path: `/gallery${search ? `?${search}` : ''}`, robots: filtered ? 'noindex' : 'index', type: 'website', image: SITE_OG_IMAGE, lang: 'en' };
 };
