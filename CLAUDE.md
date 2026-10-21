@@ -684,7 +684,11 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
    the punch) and its moments the hardest line of every verse (`big` = the round's best, `funny`).
    Quotes are found in the words (`snap_moment`, `locate_quote`), `keep_moments` holds the counts;
    without the model a battle falls back to every verse's last line and its last two verses.
-   `app.manage media refresh-timeline` redoes beat, Shorts and moments of a ready timeline
+   The video's winner (`highlights.timeline_winner`): the structured verdict decides when the
+   judge's model wrote it, a draw included (re-reading the judge's text crowned whoever it named
+   first); only without one the round totals (a tie = a draw), the text, the Shorts' pick.
+   `app.manage media refresh-timeline` redoes beat, Shorts, moments and the verdict + scoreboard
+   of a ready timeline
    without voicing or composing (keeps the old Shorts when the host fails), sets `format` (and
    `sfx` when unset) from the debate — `Timeline.format` defaults to "debate", so re-serializing
    a timeline from before the field would make a battle a debate — and bumps

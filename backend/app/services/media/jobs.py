@@ -53,15 +53,14 @@ from app.services.media.highlights import (
     HighlightPick,
     MomentPick,
     build_highlights_messages,
-    extract_winner,
     fallback_highlights,
     fallback_moments,
     keep_moments,
-    match_speaker,
     parse_highlights,
     parse_moments,
     snap_highlight,
     snap_moment,
+    timeline_winner,
 )
 from app.services.media.images import ImageStudio
 from app.services.media.languages import language_code
@@ -1087,6 +1086,29 @@ def _build_battle(
     return BuildResult(chars=char_cost, music_ms=billed_ms)
 
 
+def _timeline_verdict(
+    debate: Debate,
+    verdict_turn: Turn | None,
+    speakers: list[TimelineSpeaker],
+    picked_name: str | None,
+) -> TimelineVerdict | None:
+    """The verdict the video shows (`highlights.timeline_winner`: the structured verdict first)."""
+    if verdict_turn is None:
+        return None
+    winner = timeline_winner(
+        debate.verdict_json,
+        stored_round_scores(debate.verdict_json or {}),
+        verdict_turn.text,
+        speakers,
+        picked_name,
+    )
+    return TimelineVerdict(
+        seq_index=verdict_turn.seq_index,
+        winner_id=winner.id if winner else None,
+        winner_name=winner.name if winner else None,
+    )
+
+
 def _host_model(participants: list[dict[str, Any]]) -> str:
     """The model that hosted the debate (a Free Router's pinned one): it picks the Shorts and
     the lines the video hits."""
@@ -1134,6 +1156,18 @@ def refresh_timeline(debate_id: str) -> str:
             picks.highlights if picks.by_model or not timeline.highlights else timeline.highlights
         )
         update |= {"highlights": highlights, "moments": picks.moments}
+        # The verdict and its scoreboard as the build makes them now (a draw used to crown the
+        # debater the judge named first).
+        verdict_turn = db.scalars(
+            select(Turn).where(Turn.debate_id == debate.id, Turn.turn_type == "verdict")
+        ).first()
+        verdict = _timeline_verdict(debate, verdict_turn, timeline.speakers, picks.winner_name)
+        visuals = [v for v in timeline.visuals if v.scene.type != "scoreboard"]
+        if verdict is not None and (options.visuals or fmt.verdict_scores):
+            visuals = _add_scoreboard(
+                visuals, timeline.segments, timeline.speakers, verdict, debate.verdict_json
+            )
+        update |= {"verdict": verdict, "visuals": visuals}
         paths.timeline.write_text(timeline.model_copy(update=update).model_dump_json(indent=2))
         state = dict(debate.media_json or {})
         state["revision"] = int(state.get("revision") or 0) + 1
@@ -1191,7 +1225,6 @@ def _finish(
     debate_id = str(debate.id)
     conf: dict[str, Any] = debate.config_json or {}
     language = str(conf.get("language") or "English")
-    speakers_by_id = {s.id: s for s in speakers}
     set_media_state(db, debate, step="highlights", message="Picking highlights for shorts…")
     picks = _pick_highlights(
         model=judge_model,
@@ -1204,25 +1237,11 @@ def _finish(
         style=format_of(conf).highlight_style,
     )
     verdict_turn = next((t for t in turns if t.turn_type == "verdict"), None)
-    verdict: TimelineVerdict | None = None
-    if verdict_turn is not None:
-        # The structured verdict (worker, see services.verdict) is the most reliable source.
-        structured_id = (debate.verdict_json or {}).get("winner_id")
-        winner = (
-            speakers_by_id.get(str(structured_id))
-            if structured_id
-            else extract_winner(verdict_turn.text, speakers)
-            or match_speaker(picks.winner_name, speakers)
-        )
-        verdict = TimelineVerdict(
-            seq_index=verdict_turn.seq_index,
-            winner_id=winner.id if winner else None,
-            winner_name=winner.name if winner else None,
-        )
-        # The result is the show's last screen: formats without scenes that score every round
-        # (rap battle) get it too.
-        if options.visuals or format_of(conf).verdict_scores:
-            visuals = _add_scoreboard(visuals, segments, speakers, verdict, debate.verdict_json)
+    verdict = _timeline_verdict(debate, verdict_turn, speakers, picks.winner_name)
+    # The result is the show's last screen: formats without scenes that score every round (rap
+    # battle) get it too.
+    if verdict is not None and (options.visuals or format_of(conf).verdict_scores):
+        visuals = _add_scoreboard(visuals, segments, speakers, verdict, debate.verdict_json)
 
     timeline = Timeline(
         debate_id=debate_id,

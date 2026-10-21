@@ -23,6 +23,7 @@ from app.services.media.highlights import (
     parse_moments,
     snap_highlight,
     snap_moment,
+    timeline_winner,
 )
 
 SPEAKERS = [
@@ -359,6 +360,40 @@ def test_a_battle_falls_back_to_its_last_verses() -> None:
     assert hls[0].start_ms == VERSES[0].start_ms  # a verse Short starts with the beat
 
 
+DRAW_TEXT = (
+    "Round 1: Nova 8, Atlas 7 - sharper\nRound 2: Nova 7, Atlas 8 - better reply\n"
+    "Total: Nova 15, Atlas 15\n\n[shouts] Nova 15, Atlas 15, it is a DRAW!"
+)
+DRAW_SEGMENT = _segment(
+    3, SPEAKERS[0], 30_000, "Nova fifteen Atlas fifteen it is a draw", turn_type="verdict"
+)
+DRAW_ROUNDS = [
+    {"round": 1, "scores": {"participant_1": 8, "participant_2": 7}},
+    {"round": 2, "scores": {"participant_1": 7, "participant_2": 8}},
+]
+DRAW_VERDICT = {
+    "winner_id": None,
+    "is_draw": True,
+    "source": "llm",
+    "headline": "A draw",
+    "rounds": DRAW_ROUNDS,
+}
+
+
+def test_the_structured_verdict_decides_the_video_winner() -> None:
+    # The judge's model called a draw: no winner, whoever the text names first.
+    assert timeline_winner(DRAW_VERDICT, DRAW_ROUNDS, DRAW_TEXT, SPEAKERS, "Nova") is None
+    won = {**DRAW_VERDICT, "winner_id": "participant_2", "is_draw": False}
+    assert timeline_winner(won, DRAW_ROUNDS, DRAW_TEXT, SPEAKERS, None) == SPEAKERS[2]
+    # A regex fallback without a winner: tied round scores are a draw too.
+    fallback = {"winner_id": None, "source": "fallback"}
+    assert timeline_winner(fallback, DRAW_ROUNDS, DRAW_TEXT, SPEAKERS, "Nova") is None
+    # Older debates without a structured verdict: the judge's text, then the Shorts' pick.
+    winner_text = "## Winner\n**Atlas** wins by a narrow margin."
+    assert timeline_winner(None, [], winner_text, SPEAKERS, None) == SPEAKERS[2]
+    assert timeline_winner(None, [], "no names here", SPEAKERS, "nova") == SPEAKERS[1]
+
+
 def test_refresh_keeps_an_old_battle_a_battle(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -377,7 +412,8 @@ def test_refresh_keeps_an_old_battle_a_battle(
         "debate_id": debate_id, "title": "Tabs?", "topic": "Tabs?", "language": "English",
         "language_code": "en", "created_at": "2026-10-19T00:00:00Z", "provider": "elevenlabs",
         "model_id": "eleven_v3", "speakers": [s.model_dump() for s in SPEAKERS],
-        "segments": [v.model_dump() for v in VERSES], "gap_ms": 0, "total_ms": 30_000,
+        "segments": [*(v.model_dump() for v in VERSES), DRAW_SEGMENT.model_dump()],
+        "gap_ms": 0, "total_ms": 40_000,
         "highlights": [{"index": 0, "title": "t", "hook": "h", "start_ms": 0, "end_ms": 9000}],
     }  # fmt: skip
     (folder / "timeline.json").write_text(json.dumps(old))
@@ -387,7 +423,9 @@ def test_refresh_keeps_an_old_battle_a_battle(
         media_json={"options": {"provider": "elevenlabs"}},
         config_json={"format": "rap_battle", "topic": "Tabs?", "participants": []},
         participants=[],
+        verdict_json=DRAW_VERDICT,
     )
+    verdict_turn = SimpleNamespace(seq_index=3, text=DRAW_TEXT, turn_type="verdict")
 
     class Db:
         def get(self, _model: Any, _id: Any) -> Any:
@@ -395,6 +433,9 @@ def test_refresh_keeps_an_old_battle_a_battle(
 
         def commit(self) -> None:
             pass
+
+        def scalars(self, _query: Any) -> Any:
+            return SimpleNamespace(first=lambda: verdict_turn)
 
     @contextmanager
     def session() -> Any:
@@ -412,3 +453,7 @@ def test_refresh_keeps_an_old_battle_a_battle(
     assert written["beat"]["offset_ms"] == 370
     assert written["highlights"][0]["hook"] == "h"  # the host failed: the old Short stays
     assert debate.media_json["revision"] == 1
+    # The judge called a draw: no winner, a scoreboard without a crown.
+    assert written["verdict"]["winner_id"] is None
+    boards = [v for v in written["visuals"] if v["scene"]["type"] == "scoreboard"]
+    assert len(boards) == 1 and boards[0]["scene"]["winner_id"] is None

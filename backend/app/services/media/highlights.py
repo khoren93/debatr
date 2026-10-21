@@ -312,6 +312,33 @@ def match_speaker(name: str | None, speakers: list[TimelineSpeaker]) -> Timeline
     return None
 
 
+def timeline_winner(
+    verdict_json: dict[str, Any] | None,
+    rounds: list[dict[str, Any]],
+    verdict_text: str,
+    speakers: list[TimelineSpeaker],
+    picked_name: str | None,
+) -> TimelineSpeaker | None:
+    """Who the video crowns. The structured verdict decides when the judge's model wrote it, a
+    draw (no winner) included: reading the judge's text again would crown whoever is named first
+    ("Round 1: A 8, B 7 ... Total: A 15, B 15 ... DRAW!" made A the winner). Without it (older
+    debates, or the regex fallback found none): a tie on the round scores is a draw, else the
+    judge's text, else the host model's pick of the Shorts."""
+    structured = verdict_json or {}
+    by_id = {s.id: s for s in speakers}
+    if structured.get("winner_id"):
+        return by_id.get(str(structured["winner_id"]))
+    if structured.get("source") == "llm":
+        return None
+    totals: dict[str, int] = {}
+    for item in rounds:
+        for pid, score in (item.get("scores") or {}).items():
+            totals[str(pid)] = totals.get(str(pid), 0) + int(score)
+    if len(totals) >= 2 and len(set(totals.values())) == 1:
+        return None
+    return extract_winner(verdict_text, speakers) or match_speaker(picked_name, speakers)
+
+
 def extract_winner(verdict_text: str, speakers: list[TimelineSpeaker]) -> TimelineSpeaker | None:
     """Regex fallback: the debater named closest after 'winner' in the verdict."""
     text = verdict_text or ""

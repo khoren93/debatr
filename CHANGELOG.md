@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **A drawn battle crowned a winner in the video.** When the judge scored 15:15 and called a
+  draw, the video's scoreboard and last card still named the rapper the judge mentioned first.
+  The video now follows the judge's verdict, draws included; `refresh-timeline` fixes videos
+  built before.
+
 ## [1.8.0] - 2026-10-21
 
 ### Added
