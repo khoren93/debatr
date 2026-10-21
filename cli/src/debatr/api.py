@@ -209,6 +209,7 @@ class DebatrClient:
         period: str | None = None,
         category: str | None = None,
         format: str | None = None,
+        language: str | None = None,
         limit: int = 20,
         offset: int = 0,
     ) -> dict[str, Any]:
@@ -219,6 +220,7 @@ class DebatrClient:
             "period": period,
             "category": category,
             "format": format,
+            "language": language,
             "limit": limit,
             "offset": offset,
         }

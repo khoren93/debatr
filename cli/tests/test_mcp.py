@@ -146,6 +146,7 @@ async def test_public_debates_need_no_login(server: FakeServer, monkeypatch):
                 {
                     "slug": "k3m9xq2p7w",
                     "topic": "Tabs?",
+                    "language_code": "en",
                     "participants": [{"role": "debater", "model": "acme/a"}],
                 }
             ],
@@ -153,8 +154,12 @@ async def test_public_debates_need_no_login(server: FakeServer, monkeypatch):
         },
     )
     async with Client(make(server, monkeypatch, token=None)) as client:
-        found = structured(await client.call_tool("search_gallery", {"query": "tabs"}))
+        found = structured(
+            await client.call_tool("search_gallery", {"query": "tabs", "language": "en"})
+        )
         assert found["debates"][0]["url"] == f"{SITE}/d/k3m9xq2p7w"
+        assert found["debates"][0]["language"] == "en"
+        assert server.calls("GET /gallery")[0].url.params["language"] == "en"
         read = structured(
             await client.call_tool("get_debate", {"debate_id": f"{SITE}/d/k3m9xq2p7w"})
         )

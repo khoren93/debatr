@@ -276,7 +276,8 @@ frontend/           React 19 + React Router 8 (framework mode, server rendering)
 cli/                `debatr` package (PyPI): CLI + MCP server, Python 3.10+, uv, only the public API
   src/debatr/cli.py   Typer commands (login, run, watch, resume, show, list, stop, delete, publish, audio,
                       models, formats, gallery, leaderboard, whoami, logout, mcp); `run --format
-                      rap_battle --flow …` (flow ids checked against `GET /api/formats`)
+                      rap_battle --flow …` (flow ids checked against `GET /api/formats`), `gallery
+                      --language ru`
   src/debatr/api.py   async httpx client (ApiError messages, SSE parser), shared with the MCP server
   src/debatr/mcp_server.py  MCPServer (mcp>=2.3) tools: start/get/estimate/stop/resume debates
                       (`format`, `flows`), models, formats, gallery, leaderboard (per format),

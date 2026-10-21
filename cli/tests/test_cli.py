@@ -611,3 +611,18 @@ def test_run_asks_for_a_cover(app, server):
     assert json.loads(result.output)["cover"] is True
     result = app("run", "Cats or dogs?", "--print-config")
     assert "cover" not in json.loads(result.output)
+
+
+def test_gallery_by_language(app, server):
+    server.on(
+        "GET /gallery",
+        {"items": [{"slug": "abcd1234", "topic": "Лучше ли офис?", "language_code": "ru"}]},
+    )
+    shown = app("gallery", "--language", "RU", token=None)
+    assert shown.exit_code == 0, shown.output
+    assert server.calls("GET /gallery")[0].url.params["language"] == "ru"
+    # Every language unless asked: installed CLIs keep their old answer.
+    app("gallery", token=None)
+    assert "language" not in server.calls("GET /gallery")[1].url.params
+    wrong = app("gallery", "--language", "russian", token=None)
+    assert wrong.exit_code != 0 and "two-letter" in wrong.output

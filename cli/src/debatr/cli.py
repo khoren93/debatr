@@ -10,6 +10,7 @@ import asyncio
 import json
 import os
 import platform
+import re
 import socket
 import sys
 import time
@@ -414,10 +415,23 @@ def gallery(
     show: Annotated[
         Show | None, typer.Option("--format", help="Only debates or only rap battles.")
     ] = None,
+    language: Annotated[
+        str | None,
+        typer.Option(
+            "--language",
+            "-l",
+            help="Only debates in this language: a two-letter code (en, ru, de…). Default: all.",
+        ),
+    ] = None,
     limit: Annotated[int, typer.Option("--limit", min=1, max=100)] = 15,
     json_out: Annotated[bool, typer.Option("--json", help="Print JSON.")] = False,
 ) -> None:
     """Browse public debates and rap battles."""
+    code = language.strip().lower() if language else None
+    if code is not None and not re.fullmatch(r"[a-z]{2}", code):
+        raise typer.BadParameter(
+            "a two-letter language code, e.g. en or ru", param_hint="--language"
+        )
     client = client_of(ctx)
 
     async def go() -> dict[str, Any]:
@@ -428,6 +442,7 @@ def gallery(
                 sort=sort.value,
                 period=period.value,
                 format=show.value if show else None,
+                language=code,
                 limit=limit,
             )
 

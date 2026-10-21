@@ -446,6 +446,7 @@ def gallery_table(items: list[dict[str, Any]], site: str, width: int = WIDE) -> 
     table.add_column("Topic", overflow="fold")
     if wide:
         table.add_column("Models", overflow="fold", style="dim")
+        table.add_column("Lang", style="dim")
     table.add_column("♥", justify="right")
     table.add_column("Votes", justify="right")
     table.add_column("Link", no_wrap=True, style="dim")
@@ -462,7 +463,7 @@ def gallery_table(items: list[dict[str, Any]], site: str, width: int = WIDE) -> 
             topic = escape(topic)
         table.add_row(
             topic,
-            *([" vs ".join(models)] if wide else []),
+            *([" vs ".join(models), str(item.get("language_code") or "")] if wide else []),
             str(item.get("likes") or 0),
             str(item.get("votes") or 0),
             f"{site}/d/{item.get('slug')}",

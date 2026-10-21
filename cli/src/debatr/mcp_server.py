@@ -583,13 +583,26 @@ def create_server(
         format: Annotated[
             Show | None, Field(description="Only debates or only rap battles.")
         ] = None,
+        language: Annotated[
+            str,
+            Field(
+                pattern="^([a-z]{2})?$",
+                description="Only debates in this language (two-letter code: en, ru…); "
+                "empty: every language.",
+            ),
+        ] = "",
         limit: Annotated[int, Field(ge=1, le=50)] = 10,
     ) -> dict[str, Any]:
         """Public debates and rap battles from the gallery; read one with get_debate(url)."""
         client = await clients.get(auth=False)
         try:
             body = await client.gallery(
-                q=query or None, model=model or None, sort=sort, format=format, limit=limit
+                q=query or None,
+                model=model or None,
+                sort=sort,
+                format=format,
+                language=language or None,
+                limit=limit,
             )
         except ApiError as e:
             raise _api(e) from e
@@ -599,6 +612,7 @@ def create_server(
                 {
                     "url": f"{client.base_url}/d/{item.get('slug')}",
                     "format": item.get("format") or "debate",
+                    "language": item.get("language_code"),
                     "topic": item.get("topic"),
                     "models": [
                         p.get("model")
