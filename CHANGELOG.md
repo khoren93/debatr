@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-10-21
+
+### Added
+
+- **Rap battle videos come alive.** The verse being rapped takes the middle of the frame line by
+  line, word by word on the track, rhymes underlined; club lights in the rappers' colours swing
+  and flash on the beat; "ROUND 1" and "ROUND 2" slam in on a kick; a punchline pushes the camera
+  in, then flashes, shakes the frame and makes the other rapper flinch, and the crowd reacts
+  ("ooh", an eruption for the round's best, a roar as the winner is crowned). A battle's Short
+  starts with the beat and ends on a punchline.
+- **Livelier debates too.** The background drifts and turns to the speaker's colour, the camera
+  breathes, the speaking logo moves with the voice, round 2 and later get a card, and the
+  sharpest lines (zingers) stay highlighted in the captions. A studio audience can react as
+  well: "Crowd reactions" in the wizard and the regenerate dialog (off by default for debates,
+  on for battles).
+- `python -m app.manage media refresh-timeline <ids> | --format rap_battle`: brings finished
+  videos up to date (the beat, the lines that land, the Shorts) without rebuilding the audio.
+
+### Changed
+
+- The host model that picks the Shorts also marks the lines that land (one call, as before), in
+  the style of the show: a battle's punchlines, a debate's zingers.
+
 ## [1.7.0] - 2026-10-21
 
 ### Changed
@@ -429,7 +452,8 @@ First public release of **AI Debates**.
 - Admin panel for debates, participants, turns and sessions.
 - Docker Compose setup with FastAPI, PostgreSQL, Redis + RQ and a React + Vite frontend.
 
-[Unreleased]: https://github.com/khoren93/debatr/compare/v1.7.0...HEAD
+[Unreleased]: https://github.com/khoren93/debatr/compare/v1.8.0...HEAD
+[1.8.0]: https://github.com/khoren93/debatr/compare/v1.7.0...v1.8.0
 [1.7.0]: https://github.com/khoren93/debatr/compare/v1.6.1...v1.7.0
 [1.6.1]: https://github.com/khoren93/debatr/compare/v1.6.0...v1.6.1
 [1.6.0]: https://github.com/khoren93/debatr/compare/v1.5.1...v1.6.0
