@@ -753,8 +753,9 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   charges nothing. `ffmpeg.normalize_music` + `mix_over` duck the beat under the MC and the judge
   into a stereo full.wav; verse segments are the sections' windows (v2 keeps their durations)
   with the rapped words. In the video a verse takes the stage instead of the spotlight
-  (`visuals/VerseStage`): the line being rapped big, the one before small above, the rapper's
-  logo faint behind, the name before the first line; no captions under it (in the Short the lines
+  (`visuals/VerseStage`): only the line being rapped, big in the middle, in even rows
+  (`lyrics.balanceRows`; the one before lifts away as it comes up), the rapper's logo faint
+  behind, the name before the first line; no captions under it (in the Short the lines
   also take the captions' place, `SceneStage verseExtend`). `video/lyrics.ts` (pure, vitest)
   times the lines by matching the verse text to the track's words (LCS; stray direction words
   dropped, missing ones interpolated, by position when under 30 % match) and marks rhymes by

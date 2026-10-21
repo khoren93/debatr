@@ -111,3 +111,7 @@ export const compactNumber = (value: number, locale: string): string => {
 /** Font size that keeps `text` on about `lines` lines in `width` px (average glyph 0.55em). */
 export const fitFont = (text: string, width: number, lines: number, max: number, min: number) =>
   Math.max(min, Math.min(max, (width * lines) / (Math.max(1, text.length) * 0.55)));
+
+/** Rows `text` takes at `size` px in `width` px, by the average glyph (as `fitFont`; the size it
+ *  picks for n rows gives n, not n + 1 by a rounding error). */
+export const rowsAt = (text: string, size: number, width: number) => Math.max(1, Math.ceil((text.length * 0.55 * size) / width - 1e-6));

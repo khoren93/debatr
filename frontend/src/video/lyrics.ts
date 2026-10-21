@@ -168,3 +168,34 @@ export const lineAt = (lines: LyricLine[], ms: number): number => {
   }
   return found;
 };
+
+/** How many words go on each of `rows` rows (in order, none empty) so that the rows are as even
+ *  as they can be (least sum of squared lengths): a long line breaks into even rows instead of
+ *  full ones and a stub. */
+export const balanceRows = (words: string[], rows: number): number[] => {
+  const n = words.length;
+  if (n === 0) return [];
+  const r = Math.max(1, Math.min(rows, n));
+  const length = (from: number, to: number) => words.slice(from, to).reduce((sum, word) => sum + word.length, 0) + to - from - 1;
+  // best[k][i]: the cost of the first i words in k rows; cut[k][i]: where its last row starts.
+  const best = Array.from({ length: r + 1 }, () => new Array<number>(n + 1).fill(Infinity));
+  const cut = Array.from({ length: r + 1 }, () => new Array<number>(n + 1).fill(0));
+  best[0][0] = 0;
+  for (let k = 1; k <= r; k++) {
+    for (let i = k; i <= n; i++) {
+      for (let j = k - 1; j < i; j++) {
+        const cost = best[k - 1][j] + length(j, i) ** 2;
+        if (cost < best[k][i]) {
+          best[k][i] = cost;
+          cut[k][i] = j;
+        }
+      }
+    }
+  }
+  const counts: number[] = [];
+  for (let k = r, i = n; k > 0; k--) {
+    counts.unshift(i - cut[k][i]);
+    i = cut[k][i];
+  }
+  return counts;
+};

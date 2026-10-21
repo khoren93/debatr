@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { TimelineWord } from '../api/timeline';
-import { alignWords, lineAt, rhymeKey, rhymes, verseLines } from './lyrics';
+import { alignWords, balanceRows, lineAt, rhymeKey, rhymes, verseLines } from './lyrics';
 
 const timed = (spec: string): TimelineWord[] =>
   spec.split(' ').map((w, i) => ({ w, s: i * 300, e: i * 300 + 250 }));
@@ -96,5 +96,25 @@ describe('lineAt', () => {
     expect(lineAt(lines, 0)).toBe(-1);
     expect(lineAt(lines, 40574 + 3000)).toBe(1);
     expect(lineAt(lines, 99_999)).toBe(3);
+  });
+});
+
+describe('balanceRows', () => {
+  const words = "I pay full price, then they tell me it's just a lease?".split(' ');
+
+  it('breaks a line into even rows', () => {
+    expect(balanceRows(words, 2)).toEqual([6, 6]); // "I pay full price, then they" / "tell me it's just a lease?"
+    // "I keep four spaces" / "for a clean, controlled" / "flow, so every indent" / … — no stub in the middle.
+    const long = 'I keep four spaces for a clean, controlled flow, so every indent lands where it should go.'.split(' ');
+    const counts = balanceRows(long, 4);
+    let at = 0;
+    const lengths = counts.map((count) => long.slice(at, (at += count)).join(' ').length);
+    expect(Math.max(...lengths) - Math.min(...lengths)).toBeLessThanOrEqual(8);
+  });
+
+  it('never makes more rows than words or an empty one', () => {
+    expect(balanceRows(words, 1)).toEqual([12]);
+    expect(balanceRows(['one', 'two'], 4)).toEqual([1, 1]);
+    expect(balanceRows([], 2)).toEqual([]);
   });
 });
