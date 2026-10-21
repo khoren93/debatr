@@ -357,3 +357,58 @@ def test_a_battle_falls_back_to_its_last_verses() -> None:
     hls = fallback_highlights(VERSES, 60_000)
     assert len(hls) == 1 and hls[0].seq_indexes == [1, 2]
     assert hls[0].start_ms == VERSES[0].start_ms  # a verse Short starts with the beat
+
+
+def test_refresh_keeps_an_old_battle_a_battle(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Timelines from before `format` and `sfx`: the model's defaults ("debate", None) must not
+    turn a battle into a debate on the way back to disk."""
+    from contextlib import contextmanager
+
+    from app.schemas.timeline import TimelineBeat
+
+    debate_id = "5f0c3a1e-2b4d-4c6e-8f10-123456789abc"
+    monkeypatch.setattr(type(jobs.settings), "media_root_path", property(lambda _self: tmp_path))
+    folder = tmp_path / debate_id
+    folder.mkdir()
+    (folder / "music.wav").write_bytes(b"")
+    old = {
+        "debate_id": debate_id, "title": "Tabs?", "topic": "Tabs?", "language": "English",
+        "language_code": "en", "created_at": "2026-10-19T00:00:00Z", "provider": "elevenlabs",
+        "model_id": "eleven_v3", "speakers": [s.model_dump() for s in SPEAKERS],
+        "segments": [v.model_dump() for v in VERSES], "gap_ms": 0, "total_ms": 30_000,
+        "highlights": [{"index": 0, "title": "t", "hook": "h", "start_ms": 0, "end_ms": 9000}],
+    }  # fmt: skip
+    (folder / "timeline.json").write_text(json.dumps(old))
+    debate = SimpleNamespace(
+        id=debate_id,
+        media_status="ready",
+        media_json={"options": {"provider": "elevenlabs"}},
+        config_json={"format": "rap_battle", "topic": "Tabs?", "participants": []},
+        participants=[],
+    )
+
+    class Db:
+        def get(self, _model: Any, _id: Any) -> Any:
+            return debate
+
+        def commit(self) -> None:
+            pass
+
+    @contextmanager
+    def session() -> Any:
+        yield Db()
+
+    monkeypatch.setattr(jobs, "get_sync_session", session)
+    monkeypatch.setattr(jobs, "resolved_participants", lambda conf, rows: [])
+    monkeypatch.setattr(jobs, "_beat_of", lambda _track: TimelineBeat(bpm=92, offset_ms=370))
+    monkeypatch.setattr(
+        jobs, "_pick_highlights", lambda **kw: jobs.Picks([], None, [], by_model=False)
+    )
+    assert jobs.refresh_timeline(debate_id).startswith("1 shorts")
+    written = json.loads((folder / "timeline.json").read_text())
+    assert (written["format"], written["sfx"]) == ("rap_battle", True)
+    assert written["beat"]["offset_ms"] == 370
+    assert written["highlights"][0]["hook"] == "h"  # the host failed: the old Short stays
+    assert debate.media_json["revision"] == 1

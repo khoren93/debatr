@@ -1112,7 +1112,11 @@ def refresh_timeline(debate_id: str) -> str:
         conf: dict[str, Any] = debate.config_json or {}
         fmt = format_of(conf)
         participants = resolved_participants(conf.get("participants", []), debate.participants)
-        update: dict[str, Any] = {}
+        # Timelines from before these fields: the model's defaults would make a battle a debate.
+        options = MediaOptions.model_validate((debate.media_json or {}).get("options") or {})
+        update: dict[str, Any] = {"format": fmt.id}
+        if timeline.sfx is None:
+            update["sfx"] = fmt.crowd_sounds if options.sfx is None else options.sfx
         if fmt.soundtrack == "music" and paths.music_wav.exists():
             update["beat"] = _beat_of(paths.music_wav)
         picks = _pick_highlights(
