@@ -132,6 +132,14 @@ def test_beacons_are_checked_and_trimmed() -> None:
     assert parse_beacon(_beacon(events=[{"type": "time", "ms": 99_999_999}])) is None
     assert parse_beacon(_beacon(events=[{"type": "page"}] * 41)) is None
     assert parse_beacon(b"{" + b" " * collect.MAX_BODY + b"}") is None
+    # The page's input counts and the browser's facts.
+    counted = parse_beacon(
+        _beacon(signals={"mv": 40, "ck": 2}, env={"gl": "soft", "plat": "Win32"})
+    )
+    assert counted is not None and counted.signals is not None and counted.env is not None
+    assert (counted.signals.mv, counted.signals.ck, counted.env.gl) == (40, 2, "soft")
+    assert parse_beacon(_beacon(signals={"mv": -1})) is None
+    assert parse_beacon(_beacon(env={"gl": "quantum"})) is None
 
 
 def test_paths_and_referrers_keep_no_query() -> None:
@@ -252,6 +260,9 @@ async def test_the_beacon_route(presence_app: tuple[FastAPI, list[Any]], levers:
         ).status_code == 204
         assert len(recorded) == 1 and recorded[0][1].ip == "203.0.113.9"
         assert recorded[0][1].user_agent == WINDOWS_CHROME
+        # Its headers go to the verdict.
+        assert recorded[0][1].request.signed_agent is False
+        assert recorded[0][1].request.accept_language is False
         # Bots, unreadable beacons and a switched-off lever: the same 204, nothing written.
         bot = {"User-Agent": "Googlebot/2.1", "Content-Type": "text/plain"}
         assert (await client.post("/api/presence", content=body, headers=bot)).status_code == 204
@@ -276,11 +287,21 @@ def test_places_from_a_city_record() -> None:
     }
     assert geo.place_of(record) == geo.Place("AM", "Yerevan", "Yerevan")
     assert geo.place_of({"registered_country": {"iso_code": "DE"}}) == geo.Place("DE", None, None)
+    located = geo.place_of(record | {"location": {"latitude": 40.2, "longitude": 44.5}})
+    assert located is not None and located.longitude == 44.5
     assert geo.place_of({}) is None and geo.place_of(None) is None
     assert geo.is_public_ip("8.8.8.8") and geo.is_public_ip("2001:4860:4860::8888")
     for private in ("127.0.0.1", "10.0.0.5", "172.18.0.3", "192.168.1.1", "::1", "nope", ""):
         assert not geo.is_public_ip(private)
     assert geo.lookup("192.168.1.1") is None and geo.lookup(None) is None
+
+
+def test_networks_from_an_asn_record() -> None:
+    record = {"autonomous_system_number": 24940, "autonomous_system_organization": "Hetzner"}
+    assert geo.network_of(record) == geo.Network(24940, "Hetzner")
+    assert geo.network_of({"autonomous_system_number": 0}) is None
+    assert geo.network_of({}) is None and geo.network_of("x") is None
+    assert geo.network("10.0.0.5") is None and geo.network(None) is None
 
 
 def test_monthly_releases() -> None:
@@ -305,9 +326,12 @@ def test_a_broken_download_never_replaces_the_database(
     assert len(asked) == 2 and "dbip-city-lite-" in asked[0]
     assert not geo.database_path().exists()
     assert not list(tmp_path.glob("*.part"))
-    # A failed try waits a day before the next one.
+    # A failed try waits a day before the next one; the network database keeps its own clock.
     assert not geo.update_due()
     assert geo.update_due(datetime.now(UTC) + timedelta(days=2))
+    assert geo.update_due(db=geo.ASN)
+    assert not geo.update(transport=httpx.MockTransport(answer), db=geo.ASN)
+    assert "dbip-asn-lite-" in asked[-1] and not geo.database_path(geo.ASN).exists()
     monkeypatch.setattr(settings, "GEOIP_URL", "")
     assert not geo.update_due() and not geo.update()
 
@@ -362,9 +386,34 @@ def test_visit_search_and_filters() -> None:
     assert "users.email ILIKE '%%203.0.113%%'" in sql
     staff = audience.list_conditions(VisitListQuery(staff=True), window)
     assert "staff" not in " ".join(_sql(c) for c in staff)
+    # The list shows bots with their verdict; a filter picks a verdict or a group.
+    assert "verdict" not in sql
+    people = audience.list_conditions(VisitListQuery(verdict="people"), window)
+    assert "visits.verdict IN ('human', 'likely_human')" in " ".join(_sql(c) for c in people)
+    agents = audience.list_conditions(VisitListQuery(verdict="agent"), window)
+    assert "visits.verdict IN ('agent')" in " ".join(_sql(c) for c in agents)
     exact = uuid.uuid4()
     assert str(exact).replace("-", "") in _sql(audience.search(str(exact))).replace("-", "")
     assert audience.search("  ") is None
+
+
+def test_the_numbers_leave_out_bots_unless_asked() -> None:
+    def where(who: audience.Who) -> str:
+        return " AND ".join(_sql(c) for c in audience.scope(None, NOW, who))
+
+    assert "visits.verdict NOT IN ('bot', 'agent')" in where(audience.Who())
+    assert "visits.staff IS false" in where(audience.Who())
+    assert "verdict" not in where(audience.Who(bots=True))
+    assert "staff" not in where(audience.Who(staff=True, bots=True))
+
+
+def test_stored_reasons_get_the_consoles_words() -> None:
+    reasons = audience.reasons_of(
+        [{"code": "hosting", "points": 25, "detail": "Hetzner"}, {"code": 5}, "junk"]
+    )
+    assert [(r.code, r.points, r.detail) for r in reasons] == [("hosting", 25, "Hetzner")]
+    assert reasons[0].label == "Data-centre network"
+    assert audience.reasons_of(None) == []
 
 
 def test_parts_of_the_site() -> None:

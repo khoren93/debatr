@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { listVisits } from '../../api/admin/audience';
-import type { OverviewPeriod, VisitList, VisitListQuery, VisitRow, VisitSort } from '../../api/admin/types';
+import type { OverviewPeriod, VisitList, VisitListQuery, VisitRow, VisitSort, VisitVerdictFilter } from '../../api/admin/types';
 import { getErrorMessage } from '../../api/client';
 import { Page, PageTitle } from '../../components/layout/AppShell';
 import { DataTable, Pager, type Column } from '../../components/admin/DataTable';
 import { FilterBar, FilterChip } from '../../components/admin/FilterBar';
-import { ACTION_LABELS, countryName, flagOf } from '../../components/admin/audience/format';
+import { ACTION_LABELS, VERDICT_LABELS, VERDICT_ORDER, countryName, flagOf } from '../../components/admin/audience/format';
 import { visitColumns } from '../../components/admin/audience/visitTable';
 import { SOURCE_LABELS } from '../../components/admin/charts/palette';
 import { flag, nextOrder, pageOf, pick, pickKey, withChanges, type FilterSpec } from '../../components/admin/filters';
@@ -15,6 +15,7 @@ import { Card, ErrorBox, Spinner } from '../../components/ui';
 const PAGE = 50;
 const SORTS: VisitSort[] = ['started', 'engaged', 'pageviews', 'actions'];
 const PERIODS: OverviewPeriod[] = ['24h', '7d', '30d', '90d', 'all'];
+const VERDICTS: VisitVerdictFilter[] = ['people', 'bots', ...VERDICT_ORDER];
 
 const FILTERS: FilterSpec[] = [
   {
@@ -42,6 +43,16 @@ const FILTERS: FilterSpec[] = [
   { key: 'signed_in', label: 'Account', options: [{ value: '', label: 'Signed in or not' }, { value: 'true', label: 'Signed in' }, { value: 'false', label: 'Anonymous' }] },
   { key: 'new_visitor', label: 'Visitor', options: [{ value: '', label: 'New or returning' }, { value: 'true', label: 'New visitors' }, { value: 'false', label: 'Returning' }] },
   { key: 'action', label: 'Action', options: [{ value: '', label: 'Any action' }, ...Object.entries(ACTION_LABELS).map(([value, label]) => ({ value, label }))] },
+  {
+    key: 'verdict',
+    label: 'Person or bot',
+    options: [
+      { value: '', label: 'People and bots' },
+      { value: 'people', label: 'People (likely too)' },
+      { value: 'bots', label: 'Bots and AI agents' },
+      ...VERDICT_ORDER.map((value) => ({ value, label: VERDICT_LABELS[value] })),
+    ],
+  },
   { key: 'staff', label: 'Staff', options: [{ value: '', label: 'Without staff' }, { value: 'true', label: 'With staff' }] },
 ];
 
@@ -58,6 +69,7 @@ const toQuery = (params: URLSearchParams): VisitListQuery => {
     signed_in: flag(get('signed_in')),
     new_visitor: flag(get('new_visitor')),
     action: get('action') || undefined,
+    verdict: VERDICTS.find((v) => v === get('verdict')),
     staff: get('staff') === 'true' || undefined,
     sort: SORTS.find((s) => s === params.get('sort')) ?? 'started',
     order: params.get('order') === 'asc' ? 'asc' : 'desc',

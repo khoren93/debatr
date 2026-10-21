@@ -2,12 +2,12 @@ import { useCallback, type ReactNode } from 'react';
 import { Link, useParams } from 'react-router';
 import { FileText, MousePointerClick } from 'lucide-react';
 import { getVisit } from '../../api/admin/audience';
-import type { VisitCard, VisitEvent } from '../../api/admin/types';
+import type { VisitCard, VisitDetail, VisitEvent } from '../../api/admin/types';
 import { Page, PageTitle } from '../../components/layout/AppShell';
 import { DataTable } from '../../components/admin/DataTable';
-import { DeviceIcon, SourceText } from '../../components/admin/audience/VisitBits';
+import { DeviceIcon, SourceText, VerdictBadge } from '../../components/admin/audience/VisitBits';
 import { visitColumns } from '../../components/admin/audience/visitTable';
-import { duration, flagOf, placeText } from '../../components/admin/audience/format';
+import { VERDICT_HINTS, duration, flagOf, placeText } from '../../components/admin/audience/format';
 import { formatTime } from '../../components/admin/helpers';
 import { useLoad } from '../../components/admin/useLoad';
 import { Panel } from '../../components/admin/users/UserSections';
@@ -59,8 +59,72 @@ const Timeline = ({ card }: { card: VisitCard }) => (
   </Panel>
 );
 
-/** One visit (`/admin/audience/visits/:id`): who, from where, every page and action, the
- *  visitor's other visits and the accounts seen on the same address. */
+/** The page's input counts (lib/presence.ts Signals) in words. */
+const COUNTS: [string, string][] = [
+  ['mv', 'mouse moves'],
+  ['jmp', 'pointer jumps'],
+  ['ck', 'clicks'],
+  ['ckb', 'clicks with no path'],
+  ['cc', 'centred presses'],
+  ['tp', 'touches'],
+  ['ky', 'keys'],
+  ['kf', 'too-fast keys'],
+  ['fill', 'texts without keys'],
+  ['wh', 'wheel scrolls'],
+  ['hid', 'tab switches'],
+  ['syn', 'script events'],
+];
+const GRAPHICS: Record<string, string> = { hw: 'GPU', soft: 'software (no GPU)', none: 'no WebGL' };
+
+/** Why the visit got its verdict: the reasons with their points, the network, what was counted. */
+const VerdictPanel = ({ visit }: { visit: VisitDetail }) => {
+  const counts = visit.signals.c ?? {};
+  const env = visit.signals.env ?? {};
+  const counted = COUNTS.filter(([key]) => counts[key]);
+  const facts = [
+    env.gl !== undefined && `graphics: ${GRAPHICS[String(env.gl)] ?? String(env.gl)}`,
+    env.plat && `platform: ${String(env.plat)}`,
+    env.pl !== undefined && `${String(env.pl)} plugins`,
+    env.ln !== undefined && `${String(env.ln)} languages`,
+  ].filter(Boolean);
+  return (
+    <Panel title="Person or bot?" aside={<VerdictBadge verdict={visit.verdict} score={visit.bot_score} />}>
+      <p className="px-4 pt-3 text-xs text-muted">
+        {VERDICT_HINTS[visit.verdict]}. Score {visit.bot_score > 0 ? '+' : ''}
+        {visit.bot_score}: automation points minus person points.
+      </p>
+      {visit.reasons.length === 0 ? (
+        <p className="px-4 py-3 text-sm text-muted">No signal either way.</p>
+      ) : (
+        <ul className="mt-2 divide-y divide-line/70">
+          {visit.reasons.map((r) => (
+            <li key={r.code} className="flex items-start gap-3 px-4 py-2 text-xs">
+              <span className={`w-9 shrink-0 text-right font-mono font-semibold ${r.points > 0 ? 'text-danger' : 'text-ok'}`}>
+                {r.points > 0 ? '+' : '−'}
+                {Math.abs(r.points)}
+              </span>
+              <span className="min-w-0 flex-1 text-text-2">
+                {r.label}
+                {r.detail && <span className="ml-1.5 text-muted">· {r.detail}</span>}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="grid gap-1 border-t border-line px-4 py-3 text-xs text-muted">
+        <div>
+          Network: <span className="text-text-3">{visit.network ?? 'unknown'}</span>
+          {visit.network_kind && <span> · {visit.network_kind === 'hosting' ? 'data centre' : 'relay / VPN'}</span>}
+        </div>
+        <div>Input: {counted.length ? counted.map(([key, label]) => `${counts[key]} ${label}`).join(' · ') : 'none counted'}</div>
+        {facts.length > 0 && <div>Browser: {facts.join(' · ')}</div>}
+      </div>
+    </Panel>
+  );
+};
+
+/** One visit (`/admin/audience/visits/:id`): who, from where, every page and action, whether a
+ *  person or a bot made it, the visitor's other visits and the accounts seen on the same address. */
 const AdminVisit = () => {
   const { id = '' } = useParams();
   const load = useCallback(() => getVisit(id), [id]);
@@ -93,6 +157,9 @@ const AdminVisit = () => {
               <Fact label="IP">{v.ip ? <span className="font-mono">{v.ip}</span> : <span className="text-muted">cleared</span>}</Fact>
               <Fact label="Came from">
                 <SourceText source={v.source} host={v.referrer_host} />
+              </Fact>
+              <Fact label="Person or bot">
+                <VerdictBadge verdict={v.verdict} score={v.bot_score} />
               </Fact>
               <Fact label="Account">
                 {v.user ? (
@@ -134,6 +201,7 @@ const AdminVisit = () => {
           <div className="mt-4 grid items-start gap-4 xl:grid-cols-[3fr_2fr]">
             <Timeline card={card} />
             <div className="grid gap-4">
+              <VerdictPanel visit={v} />
               <Panel title="Accounts of this browser">
                 {card.visitor.accounts.length === 0 ? (
                   <p className="px-4 py-4 text-sm text-muted">Never signed in.</p>

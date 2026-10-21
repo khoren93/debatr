@@ -1366,6 +1366,9 @@ class AudienceOut(BaseModel):
     hours: list[list[int]]  # visits started: [Monday … Sunday][hour 0-23] in `timezone`
     funnel: list[FunnelStep]
     actions: list[AudienceRow]  # key = action, label = its words; visits = how many times
+    # key = verdict (audience/bots.py), over every visit of the period, bots included
+    verdicts: list[AudienceRow]
+    bots: bool  # bots and AI agents are in the other numbers
     geo: GeoDatabase
 
 
@@ -1397,10 +1400,17 @@ class VisitRow(BaseModel):
     os: str | None
     new_visitor: bool
     staff: bool
+    # A person, a bot or an AI agent (audience/bots.py) and the points behind it.
+    verdict: str = "unclear"
+    bot_score: int = 0
     user: VisitUser | None = None
 
 
 VisitSort = Literal["started", "engaged", "pageviews", "actions"]
+# A verdict, or a group of them: people = human + likely_human, bots = bot + agent.
+VisitVerdictFilter = Literal[
+    "people", "bots", "human", "likely_human", "unclear", "suspect", "bot", "agent"
+]
 
 
 class VisitListQuery(BaseModel):
@@ -1412,6 +1422,7 @@ class VisitListQuery(BaseModel):
     signed_in: bool | None = None
     new_visitor: bool | None = None
     action: str | None = Field(default=None, max_length=32)  # visits where this happened
+    verdict: VisitVerdictFilter | None = None
     staff: bool = False  # include console staff
     sort: VisitSort = "started"
     order: Literal["asc", "desc"] = "desc"
@@ -1436,6 +1447,13 @@ class VisitEventOut(BaseModel):
     props: dict[str, Any] = Field(default_factory=dict)
 
 
+class BotReason(BaseModel):
+    code: str
+    label: str  # the console's words (bots.REASONS)
+    points: int  # > 0 towards automation, < 0 towards a person
+    detail: str | None = None
+
+
 class VisitDetail(VisitRow):
     user_agent: str | None
     referrer: str | None
@@ -1445,6 +1463,11 @@ class VisitDetail(VisitRow):
     screen: str | None
     language: str | None
     timezone: str | None
+    network: str | None  # the IP's network operator
+    network_kind: str | None  # hosting | relay
+    reasons: list[BotReason]
+    # What the page counted and said (bots.merge): {"c": counts, "env": browser, "srv": headers}
+    signals: dict[str, Any]
 
 
 class VisitorSummary(BaseModel):

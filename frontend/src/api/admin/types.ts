@@ -1162,6 +1162,10 @@ export interface Audience {
   hours: number[][];
   funnel: FunnelStep[];
   actions: AudienceRow[];
+  /** key = verdict; every visit of the period, bots included. */
+  verdicts: AudienceRow[];
+  /** Bots and AI agents are in the other numbers. */
+  bots: boolean;
   geo: GeoDatabase;
 }
 
@@ -1193,8 +1197,16 @@ export interface VisitRow {
   os: string | null;
   new_visitor: boolean;
   staff: boolean;
+  /** A person, a bot or an AI agent (backend audience/bots.py). */
+  verdict: VisitVerdict;
+  /** Automation points minus person points, within ±100. */
+  bot_score: number;
   user: VisitUser | null;
 }
+
+export type VisitVerdict = 'human' | 'likely_human' | 'unclear' | 'suspect' | 'bot' | 'agent';
+/** A verdict, or a group: people = human + likely_human, bots = bot + agent. */
+export type VisitVerdictFilter = VisitVerdict | 'people' | 'bots';
 
 export type VisitSort = 'started' | 'engaged' | 'pageviews' | 'actions';
 
@@ -1207,6 +1219,7 @@ export interface VisitListQuery {
   signed_in?: boolean;
   new_visitor?: boolean;
   action?: string;
+  verdict?: VisitVerdictFilter;
   staff?: boolean;
   sort?: VisitSort;
   order?: 'asc' | 'desc';
@@ -1231,6 +1244,14 @@ export interface VisitEvent {
   props: Record<string, unknown>;
 }
 
+export interface BotReason {
+  code: string;
+  label: string;
+  /** > 0 towards automation, < 0 towards a person. */
+  points: number;
+  detail: string | null;
+}
+
 export interface VisitDetail extends VisitRow {
   user_agent: string | null;
   referrer: string | null;
@@ -1240,6 +1261,12 @@ export interface VisitDetail extends VisitRow {
   screen: string | null;
   language: string | null;
   timezone: string | null;
+  /** The IP's network operator, and whether it is a data centre or a relay. */
+  network: string | null;
+  network_kind: 'hosting' | 'relay' | null;
+  reasons: BotReason[];
+  /** What the page counted and said: c = input counts, env = browser, srv = request headers. */
+  signals: { c?: Record<string, number>; env?: Record<string, string | number | boolean>; srv?: Record<string, string | boolean> };
 }
 
 export interface VisitorSummary {

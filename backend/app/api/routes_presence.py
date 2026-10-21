@@ -12,6 +12,7 @@ from app.core.db import get_db
 from app.core.ratelimit import enforce_limit
 from app.models.models import User, utcnow
 from app.services import runtime_settings
+from app.services.audience.bots import request_facts
 from app.services.audience.collect import Context, parse_beacon, record
 from app.services.views import host_of, is_bot
 
@@ -47,6 +48,7 @@ async def presence(
         now=utcnow(),
         site_host=host_of(urlsplit(settings.SITE_URL).netloc) or "",
         site_aliases=settings.site_aliases,
+        request=request_facts(request.headers),
     )
     await record(db, beacon, context)
     return done

@@ -2,8 +2,9 @@
 answers carry IP addresses): the period's numbers, the visits live now, the visits list, one
 visit, and an account's visits (`/users/{id}/visits`).
 
-The period's numbers are cached in Redis for CACHE_SECONDS per period, time zone and staff
-switch (`refresh=true` skips it), and run in a read-only transaction like the overview.
+The period's numbers leave out console staff and bots / AI agents unless asked for (`staff`,
+`bots`), are cached in Redis for CACHE_SECONDS per period, time zone and those switches
+(`refresh=true` skips it), and run in a read-only transaction like the overview.
 """
 
 import contextlib
@@ -59,12 +60,13 @@ async def audience_overview(
     period: OverviewPeriod = "7d",
     tz: str = Query("UTC", max_length=64),
     staff: bool = False,
+    bots: bool = False,
     refresh: bool = False,
     _ctx: AdminContext = Depends(read_audience),
     db: AsyncSession = Depends(read_only_db),
 ) -> AudienceOut:
     timezone = _timezone(tz)
-    key = f"admin:audience:{period}:{timezone}:{int(staff)}"
+    key = f"admin:audience:{period}:{timezone}:{int(staff)}:{int(bots)}"
     redis = get_async_redis()
     if not refresh:
         try:
@@ -87,7 +89,11 @@ async def audience_overview(
             "timezone": timezone,
             "data_since": since,
             "geo": GeoDatabase.model_validate(geo.info()),
-            **(await audience.build(db, window, now, staff=staff, timezone=timezone)),
+            **(
+                await audience.build(
+                    db, window, now, who=audience.Who(staff=staff, bots=bots), timezone=timezone
+                )
+            ),
         }
     )
     with contextlib.suppress(RedisError):

@@ -1,7 +1,7 @@
 import type { VisitRow } from '../../../api/admin/types';
 import { RelativeDate } from '../../ui';
 import type { Column } from '../DataTable';
-import { DeviceIcon, PlaceText, SourceText } from './VisitBits';
+import { DeviceIcon, PlaceText, SourceText, VerdictBadge } from './VisitBits';
 import { duration } from './format';
 
 /** Columns of a visits table (the list, live now, an account's visits). */
@@ -17,6 +17,12 @@ export const visitColumns = ({ who = true }: { who?: boolean } = {}): Column<Vis
         <span className="text-[11px] text-muted">{duration(v.engaged_ms)} on the site</span>
       </span>
     ),
+  },
+  {
+    key: 'verdict',
+    header: 'Person?',
+    className: 'whitespace-nowrap',
+    cell: (v) => <VerdictBadge verdict={v.verdict} score={v.bot_score} />,
   },
   ...(who
     ? [

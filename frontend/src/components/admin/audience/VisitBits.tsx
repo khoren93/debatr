@@ -1,7 +1,8 @@
 import { Monitor, Smartphone, Tablet } from 'lucide-react';
-import type { VisitRow } from '../../../api/admin/types';
+import type { VisitRow, VisitVerdict } from '../../../api/admin/types';
+import { Pill } from '../../ui';
 import { SOURCE_COLORS } from '../charts/palette';
-import { flagOf, placeText, sourceLabel } from './format';
+import { VERDICT_COLORS, VERDICT_HINTS, VERDICT_LABELS, flagOf, placeText, sourceLabel } from './format';
 
 export const DeviceIcon = ({ device }: { device: string }) => {
   const Icon = device === 'mobile' ? Smartphone : device === 'tablet' ? Tablet : Monitor;
@@ -24,5 +25,14 @@ export const PlaceText = ({ visit }: { visit: Pick<VisitRow, 'country' | 'region
       {flagOf(visit.country)} {placeText(visit)}
     </span>
     {visit.ip && <span className="font-mono text-[11px] text-muted">{visit.ip}</span>}
+  </span>
+);
+
+/** Person, bot or AI agent (backend audience/bots.py); `score`: automation minus person points. */
+export const VerdictBadge = ({ verdict, score, className = '' }: { verdict: VisitVerdict; score?: number; className?: string }) => (
+  <span title={`${VERDICT_HINTS[verdict]}${score === undefined ? '' : ` · score ${score > 0 ? '+' : ''}${score}`}`} className={className}>
+    <Pill color={VERDICT_COLORS[verdict]} pulse={verdict === 'agent'} className="whitespace-nowrap">
+      {VERDICT_LABELS[verdict]}
+    </Pill>
   </span>
 );

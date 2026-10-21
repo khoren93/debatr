@@ -170,6 +170,9 @@ class Settings(BaseSettings):
     # Empty GEOIP_URL: no download (put a GeoLite2-City / DB-IP .mmdb there by hand).
     GEOIP_DIR: str = "./geoip"
     GEOIP_URL: str = "https://download.db-ip.com/free/dbip-city-lite-{month}.mmdb.gz"
+    # IP → network (AS number and operator) the same way, to tell data centres from home and
+    # mobile networks (audience/bots.py). Empty: no download (asn.mmdb by hand, or none).
+    GEOIP_ASN_URL: str = "https://download.db-ip.com/free/dbip-asn-lite-{month}.mmdb.gz"
 
     # Admin console (/admin + /api/admin, app/admin): admins are accounts with `users.admin_role`
     # (granted with `python -m app.manage admin grant`), signing in with password + TOTP.

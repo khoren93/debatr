@@ -3,6 +3,7 @@ import type { GalleryItem, Participant } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { Page } from '../components/layout/AppShell';
 import { CardCover, CardStats, CoverBadge, DebateCard, VersionsBadge, VideoPoster } from '../components/cards';
+import { HeroDebate } from '../components/landing/HeroDebate';
 import { Avatar, Bars, LinkButton } from '../components/ui';
 import { APP_DESCRIPTION } from '../lib/brand';
 
@@ -26,14 +27,15 @@ const STEPS = [
 const HERO_GLOW =
   'radial-gradient(60% 60% at 70% 30%, rgba(217,255,61,0.14), transparent 60%), radial-gradient(40% 50% at 20% 60%, rgba(108,156,255,0.16), transparent 60%)';
 
-/** Lineup and question of the hero's poster (a static mock, no data involved). */
+/** Lineup and question of the hero's poster without a debate to show (a static mock). */
 const HERO_LINEUP: Participant[] = [
   { name: 'Claude Opus 5.5', role: 'debater', model: 'anthropic/claude-opus-5.5', voice_name: null, avatar: null },
   { name: 'GPT-6.1 Sol', role: 'debater', model: 'openai/gpt-6.1-sol', voice_name: null, avatar: null },
 ];
 const HERO_TOPIC = 'Will smart contracts replace banks?';
 
-/** The long video's first frame (brand bar, face-off, question). */
+/** The long video's first frame (brand bar, face-off, question): the hero when the gallery has
+ *  no voiced debate to show. */
 const HeroPlayer = () => (
   <div className="group relative animate-rise" style={{ animationDuration: '0.7s', animationDelay: '0.1s' }}>
     <div className="overflow-hidden rounded-panel border border-line-2 shadow-[0_40px_80px_-30px_rgba(0,0,0,0.8)]">
@@ -51,11 +53,13 @@ const HeroPlayer = () => (
 );
 
 interface Props {
+  /** The hero: the most popular voiced debate (route data; null: the static poster). */
+  hero: GalleryItem | null;
   /** The "Trending in the gallery" row (route data; empty when the gallery is unavailable). */
   featured: GalleryItem[];
 }
 
-const Landing = ({ featured }: Props) => {
+const Landing = ({ hero, featured }: Props) => {
   const { user } = useAuth();
 
   return (
@@ -96,7 +100,7 @@ const Landing = ({ featured }: Props) => {
             ))}
           </div>
         </div>
-        <HeroPlayer />
+        {hero ? <HeroDebate debate={hero} /> : <HeroPlayer />}
       </div>
 
       {/* How it works */}

@@ -26,8 +26,12 @@ so run it in the media-worker container:
 
     docker compose exec media-worker python -m app.manage media refresh-timeline --format rap_battle
 
-`geoip update` fetches the IP → place database of the Audience page now (the background queue
-does it monthly; services/audience/geo) and places the visits saved without one.
+`geoip update` fetches the IP → place and IP → network databases of the Audience page now (the
+background queue does it monthly; services/audience/geo) and places the visits saved without one.
+
+`audience classify [--days N]` weighs stored visits again — person, bot or AI agent
+(services/audience/bots) —: once for the visits from before the verdicts, or after the rules
+changed. Visits from before the page counted its input keep fewer signals.
 """
 
 import argparse
@@ -35,6 +39,7 @@ import logging
 import sys
 import uuid
 from collections.abc import Sequence
+from datetime import timedelta
 from decimal import Decimal, InvalidOperation
 
 from sqlalchemy import delete, func, select
@@ -295,14 +300,39 @@ def indexnow_all(*, dry_run: bool) -> int:
 def geoip_update() -> int:
     from app.services.audience import geo, jobs
 
-    if not geo.update():
+    if not geo.update(db=geo.ASN):
+        print(
+            "The network database was not updated (GEOIP_ASN_URL empty or unreachable)",
+            file=sys.stderr,
+        )
+    if not geo.update(db=geo.CITY):
         print(
             "The GeoIP database was not updated (GEOIP_URL empty or unreachable)", file=sys.stderr
         )
         return 1
     with get_sync_session() as db:
         placed = jobs.backfill(db)
-    print(f"GeoIP database ready ({geo.info().get('release')}); placed {placed} visits")
+        found = jobs.backfill_networks(db)
+    print(
+        f"GeoIP database ready ({geo.info().get('release')}); placed {placed} visits, "
+        f"found the network of {found}"
+    )
+    return 0
+
+
+def audience_classify(days: int | None) -> int:
+    from app.models.models import Visit, utcnow
+    from app.services.audience import jobs
+
+    since = utcnow() - timedelta(days=days) if days else None
+    with get_sync_session() as db:
+        done = jobs.classify(db, since=since)
+        rows = db.execute(
+            select(Visit.verdict, func.count())
+            .where(*([Visit.started_at >= since] if since else []))
+            .group_by(Visit.verdict)
+        ).all()
+    print(f"Weighed {done} visits: " + ", ".join(f"{v} {n}" for v, n in sorted(rows)))
     return 0
 
 
@@ -369,8 +399,13 @@ def build_parser() -> argparse.ArgumentParser:
     refresh.add_argument("ids", nargs="*", help="debate ids")
     refresh.add_argument("--format", dest="fmt", help="every ready debate of this format")
 
-    geoip = commands.add_parser("geoip", help="the IP to place database of the Audience page")
-    geoip.add_subparsers(dest="action", required=True).add_parser("update", help="fetch it now")
+    geoip = commands.add_parser("geoip", help="the IP databases of the Audience page")
+    geoip.add_subparsers(dest="action", required=True).add_parser("update", help="fetch them now")
+    audience = commands.add_parser("audience", help="visits of the site")
+    weigh = audience.add_subparsers(dest="action", required=True).add_parser(
+        "classify", help="weigh stored visits again: person, bot or AI agent"
+    )
+    weigh.add_argument("--days", type=int, default=None, help="only visits of the last N days")
     return parser
 
 
@@ -413,6 +448,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return media_refresh(list(args.ids), args.fmt)
     if args.command == "geoip":
         return geoip_update()
+    if args.command == "audience":
+        return audience_classify(args.days)
     return 2
 
 

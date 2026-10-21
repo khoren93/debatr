@@ -447,6 +447,22 @@ class Visit(Base):
     timezone: Mapped[str | None] = mapped_column(String(48), nullable=True)
     # The visitor's first visit (no earlier visit with its id).
     new_visitor: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    # A person, a bot or an AI agent (audience/bots.py), weighed again with every beacon:
+    # human | likely_human | unclear | suspect | bot | agent; the score is automation points
+    # minus person points (±100) and the reasons [{code, points, detail?}] say why.
+    verdict: Mapped[str] = mapped_column(
+        String(12), default="unclear", server_default="unclear", index=True
+    )
+    bot_score: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    bot_reasons: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSON, default=list, server_default="[]"
+    )
+    # What the page counted of its input and said about the browser, and the request's facts
+    # (bots.merge: {"c": counts, "env": browser, "srv": headers}).
+    signals: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, server_default="{}")
+    # The IP's network operator and whether it is a data centre or a relay (kept after the IP).
+    network: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    network_kind: Mapped[str | None] = mapped_column(String(8), nullable=True)
 
     __table_args__ = (Index("ix_visits_visitor_started", "visitor_id", "started_at"),)
 

@@ -7,8 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **The home page plays the most popular debate.** The hero shows the gallery's top trending
+  English debate with its video and plays it in place (the player loads on hover or the first
+  click); without one it keeps the static poster.
+- Admin console: each visit is marked as a person, a bot or an AI agent, with the reasons; the
+  Audience page leaves bots out of its numbers unless "Include bots" is on.
+  `python -m app.manage audience classify` marks the visits from before.
+
 ### Changed
 
+- The home page lists English debates only.
 - The server calls itself Debatr instead of AI Debates: the API docs' title, the Stripe product
   ("Debatr credits"), CSV exports (`debatr-ledger-….csv` and the console's), the app name sent to
   OpenRouter, the backend and frontend package names.

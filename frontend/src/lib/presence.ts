@@ -1,5 +1,5 @@
 import { isLandingPage } from '../api/debates';
-import { sendPresence, type PresenceEvent } from '../api/presence';
+import { sendPresence, type BrowserEnv, type PresenceEvent, type Signals } from '../api/presence';
 
 /**
  * The presence beacon (backend services/audience; the admin console's Audience page): pages
@@ -13,6 +13,13 @@ import { sendPresence, type PresenceEvent } from '../api/presence';
  * page was shown in. Events are batched and sent with `navigator.sendBeacon`, at once when the
  * page is hidden or left. Browser only: nothing is sent on the server, by a browser driven by
  * automation, or while the admin console's `analytics_enabled` lever is off.
+ *
+ * Each beacon also carries counts of the input since the previous one (mouse moves, presses,
+ * touches, keys, wheel scrolls) and how machine-like it was (presses with no mouse path towards
+ * them or at the exact centre of a button, keys faster than fingers, text with no keys), and once
+ * per page load what the browser says about itself (graphics on a GPU or in software, platform,
+ * a headless brand…): the console tells people from bots and AI agents with them (backend
+ * audience/bots.py). Never what was typed, nor where the pointer went.
  */
 
 /** Actions the site reports; the backend keeps only these (audience/collect.ACTIONS). */
@@ -44,6 +51,8 @@ export type PresenceAction =
 
 type Props = Record<string, string | number | boolean | null>;
 
+type UAData = { platform?: string; brands?: { brand: string }[] };
+
 const VISITOR_KEY = 'debatr.visitor';
 const VISIT_KEY = 'debatr.visit';
 export const VISIT_IDLE_MS = 30 * 60_000;
@@ -52,6 +61,11 @@ const PING_MS = 60_000;
 const FLUSH_DELAY_MS = 1500;
 const MAX_QUEUE = 40;
 const MAX_TIME_MS = 30 * 60_000;
+const JUMP_PX = 300;
+const FAST_KEY_MS = 12;
+const CENTRE_PX = 0.5;
+const PRESSABLE = 'a,button,input,select,textarea,label,summary,[role="button"],[role="link"],[role="tab"],[role="option"],[role="menuitem"],[tabindex]';
+const SOFTWARE_GL = /swiftshader|llvmpipe|softpipe|software|basic render|mesa offscreen/i;
 
 interface Visit {
   id: string;
@@ -76,6 +90,12 @@ let queue: PresenceEvent[] = [];
 let queueVisit: { id: string; resumed: boolean } | null = null;
 let flushTimer: ReturnType<typeof setTimeout> | null = null;
 const memory: { visitor: string | null; visit: Visit | null } = { visitor: null, visit: null };
+
+const noSignals = (): Signals => ({ mv: 0, jmp: 0, ck: 0, ckb: 0, cc: 0, tp: 0, ky: 0, kf: 0, fill: 0, wh: 0, hid: 0, syn: 0 });
+let signals = noSignals();
+// The browser's facts: worked out in idle time, sent with the next beacon, once per page load.
+let env: BrowserEnv | null = null;
+let envSent = false;
 
 const active = () => enabled && typeof window !== 'undefined' && !navigator.webdriver;
 const visible = () => document.visibilityState === 'visible';
@@ -134,6 +154,20 @@ export const visitExpired = (last: number, now: number) => now - last > VISIT_ID
 /** Time of a shown page not reported yet: visible, and up to IDLE_MS after the last input. */
 export const engagedSince = (since: number | null, now: number, lastInputAt: number) => (since === null ? 0 : Math.max(0, Math.min(now, lastInputAt + IDLE_MS) - since));
 
+/** The counts since the previous beacon (only those above zero; an empty object still says the
+ *  page counts: no input at all is a signal too), starting the next ones at zero. */
+const takeSignals = (): Partial<Signals> => {
+  const counted = Object.fromEntries(Object.entries(signals).filter(([, n]) => n > 0));
+  signals = noSignals();
+  return counted;
+};
+
+const takeEnv = (): BrowserEnv | undefined => {
+  if (!env || envSent) return undefined;
+  envSent = true;
+  return env;
+};
+
 const flush = () => {
   if (flushTimer) clearTimeout(flushTimer);
   flushTimer = null;
@@ -147,6 +181,8 @@ const flush = () => {
       tz: Intl.DateTimeFormat().resolvedOptions().timeZone?.slice(0, 48),
       touch: navigator.maxTouchPoints > 1,
       resumed: queueVisit.resumed || undefined,
+      signals: takeSignals(),
+      env: takeEnv(),
     });
     queueVisit = { id: queueVisit.id, resumed: false };
   }
@@ -200,10 +236,126 @@ const onInput = () => {
   lastInput = now;
 };
 
+/** WebGL's renderer, as a class only: a GPU, software rendering or none. */
+const graphics = (): BrowserEnv['gl'] => {
+  try {
+    const gl = document.createElement('canvas').getContext('webgl');
+    if (!gl) return 'none';
+    const info = gl.getExtension('WEBGL_debug_renderer_info');
+    const renderer = String(gl.getParameter(info ? info.UNMASKED_RENDERER_WEBGL : gl.RENDERER) ?? '');
+    gl.getExtension('WEBGL_lose_context')?.loseContext();
+    return SOFTWARE_GL.test(renderer) ? 'soft' : 'hw';
+  } catch {
+    return undefined;
+  }
+};
+
+const browserEnv = (): BrowserEnv => {
+  const ua = (navigator as Navigator & { userAgentData?: UAData }).userAgentData;
+  return {
+    gl: graphics(),
+    plat: (ua?.platform || navigator.platform || '').slice(0, 32) || undefined,
+    pl: navigator.plugins?.length,
+    ln: navigator.languages?.length,
+    chr: 'chrome' in window,
+    ow: window.outerWidth === 0 && window.outerHeight === 0,
+    hl: ua?.brands?.some((b) => /headless/i.test(b.brand)) || undefined,
+  };
+};
+
+/** A press at the exact centre of what it pressed (where software clicks; a hand almost never). */
+const centred = (e: PointerEvent): boolean => {
+  const target = e.target instanceof Element ? e.target.closest(PRESSABLE) : null;
+  if (!target) return false;
+  const box = target.getBoundingClientRect();
+  if (box.width < 8 || box.height < 8) return false;
+  return Math.abs(e.clientX - (box.left + box.width / 2)) <= CENTRE_PX && Math.abs(e.clientY - (box.top + box.height / 2)) <= CENTRE_PX;
+};
+
+/** Counts the input (Signals): how much of it, and how machine-like. */
+const watchInput = () => {
+  const options = { passive: true, capture: true } as const;
+  const desktop = navigator.maxTouchPoints === 0;
+  let pointer: { x: number; y: number } | null = null;
+  let lastPress: { x: number; y: number } | null = null;
+  let movesSincePress = 0;
+  let lastKeyAt = -Infinity;
+  window.addEventListener(
+    'pointermove',
+    (e) => {
+      if (e.pointerType !== 'mouse' || !e.isTrusted) return;
+      signals.mv += 1;
+      movesSincePress += 1;
+      if (pointer && Math.hypot(e.clientX - pointer.x, e.clientY - pointer.y) > JUMP_PX) signals.jmp += 1;
+      pointer = { x: e.clientX, y: e.clientY };
+    },
+    options,
+  );
+  // The pointer may come back anywhere.
+  const lose = () => {
+    pointer = null;
+  };
+  document.documentElement.addEventListener('pointerleave', lose, options);
+  window.addEventListener('blur', lose, options);
+  window.addEventListener(
+    'pointerdown',
+    (e) => {
+      if (!e.isTrusted) {
+        signals.syn += 1;
+        return;
+      }
+      if (e.pointerType === 'mouse') {
+        signals.ck += 1;
+        const again = lastPress && Math.hypot(e.clientX - lastPress.x, e.clientY - lastPress.y) < 12;
+        if (movesSincePress <= 1 && !again) signals.ckb += 1;
+        movesSincePress = 0;
+        lastPress = { x: e.clientX, y: e.clientY };
+      } else {
+        signals.tp += 1;
+      }
+      if (centred(e)) signals.cc += 1;
+    },
+    options,
+  );
+  window.addEventListener(
+    'keydown',
+    (e) => {
+      if (!e.isTrusted || e.repeat) return;
+      const now = performance.now();
+      signals.ky += 1;
+      if (now - lastKeyAt < FAST_KEY_MS) signals.kf += 1;
+      lastKeyAt = now;
+    },
+    options,
+  );
+  window.addEventListener(
+    'input',
+    (e) => {
+      // Phones type through their keyboards, dictation and suggestions without key presses.
+      if (!desktop || !e.isTrusted || (e as InputEvent).inputType !== 'insertText') return;
+      if (performance.now() - lastKeyAt > 100) signals.fill += 1;
+    },
+    options,
+  );
+  window.addEventListener(
+    'wheel',
+    (e) => {
+      if (e.isTrusted) signals.wh += 1;
+    },
+    options,
+  );
+};
+
 const start = () => {
   if (started) return;
   started = true;
   lastInput = Date.now();
+  watchInput();
+  const describe = () => {
+    env = browserEnv();
+  };
+  if (typeof window.requestIdleCallback === 'function') window.requestIdleCallback(describe, { timeout: 3000 });
+  else setTimeout(describe, 1000);
   let throttled = 0;
   const input = () => {
     const now = Date.now();
@@ -215,6 +367,7 @@ const start = () => {
   document.addEventListener('visibilitychange', () => {
     const now = Date.now();
     if (!visible()) {
+      signals.hid += 1;
       collect(now);
       flush();
     } else if (page) {
@@ -235,7 +388,10 @@ const start = () => {
 /** The admin console's lever (`GET /api/status`): off sends nothing. */
 export const setPresenceEnabled = (on: boolean) => {
   enabled = on;
-  if (!on) queue = [];
+  if (!on) {
+    queue = [];
+    signals = noSignals();
+  }
 };
 
 const externalReferrer = (): string | undefined => {

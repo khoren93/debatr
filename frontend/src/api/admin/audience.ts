@@ -1,8 +1,8 @@
 import { adminApi } from './client';
 import type { Audience, LiveVisits, OverviewPeriod, UserVisits, VisitCard, VisitList, VisitListQuery } from './types';
 
-export const getAudience = (period: OverviewPeriod, timezone: string, staff: boolean, refresh = false) =>
-  adminApi.get<Audience>('/audience', { params: { period, tz: timezone, staff: staff || undefined, refresh: refresh || undefined } }).then((r) => r.data);
+export const getAudience = (period: OverviewPeriod, timezone: string, staff: boolean, bots: boolean, refresh = false) =>
+  adminApi.get<Audience>('/audience', { params: { period, tz: timezone, staff: staff || undefined, bots: bots || undefined, refresh: refresh || undefined } }).then((r) => r.data);
 
 export const getLiveVisits = () => adminApi.get<LiveVisits>('/audience/live').then((r) => r.data);
 

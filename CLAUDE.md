@@ -20,7 +20,8 @@ backend/            FastAPI API + RQ worker (Python 3.12+, managed with uv)
                       sitemap page to IndexNow at once, after a domain move), `media
                       refresh-timeline <ids> | --format rap_battle` (beat grid, Shorts and
                       moments of ready timelines without rebuilding audio; media-worker: ffmpeg),
-                      `geoip update` (the Audience page's place database now)
+                      `geoip update` (the Audience page's place and network databases now),
+                      `audience classify [--days N]` (person / bot / AI agent of stored visits)
   app/admin/          admin console access: gate (host / IP / Fetch Metadata / Origin, outermost
                       middleware), access (sessions → AdminContext, CSRF, roles, sudo)
   app/scheduler.py    periodic jobs (`python -m app.scheduler`, RQ cron on the background queue:
@@ -85,7 +86,8 @@ backend/            FastAPI API + RQ worker (Python 3.12+, managed with uv)
                       finance (money per day / week / month, Stripe reconciliation, model rows),
                       audience (the Audience page's queries)
   app/services/audience/ visit statistics (see "Visit statistics"): collect (the beacon),
-                      agent (device / browser / OS), geo (place database), jobs (upkeep)
+                      agent (device / browser / OS), geo (place + network databases), bots
+                      (person / bot / AI agent per visit), jobs (upkeep)
   app/services/media/ audio pipeline: script (markdown→speech), tts/ (elevenlabs, edge),
                       ffmpeg, highlights (the host model picks shorts), visuals (LLM director),
                       sketch (SVG line art → sanitized path data), images (Commons photos / AI
@@ -227,7 +229,9 @@ frontend/           React 19 + React Router 8 (framework mode, server rendering)
                       PictureScenes: sketch strokes + Ken Burns pictures)
   src/pages/          page components (routes in src/routes wrap them; Landing, Gallery,
                       Leaderboard, Topic render from route data, DebateView starts from it):
-                      Landing (/), Library (/library), Gallery (/gallery), Leaderboard (/leaderboard),
+                      Landing (/: English only; the hero plays the most popular voiced debate in
+                      place, components/landing/HeroDebate, like the embed's facade), Library
+                      (/library), Gallery (/gallery), Leaderboard (/leaderboard),
                       CreateDebate (/create, `?draft=<id>`, `?remix=<id>`),
                       DebateView (/debate/:id and public /d/:slug), Topic (/t/:slug: a topic's
                       public versions), Embed (/embed/:slug: the facade, then DebatePlayer
@@ -1163,10 +1167,26 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   `visit_events` (migration 0018). Console staff are left out of the numbers. A new action:
   `PresenceAction`, `collect.ACTIONS` and the console's `ACTION_LABELS` (a test checks them).
 - Levers `analytics_enabled` (off: `GET /api/status` tells the site to send nothing) and
-  `analytics_ip_days` (`jobs.maintenance_job` clears old IPs hourly). Places come from a local
-  MaxMind-format file in GEOIP_DIR (volume `geoip_data`; DB-IP Lite, fetched monthly, CC BY:
-  the page credits it). Permission `audience` (admins). Keep `/privacy` (pages/Privacy.tsx) true
-  to what is kept and for how long.
+  `analytics_ip_days` (`jobs.maintenance_job` clears old IPs hourly). Places and networks come
+  from local MaxMind-format files in GEOIP_DIR (volume `geoip_data`: `city.mmdb`, `asn.mmdb`;
+  DB-IP Lite, fetched monthly, CC BY: the page credits it). Permission `audience` (admins). Keep
+  `/privacy` (pages/Privacy.tsx) true to what is kept and for how long.
+- Person, bot or AI agent (`services/audience/bots.py`, pure): every beacon also carries the
+  page's input counts since the last one (`Signals` in `api/presence.ts`: mouse moves and jumps,
+  presses with no mouse path or at a button's exact centre, touches, keys and too-fast keys, text
+  without keys, wheel, tab switches, script events; never what or where) and once per page load
+  the browser's facts (`BrowserEnv`: WebGL on a GPU / in software, platform, plugins, languages,
+  `window.chrome`, headless brand); the API adds the headers (`Signature-Agent` = ChatGPT agent,
+  `Sec-CH-UA` headless brand / platform, Accept-Language), the network (`hosting` / `relay`
+  by AS number or operator words) and the IP's longitude (`signals.srv.lon`: a browser clock
+  more than 4.5 h from the sun's time there belongs elsewhere: VPN, proxy, cloud). `classify` turns them into points (+ automation, − a person)
+  and `visits.verdict` (`human | likely_human | unclear | suspect | bot | agent`), `bot_score`,
+  `bot_reasons`, weighed again with every beacon; `agent` = automation with machine-like input
+  (or a signed agent), `bot` = without it. The Audience page leaves `bot` / `agent` out of its
+  numbers unless "Include bots" (`bots=true`), shows "People and bots", the live list and the
+  visits list carry the verdict (filter `verdict=people|bots|<verdict>`), the visit card its
+  reasons, network and counts. A new signal: `ClientSignals` / `ClientEnv` + the TS interfaces
+  (a test compares them) and words in `REASONS`. Old visits: `app.manage audience classify`.
 
 ### Admin console (`/admin`, `/api/admin/*`)
 

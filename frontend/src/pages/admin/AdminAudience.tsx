@@ -13,7 +13,7 @@ import { HourGrid } from '../../components/admin/audience/HourGrid';
 import { ShareList } from '../../components/admin/audience/ShareList';
 import { SourceText } from '../../components/admin/audience/VisitBits';
 import { visitColumns } from '../../components/admin/audience/visitTable';
-import { DEVICE_LABELS, SECTION_LABELS, countryName, duration, flagOf, languageName, sourceLabel } from '../../components/admin/audience/format';
+import { DEVICE_LABELS, SECTION_LABELS, VERDICT_COLORS, VERDICT_HINTS, VERDICT_LABELS, VERDICT_ORDER, countryName, duration, flagOf, isVerdict, languageName, sourceLabel } from '../../components/admin/audience/format';
 import { ChartCard } from '../../components/admin/charts/ChartCard';
 import { LineChart } from '../../components/admin/charts/LineChart';
 import { StackedColumns } from '../../components/admin/charts/StackedColumns';
@@ -77,17 +77,22 @@ const VisitsLink = ({ period, filter, children }: { period: OverviewPeriod; filt
 
 const loadLive = () => getLiveVisits();
 
-/** Visits active in the last five minutes, polled. */
+/** Visits active in the last five minutes, polled, with who made them. */
 const LiveNow = () => {
   const { data, error } = useLoad(loadLive, 15_000);
   const visits = data?.visits ?? [];
+  const people = visits.filter((v) => v.verdict === 'human' || v.verdict === 'likely_human').length;
+  const automated = visits.filter((v) => v.verdict === 'bot' || v.verdict === 'agent').length;
   return (
     <Card padding="none" className="overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-3">
         <span className="flex items-center gap-2 text-sm font-semibold text-text-2">
           <span className={`size-2 rounded-full ${visits.length ? 'animate-pulse bg-ok' : 'bg-surface-4'}`} aria-hidden />
           On the site now
-          <span className="font-normal text-muted">{data ? `${visits.length} active in the last 5 minutes` : ''}</span>
+          <span className="font-normal text-muted">
+            {data ? `${visits.length} active in the last 5 minutes` : ''}
+            {visits.length > 0 && ` · ${people} ${people === 1 ? 'person' : 'people'} · ${automated} ${automated === 1 ? 'bot or agent' : 'bots and agents'}`}
+          </span>
         </span>
         {data && <span className="text-xs text-muted">updated {formatTime(data.generated_at)} · every 15 s</span>}
       </div>
@@ -123,6 +128,38 @@ const Charts = ({ data }: { data: Audience }) => {
   );
 };
 
+/** Every visit of the period by verdict (bots included), each a link to its visits. */
+const Verdicts = ({ data }: { data: Audience }) => {
+  const order = (key: string) => (isVerdict(key) ? VERDICT_ORDER.indexOf(key) : VERDICT_ORDER.length);
+  const rows = [...data.verdicts].sort((a, b) => order(a.key) - order(b.key));
+  const total = rows.reduce((sum, row) => sum + row.visits, 0);
+  const automated = rows.filter((row) => row.key === 'bot' || row.key === 'agent').reduce((sum, row) => sum + row.visits, 0);
+  return (
+    <TableCard
+      title="People and bots"
+      subtitle={
+        data.bots
+          ? 'Every visit by verdict; bots and AI agents are in the numbers above'
+          : `Every visit by verdict; the ${count(automated)} by bots and AI agents are left out of the numbers above${total ? ` (${formatPercent(automated / total)})` : ''}`
+      }
+      head={['Verdict', 'Visits', 'Visitors', 'Time / visit', 'Bounce']}
+      empty="No visits in this period."
+      rows={rows.map((row) => [
+        <VisitsLink key="v" period={data.period} filter={{ verdict: row.key }}>
+          <span className="inline-flex items-center gap-2" title={isVerdict(row.key) ? VERDICT_HINTS[row.key] : undefined}>
+            <span aria-hidden className="size-2 shrink-0 rounded-[3px]" style={{ background: isVerdict(row.key) ? VERDICT_COLORS[row.key] : undefined }} />
+            {isVerdict(row.key) ? VERDICT_LABELS[row.key] : row.key}
+          </span>
+        </VisitsLink>,
+        count(row.visits),
+        count(row.visitors),
+        duration(row.engaged_ms),
+        formatPercent(row.bounce_rate),
+      ])}
+    />
+  );
+};
+
 const rowCells = (row: AudienceRow) => [count(row.visits), count(row.visitors), duration(row.engaged_ms), formatPercent(row.bounce_rate), count(row.signups)];
 const ROW_HEAD = ['Visits', 'Visitors', 'Time / visit', 'Bounce', 'Sign-ups'];
 
@@ -150,6 +187,9 @@ const Overview = ({ data, previous }: { data: Audience; previous: string }) => {
         <StatTile label="New visitors" value={count(t.new_visitors.value)} current={t.new_visitors.value} previous={t.new_visitors.previous} previousLabel={previous} hint={visitors ? `${formatPercent(t.new_visitors.value / visitors)} of visitors` : undefined} />
         <StatTile label="Sign-ups" value={count(t.signups.value)} current={t.signups.value} previous={t.signups.previous} previousLabel={previous} hint={visitors ? `${formatPercent(t.signups.value / visitors)} of visitors` : undefined} />
       </div>
+      <Section title="People and bots" aside="A verdict per visit from its browser, network and input; open a visit to see why">
+        <Verdicts data={data} />
+      </Section>
       <Section title="Over time">
         <Charts data={data} />
       </Section>
@@ -358,6 +398,7 @@ const AdminAudience = () => {
   const tab = TABS.find((t) => t.value === params.get('tab'))?.value ?? 'overview';
   const [period, setPeriod] = useState<OverviewPeriod>('7d');
   const [staff, setStaff] = useState(false);
+  const [bots, setBots] = useState(false);
   const [refreshes, setRefreshes] = useState(0);
   const [data, setData] = useState<Audience | null>(null);
   const [loading, setLoading] = useState(true);
@@ -365,7 +406,7 @@ const AdminAudience = () => {
 
   useEffect(() => {
     let cancelled = false;
-    getAudience(period, timezone, staff, refreshes > 0)
+    getAudience(period, timezone, staff, bots, refreshes > 0)
       .then((value) => {
         if (!cancelled) {
           setData(value);
@@ -381,7 +422,7 @@ const AdminAudience = () => {
     return () => {
       cancelled = true;
     };
-  }, [period, staff, refreshes]);
+  }, [period, staff, bots, refreshes]);
 
   const choose = (value: OverviewPeriod) => {
     setLoading(true);
@@ -419,6 +460,17 @@ const AdminAudience = () => {
           title="Visits of accounts with a console role are left out unless this is on"
         >
           Include staff
+        </Chip>
+        <Chip
+          size="sm"
+          active={bots}
+          onClick={() => {
+            setLoading(true);
+            setBots((v) => !v);
+          }}
+          title="Visits judged to be bots or AI agents are left out of the numbers unless this is on"
+        >
+          Include bots
         </Chip>
         <Button
           variant="ghost"

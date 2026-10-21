@@ -2,11 +2,14 @@
 where they came from, where they are, what they looked at and did; one visit with its pages and
 actions; an account's visits and the addresses it shares with other accounts.
 
-Read-only queries. Visits of console staff are left out unless asked for. A visit belongs to the
-period it started in; pages and actions to the moment they happened.
+Read-only queries. Visits of console staff, and of bots and AI agents (audience/bots.py), are
+left out of the numbers unless asked for (`Who`); the visits list and the live list show them
+with their verdict. A visit belongs to the period it started in; pages and actions to the moment
+they happened.
 """
 
 import uuid
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -22,6 +25,7 @@ from app.schemas.admin import (
     AudiencePoint,
     AudienceRow,
     AudienceVideo,
+    BotReason,
     FunnelStep,
     SharedAddress,
     VisitCard,
@@ -35,6 +39,7 @@ from app.schemas.admin import (
 )
 from app.services import seo
 from app.services.admin.stats import Window, _aware, _bucket, bucket_starts, tile
+from app.services.audience.bots import AUTOMATED, REASONS
 from app.services.audience.collect import ACTIONS
 from app.services.views import SOURCES
 
@@ -78,13 +83,36 @@ def did(name: str) -> ColumnElement[bool]:
     return exists().where(VisitEvent.visit_id == Visit.id, VisitEvent.name == name)
 
 
-def scope(start: datetime | None, end: datetime, staff: bool = False) -> list[ColumnElement[bool]]:
+# A verdict filter of the visits list: a group, or one verdict.
+VERDICT_GROUPS: dict[str, tuple[str, ...]] = {
+    "people": ("human", "likely_human"),
+    "bots": AUTOMATED,
+}
+
+
+@dataclass(frozen=True)
+class Who:
+    """Whose visits count: console staff and bots / AI agents only when asked for."""
+
+    staff: bool = False
+    bots: bool = False
+
+    def conditions(self) -> list[ColumnElement[bool]]:
+        where: list[ColumnElement[bool]] = []
+        if not self.staff:
+            where.append(Visit.staff.is_(False))
+        if not self.bots:
+            where.append(Visit.verdict.not_in(AUTOMATED))
+        return where
+
+
+def scope(
+    start: datetime | None, end: datetime, who: Who | None = None
+) -> list[ColumnElement[bool]]:
     where: list[ColumnElement[bool]] = [Visit.started_at < end]
     if start is not None:
         where.append(Visit.started_at >= start)
-    if not staff:
-        where.append(Visit.staff.is_(False))
-    return where
+    return [*where, *(who or Who()).conditions()]
 
 
 def section_of() -> ColumnElement[str]:
@@ -104,7 +132,7 @@ async def first_visit(db: AsyncSession) -> datetime | None:
 # --- the page -----------------------------------------------------------------------------------
 
 
-async def tiles(db: AsyncSession, window: Window, now: datetime, staff: bool) -> dict[str, Any]:
+async def tiles(db: AsyncSession, window: Window, now: datetime, who: Who) -> dict[str, Any]:
     async def measure(start: datetime | None, end: datetime) -> dict[str, float]:
         row = (
             await db.execute(
@@ -116,7 +144,7 @@ async def tiles(db: AsyncSession, window: Window, now: datetime, staff: bool) ->
                     func.avg(case((bounced(), 1.0), else_=0.0)),
                     func.count(distinct(case((Visit.new_visitor, Visit.visitor_id)))),
                     func.coalesce(func.sum(case((did("signup"), 1), else_=0)), 0),
-                ).where(*scope(start, end, staff))
+                ).where(*scope(start, end, who))
             )
         ).one()
         keys = ("visitors", "visits", "pageviews", "engaged_ms", "bounce_rate", "new", "signups")
@@ -134,9 +162,7 @@ async def tiles(db: AsyncSession, window: Window, now: datetime, staff: bool) ->
         )
 
     online = await db.scalar(
-        select(func.count()).where(
-            Visit.last_at >= now - ONLINE, *([] if staff else [Visit.staff.is_(False)])
-        )
+        select(func.count()).where(Visit.last_at >= now - ONLINE, *who.conditions())
     )
     return {
         "visitors": pair("visitors"),
@@ -150,9 +176,9 @@ async def tiles(db: AsyncSession, window: Window, now: datetime, staff: bool) ->
     }
 
 
-async def series(db: AsyncSession, window: Window, staff: bool) -> list[AudiencePoint]:
+async def series(db: AsyncSession, window: Window, who: Who) -> list[AudiencePoint]:
     bucket = _bucket(Visit.started_at, window.bucket).label("bucket")
-    where = scope(window.start, window.end, staff)
+    where = scope(window.start, window.end, who)
     by_source: dict[datetime, dict[str, int]] = {}
     rows = await db.execute(
         select(bucket, Visit.source, func.count()).where(*where).group_by(bucket, Visit.source)
@@ -223,14 +249,11 @@ async def breakdown(
     return out
 
 
-def _event_scope(window: Window, staff: bool, *extra: ColumnElement[bool]) -> list[Any]:
-    where: list[Any] = [VisitEvent.at >= window.start, VisitEvent.at < window.end, *extra]
-    if not staff:
-        where.append(Visit.staff.is_(False))
-    return where
+def _event_scope(window: Window, who: Who, *extra: ColumnElement[bool]) -> list[Any]:
+    return [VisitEvent.at >= window.start, VisitEvent.at < window.end, *extra, *who.conditions()]
 
 
-async def pages(db: AsyncSession, window: Window, staff: bool) -> list[AudiencePage]:
+async def pages(db: AsyncSession, window: Window, who: Who) -> list[AudiencePage]:
     views = func.count().label("views")
     rows = await db.execute(
         select(
@@ -241,7 +264,7 @@ async def pages(db: AsyncSession, window: Window, staff: bool) -> list[AudienceP
             func.min(cast(VisitEvent.debate_id, String)),
         )
         .join(Visit, Visit.id == VisitEvent.visit_id)
-        .where(*_event_scope(window, staff, VisitEvent.kind == "page"))
+        .where(*_event_scope(window, who, VisitEvent.kind == "page"))
         .group_by(VisitEvent.path)
         .order_by(views.desc(), VisitEvent.path)
         .limit(TOP + 5)
@@ -260,7 +283,7 @@ async def pages(db: AsyncSession, window: Window, staff: bool) -> list[AudienceP
     ]
 
 
-async def sections(db: AsyncSession, window: Window, staff: bool) -> list[AudienceRow]:
+async def sections(db: AsyncSession, window: Window, who: Who) -> list[AudienceRow]:
     section = section_of().label("section")
     views = func.count().label("views")
     rows = await db.execute(
@@ -271,7 +294,7 @@ async def sections(db: AsyncSession, window: Window, staff: bool) -> list[Audien
             func.avg(VisitEvent.engaged_ms),
         )
         .join(Visit, Visit.id == VisitEvent.visit_id)
-        .where(*_event_scope(window, staff, VisitEvent.kind == "page"))
+        .where(*_event_scope(window, who, VisitEvent.kind == "page"))
         .group_by(section)
         .order_by(views.desc())
     )
@@ -299,7 +322,7 @@ async def _titles(db: AsyncSession, ids: list[str]) -> dict[str, str]:
     return {str(i): title or "Untitled debate" for i, title in rows.all()}
 
 
-async def videos(db: AsyncSession, window: Window, staff: bool) -> list[AudienceVideo]:
+async def videos(db: AsyncSession, window: Window, who: Who) -> list[AudienceVideo]:
     play = VisitEvent.name == "video_play"
     finished = and_(
         VisitEvent.name == "video_progress", VisitEvent.props["pct"].as_string() == "100"
@@ -316,7 +339,7 @@ async def videos(db: AsyncSession, window: Window, staff: bool) -> list[Audience
         .where(
             *_event_scope(
                 window,
-                staff,
+                who,
                 VisitEvent.debate_id.is_not(None),
                 VisitEvent.name.in_(("video_play", "video_progress")),
             )
@@ -352,7 +375,7 @@ async def videos(db: AsyncSession, window: Window, staff: bool) -> list[Audience
     return out
 
 
-async def campaigns(db: AsyncSession, window: Window, staff: bool) -> list[AudienceCampaign]:
+async def campaigns(db: AsyncSession, window: Window, who: Who) -> list[AudienceCampaign]:
     visits = func.count().label("n")
     rows = await db.execute(
         select(
@@ -364,7 +387,7 @@ async def campaigns(db: AsyncSession, window: Window, staff: bool) -> list[Audie
             func.coalesce(func.sum(case((did("signup"), 1), else_=0)), 0),
         )
         .where(
-            *scope(window.start, window.end, staff),
+            *scope(window.start, window.end, who),
             or_(
                 Visit.utm_source.is_not(None),
                 Visit.utm_medium.is_not(None),
@@ -383,14 +406,14 @@ async def campaigns(db: AsyncSession, window: Window, staff: bool) -> list[Audie
     ]
 
 
-async def hours(db: AsyncSession, window: Window, staff: bool, timezone: str) -> list[list[int]]:
+async def hours(db: AsyncSession, window: Window, who: Who, timezone: str) -> list[list[int]]:
     local = func.timezone(timezone, Visit.started_at)
     day = (cast(func.extract("isodow", local), Integer) - 1).label("day")
     hour = cast(func.extract("hour", local), Integer).label("hour")
     grid = [[0] * 24 for _ in range(7)]
     rows = await db.execute(
         select(day, hour, func.count())
-        .where(*scope(window.start, window.end, staff))
+        .where(*scope(window.start, window.end, who))
         .group_by(day, hour)
     )
     for d, h, n in rows.all():
@@ -399,7 +422,7 @@ async def hours(db: AsyncSession, window: Window, staff: bool, timezone: str) ->
     return grid
 
 
-async def funnel(db: AsyncSession, window: Window, staff: bool) -> list[FunnelStep]:
+async def funnel(db: AsyncSession, window: Window, who: Who) -> list[FunnelStep]:
     def people(condition: ColumnElement[bool]) -> Any:
         return func.count(distinct(case((condition, Visit.visitor_id))))
 
@@ -412,7 +435,7 @@ async def funnel(db: AsyncSession, window: Window, staff: bool) -> list[FunnelSt
                 people(did("signup")),
                 people(did("debate_start")),
                 people(did("topup")),
-            ).where(*scope(window.start, window.end, staff))
+            ).where(*scope(window.start, window.end, who))
         )
     ).one()
     return [
@@ -421,12 +444,12 @@ async def funnel(db: AsyncSession, window: Window, staff: bool) -> list[FunnelSt
     ]
 
 
-async def actions(db: AsyncSession, window: Window, staff: bool) -> list[AudienceRow]:
+async def actions(db: AsyncSession, window: Window, who: Who) -> list[AudienceRow]:
     times = func.count().label("n")
     rows = await db.execute(
         select(VisitEvent.name, times, func.count(distinct(Visit.visitor_id)))
         .join(Visit, Visit.id == VisitEvent.visit_id)
-        .where(*_event_scope(window, staff, VisitEvent.kind == "action"))
+        .where(*_event_scope(window, who, VisitEvent.kind == "action"))
         .group_by(VisitEvent.name)
         .order_by(times.desc())
     )
@@ -437,20 +460,21 @@ async def actions(db: AsyncSession, window: Window, staff: bool) -> list[Audienc
 
 
 async def build(
-    db: AsyncSession, window: Window, now: datetime, *, staff: bool, timezone: str
+    db: AsyncSession, window: Window, now: datetime, *, who: Who, timezone: str
 ) -> dict[str, Any]:
-    where = scope(window.start, window.end, staff)
+    where = scope(window.start, window.end, who)
+    everyone = scope(window.start, window.end, Who(staff=who.staff, bots=True))
     place = Visit.country.is_not(None)
     region = func.concat_ws(" · ", Visit.city, func.nullif(Visit.region, Visit.city))
     language = func.split_part(func.lower(Visit.language), "-", 1)
     return {
-        "tiles": await tiles(db, window, now, staff),
-        "series": await series(db, window, staff),
+        "tiles": await tiles(db, window, now, who),
+        "series": await series(db, window, who),
         "sources": await breakdown(db, where, Visit.source),
         "referrers": await breakdown(
             db, [*where, Visit.referrer_host.is_not(None)], Visit.referrer_host, Visit.source
         ),
-        "campaigns": await campaigns(db, window, staff),
+        "campaigns": await campaigns(db, window, who),
         "countries": await breakdown(db, where, func.coalesce(Visit.country, ""), limit=30),
         "regions": await breakdown(
             db, [*where, place, Visit.region.is_not(None)], Visit.country, Visit.region, limit=20
@@ -460,17 +484,19 @@ async def build(
         ),
         "landing": await breakdown(db, where, Visit.landing),
         "exits": await breakdown(db, where, Visit.exit_path),
-        "pages": await pages(db, window, staff),
-        "sections": await sections(db, window, staff),
-        "videos": await videos(db, window, staff),
+        "pages": await pages(db, window, who),
+        "sections": await sections(db, window, who),
+        "videos": await videos(db, window, who),
         "devices": await breakdown(db, where, Visit.device),
         "browsers": await breakdown(db, where, func.coalesce(Visit.browser, ""), limit=10),
         "systems": await breakdown(db, where, func.coalesce(Visit.os, ""), limit=10),
         "languages": await breakdown(db, where, func.coalesce(language, ""), limit=12),
         "screens": await breakdown(db, where, func.coalesce(Visit.screen, ""), limit=10),
-        "hours": await hours(db, window, staff, timezone),
-        "funnel": await funnel(db, window, staff),
-        "actions": await actions(db, window, staff),
+        "hours": await hours(db, window, who, timezone),
+        "funnel": await funnel(db, window, who),
+        "actions": await actions(db, window, who),
+        "verdicts": await breakdown(db, everyone, Visit.verdict),
+        "bots": who.bots,
     }
 
 
@@ -506,6 +532,8 @@ def visit_row(visit: Visit, user: User | None) -> VisitRow:
         os=visit.os,
         new_visitor=visit.new_visitor,
         staff=visit.staff,
+        verdict=visit.verdict,
+        bot_score=visit.bot_score,
         user=visit_user(user),
     )
 
@@ -539,7 +567,7 @@ def search(q: str) -> ColumnElement[bool] | None:
 
 
 def list_conditions(query: VisitListQuery, window: Window) -> list[ColumnElement[bool]]:
-    where = scope(window.start, window.end, query.staff)
+    where = scope(window.start, window.end, Who(staff=query.staff, bots=True))
     if query.source:
         where.append(Visit.source == query.source)
     if query.country:
@@ -552,6 +580,8 @@ def list_conditions(query: VisitListQuery, window: Window) -> list[ColumnElement
         where.append(Visit.new_visitor.is_(query.new_visitor))
     if query.action:
         where.append(did(query.action))
+    if query.verdict:
+        where.append(Visit.verdict.in_(VERDICT_GROUPS.get(query.verdict, (query.verdict,))))
     found = search(query.q)
     if found is not None:
         where.append(found)
@@ -618,6 +648,25 @@ async def _shared(
     ]
 
 
+def reasons_of(stored: Any) -> list[BotReason]:
+    """A visit's stored reasons with the console's words."""
+    out: list[BotReason] = []
+    for item in stored if isinstance(stored, list) else []:
+        code = item.get("code") if isinstance(item, dict) else None
+        if not isinstance(code, str):
+            continue
+        detail = item.get("detail")
+        out.append(
+            BotReason(
+                code=code,
+                label=REASONS.get(code, code),
+                points=int(item.get("points") or 0),
+                detail=str(detail) if detail else None,
+            )
+        )
+    return out
+
+
 async def visit_card(db: AsyncSession, visit_id: uuid.UUID) -> VisitCard | None:
     found = (
         await db.execute(
@@ -679,6 +728,10 @@ async def visit_card(db: AsyncSession, visit_id: uuid.UUID) -> VisitCard | None:
             screen=visit.screen,
             language=visit.language,
             timezone=visit.timezone,
+            network=visit.network,
+            network_kind=visit.network_kind,
+            reasons=reasons_of(visit.bot_reasons),
+            signals=visit.signals or {},
         ),
         events=[
             VisitEventOut(

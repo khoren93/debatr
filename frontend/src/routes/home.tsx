@@ -10,19 +10,31 @@ import type { Route } from './+types/home';
 
 /** Debates in the "Trending in the gallery" row. */
 const FEATURED = 3;
+/** Trending topics looked at: the hero's and the row's, with room for debates without audio. */
+const POOL = 8;
 
-/** The landing is the first impression: debates with premium voices come first, the general
- *  trending list fills the free places; one card per topic in both lists (a topic in both shows
- *  its premium version). The row is optional: without the gallery it stays hidden. */
-async function load(get: ApiGet): Promise<{ featured: GalleryItem[] }> {
-  const list = (premium: boolean) => get<GalleryResponse>(`/gallery${toQuery({ limit: FEATURED, sort: 'trending', group: 'motion', premium_voices: premium || undefined })}`);
+/** The landing is the first impression, in English. The hero plays the most popular debate (the
+ *  first trending topic with its video ready); in the row below, debates with premium voices come
+ *  first and the general trending list fills the free places, one card per topic and none of the
+ *  hero's. Both are optional: without the gallery the hero is the static poster and the row
+ *  stays hidden. */
+async function load(get: ApiGet): Promise<{ hero: GalleryItem | null; featured: GalleryItem[] }> {
+  const list = (premium: boolean) => get<GalleryResponse>(`/gallery${toQuery({ limit: POOL, sort: 'trending', group: 'motion', language: 'en', premium_voices: premium || undefined })}`);
   try {
     const [premium, all] = await Promise.all([list(true), list(false)]);
     const topicOf = (item: GalleryItem) => item.motion?.slug ?? item.id;
-    const topics = new Set(premium.items.map(topicOf));
-    return { featured: [...premium.items, ...all.items.filter((item) => !topics.has(topicOf(item)))].slice(0, FEATURED) };
+    const hero = all.items.find((item) => item.has_media) ?? premium.items.find((item) => item.has_media) ?? null;
+    const taken = new Set(hero ? [topicOf(hero)] : []);
+    const featured: GalleryItem[] = [];
+    for (const item of [...premium.items, ...all.items]) {
+      if (featured.length === FEATURED) break;
+      if (taken.has(topicOf(item))) continue;
+      taken.add(topicOf(item));
+      featured.push(item);
+    }
+    return { hero, featured };
   } catch {
-    return { featured: [] };
+    return { hero: null, featured: [] };
   }
 }
 
@@ -34,7 +46,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
   return (
     <>
       <Seo {...homeSeo()} />
-      <Landing featured={loaderData.featured} />
+      <Landing hero={loaderData.hero} featured={loaderData.featured} />
     </>
   );
 }

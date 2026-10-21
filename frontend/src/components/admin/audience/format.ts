@@ -1,4 +1,5 @@
 /** Words and numbers of the Audience pages (pure; a .ts file for react-refresh). */
+import type { VisitVerdict } from '../../../api/admin/types';
 import { SOURCE_LABELS } from '../charts/palette';
 import { formatSpan } from '../helpers';
 
@@ -99,3 +100,35 @@ export const ACTION_LABELS: Record<string, string> = {
   token_create: 'Created an API token',
   gallery_filter: 'Filtered the gallery',
 };
+
+/** A visit's verdict in the console's words (backend services/audience/bots.py). */
+export const VERDICT_LABELS: Record<VisitVerdict, string> = {
+  human: 'Person',
+  likely_human: 'Likely a person',
+  unclear: 'Unclear',
+  suspect: 'Suspicious',
+  bot: 'Bot',
+  agent: 'AI agent',
+};
+
+export const VERDICT_HINTS: Record<VisitVerdict, string> = {
+  human: 'Input only a hand makes, nothing machine-like',
+  likely_human: 'Some human input, no sign of automation',
+  unclear: 'Too little to tell yet (a visit that has just begun, or one from before input was counted)',
+  suspect: 'Signs of automation next to human ones: a VPN, a cloud browser, or an agent in someone’s browser',
+  bot: 'An automated browser that does not interact: a crawler or a script',
+  agent: 'Automation that clicks and types: an AI agent or a scripted browser',
+};
+
+export const VERDICT_COLORS: Record<VisitVerdict, string> = {
+  human: 'var(--color-ok)',
+  likely_human: 'var(--color-mint)',
+  unclear: 'var(--color-muted)',
+  suspect: 'var(--color-host)',
+  bot: 'var(--color-danger)',
+  agent: 'var(--color-violet)',
+};
+
+export const VERDICT_ORDER: VisitVerdict[] = ['human', 'likely_human', 'unclear', 'suspect', 'agent', 'bot'];
+
+export const isVerdict = (value: string): value is VisitVerdict => value in VERDICT_LABELS;

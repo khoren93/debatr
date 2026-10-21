@@ -11,7 +11,8 @@ const Block = ({ title, children }: { title: string; children: ReactNode }) => (
 );
 
 /** The privacy notice (`/privacy`). Keep it true to the code: backend services/audience
- *  (visits; the IP is cleared after the console's analytics_ip_days lever), accounts, keys. */
+ *  (visits and their bot verdicts; the IP is cleared after the console's analytics_ip_days
+ *  lever), accounts, keys. */
 const Privacy = () => (
   <Page>
     <PageTitle kicker="Legal" title="Privacy" />
@@ -28,6 +29,11 @@ const Privacy = () => (
           To see how people find and use the site, we record the pages you open, how long they stay in front of you, a few actions (such as playing a video or starting a debate), the
           site you came from and the browser’s technical details: IP address, the approximate place it belongs to, device and browser type, screen size and language. A random
           identifier in your browser’s local storage tells repeat visits apart; clearing the site’s data resets it.
+        </p>
+        <p>
+          To keep bots and automated browsers out of these numbers, the page also counts how much you used the mouse, touch screen, keyboard and scroll wheel (counts only: never
+          what you typed or where you pointed), checks a few facts about the browser (such as whether it draws graphics on a GPU and which platform it runs on) and looks up the
+          network operator of the IP address.
         </p>
         <p>This runs on our own servers: no third-party analytics or advertising trackers. IP addresses are deleted after 90 days.</p>
       </Block>

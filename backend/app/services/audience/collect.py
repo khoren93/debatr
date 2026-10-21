@@ -7,6 +7,11 @@ landing's referrer and query on a visit's first page), `time` (milliseconds a sh
 in front, sent while it does and when it is left) and `action` (one of ACTIONS). The visit row is
 made by its first beacon; later ones add to it. A beacon naming a visit of another visitor, or
 anything unreadable, is dropped without an answer the page could act on.
+
+Each beacon also carries counts of the page's input since the previous one and, once per page
+load, what the browser says about itself (`bots.ClientSignals` / `bots.ClientEnv`); with the
+request's headers and the network they decide whether the visit is a person, a bot or an AI
+agent, weighed again with every beacon (`bots.classify`).
 """
 
 import logging
@@ -19,13 +24,14 @@ from typing import Any, Literal
 from urllib.parse import parse_qs, urlsplit
 
 from pydantic import BaseModel, Field, ValidationError, field_validator
-from sqlalchemy import select, update
+from sqlalchemy import Select, distinct, func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.models import Debate, User, Visit, VisitEvent
+from app.services.audience import bots
 from app.services.audience.agent import parse_agent
-from app.services.audience.geo import lookup
+from app.services.audience.geo import lookup, network
 from app.services.views import Source, classify, host_of
 
 logger = logging.getLogger(__name__)
@@ -33,6 +39,7 @@ logger = logging.getLogger(__name__)
 MAX_BODY = 32_000
 MAX_EVENTS = 40
 MAX_ENGAGED_MS = 30 * 60_000  # one `time` event; a page in front longer sends more of them
+CROWD_WINDOW = timedelta(days=1)  # new browsers on the same IP (bots.Facts.crowd)
 
 #: What the site reports (frontend lib/presence.ts `track`), with the console's words.
 ACTIONS: dict[str, str] = {
@@ -107,6 +114,9 @@ class Beacon(BaseModel):
     touch: bool = False
     # The visit began on a page opened earlier (a tab left for half an hour): no landing.
     resumed: bool = False
+    # The page's input since its previous beacon, and (once per page load) the browser's facts.
+    signals: bots.ClientSignals | None = None
+    env: bots.ClientEnv | None = None
 
 
 def parse_beacon(body: bytes) -> Beacon | None:
@@ -213,6 +223,56 @@ class Context:
     now: datetime
     site_host: str
     site_aliases: Collection[str]
+    request: bots.RequestFacts | None = None
+
+
+def visit_facts(
+    visit: Visit,
+    *,
+    at: datetime,
+    crowd: int = 0,
+    pageviews: int | None = None,
+    engaged_ms: int | None = None,
+    signals: dict[str, Any] | None = None,
+    signed_in: bool | None = None,
+) -> bots.Facts:
+    """The verdict's view of a visit at `at` (its last beacon); the keywords are the values the
+    beacon being written is about to store."""
+    agent = parse_agent(visit.user_agent) if visit.user_agent else None
+    return bots.Facts(
+        user_agent=visit.user_agent,
+        browser=visit.browser or (agent.browser if agent else None),
+        os=visit.os or (agent.os if agent else None),
+        device=visit.device or "desktop",
+        screen=visit.screen,
+        timezone=visit.timezone,
+        pageviews=visit.pageviews if pageviews is None else pageviews,
+        engaged_ms=visit.engaged_ms if engaged_ms is None else engaged_ms,
+        duration_ms=max(0, int((at - visit.started_at).total_seconds() * 1000)),
+        returning=not visit.new_visitor,
+        signed_in=visit.user_id is not None if signed_in is None else signed_in,
+        place=", ".join(p for p in (visit.city, visit.country) if p) or None,
+        network=visit.network,
+        network_kind=visit.network_kind,
+        crowd=crowd,
+        signals=(visit.signals or {}) if signals is None else signals,
+        now=at,
+    )
+
+
+def crowd_query(visit: Visit, now: datetime) -> Select[int]:
+    """Other browsers new to the site on this visit's IP in the day before `now`."""
+    return select(func.count(distinct(Visit.visitor_id))).where(
+        Visit.ip == visit.ip,
+        Visit.started_at >= now - CROWD_WINDOW,
+        Visit.started_at <= now,
+        Visit.new_visitor.is_(True),
+        Visit.visitor_id != visit.visitor_id,
+    )
+
+
+async def crowd_of(db: AsyncSession, visit: Visit, now: datetime) -> int:
+    return int(await db.scalar(crowd_query(visit, now)) or 0) if visit.ip else 0
 
 
 async def _debates(db: AsyncSession, beacon: Beacon) -> tuple[dict[str, uuid.UUID], set[uuid.UUID]]:
@@ -248,6 +308,7 @@ async def _open_visit(db: AsyncSession, beacon: Beacon, ctx: Context) -> Visit |
     )
     agent = parse_agent(ctx.user_agent, touch=beacon.touch)
     place = lookup(ctx.ip)
+    net = network(ctx.ip)
     earlier = await db.scalar(select(Visit.id).where(Visit.visitor_id == beacon.visitor).limit(1))
     landing = clean_path(first.path) if first else "/"
     row = {
@@ -278,6 +339,12 @@ async def _open_visit(db: AsyncSession, beacon: Beacon, ctx: Context) -> Visit |
         "language": _text(beacon.lang, 16),
         "timezone": _text(beacon.tz, 48),
         "new_visitor": earlier is None,
+        # The IP's longitude stays with the request facts: the verdict compares the clock with it.
+        "signals": {"srv": {"lon": round(place.longitude, 1)}}
+        if place and place.longitude is not None
+        else {},
+        "network": net.org if net else None,
+        "network_kind": bots.network_kind(net.asn, net.org) if net else None,
     }
     await db.execute(insert(Visit).values(**row).on_conflict_do_nothing(index_elements=["id"]))
     visit = await db.get(Visit, beacon.visit, populate_existing=True)
@@ -337,15 +404,31 @@ async def record(db: AsyncSession, beacon: Beacon, ctx: Context) -> bool:
                 )
             )
             actions += 1
+    user = ctx.user
+    signals = bots.merge(visit.signals, beacon.signals, beacon.env, ctx.request)
+    assessment = bots.classify(
+        visit_facts(
+            visit,
+            at=ctx.now,
+            crowd=await crowd_of(db, visit, ctx.now),
+            pageviews=visit.pageviews + pages,
+            engaged_ms=visit.engaged_ms + engaged,
+            signals=signals,
+            signed_in=visit.user_id is not None or user is not None,
+        )
+    )
     values: dict[str, Any] = {
         "last_at": ctx.now,
         "pageviews": Visit.pageviews + pages,
         "actions": Visit.actions + actions,
         "engaged_ms": Visit.engaged_ms + engaged,
+        "signals": signals,
+        "verdict": assessment.verdict,
+        "bot_score": assessment.score,
+        "bot_reasons": assessment.stored_reasons(),
     }
     if last_path:
         values["exit_path"] = last_path
-    user = ctx.user
     if user is not None:
         values["user_id"] = user.id
         if user.admin_role:
