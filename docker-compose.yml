@@ -169,9 +169,9 @@ services:
     depends_on:
       - api
 
-  # Caddy: static files, the admin console, /api → api, every page → web.
+  # Caddy: static files, the admin console, /api → api, every page → web. In production the
+  # external proxy reaches it as `debatr-frontend` (its alias on caddy_net, docker-compose.prod.yml).
   frontend:
-    container_name: ai-debates-frontend-1
     build:
       context: ./frontend
       dockerfile: Dockerfile

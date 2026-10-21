@@ -2,8 +2,13 @@ services:
   frontend:
     ports: !reset []
     networks:
-      - default
-      - caddy_net
+      default: {}
+      caddy_net:
+        # The external proxy's address of the site: reverse_proxy debatr-frontend:80.
+        # ai-debates-frontend-1 = the former container name, until the proxy uses the new one.
+        aliases:
+          - debatr-frontend
+          - ai-debates-frontend-1
 
 networks:
   caddy_net:

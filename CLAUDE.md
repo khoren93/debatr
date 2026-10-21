@@ -1422,8 +1422,10 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   view sources). Subdomains of ai-debates.net are untouched: the console stays on its `ADMIN_HOST`
   there (passkeys are bound to it). CLI ≥ 0.5.0 maps the old host to the new one
   (`config.MOVED_HOSTS`, saved logins too).
-- The `frontend` container name (`ai-debates-frontend-1`) is referenced by the external Caddy
-  on the production host via the `caddy_net` network. `frontend/Caddyfile` trusts private-range
+- The external Caddy on the production host reaches the `frontend` service by its `caddy_net`
+  alias `debatr-frontend` (docker-compose.prod.yml; container names follow the compose project,
+  i.e. the folder). The alias `ai-debates-frontend-1` (the former fixed container name) stays
+  until the external Caddyfile uses the new one. `frontend/Caddyfile` trusts private-range
   proxies (`trusted_proxies`) so the external Caddy's `X-Forwarded-Proto: https` and client IP
   reach uvicorn; without it the API sees `http` and every visitor shares one IP for rate limits,
   the console's IP checks and view counts.

@@ -271,20 +271,20 @@ Run `make` to list every target. The most useful ones:
    - Replace every placeholder secret (`SECRET_KEY`, `POSTGRES_PASSWORD`, e.g.
      `openssl rand -base64 32`).
 5. **Put a reverse proxy in front**: the production stack serves plain HTTP and joins the external
-   Docker network `caddy_net`, where a proxy terminates TLS. With Caddy (it gets the certificates
-   itself and passes the Host header the stack relies on), run a `caddy` container on that
-   network with ports 80 and 443 and this site block:
+   Docker network `caddy_net` as `debatr-frontend`, where a proxy terminates TLS. With Caddy (it
+   gets the certificates itself and passes the Host header the stack relies on), run a `caddy`
+   container on that network with ports 80 and 443 and this site block:
    ```bash
    docker network create caddy_net
    ```
    ```caddyfile
    your-domain.com, admin.your-domain.com {
-       reverse_proxy ai-debates-frontend-1:80
+       reverse_proxy debatr-frontend:80
    }
    # Only after a move: the former domain sends its pages to the new one.
    old-domain.com, www.old-domain.com {
        handle /api/* {
-           reverse_proxy ai-debates-frontend-1:80
+           reverse_proxy debatr-frontend:80
        }
        handle {
            redir https://your-domain.com{uri} 301

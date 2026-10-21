@@ -14,6 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   OpenRouter, the backend and frontend package names.
 - Database backups are named `debatr-<stamp>.dump`; older `ai_debates-*` dumps are still pruned
   and checked.
+- Docker: the external proxy reaches the site by the `caddy_net` alias `debatr-frontend`
+  (`reverse_proxy debatr-frontend:80`) instead of a fixed container name; `ai-debates-frontend-1`
+  stays an alias until the proxy is switched.
 
 ## [1.9.0] - 2026-10-21
 
