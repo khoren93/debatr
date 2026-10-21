@@ -30,7 +30,13 @@ from app.core.config import settings
 from app.core.redis import get_async_redis, get_sync_redis
 from app.models.models import Debate, Motion
 from app.services import seo
-from app.services.motions import public_clause, topic_text
+from app.services.motions import (
+    indexed_topics_query,
+    public_clause,
+    published_sql,
+    topic_sql,
+    topic_text,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -159,6 +165,33 @@ def resolve(db: Session, refs: Iterable[str]) -> list[str]:
         if url and url not in urls:
             urls.append(url)
     return urls
+
+
+def all_urls(db: Session) -> list[str]:
+    """Every page the sitemaps list, at its address now: the listings, the topics worth a search
+    result and every public debate (a move to a new domain announces them all at once)."""
+    site = settings.SITE_URL.rstrip("/")
+    urls = [seo.encoded(seo.absolute(site, path)) for path in seo.LISTING_PATHS]
+    urls += [
+        seo.encoded(seo.absolute(site, seo.topic_path(row.slug, row.title)))
+        for row in db.execute(indexed_topics_query()).all()
+    ]
+    debates = db.execute(
+        select(Debate.slug, topic_sql())
+        .where(*public_clause())
+        .order_by(published_sql().desc(), Debate.id)
+    ).all()
+    urls += [debate_url(slug, topic) for slug, topic in debates if slug]
+    return list(dict.fromkeys(urls))
+
+
+def submit_all(urls: list[str], *, transport: httpx.BaseTransport | None = None) -> bool:
+    """Send every URL in batches of BATCH_LIMIT; True when each batch was accepted."""
+    accepted = True
+    for start in range(0, len(urls), BATCH_LIMIT):
+        status = submit(urls[start : start + BATCH_LIMIT], transport=transport)
+        accepted = accepted and status in (200, 202)
+    return accepted
 
 
 def payload(urls: list[str]) -> dict[str, Any]:

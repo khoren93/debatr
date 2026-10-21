@@ -9,6 +9,12 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 TERMINAL_DEBATE_STATUSES = frozenset({"completed", "error", "stopped"})
 
 
+def bare_host(raw: str) -> str:
+    """A host setting without scheme, port or path, lowercase ("" when empty)."""
+    host = raw.strip().lower().split("://", 1)[-1].split("/", 1)[0]
+    return host.rsplit(":", 1)[0] if host.count(":") == 1 else host
+
+
 class Settings(BaseSettings):
     PROJECT_NAME: str = "AI Debates"
     # The commit the image was built from (Docker build-arg GIT_SHA, set by deploy.sh).
@@ -142,6 +148,10 @@ class Settings(BaseSettings):
 
     # Site
     SITE_URL: str = "http://localhost"
+    # Former hosts of the site, comma separated (e.g. "ai-debates.net"): the outer proxy sends
+    # their pages to SITE_URL with a 301, and links to them still count as the site's own
+    # (oEmbed answers for them, a view from them is internal).
+    SITE_ALIASES: str = ""
     SECRET_KEY: str = "secret-key-for-sessions-change-me"
     # Search engines (app/api/routes_seo, services/indexnow). AI crawlers (GPTBot, ClaudeBot,
     # PerplexityBot, Google-Extended…) may read the public pages unless this is false.
@@ -240,9 +250,13 @@ class Settings(BaseSettings):
     @property
     def admin_hostname(self) -> str:
         """ADMIN_HOST without scheme, port or path, lowercase ("" when unset)."""
-        raw = self.ADMIN_HOST.strip().lower()
-        raw = raw.split("://", 1)[-1].split("/", 1)[0]
-        return raw.rsplit(":", 1)[0] if raw.count(":") == 1 else raw
+        return bare_host(self.ADMIN_HOST)
+
+    @cached_property
+    def site_aliases(self) -> tuple[str, ...]:
+        """SITE_ALIASES as hosts without scheme, port, path or "www."."""
+        hosts = (bare_host(raw).removeprefix("www.") for raw in self.SITE_ALIASES.split(","))
+        return tuple(dict.fromkeys(host for host in hosts if host))
 
     @property
     def admin_console_enabled(self) -> bool:

@@ -15,6 +15,9 @@ nowhere else.
 `credits` adds (or, with a negative amount, takes) credits through the ledger, the only way the
 balance changes (services/credits.apply_transaction_sync). The description is what the user
 sees in their ledger; the reason stays internal (`meta_json.reason`).
+
+`indexnow --all` announces every page the sitemaps list to IndexNow at once (after a move to a
+new domain); `--dry-run` only prints them.
 """
 
 import argparse
@@ -259,6 +262,26 @@ def admin_list() -> int:
         return 0
 
 
+def indexnow_all(*, dry_run: bool) -> int:
+    from app.services import indexnow
+
+    with get_sync_session() as db:
+        urls = indexnow.all_urls(db)
+    if dry_run:
+        print("\n".join(urls))
+        print(f"{len(urls)} pages", file=sys.stderr)
+        return 0
+    if not indexnow.enabled():
+        print(
+            "IndexNow is off: it needs production, an https SITE_URL and a valid INDEXNOW_KEY",
+            file=sys.stderr,
+        )
+        return 1
+    accepted = indexnow.submit_all(urls)
+    print(f"{len(urls)} pages {'sent' if accepted else 'not all accepted, see the log'}")
+    return 0 if accepted else 1
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="python -m app.manage", description=__doc__)
     parser.formatter_class = argparse.RawDescriptionHelpFormatter
@@ -285,6 +308,10 @@ def build_parser() -> argparse.ArgumentParser:
     credits.add_argument("--kind", choices=CREDIT_KINDS, default="adjustment")
     credits.add_argument("--description", help="what the user sees in the ledger")
     credits.add_argument("--yes", action="store_true", help="do not ask for confirmation")
+
+    index = commands.add_parser("indexnow", help="announce pages to IndexNow")
+    index.add_argument("--all", action="store_true", required=True, help="every sitemap page")
+    index.add_argument("--dry-run", action="store_true", help="print the pages, send nothing")
     return parser
 
 
@@ -321,6 +348,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             description=args.description,
             assume_yes=args.yes,
         )
+    if args.command == "indexnow":
+        return indexnow_all(dry_run=args.dry_run)
     return 2
 
 

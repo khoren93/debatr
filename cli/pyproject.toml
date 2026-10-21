@@ -31,7 +31,7 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://ai-debates.net"
+Homepage = "https://debatr.tv"
 Documentation = "https://github.com/khoren93/debatr/tree/main/cli#readme"
 Repository = "https://github.com/khoren93/debatr"
 Issues = "https://github.com/khoren93/debatr/issues"

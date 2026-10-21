@@ -1,7 +1,8 @@
 """Where the CLI talks to and with which token.
 
 The server URL comes from `--url`, then `DEBATR_URL`, then the last server you signed in to,
-then https://ai-debates.net. The token comes from `DEBATR_TOKEN`, then the one saved by
+then https://debatr.tv (the site moved there from ai-debates.net: old addresses and logins
+saved for them follow it). The token comes from `DEBATR_TOKEN`, then the one saved by
 `debatr login` for that server. Saved logins live in `config.json` (mode 0600) in
 `$DEBATR_CONFIG_DIR`, `%APPDATA%\\debatr` on Windows or `$XDG_CONFIG_HOME/debatr`
 (`~/.config/debatr`) elsewhere.
@@ -18,7 +19,10 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
-DEFAULT_URL = "https://ai-debates.net"
+DEFAULT_URL = "https://debatr.tv"
+# Former hosts of the default server (they redirect there): a URL or a saved login naming one
+# means the new host.
+MOVED_HOSTS = {"ai-debates.net": "debatr.tv", "www.ai-debates.net": "debatr.tv"}
 ENV_URL = "DEBATR_URL"
 ENV_TOKEN = "DEBATR_TOKEN"
 ENV_CONFIG_DIR = "DEBATR_CONFIG_DIR"
@@ -40,8 +44,9 @@ def config_path() -> Path:
 
 
 def normalize_url(raw: str) -> str:
-    """ "ai-debates.net" -> "https://ai-debates.net", "localhost:5173/api/" ->
-    "http://localhost:5173". Raises ValueError for anything that is not an http(s) site."""
+    """ "debatr.tv" -> "https://debatr.tv", "localhost:5173/api/" -> "http://localhost:5173",
+    "ai-debates.net" (a former host) -> "https://debatr.tv". Raises ValueError for anything that
+    is not an http(s) site."""
     value = raw.strip()
     if not value:
         raise ValueError("Empty server URL")
@@ -55,7 +60,18 @@ def normalize_url(raw: str) -> str:
     path = parts.path.rstrip("/")
     if path.endswith("/api"):
         path = path[: -len("/api")]
-    return urlunsplit((parts.scheme.lower(), parts.netloc.lower(), path, "", ""))
+    scheme, netloc = parts.scheme.lower(), parts.netloc.lower()
+    if netloc in MOVED_HOSTS:
+        scheme, netloc = "https", MOVED_HOSTS[netloc]
+    return urlunsplit((scheme, netloc, path, "", ""))
+
+
+def _current(url: str) -> str:
+    """A saved server URL with a former host replaced (saved by an older version)."""
+    try:
+        return normalize_url(url)
+    except ValueError:
+        return url
 
 
 @dataclass
@@ -70,11 +86,14 @@ class Store:
 
     def __init__(self, data: dict[str, Any] | None = None) -> None:
         data = data or {}
-        self.default_url: str | None = data.get("default_url")
+        default_url = data.get("default_url")
+        self.default_url: str | None = _current(default_url) if default_url else None
         self.logins: dict[str, Login] = {}
-        for url, entry in (data.get("hosts") or {}).items():
+        hosts = data.get("hosts") or {}
+        # A login saved for the current address wins over one saved for its former host.
+        for url, entry in sorted(hosts.items(), key=lambda item: _current(item[0]) == item[0]):
             if isinstance(entry, dict) and entry.get("token"):
-                self.logins[url] = Login(
+                self.logins[_current(url)] = Login(
                     token=str(entry["token"]),
                     email=entry.get("email"),
                     token_name=entry.get("token_name"),

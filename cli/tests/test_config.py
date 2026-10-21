@@ -11,9 +11,12 @@ from debatr.config import DEFAULT_URL, Login, Store, config_path, normalize_url,
 @pytest.mark.parametrize(
     ("raw", "expected"),
     [
-        ("ai-debates.net", "https://ai-debates.net"),
-        ("https://AI-Debates.net/", "https://ai-debates.net"),
-        ("https://ai-debates.net/api/", "https://ai-debates.net"),
+        ("debatr.tv", "https://debatr.tv"),
+        ("https://Debatr.tv/", "https://debatr.tv"),
+        ("https://debatr.tv/api/", "https://debatr.tv"),
+        # The former host of the default server means the new one.
+        ("ai-debates.net", "https://debatr.tv"),
+        ("http://www.ai-debates.net/api", "https://debatr.tv"),
         ("localhost", "http://localhost"),
         ("localhost:5173/api", "http://localhost:5173"),
         ("127.0.0.1:8000", "http://127.0.0.1:8000"),
@@ -32,15 +35,13 @@ def test_normalize_url_rejects(raw: str):
 
 def test_store_roundtrip_is_private():
     store = Store()
-    store.default_url = "https://ai-debates.net"
-    store.logins["https://ai-debates.net"] = Login(
-        token="debatr_x", email="a@b.co", token_name="cli"
-    )
+    store.default_url = "https://debatr.tv"
+    store.logins["https://debatr.tv"] = Login(token="debatr_x", email="a@b.co", token_name="cli")
     path = store.save()
     assert path == config_path()
     loaded = Store.load()
-    assert loaded.default_url == "https://ai-debates.net"
-    assert loaded.logins["https://ai-debates.net"] == Login("debatr_x", "a@b.co", "cli")
+    assert loaded.default_url == "https://debatr.tv"
+    assert loaded.logins["https://debatr.tv"] == Login("debatr_x", "a@b.co", "cli")
     if sys.platform != "win32":
         assert stat.S_IMODE(os.stat(path).st_mode) == 0o600
         assert stat.S_IMODE(os.stat(path.parent).st_mode) == 0o700
@@ -72,3 +73,19 @@ def test_resolve_precedence(monkeypatch):
     monkeypatch.setenv("DEBATR_TOKEN", " debatr_env ")
     s = resolve("mine.example", store=store)
     assert (s.token, s.token_source) == ("debatr_env", "env")
+
+
+def test_logins_saved_for_the_former_host_follow_the_move():
+    old = {"token": "debatr_old", "email": "a@b.co"}
+    store = Store(
+        {"default_url": "https://ai-debates.net", "hosts": {"https://ai-debates.net": old}}
+    )
+    assert store.default_url == DEFAULT_URL
+    assert store.logins == {DEFAULT_URL: Login("debatr_old", "a@b.co")}
+    assert resolve(store=store).token == "debatr_old"
+    # A login made on the new host already wins over the old one.
+    new = {"token": "debatr_new"}
+    hosts = {DEFAULT_URL: new, "https://ai-debates.net": old}
+    assert Store({"hosts": hosts}).logins[DEFAULT_URL].token == "debatr_new"
+    hosts = {"https://ai-debates.net": old, DEFAULT_URL: new}
+    assert Store({"hosts": hosts}).logins[DEFAULT_URL].token == "debatr_new"

@@ -6,42 +6,26 @@ Only what the gallery shows is listed (`motions.public_clause`), at its canonica
 topics need TOPIC_INDEX_MIN_VERSIONS public versions (a single one is that debate's page again).
 """
 
-from typing import Any
-
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import PlainTextResponse, Response
-from sqlalchemy import ColumnElement, func, select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.db import get_db
-from app.models.models import Debate, Motion
+from app.models.models import Debate
 from app.services import indexnow, motions, seo
+from app.services.motions import changed_sql, indexed_topics_query, published_sql, topic_sql
 from app.services.seo import SitemapUrl
 
 router = APIRouter(include_in_schema=False)
 
 XML = "application/xml; charset=utf-8"
 CACHED = {"Cache-Control": f"public, max-age={seo.SITEMAP_CACHE_SECONDS}"}
-TOPICS_LIMIT = 50_000  # one file; split like the debates when topics get that many
 
 
 def _site() -> str:
     return settings.SITE_URL.rstrip("/")
-
-
-def _published() -> ColumnElement[Any]:
-    return func.coalesce(Debate.published_at, Debate.created_at)
-
-
-def _changed() -> ColumnElement[Any]:
-    """When the page last changed: published, or finished later (GREATEST skips NULLs)."""
-    return func.greatest(Debate.published_at, Debate.ended_at, Debate.created_at)
-
-
-def topic_sql() -> ColumnElement[str]:
-    """SQL twin of `serializers.topic_of`."""
-    return func.coalesce(func.nullif(Debate.config_json["topic"].as_string(), ""), Debate.title, "")
 
 
 def _xml(text: str) -> Response:
@@ -58,44 +42,19 @@ async def robots() -> PlainTextResponse:
     return PlainTextResponse(text, headers=CACHED)
 
 
-def _topics_query() -> Any:
-    """(slug, title, last change) of every topic worth a search result."""
-    public = motions.public_clause()
-    versions = (
-        select(
-            Debate.motion_id.label("motion_id"),
-            topic_sql().label("title"),
-            func.row_number()
-            .over(partition_by=Debate.motion_id, order_by=(_published(), Debate.created_at))
-            .label("rn"),
-            func.count().over(partition_by=Debate.motion_id).label("versions"),
-            func.max(_changed()).over(partition_by=Debate.motion_id).label("changed"),
-        )
-        .where(*public, Debate.motion_id.is_not(None))
-        .subquery()
-    )
-    return (
-        select(Motion.slug, versions.c.title, versions.c.changed)
-        .join(Motion, Motion.id == versions.c.motion_id)
-        .where(versions.c.rn == 1, versions.c.versions >= seo.TOPIC_INDEX_MIN_VERSIONS)
-        .order_by(versions.c.changed.desc(), Motion.slug)
-        .limit(TOPICS_LIMIT)
-    )
-
-
 @router.api_route("/sitemap.xml", methods=["GET", "HEAD"])
 async def sitemap(db: AsyncSession = Depends(get_db)) -> Response:
     public = motions.public_clause()
     site = _site()
-    newest = await db.scalar(select(func.max(_changed())).where(*public))
+    newest = await db.scalar(select(func.max(changed_sql())).where(*public))
     files = [SitemapUrl(f"{site}/sitemaps/pages.xml", newest)]
-    topics = (await db.execute(_topics_query().limit(1))).first()
+    topics = (await db.execute(indexed_topics_query().limit(1))).first()
     if topics is not None:
         files.append(SitemapUrl(f"{site}/sitemaps/topics.xml", topics.changed))
     ranked = (
         select(
-            _changed().label("changed"),
-            func.row_number().over(order_by=(_published(), Debate.id)).label("rn"),
+            changed_sql().label("changed"),
+            func.row_number().over(order_by=(published_sql(), Debate.id)).label("rn"),
         )
         .where(*public)
         .subquery()
@@ -112,14 +71,14 @@ async def sitemap(db: AsyncSession = Depends(get_db)) -> Response:
 
 @router.api_route("/sitemaps/pages.xml", methods=["GET", "HEAD"])
 async def sitemap_pages(db: AsyncSession = Depends(get_db)) -> Response:
-    newest = await db.scalar(select(func.max(_changed())).where(*motions.public_clause()))
+    newest = await db.scalar(select(func.max(changed_sql())).where(*motions.public_clause()))
     site = _site()
     return _xml(seo.urlset(SitemapUrl(f"{site}{p}", newest) for p in seo.LISTING_PATHS))
 
 
 @router.api_route("/sitemaps/topics.xml", methods=["GET", "HEAD"])
 async def sitemap_topics(db: AsyncSession = Depends(get_db)) -> Response:
-    rows = (await db.execute(_topics_query())).all()
+    rows = (await db.execute(indexed_topics_query())).all()
     site = _site()
     return _xml(
         seo.urlset(
@@ -139,9 +98,9 @@ async def sitemap_debates(page: int, db: AsyncSession = Depends(get_db)) -> Resp
         raise HTTPException(status_code=404, detail="Not Found")
     rows = (
         await db.execute(
-            select(Debate.slug, topic_sql().label("topic"), _changed().label("changed"))
+            select(Debate.slug, topic_sql().label("topic"), changed_sql().label("changed"))
             .where(*motions.public_clause())
-            .order_by(_published(), Debate.id)
+            .order_by(published_sql(), Debate.id)
             .offset((page - 1) * seo.SITEMAP_PAGE_SIZE)
             .limit(seo.SITEMAP_PAGE_SIZE)
         )

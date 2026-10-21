@@ -16,7 +16,8 @@ backend/            FastAPI API + RQ worker (Python 3.12+, managed with uv)
   app/worker.py       RQ worker entrypoint (`python -m app.worker`)
   app/manage.py       operator commands on the server, not part of the public CLI: `admin grant |
                       revoke | list | reset-2fa | revoke-sessions | enroll-code`, `credits …`
-                      (balance changes through the ledger)
+                      (balance changes through the ledger), `indexnow --all [--dry-run]` (every
+                      sitemap page to IndexNow at once, after a domain move)
   app/admin/          admin console access: gate (host / IP / Fetch Metadata / Origin, outermost
                       middleware), access (sessions → AdminContext, CSRF, roles, sudo)
   app/scheduler.py    periodic jobs (`python -m app.scheduler`, RQ cron on the background queue:
@@ -589,7 +590,9 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   in the Redis set `indexnow:pending` (`announce` / `announce_sync`, never failing the caller);
   the scheduler's `flush_job` (every 60 s, background queue, only registered when on) resolves
   topics to their address now and POSTs up to 10 000 URLs to api.indexnow.org; 429 / 5xx /
-  network errors put them back. Not booked in `provider_usage` (free).
+  network errors put them back. Not booked in `provider_usage` (free). `python -m app.manage
+  indexnow --all` sends every sitemap page at once (`all_urls`, after a domain move); the
+  sitemaps' queries live in `services/motions` (`indexed_topics_query`, `topic_sql`, …).
 
 ### Embedding on other sites (`/embed`, oEmbed; `lib/embed.ts`, `services/embed`)
 
@@ -613,7 +616,7 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   ≤ 360 px; `allow="autoplay; picture-in-picture"` + `allowfullscreen` — `fullscreen` in `allow`
   makes Chrome warn on the other page).
 - oEmbed `GET /api/oembed?url=&maxwidth=&maxheight=&format=json` (`routes_oembed`, CORS `*`,
-  `max-age=3600`): links of SITE_URL's host (port and `www.` ignored) to `/d/…`, `/t/…` (the most
+  `max-age=3600`): links of SITE_URL's host or a `SITE_ALIASES` host (port and `www.` ignored) to `/d/…`, `/t/…` (the most
   liked public version with audio, else the most liked) or `/embed/…` (its format and start kept);
   `type: video` with ready audio, else `rich`; size in the video's proportions within the limits
   (640×360 / 360×640 by default, up to 1280 / 405 wide); thumbnail = the preview picture
@@ -1067,7 +1070,8 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   site). Body: text/plain JSON (`ViewBeacon`, no preflight; unreadable = a page view, direct).
   Bots by User-Agent (`is_bot`) count nothing; one view per IP and debate in 6 h, never the
   owner's. `classify`: search | ai | social | embed (a player elsewhere or its `?ref=embed` link)
-  | other | direct | internal (the site's own host, a navigation inside the site, the Share
+  | other | direct | internal (the site's own host or a former one, `SITE_ALIASES`; a
+  navigation inside the site, the Share
   preview). Stored as counts only: `debates.views` + `view_days` (UTC day, debate, place, source;
   migration 0016) — no IP, address or account; embedding hosts in Redis sorted sets
   (`views:embeds:{id}` and `views:embeds`, 90 days since the last view).
@@ -1320,6 +1324,13 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   `header @framed`); the embed route sends no `frame-ancestors` (any parent).
   Views come only from the page's beacon after hydration (see "Statistics data"), so crawlers
   without JavaScript and micro-cached pages neither add nor hide views.
+- Domains: the site is `debatr.tv` (SITE_URL). The former `ai-debates.net` and its `www.` answer
+  301 to the same path on debatr.tv at the external Caddy, except `/api/*`, which is proxied as
+  before: CLI ≤ 0.4.x and MCP configs default to it, and httpx follows no redirects (a 301 also
+  turns POST into GET). `SITE_ALIASES=ai-debates.net` keeps old links the site's own (oEmbed,
+  view sources). Subdomains of ai-debates.net are untouched: the console stays on its `ADMIN_HOST`
+  there (passkeys are bound to it). CLI ≥ 0.5.0 maps the old host to the new one
+  (`config.MOVED_HOSTS`, saved logins too).
 - The `frontend` container name (`ai-debates-frontend-1`) is referenced by the external Caddy
   on the production host via the `caddy_net` network. `frontend/Caddyfile` trusts private-range
   proxies (`trusted_proxies`) so the external Caddy's `X-Forwarded-Proto: https` and client IP

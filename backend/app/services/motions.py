@@ -28,6 +28,7 @@ from sqlalchemy.orm import selectinload
 from app.core.config import settings
 from app.core.ids import new_slug
 from app.models.models import Debate, DebateParticipant, Motion, utcnow
+from app.services import seo
 
 KEY_MAX = 600
 _NOT_WORD = re.compile(r"[\W_]+")
@@ -62,6 +63,50 @@ def public_clause() -> list[ColumnElement[bool]]:
 
 def topic_text(debate: Debate) -> str:
     return str((debate.config_json or {}).get("topic") or debate.title or "")
+
+
+# --- what search engines are given (sitemaps, IndexNow) --------------------------------------------
+
+INDEXED_TOPICS_LIMIT = 50_000  # one sitemap file; split like the debates when topics get that many
+
+
+def published_sql() -> ColumnElement[Any]:
+    return func.coalesce(Debate.published_at, Debate.created_at)
+
+
+def changed_sql() -> ColumnElement[Any]:
+    """When a debate's page last changed: published, or finished later (GREATEST skips NULLs)."""
+    return func.greatest(Debate.published_at, Debate.ended_at, Debate.created_at)
+
+
+def topic_sql() -> ColumnElement[str]:
+    """SQL twin of `serializers.topic_of`."""
+    return func.coalesce(func.nullif(Debate.config_json["topic"].as_string(), ""), Debate.title, "")
+
+
+def indexed_topics_query() -> Any:
+    """(slug, title, last change) of every topic worth a search result: one with
+    TOPIC_INDEX_MIN_VERSIONS public versions (a single one is that debate's page again)."""
+    versions = (
+        select(
+            Debate.motion_id.label("motion_id"),
+            topic_sql().label("title"),
+            func.row_number()
+            .over(partition_by=Debate.motion_id, order_by=(published_sql(), Debate.created_at))
+            .label("rn"),
+            func.count().over(partition_by=Debate.motion_id).label("versions"),
+            func.max(changed_sql()).over(partition_by=Debate.motion_id).label("changed"),
+        )
+        .where(*public_clause(), Debate.motion_id.is_not(None))
+        .subquery()
+    )
+    return (
+        select(Motion.slug, versions.c.title, versions.c.changed)
+        .join(Motion, Motion.id == versions.c.motion_id)
+        .where(versions.c.rn == 1, versions.c.versions >= seo.TOPIC_INDEX_MIN_VERSIONS)
+        .order_by(versions.c.changed.desc(), Motion.slug)
+        .limit(INDEXED_TOPICS_LIMIT)
+    )
 
 
 def language_of(debate: Debate) -> str:

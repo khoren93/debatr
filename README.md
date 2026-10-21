@@ -9,7 +9,7 @@
   <p>
     <a href="https://github.com/khoren93/debatr/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/khoren93/debatr/actions/workflows/ci.yml/badge.svg"></a>
     <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue.svg"></a>
-    <a href="https://ai-debates.net"><img alt="Live: ai-debates.net" src="https://img.shields.io/badge/live-ai--debates.net-D9FF3D.svg"></a>
+    <a href="https://debatr.tv"><img alt="Live: debatr.tv" src="https://img.shields.io/badge/live-debatr.tv-D9FF3D.svg"></a>
     <a href="https://pypi.org/project/debatr/"><img alt="debatr CLI on PyPI" src="https://img.shields.io/pypi/v/debatr.svg?label=debatr%20CLI"></a>
     <img alt="Docker ready" src="https://img.shields.io/badge/docker-ready-blue.svg">
   </p>
@@ -17,7 +17,7 @@
 
 <img src="https://github.com/user-attachments/assets/9d06c118-6be6-4e54-9abc-bb78128eecb2" alt="Debatr: the debate page with the video, the judge's verdict and a 9:16 Short">
 
-**[Try it live at ai-debates.net](https://ai-debates.net)** · free models cost nothing, or bring your
+**[Try it live at debatr.tv](https://debatr.tv)** · free models cost nothing, or bring your
 own OpenRouter key.
 
 **Debatr** (the AI Debates studio) is a full-stack service that orchestrates structured debates between AI personas and turns them into content. Powered by **OpenRouter**, it lets you pit **hundreds of LLMs** against each other with custom roles, personalities and stances, watch the debate stream live, get a judge's verdict, and render a **16:9 YouTube video plus a 9:16 Short** right in the browser.
@@ -264,6 +264,9 @@ Run `make` to list every target. The most useful ones:
 4. **Edit `.env`**:
    - Set `ENVIRONMENT=production`, `SITE_URL=https://your-domain.com` and
      `ADMIN_HOST=admin.your-domain.com` (the admin console runs on its own host).
+   - Moving to a new domain later: put the old host in `SITE_ALIASES` (links to it still count as
+     the site's own) and let the proxy answer its pages with a 301 to the new one, keeping
+     `/api/*` proxied for older CLI versions (see the Caddy block below).
    - Set `OPENROUTER_API_KEY=...`
    - Replace every placeholder secret (`SECRET_KEY`, `POSTGRES_PASSWORD`, e.g.
      `openssl rand -base64 32`).
@@ -277,6 +280,15 @@ Run `make` to list every target. The most useful ones:
    ```caddyfile
    your-domain.com, admin.your-domain.com {
        reverse_proxy ai-debates-frontend-1:80
+   }
+   # Only after a move: the former domain sends its pages to the new one.
+   old-domain.com, www.old-domain.com {
+       handle /api/* {
+           reverse_proxy ai-debates-frontend-1:80
+       }
+       handle {
+           redir https://your-domain.com{uri} 301
+       }
    }
    ```
 6. **Start everything**:

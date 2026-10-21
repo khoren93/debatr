@@ -80,7 +80,12 @@ async def view_debate(
     host = host_of(beacon.referrer)
     site_host = host_of(urlsplit(settings.SITE_URL).netloc) or ""
     source = classify(
-        host, site_host=site_host, place=beacon.place, ref=beacon.ref, internal=beacon.internal
+        host,
+        site_host=site_host,
+        site_aliases=settings.site_aliases,
+        place=beacon.place,
+        ref=beacon.ref,
+        internal=beacon.internal,
     )
     client = request.client.host if request.client else "unknown"
     await count_view(

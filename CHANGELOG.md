@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **New address: debatr.tv.** The site moves from ai-debates.net to debatr.tv; every old link
+  (debates, topics, the gallery, embedded players) leads to the same page on the new domain. You
+  need to sign in once more there, and keys you kept in the browser (OpenRouter, ElevenLabs) have
+  to be entered again on the Account page: browsers keep them per site.
+- **CLI 0.5.0**: talks to https://debatr.tv by default; `--url ai-debates.net` and logins saved
+  for it by older versions mean the new address. Older versions keep working against the old
+  address.
+
+### Added
+
+- `python -m app.manage indexnow --all [--dry-run]`: announces every page of the sitemaps to
+  IndexNow at once, for a move to a new domain.
+- `SITE_ALIASES`: former hosts of the site; links to them still count as the site's own (oEmbed
+  answers for them, views from them are internal).
+
 ## [1.6.1] - 2026-10-21
 
 ### Fixed

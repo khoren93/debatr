@@ -114,6 +114,10 @@ def test_classify_embeds_and_navigation() -> None:
     assert classify(SITE, site_host=SITE, place="embed") == "internal"
     # A navigation inside the site keeps the first page's referrer: it does not count.
     assert classify("google.com", site_host=SITE, internal=True) == "internal"
+    # A link on a former host of the site (it redirects) is the site's own too.
+    old = ("ai-debates.example",)
+    assert classify("ai-debates.example", site_host=SITE, site_aliases=old) == "internal"
+    assert classify("ai-debates.example", site_host=SITE) == "other"
     # An unknown ref changes nothing.
     assert classify("google.com", site_host=SITE, ref="newsletter") == "search"
 

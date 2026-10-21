@@ -5,7 +5,7 @@ export const CLI_INSTALL = 'uv tool install debatr';
 export const CLI_DOCS_URL = 'https://github.com/khoren93/debatr/tree/main/cli#readme';
 
 /** Server the CLI talks to unless DEBATR_URL / --url say otherwise (cli/src/debatr/config.py). */
-const CLI_DEFAULT_SITE = 'https://ai-debates.net';
+const CLI_DEFAULT_SITE = 'https://debatr.tv';
 
 /** This site, when the CLI has to be pointed at it (self-hosted or local), else null. */
 export const customSite = (origin: string = window.location.origin): string | null => {

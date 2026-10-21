@@ -8,6 +8,7 @@ blind). The query of an embed (`format=short`, `t=`) mirrors frontend lib/embed.
 
 import math
 import re
+from collections.abc import Collection
 from dataclasses import dataclass
 from html import escape
 from typing import Any, Literal
@@ -61,17 +62,19 @@ def parse_start(value: str) -> int:
     return seconds if seconds <= MAX_START else 0
 
 
-def parse_url(url: str, site_url: str) -> EmbedTarget | None:
+def parse_url(url: str, site_url: str, aliases: Collection[str] = ()) -> EmbedTarget | None:
     """The page a link of this site names: `/d/{slug}[/{words}]`, `/t/{slug}[/{words}]` or
-    `/embed/{slug}`, with its `format=short` and `t=` kept. Other hosts (the port and a `www.`
-    do not count) and other pages → None."""
+    `/embed/{slug}`, with its `format=short` and `t=` kept. `aliases`: former hosts of the site
+    (they redirect to it). Other hosts (the port and a `www.` do not count) and other pages →
+    None."""
     try:
         parts = urlsplit(url.strip())
     except ValueError:
         return None
     if parts.scheme not in ("http", "https") or not parts.netloc:
         return None
-    if _host(parts.netloc) != _host(urlsplit(site_url).netloc):
+    host = _host(parts.netloc)
+    if host != _host(urlsplit(site_url).netloc) and host not in aliases:
         return None
     segments = [unquote(s) for s in parts.path.split("/") if s]
     if len(segments) < 2 or segments[0] not in _PAGES or not _SLUG.match(segments[1]):

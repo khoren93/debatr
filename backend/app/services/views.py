@@ -18,6 +18,7 @@ and overall (`EMBED_KEY`), forgotten after EMBED_DAYS without a view.
 import logging
 import re
 import uuid
+from collections.abc import Collection
 from datetime import UTC, datetime
 from typing import Literal
 from urllib.parse import urlsplit
@@ -167,14 +168,16 @@ def classify(
     host: str | None,
     *,
     site_host: str,
+    site_aliases: Collection[str] = (),
     place: Place = "page",
     ref: str = "",
     internal: bool = False,
 ) -> Source:
-    """Where a view came from. `host`: the referrer's (`host_of`); `site_host`: the site's own;
-    `ref`: the page's `?ref=` (`embed` = the "Watch on Debatr" link of a player); `internal`: a
-    navigation inside the site (the browser keeps the first page's referrer for those)."""
-    own = host is not None and host == site_host
+    """Where a view came from. `host`: the referrer's (`host_of`); `site_host`: the site's own,
+    `site_aliases` its former hosts; `ref`: the page's `?ref=` (`embed` = the "Watch on Debatr"
+    link of a player); `internal`: a navigation inside the site (the browser keeps the first
+    page's referrer for those)."""
+    own = host is not None and (host == site_host or host in site_aliases)
     if internal or (own and place == "page" and ref != "embed"):
         return "internal"
     if place == "embed":

@@ -64,7 +64,7 @@ async def oembed(
     """The player of the public debate (or the best version of the topic) a link names."""
     if format != "json":
         return _answer(501, {"detail": "Only format=json is supported"})
-    target = embed.parse_url(url, settings.SITE_URL)
+    target = embed.parse_url(url, settings.SITE_URL, settings.site_aliases)
     if target is None:
         return _answer(404, {"detail": "Not a link to a debate or a topic of this site"})
     debate = await (_public_debate if target.kind == "debate" else _best_version)(db, target.slug)

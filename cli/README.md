@@ -2,7 +2,7 @@
 
 **Run AI debates from your terminal, and give AI agents a debate tool over MCP.**
 
-`debatr` is the command-line client for [Debatr](https://ai-debates.net), the AI debate studio:
+`debatr` is the command-line client for [Debatr](https://debatr.tv), the AI debate studio:
 pick a question and the models, watch them argue live in your terminal and get the judge's
 verdict. The same package is an [MCP](https://modelcontextprotocol.io) server, so Claude, Cursor
 and other agents can stage a debate to stress-test a decision or see both sides of a question.
@@ -164,7 +164,7 @@ ask to publish them.
 
 | Variable | Meaning |
 |---|---|
-| `DEBATR_URL` | Server to use (default: the one you signed in to, else `https://ai-debates.net`). Same as `--url`. |
+| `DEBATR_URL` | Server to use (default: the one you signed in to, else `https://debatr.tv`; the former `ai-debates.net` means it too). Same as `--url`. |
 | `DEBATR_TOKEN` | API token; takes precedence over `debatr login`. |
 | `DEBATR_OPENROUTER_KEY` | Your OpenRouter key: models run on your account instead of your credits. Never stored by Debatr. |
 | `DEBATR_ELEVENLABS_KEY` | Your ElevenLabs key for `--voices elevenlabs`. |

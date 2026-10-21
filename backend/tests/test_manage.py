@@ -47,3 +47,10 @@ def test_bad_input_exits_before_touching_the_database(capsys: pytest.CaptureFixt
     assert main(["credits", "a@b.co", "-1", "--kind", "bonus", "--reason", "x"]) == 2
     assert main(["credits", "a@b.co", "1", "--reason", "  "]) == 2
     assert "Give a reason" in capsys.readouterr().err
+
+
+def test_indexnow_needs_all() -> None:
+    args = build_parser().parse_args(["indexnow", "--all", "--dry-run"])
+    assert (args.command, args.all, args.dry_run) == ("indexnow", True, True)
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(["indexnow"])

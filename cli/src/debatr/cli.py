@@ -185,7 +185,7 @@ def main_options(
         typer.Option(
             "--url",
             help="Debatr server. Default: DEBATR_URL, the last server you signed in to, "
-            "or https://ai-debates.net.",
+            "or https://debatr.tv.",
             metavar="URL",
         ),
     ] = None,

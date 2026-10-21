@@ -165,3 +165,54 @@ def test_flush_sends_once_and_keeps_what_may_pass_later(
     production.sets[indexnow.PENDING_KEY] = set()
     indexnow.flush_job()
     assert sent == []
+
+
+def test_submit_all_sends_batches(production: FakeRedis, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(indexnow, "BATCH_LIMIT", 2)
+    batches: list[list[str]] = []
+    statuses = iter([202, 200, 429])
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        batches.append(json.loads(request.content)["urlList"])
+        return httpx.Response(next(statuses))
+
+    urls = [f"https://debatr.example/d/{i}" for i in range(5)]
+    assert indexnow.submit_all(urls, transport=httpx.MockTransport(answer)) is False
+    assert batches == [urls[:2], urls[2:4], urls[4:]]
+
+
+class _Rows:
+    def __init__(self, rows: list[Any]) -> None:
+        self.rows = rows
+
+    def all(self) -> list[Any]:
+        return self.rows
+
+
+class _Topic:
+    def __init__(self, slug: str, title: str) -> None:
+        self.slug = slug
+        self.title = title
+
+
+def test_all_urls_lists_listings_topics_and_debates(production: FakeRedis) -> None:
+    answers = iter(
+        [
+            _Rows([_Topic("t0p1c", "Cats or dogs?")]),
+            _Rows([("abc123", "Дом или офис?"), (None, "draft"), ("abc123", "Дом или офис?")]),
+        ]
+    )
+
+    class Db:
+        def execute(self, statement: Any) -> _Rows:
+            return next(answers)
+
+    urls = indexnow.all_urls(Db())  # type: ignore[arg-type]
+    assert urls[0] == "https://debatr.example/"
+    assert "https://debatr.example/gallery?format=rap_battle" in urls
+    assert "https://debatr.example/t/t0p1c/cats-or-dogs" in urls
+    assert (
+        urls[-1]
+        == "https://debatr.example/d/abc123/%D0%B4%D0%BE%D0%BC-%D0%B8%D0%BB%D0%B8-%D0%BE%D1%84%D0%B8%D1%81"
+    )
+    assert len(urls) == len(set(urls))

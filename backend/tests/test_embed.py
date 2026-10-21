@@ -30,6 +30,15 @@ def test_parse_url_names_debates_topics_and_players() -> None:
     assert embed.parse_url(f"{SITE}/d/abc123/лучше-ли", SITE) == EmbedTarget("debate", "abc123")
 
 
+def test_parse_url_takes_the_former_hosts() -> None:
+    old = "https://www.ai-debates.example/d/abc123/tabs-or-spaces?t=5"
+    assert embed.parse_url(old, SITE) is None
+    assert embed.parse_url(old, SITE, ("ai-debates.example",)) == EmbedTarget(
+        "debate", "abc123", start=5
+    )
+    assert embed.parse_url("https://evil.example/d/abc123", SITE, ("ai-debates.example",)) is None
+
+
 def test_parse_url_host_ignores_port_and_www() -> None:
     assert embed.parse_url("http://www.debatr.example:5173/d/abc123", SITE) is not None
     assert (
