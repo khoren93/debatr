@@ -5,17 +5,24 @@ from typing import Any
 
 import pytest
 
-from app.schemas.timeline import TimelineSegment, TimelineSpeaker, TimelineWord
+from app.schemas.timeline import TimelineMoment, TimelineSegment, TimelineSpeaker, TimelineWord
+from app.services.formats import format_of
 from app.services.media import jobs
 from app.services.media.highlights import (
+    PUNCH_TAIL_MS,
     HighlightPick,
+    MomentPick,
     build_highlights_messages,
     extract_winner,
     fallback_highlights,
+    fallback_moments,
+    keep_moments,
     locate_quote,
     match_speaker,
     parse_highlights,
+    parse_moments,
     snap_highlight,
+    snap_moment,
 )
 
 SPEAKERS = [
@@ -150,9 +157,7 @@ def test_highlights_key_follows_the_transcript_not_the_voices() -> None:
     assert jobs.highlights_key("other/model", "Cars?", "English", segments) != key
 
 
-def _picks(
-    model: str, cache: Path, segments: list[TimelineSegment]
-) -> tuple[str | None, list[HighlightPick]]:
+def _picks(model: str, cache: Path, segments: list[TimelineSegment]) -> jobs.HostPicks:
     paths: Any = SimpleNamespace(highlights=cache)
     return jobs._host_picks(
         model, paths, topic="Cars?", language="English", segments=segments, speakers=SPEAKERS
@@ -166,6 +171,7 @@ def test_the_host_model_is_asked_once_per_transcript(
     answer = {
         "winner_name": "Nova",
         "highlights": [{"title": "Clash", "hook": "Who pays?", "start_seq": 1, "end_seq": 2}],
+        "moments": [{"seq": 2, "quote": "shops die without the drivers", "big": True}],
     }
 
     def complete(model: str, _messages: Any, **kw: Any) -> tuple[str, dict]:
@@ -176,9 +182,10 @@ def test_the_host_model_is_asked_once_per_transcript(
     monkeypatch.setattr(jobs, "complete", complete)
     monkeypatch.setattr(jobs.free_quota, "wait_for_slot", lambda _deadline: True)
     cache, segments = tmp_path / "highlights.json", _debate_segments()
-    winner, picks = _picks("vendor/host-model", cache, segments)
+    winner, picks, moments = _picks("vendor/host-model", cache, segments)
     assert (winner, [p.title for p in picks]) == ("Nova", ["Clash"])
-    assert _picks("vendor/host-model", cache, segments) == (winner, picks)  # from the cache
+    assert moments == [MomentPick(2, "shops die without the drivers", big=True)]
+    assert _picks("vendor/host-model", cache, segments) == (winner, picks, moments)  # cached
     assert calls == ["vendor/host-model"]
     _picks("vendor/other-model", cache, segments)  # another host: asked again
     assert calls == ["vendor/host-model", "vendor/other-model"]
@@ -204,7 +211,7 @@ def test_host_picks_respect_levers_and_the_free_quota(
     # _pick_highlights turns either into the deterministic fallback.
     paths: Any = SimpleNamespace(highlights=tmp_path / "h.json")
     monkeypatch.setattr(jobs.settings, "OPENROUTER_API_KEY", "sk-test")
-    highlights, winner = jobs._pick_highlights(
+    picks = jobs._pick_highlights(
         model="vendor/host:free",
         paths=paths,
         topic="Cars?",
@@ -213,4 +220,140 @@ def test_host_picks_respect_levers_and_the_free_quota(
         speakers=SPEAKERS,
         total_ms=6000,
     )
-    assert winner is None and highlights == fallback_highlights(_debate_segments(), 6000)
+    assert picks.winner_name is None and not picks.by_model
+    assert picks.highlights == fallback_highlights(_debate_segments(), 6000)
+    assert picks.moments == []  # a debate has no fallback lines
+
+
+def test_parse_moments_tolerates_bad_items() -> None:
+    answer = {
+        "moments": [
+            {"seq": "3", "quote": "  a   patch is just a file ", "big": True, "funny": "yes"},
+            {"seq": 3, "quote": "a patch is just a file"},  # the same line twice
+            {"seq": None, "quote": "x"},
+            {"seq": 4, "quote": ""},
+            "junk",
+        ]
+    }
+    assert parse_moments(answer) == [MomentPick(3, "a patch is just a file", big=True)]
+    assert (
+        parse_moments({"moments": [{"seq": i, "quote": f"q{i}"} for i in range(30)]})[-1].seq == 11
+    )
+    assert parse_moments("nope") == []
+
+
+def _verse(seq: int, speaker: TimelineSpeaker, start_ms: int, text: str) -> TimelineSegment:
+    seg = _segment(seq, speaker, start_ms, text.replace("\n", " "), turn_type="verse")
+    # The track times words a beat into the section; the text keeps its lines.
+    words = [w.model_copy(update={"s": w.s + 1000, "e": w.e + 1000}) for w in seg.words]
+    return seg.model_copy(update={"text": text, "words": words, "end_ms": seg.end_ms + 2000})
+
+
+VERSES = [
+    _verse(1, SPEAKERS[1], 10_000, "I spit clean code\nyour tabs just cause gaps"),
+    _verse(2, SPEAKERS[2], 16_000, "Four spaces flow\nso every indent lands"),
+]
+
+
+def test_moments_land_on_the_quoted_words_of_a_debater() -> None:
+    moment = snap_moment(
+        VERSES,
+        MomentPick(1, "tabs just cause gaps", big=True),
+        "punchline",
+        {"participant_1", "participant_2"},
+    )
+    assert moment is not None
+    assert (moment.kind, moment.speaker_id, moment.big) == ("punchline", "participant_1", True)
+    assert moment.start_ms == 10_000 + 1000 + 5 * 400
+    assert moment.end_ms == 10_000 + 1000 + 8 * 400 + 350
+    # The host's lines, unknown turns and quotes that are not there are dropped.
+    assert (
+        snap_moment(VERSES, MomentPick(1, "tabs just cause gaps"), "punchline", {"participant_2"})
+        is None
+    )
+    assert snap_moment(VERSES, MomentPick(9, "tabs"), "punchline", {"participant_1"}) is None
+    assert (
+        snap_moment(
+            VERSES, MomentPick(1, "nothing like this at all"), "punchline", {"participant_1"}
+        )
+        is None
+    )
+
+
+def test_fallback_moments_are_the_verses_last_lines() -> None:
+    moments = fallback_moments([*VERSES, *_debate_segments()], {"participant_1", "participant_2"})
+    assert [(m.seq_index, m.quote) for m in moments] == [
+        (1, "your tabs just cause gaps"),
+        (2, "so every indent lands"),
+    ]
+
+
+def test_a_verse_short_starts_with_the_beat_and_ends_on_the_punch() -> None:
+    pick = HighlightPick("t", "h", 1, 2, start_quote="spaces flow", end_quote="every indent lands")
+    hl = snap_highlight(VERSES, pick, 0, 60_000)
+    assert hl is not None
+    assert hl.start_ms == VERSES[0].start_ms  # the section's start, not the quoted words
+    assert hl.end_ms == 16_000 + 1000 + 6 * 400 + 350 + PUNCH_TAIL_MS
+    # Without an end quote: the whole verse.
+    whole = snap_highlight(VERSES, HighlightPick("t", "h", 1, 1), 0, 60_000)
+    assert whole is not None and (whole.start_ms, whole.end_ms) == (
+        VERSES[0].start_ms,
+        VERSES[0].end_ms,
+    )
+
+
+def test_a_battle_asks_for_punchlines_and_shorts_of_verses() -> None:
+    style = format_of({"format": "rap_battle"}).highlight_style
+    messages = build_highlights_messages(
+        topic="Tabs?", language="English", segments=VERSES, speakers=SPEAKERS, style=style
+    )
+    assert "AI rap battle" in messages[0]["content"]
+    assert "hardest-hitting line of every verse" in messages[1]["content"]
+    assert '"moments": [{"seq": number' in messages[1]["content"]
+    debate = build_highlights_messages(
+        topic="Tabs?", language="English", segments=VERSES, speakers=SPEAKERS
+    )
+    assert "AI debate" in debate[0]["content"] and "one-liners" in debate[1]["content"]
+
+
+def test_a_new_prompt_asks_the_host_again(monkeypatch: pytest.MonkeyPatch) -> None:
+    key = jobs.highlights_key("host/model", "Cars?", "English", _debate_segments())
+    monkeypatch.setattr(jobs, "HIGHLIGHTS_VERSION", 999)
+    assert jobs.highlights_key("host/model", "Cars?", "English", _debate_segments()) != key
+
+
+def test_keep_one_line_per_turn_and_the_limit() -> None:
+    def m(seq: int, start: int, big: bool = False) -> TimelineMoment:
+        return TimelineMoment(
+            seq_index=seq,
+            speaker_id="participant_1",
+            kind="zinger",
+            quote="q",
+            start_ms=start,
+            end_ms=start + 500,
+            big=big,
+        )
+
+    lines = [
+        m(2, 100),
+        m(2, 900, big=True),
+        m(3, 2000),
+        m(4, 3000),
+        m(5, 4000, big=True),
+        m(6, 5000),
+    ]
+    assert [(x.seq_index, x.start_ms) for x in keep_moments(lines, None)] == [
+        (2, 900),
+        (3, 2000),
+        (4, 3000),
+        (5, 4000),
+        (6, 5000),
+    ]
+    # Over the limit the big ones stay, then the earliest.
+    assert [x.seq_index for x in keep_moments(lines, 3)] == [2, 3, 5]
+
+
+def test_a_battle_falls_back_to_its_last_verses() -> None:
+    hls = fallback_highlights(VERSES, 60_000)
+    assert len(hls) == 1 and hls[0].seq_indexes == [1, 2]
+    assert hls[0].start_ms == VERSES[0].start_ms  # a verse Short starts with the beat

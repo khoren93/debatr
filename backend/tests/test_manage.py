@@ -54,3 +54,15 @@ def test_indexnow_needs_all() -> None:
     assert (args.command, args.all, args.dry_run) == ("indexnow", True, True)
     with pytest.raises(SystemExit):
         build_parser().parse_args(["indexnow"])
+
+
+def test_media_refresh_takes_ids_or_a_format() -> None:
+    args = build_parser().parse_args(["media", "refresh-timeline", "a", "b"])
+    assert (args.command, args.action, args.ids, args.fmt) == (
+        "media",
+        "refresh-timeline",
+        ["a", "b"],
+        None,
+    )
+    args = build_parser().parse_args(["media", "refresh-timeline", "--format", "rap_battle"])
+    assert (args.ids, args.fmt) == ([], "rap_battle")

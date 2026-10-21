@@ -62,6 +62,34 @@ DEBATE_TOPICS = TopicStyle(
 )
 
 
+@dataclass(frozen=True)
+class HighlightStyle:
+    """How the host's model reads a finished show for the video (media/highlights): which
+    stretches make Shorts and which lines the video hits (`Timeline.moments`)."""
+
+    show: str  # "an AI debate", after "the most viral moments of"
+    clip: str  # what one Short is, after "Each moment is"
+    hook: str  # what the hook shown before a Short is
+    moment: Literal["zinger", "punchline"]
+    moments: str  # which lines to mark, after "Then mark"
+    # At most this many lines in all (None: one per debater turn is the only limit).
+    max_moments: int | None = None
+
+
+DEBATE_HIGHLIGHTS = HighlightStyle(
+    show="an AI debate",
+    clip="a contiguous range of turns, ideally a sharp exchange between debaters (a claim and the reply)",
+    hook="a punchy quote or question (max 12 words) shown before the clip",
+    moment="zinger",
+    moments=(
+        "the debaters' sharpest one-liners: at most one per debater turn and 4 in all, only lines "
+        "that really sting or surprise (none is fine); big = the strongest of them, funny = a "
+        "line that lands with humour"
+    ),
+    max_moments=4,
+)
+
+
 def debaters_of(participants: Sequence[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
     return [p for p in participants if p.get("role") == "debater"]
 
@@ -101,6 +129,8 @@ class Format(ABC):
     moderation_note: str = ""
     # How its topics are written; a format with the debate's style shows the debate's news list.
     topic_style: TopicStyle = DEBATE_TOPICS
+    # How its Shorts and the lines the video hits are picked (media/highlights).
+    highlight_style: HighlightStyle = DEBATE_HIGHLIGHTS
 
     # --- seats ----------------------------------------------------------------------------------
 

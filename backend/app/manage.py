@@ -18,6 +18,13 @@ sees in their ledger; the reason stays internal (`meta_json.reason`).
 
 `indexnow --all` announces every page the sitemaps list to IndexNow at once (after a move to a
 new domain); `--dry-run` only prints them.
+
+`media refresh-timeline` brings ready timelines up to date without voicing or composing
+anything (a battle's beat grid, the Shorts, the lines the video hits): by debate id, or every
+ready debate of a format with `--format rap_battle`. It reads the generated track with ffmpeg,
+so run it in the media-worker container:
+
+    docker compose exec media-worker python -m app.manage media refresh-timeline --format rap_battle
 """
 
 import argparse
@@ -282,6 +289,30 @@ def indexnow_all(*, dry_run: bool) -> int:
     return 0 if accepted else 1
 
 
+def media_refresh(ids: list[str], fmt: str | None) -> int:
+    from app.models.models import Debate
+    from app.services.media.jobs import refresh_timeline
+
+    if fmt:
+        with get_sync_session() as db:
+            rows = db.scalars(
+                select(Debate.id).where(
+                    Debate.media_status == "ready",
+                    Debate.config_json["format"].as_string() == fmt,
+                )
+            )
+            ids = [*ids, *(str(i) for i in rows)]
+    if not ids:
+        print("Nothing to refresh", file=sys.stderr)
+        return 1
+    for debate_id in dict.fromkeys(ids):
+        try:
+            print(debate_id, refresh_timeline(debate_id))
+        except ValueError:
+            print(debate_id, "skipped: not a debate id")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="python -m app.manage", description=__doc__)
     parser.formatter_class = argparse.RawDescriptionHelpFormatter
@@ -312,6 +343,14 @@ def build_parser() -> argparse.ArgumentParser:
     index = commands.add_parser("indexnow", help="announce pages to IndexNow")
     index.add_argument("--all", action="store_true", required=True, help="every sitemap page")
     index.add_argument("--dry-run", action="store_true", help="print the pages, send nothing")
+
+    media = commands.add_parser("media", help="audio and video files of debates")
+    media_actions = media.add_subparsers(dest="action", required=True)
+    refresh = media_actions.add_parser(
+        "refresh-timeline", help="update ready timelines without rebuilding the audio"
+    )
+    refresh.add_argument("ids", nargs="*", help="debate ids")
+    refresh.add_argument("--format", dest="fmt", help="every ready debate of this format")
     return parser
 
 
@@ -350,6 +389,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
     if args.command == "indexnow":
         return indexnow_all(dry_run=args.dry_run)
+    if args.command == "media":
+        return media_refresh(list(args.ids), args.fmt)
     return 2
 
 

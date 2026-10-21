@@ -9,6 +9,7 @@ import { SpeakerCard, SpeakingChip } from './components/SpeakerCard';
 import { debaterTag } from './speakers';
 import { INTRO_MS, LONG_W, barHeight } from './constants';
 import { cameraAt, flashAt, glowColorAt, grooveAt, roundCardAt } from './groove';
+import { hitAt } from './moments';
 import { frameToMs, levelAt, msToFrame, segmentAt, speakingAt } from './utils';
 import { SceneStage } from './visuals/SceneStage';
 
@@ -27,10 +28,10 @@ const STAGE = { x: 380, y: 160, w: 1160, h: 690 };
 const SIDE_X = 3 * U;
 const SIDE_W = STAGE.x - SIDE_X - 24;
 
-const SideColumn = ({ speakers, debaters, x, activeId, pulse }: { speakers: TimelineSpeaker[]; debaters: TimelineSpeaker[]; x: number; activeId: string | undefined; pulse: number }) => (
+const SideColumn = ({ speakers, debaters, x, activeId, pulse, flinchOf }: { speakers: TimelineSpeaker[]; debaters: TimelineSpeaker[]; x: number; activeId: string | undefined; pulse: number; flinchOf: (id: string) => number }) => (
   <div style={{ position: 'absolute', left: x, top: STAGE.y, width: SIDE_W, height: STAGE.h, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: 28 }}>
     {speakers.map((d) => (
-      <SpeakerCard key={d.id} speaker={d} tag={debaterTag(d, debaters)} active={activeId === d.id} width={speakers.length > 1 ? Math.min(SIDE_W, 250) : SIDE_W - 8} pulse={pulse} />
+      <SpeakerCard key={d.id} speaker={d} tag={debaterTag(d, debaters)} active={activeId === d.id} width={speakers.length > 1 ? Math.min(SIDE_W, 250) : SIDE_W - 8} pulse={pulse} flinch={flinchOf(d.id)} />
     ))}
   </div>
 );
@@ -56,8 +57,12 @@ export const DebateLong = ({ timeline, mediaBase }: DebateProps) => {
   const groove = timelineFormat(timeline).id === 'rap_battle' ? grooveAt(timeline, current, ms) : null;
   const pulse = groove ? groove.pulse * (groove.strong ? 1 : 0.5) : 0.6 * levelAt(seg, ms);
   const card = inIntro || inOutro ? null : roundCardAt(timeline, ms);
-  const cam = cameraAt(ms, groove, card);
-  const flash = flashAt(card, ms);
+  // A line that lands (punchline / zinger) pushes the camera in, flashes, shakes a battle.
+  const hit = inIntro || inOutro ? null : hitAt(timeline, ms);
+  const base = cameraAt(ms, groove, card);
+  const cam = { scale: base.scale + (hit?.push ?? 0), x: base.x + (hit?.shake.x ?? 0), y: base.y + (hit?.shake.y ?? 0) };
+  const flash = Math.min(0.25, flashAt(card, ms) + (hit?.flash ?? 0));
+  const flinchOf = (id: string) => (hit && hit.moment.kind === 'punchline' && hit.moment.speaker_id !== id ? hit.flinch : 0);
   const lights = groove && debaters.length >= 2 ? { colors: [debaters[0].color, debaters[1].color] as [string, string], active: speaker?.role === 'debater' ? speaker.color : null, groove } : null;
 
   return (
@@ -81,15 +86,15 @@ export const DebateLong = ({ timeline, mediaBase }: DebateProps) => {
             </div>
           )}
 
-          <SideColumn speakers={debaters.slice(0, half)} debaters={debaters} x={SIDE_X} activeId={active?.id} pulse={pulse} />
-          <SideColumn speakers={debaters.slice(half)} debaters={debaters} x={LONG_W - SIDE_X - SIDE_W} activeId={active?.id} pulse={pulse} />
+          <SideColumn speakers={debaters.slice(0, half)} debaters={debaters} x={SIDE_X} activeId={active?.id} pulse={pulse} flinchOf={flinchOf} />
+          <SideColumn speakers={debaters.slice(half)} debaters={debaters} x={LONG_W - SIDE_X - SIDE_W} activeId={active?.id} pulse={pulse} flinchOf={flinchOf} />
 
           <SceneStage timeline={timeline} mediaBase={mediaBase} seg={current} ms={ms} x={STAGE.x} y={STAGE.y} w={STAGE.w} h={STAGE.h} k={1} card={card} pulse={groove ? pulse : 0} />
 
           {/* A rap verse's lines are on the stage (VerseStage): no captions under them. */}
           {!showVerdict && seg?.turn_type !== 'verse' && (
             <div style={{ position: 'absolute', left: 4 * U, right: 4 * U, bottom: 3 * U, display: 'flex', justifyContent: 'center' }}>
-              <Captions seg={seg} offsetMs={INTRO_MS} fontSize={2.4 * U} maxWidth={LONG_W - 8 * U} />
+              <Captions seg={seg} offsetMs={INTRO_MS} fontSize={2.4 * U} maxWidth={LONG_W - 8 * U} moment={hit?.moment} />
             </div>
           )}
         </div>

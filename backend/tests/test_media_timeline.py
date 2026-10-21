@@ -14,3 +14,20 @@ def test_build_speakers_keep_full_model_ids_for_logos() -> None:
     assert by_id["participant_2"].model == "gpt-4o"
     assert by_id["participant_2"].model_id == "openai/gpt-4o:free"
     assert by_id["judge"].model_id == "deepseek/deepseek-chat"
+
+
+def test_a_refreshed_timeline_gets_a_new_address() -> None:
+    from types import SimpleNamespace
+    from typing import Any
+
+    from app.api.routes_media import media_out
+
+    state: dict[str, Any] = {"finished_at": "2026-10-21T09:48:16.123456+00:00"}
+    debate: Any = SimpleNamespace(
+        id="5f0c3a1e-2b4d-4c6e-8f10-123456789abc", media_status="ready", media_json=state
+    )
+    first = media_out(debate).urls
+    assert first is not None and first.timeline.endswith("v=2026-10-21T094816.12")
+    state["revision"] = 2
+    second = media_out(debate).urls
+    assert second is not None and second.timeline.endswith("v=2026-10-21T094816.12r2")

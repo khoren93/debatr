@@ -12,8 +12,12 @@ const DIM = '#5C6170';
  *  loudness in a debate). */
 const Bounce = ({ pulse, children }: { pulse: number; children: ReactNode }) => <div style={{ transform: pulse ? `scale(${1 + 0.09 * pulse})` : undefined }}>{children}</div>;
 
+/** A card jolting and reddening as the other rapper's punchline lands (`flinch` 1 → 0). */
+const flinchStyle = (flinch: number, size: number) =>
+  flinch > 0 ? { transform: `translateX(${size * 0.05 * flinch * Math.sin(flinch * 38)}px) rotate(${2.5 * flinch * Math.sin(flinch * 29)}deg)`, borderColor: `rgba(255,77,77,${(0.9 * flinch).toFixed(3)})` } : {};
+
 /** A debater's card: model logo, name, model, and SPEAKING (or the side) under it. */
-export const SpeakerCard = ({ speaker, tag, active, width, pulse = 0 }: { speaker: TimelineSpeaker; tag: string; active: boolean; width: number; pulse?: number }) => {
+export const SpeakerCard = ({ speaker, tag, active, width, pulse = 0, flinch = 0 }: { speaker: TimelineSpeaker; tag: string; active: boolean; width: number; pulse?: number; flinch?: number }) => {
   const name = width * 0.112;
   return (
     <div
@@ -31,6 +35,7 @@ export const SpeakerCard = ({ speaker, tag, active, width, pulse = 0 }: { speake
         alignItems: 'center',
         gap: width * 0.03,
         textAlign: 'center',
+        ...flinchStyle(flinch, width),
       }}
     >
       <Bounce pulse={active ? pulse : 0}>
@@ -44,7 +49,7 @@ export const SpeakerCard = ({ speaker, tag, active, width, pulse = 0 }: { speake
 };
 
 /** A debater in the Short's rows: logo on the left; name, model and SPEAKING (or the side) beside it. */
-export const SpeakerRowCard = ({ speaker, tag, active, width, height, pulse = 0 }: { speaker: TimelineSpeaker; tag: string; active: boolean; width: number; height: number; pulse?: number }) => {
+export const SpeakerRowCard = ({ speaker, tag, active, width, height, pulse = 0, flinch = 0 }: { speaker: TimelineSpeaker; tag: string; active: boolean; width: number; height: number; pulse?: number; flinch?: number }) => {
   const logo = height * 0.64;
   const pad = (height - logo) / 2;
   const name = height * 0.26;
@@ -64,6 +69,7 @@ export const SpeakerRowCard = ({ speaker, tag, active, width, height, pulse = 0 
         display: 'flex',
         alignItems: 'center',
         gap: pad * 0.8,
+        ...flinchStyle(flinch, width * 0.6),
       }}
     >
       <Bounce pulse={active ? pulse : 0}>

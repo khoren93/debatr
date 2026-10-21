@@ -10,6 +10,7 @@ import { SpeakerRowCard, SpeakingChip } from './components/SpeakerCard';
 import { debaterTag } from './speakers';
 import { ACCENT, DISPLAY_FONT, FONT, SHORT_H, SHORT_HOOK_MS, SHORT_W, barHeight, headlineSize } from './constants';
 import { cameraAt, flashAt, glowColorAt, grooveAt, roundCardAt } from './groove';
+import { hitAt } from './moments';
 import { frameToMs, highlightRange, levelAt, msToFrame } from './utils';
 import { SceneStage } from './visuals/SceneStage';
 
@@ -65,13 +66,17 @@ export const DebateShort = ({ timeline, mediaBase, highlightIndex }: ShortProps)
   const groove = timelineFormat(timeline).id === 'rap_battle' ? grooveAt(timeline, current, absMs) : null;
   const pulse = groove ? groove.pulse * (groove.strong ? 1 : 0.5) : 0.6 * levelAt(seg, absMs);
   const card = inside ? roundCardAt(timeline, absMs) : null;
-  const cam = cameraAt(absMs, groove, card);
-  const flash = flashAt(card, absMs);
+  // A line that lands (punchline / zinger) pushes the camera in, flashes, shakes a battle.
+  const hit = !inside ? null : hitAt(timeline, absMs);
+  const base = cameraAt(absMs, groove, card);
+  const cam = { scale: base.scale + (hit?.push ?? 0), x: base.x + (hit?.shake.x ?? 0), y: base.y + (hit?.shake.y ?? 0) };
+  const flash = Math.min(0.25, flashAt(card, absMs) + (hit?.flash ?? 0));
+  const flinchOf = (id: string) => (hit && hit.moment.kind === 'punchline' && hit.moment.speaker_id !== id ? hit.flinch : 0);
   const lights = groove && debaters.length >= 2 ? { colors: [debaters[0].color, debaters[1].color] as [string, string], active: speaker?.role === 'debater' ? speaker.color : null, groove } : null;
   const row = (speakers: typeof debaters, y: number) => (
     <div style={{ position: 'absolute', top: y, left: X, width: W, display: 'flex', justifyContent: 'center', gap: GAP }}>
       {speakers.map((d) => (
-        <SpeakerRowCard key={d.id} speaker={d} tag={debaterTag(d, debaters)} active={seg?.speaker_id === d.id} width={ROW_W} height={ROW_H} pulse={pulse} />
+        <SpeakerRowCard key={d.id} speaker={d} tag={debaterTag(d, debaters)} active={seg?.speaker_id === d.id} width={ROW_W} height={ROW_H} pulse={pulse} flinch={flinchOf(d.id)} />
       ))}
     </div>
   );
@@ -112,7 +117,7 @@ export const DebateShort = ({ timeline, mediaBase, highlightIndex }: ShortProps)
           <SceneStage timeline={timeline} mediaBase={mediaBase} seg={current} ms={absMs} x={X} y={STAGE_Y} w={W} h={stageH} k={STAGE_K} verseExtend={VERSE_BOTTOM - STAGE_Y - stageH} card={card} pulse={groove ? pulse : 0} />
           {rows[1].length > 0 && row(rows[1], ROW_B_Y)}
           <div style={{ position: 'absolute', left: 3 * U, right: 3 * U, top: CAPTIONS_Y, height: SHORT_H - CAPTIONS_Y - 60, display: 'flex', alignItems: 'flex-start', justifyContent: 'center' }}>
-            {seg?.turn_type !== 'verse' && <Captions seg={seg} offsetMs={offsetMs} fontSize={2.8 * U} maxWidth={SHORT_W - 6 * U} combineMs={900} />}
+            {seg?.turn_type !== 'verse' && <Captions seg={seg} offsetMs={offsetMs} fontSize={2.8 * U} maxWidth={SHORT_W - 6 * U} combineMs={900} moment={hit?.moment} />}
           </div>
         </div>
       )}

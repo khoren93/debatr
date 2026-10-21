@@ -58,6 +58,20 @@ class TimelineHighlight(BaseModel):
     seq_indexes: list[int] = Field(default_factory=list)
 
 
+class TimelineMoment(BaseModel):
+    """A line that lands (a battle's punchline, a debate's zinger): the video hits it as its last
+    word is said. Times are absolute on the full track."""
+
+    seq_index: int
+    speaker_id: str
+    kind: Literal["punchline", "zinger"]
+    quote: str
+    start_ms: int
+    end_ms: int
+    big: bool = False  # the best of its round (battle) / of the debate
+    funny: bool = False
+
+
 class TimelineVerdict(BaseModel):
     seq_index: int
     winner_id: str | None = None
@@ -112,3 +126,5 @@ class Timeline(BaseModel):
     stats: TimelineStats = Field(default_factory=TimelineStats)
     # Only a generated soundtrack has one (and only when the track's beat is clear).
     beat: TimelineBeat | None = None
+    # The lines the video hits, in track order (media/highlights).
+    moments: list[TimelineMoment] = Field(default_factory=list)

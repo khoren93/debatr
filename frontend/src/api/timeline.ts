@@ -51,6 +51,19 @@ export interface TimelineHighlight {
   seq_indexes: number[];
 }
 
+/** A line that lands (a battle's punchline, a debate's zinger): the video hits it as its last
+ *  word is said. Times are absolute on the full track. */
+export interface TimelineMoment {
+  seq_index: number;
+  speaker_id: string;
+  kind: 'punchline' | 'zinger';
+  quote: string;
+  start_ms: number;
+  end_ms: number;
+  big: boolean;
+  funny: boolean;
+}
+
 export interface TimelineVerdict {
   seq_index: number;
   winner_id: string | null;
@@ -90,4 +103,6 @@ export interface Timeline {
   stats: { chars: number; tts_ms: number; estimated_usd: number | null; cached_turns: number; visuals_usd?: number | null; images_usd?: number | null };
   /** Only a battle's generated track has one (older battle timelines too: not). */
   beat?: TimelineBeat | null;
+  /** The lines the video hits, in track order; missing in timelines built before them. */
+  moments?: TimelineMoment[];
 }

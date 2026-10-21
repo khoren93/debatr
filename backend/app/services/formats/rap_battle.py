@@ -10,7 +10,14 @@ import re
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from app.services.formats.base import Format, Messages, Seat, TopicStyle, debaters_of
+from app.services.formats.base import (
+    Format,
+    HighlightStyle,
+    Messages,
+    Seat,
+    TopicStyle,
+    debaters_of,
+)
 from app.services.media import music
 from app.services.prompt_builder import intensity_description
 from app.services.scheduler import ScheduledTurn
@@ -128,6 +135,23 @@ class RapBattleFormat(Format):
     moderation_note = (
         "This is a rap battle: roasting the opposing rapper (an AI model) and its arguments, "
         "trash talk and bragging are expected and fine."
+    )
+    highlight_style = HighlightStyle(
+        show="an AI rap battle",
+        clip=(
+            "one verse, or two verses back to back (a diss and the answer), ending on a "
+            "punchline; start_quote is the first words of a verse"
+        ),
+        hook=(
+            "a teaser of the clash (max 12 words) that makes people watch, without giving "
+            "the punchline away"
+        ),
+        moment="punchline",
+        moments=(
+            "the hardest-hitting line of every verse (leave a verse out when nothing in it "
+            "lands); big = the best punchline of its round, funny = a line that roasts with "
+            "humour"
+        ),
     )
     topic_style = TopicStyle(
         noun="rap battle topic",

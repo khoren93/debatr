@@ -106,6 +106,8 @@ def media_out(debate: Debate) -> DebateMediaOut:
     stats: MediaStats | None = None
     if debate.media_status == "ready":
         version = str(state.get("finished_at") or "").replace(":", "").replace("+", "")[:20] or None
+        if version and state.get("revision"):  # timeline.json refreshed since (refresh_timeline)
+            version = f"{version}r{state['revision']}"
         urls = MediaUrls(
             timeline=public_url(debate_id, "timeline.json", version),
             full_mp3=public_url(debate_id, "full.mp3", version),

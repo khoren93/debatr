@@ -17,7 +17,9 @@ backend/            FastAPI API + RQ worker (Python 3.12+, managed with uv)
   app/manage.py       operator commands on the server, not part of the public CLI: `admin grant |
                       revoke | list | reset-2fa | revoke-sessions | enroll-code`, `credits …`
                       (balance changes through the ledger), `indexnow --all [--dry-run]` (every
-                      sitemap page to IndexNow at once, after a domain move)
+                      sitemap page to IndexNow at once, after a domain move), `media
+                      refresh-timeline <ids> | --format rap_battle` (beat grid, Shorts and
+                      moments of ready timelines without rebuilding audio; media-worker: ffmpeg)
   app/admin/          admin console access: gate (host / IP / Fetch Metadata / Origin, outermost
                       middleware), access (sessions → AdminContext, CSRF, roles, sudo)
   app/scheduler.py    periodic jobs (`python -m app.scheduler`, RQ cron on the background queue:
@@ -668,9 +670,18 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
    `MEDIA_ROOT/{debate_id}/turns/`, mixes `full.wav`/`full.mp3`, designs the visual scenes
    (below, when `MediaOptions.visuals`), asks the host's model (pinned for a Free Router; system
    key, not billed; a free one takes a free-quota slot, a turned-off one gives the deterministic
-   fallback) for short-video highlights, kept in `highlights.json` per transcript
-   (`jobs.highlights_key`: a rebuild with new voices asks nothing), and writes
-   `timeline.json` (`app/schemas/timeline.py`).
+   fallback) for short-video highlights and the lines the video hits, kept in `highlights.json`
+   per transcript (`jobs.highlights_key` with `HIGHLIGHTS_VERSION`: a rebuild with new voices
+   asks nothing, a new prompt asks once), and writes `timeline.json` (`app/schemas/timeline.py`).
+   What is asked follows the format (`Format.highlight_style`): a debate's Shorts are sharp
+   exchanges and its `moments` the debaters' zingers (≤ 1 per turn, ≤ 4); a battle's Shorts are
+   verses ending on a punchline (`snap_highlight`: from the verse's section start to a beat after
+   the punch) and its moments the hardest line of every verse (`big` = the round's best, `funny`).
+   Quotes are found in the words (`snap_moment`, `locate_quote`), `keep_moments` holds the counts;
+   without the model a battle falls back to every verse's last line and its last two verses.
+   `app.manage media refresh-timeline` redoes beat, Shorts and moments of a ready timeline
+   without voicing or composing (keeps the old Shorts when the host fails) and bumps
+   `media_json.revision`, which the media URLs' `?v=` carry.
    Progress lives in `media_json` (polled by `GET /api/debates/{id}/media`); `media_status`
    is `none | queued | running | ready | error`.
 8. Files are served by `MediaStaticFiles` at `/api/media/files/{debate_id}/...` (Range
@@ -775,6 +786,11 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   `start_ms`/`end_ms`/`item_ms`, non-overlapping, recomputed on every audio build. `item_ms`
   follows the order of the scene's lists; `UNORDERED_ITEMS` (ranking, scale, map) search every
   element on its own, since a countdown or the two pans are not said in list order.
+- Moments (`video/moments.ts`, pure, vitest; `Timeline.moments`): the camera pushes in while the
+  line is said and lets go after it; as its last word lands a battle's punchline flashes, shakes
+  the frame, makes the other rapper's card flinch (jolt + red border) and slams in the accent on
+  the stage (`VerseStage` holds it 450 ms before the next line); a debate's zinger flashes softly
+  and its said words stay in the accent in the captions.
 - Motion in both formats (`video/groove.ts`): the background's glows drift on slow sine paths
   and turn from one speaker's colour to the next over 700 ms (`glowColorAt`); the camera breathes
   (`cameraAt`: ≤ 0.6 % over 18 s); the speaking logo bounces with the voice's loudness; a debate

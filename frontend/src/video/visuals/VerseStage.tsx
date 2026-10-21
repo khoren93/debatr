@@ -2,6 +2,8 @@ import type { Timeline, TimelineSegment } from '../../api/timeline';
 import { ModelLogo } from '../components/ModelLogo';
 import { ACCENT, DISPLAY_FONT, MONO_FONT } from '../constants';
 import { lineAt, verseLines, type LyricLine } from '../lyrics';
+import { hitAt, inMoment } from '../moments';
+import type { TimelineMoment } from '../../api/timeline';
 import { speakerModelId } from '../speakers';
 import { roundLabel } from '../utils';
 import { INK, backOut, easeOut, fitFont, ramp } from './draw';
@@ -10,15 +12,20 @@ import { INK, backOut, easeOut, fitFont, ramp } from './draw';
 const LEAD_MS = 140;
 const ENTER_MS = 260;
 const POP_MS = 220;
+/** A punchline that just landed holds the stage this long before the next line comes up (the
+ *  rapper is already on it; its words catch up). */
+const PUNCH_HOLD_MS = 450;
 /** The rapper's name opens the verse only when the beat leaves room before the first line. */
 const TITLE_MIN_MS = 700;
 const HOST = '#FFC46B';
 const AHEAD = 'rgba(242,243,247,0.3)';
 
 /** A line's words: rapped ones white, the current one in the accent and popping, the ones ahead
- *  dim; the last word in the rapper's colour, underlined in the accent when it rhymes. A line
- *  already rapped (`live` off) shows everything said. */
-const Words = ({ line, ms, size, color, live }: { line: LyricLine; ms: number; size: number; color: string; live: boolean }) => {
+ *  dim; the last word in the rapper's colour, underlined in the accent when it rhymes. Once a
+ *  punchline (`punch`) lands, its words turn to the accent. A line already rapped (`live` off)
+ *  shows everything said. */
+const Words = ({ line, ms, size, color, live, punch = null }: { line: LyricLine; ms: number; size: number; color: string; live: boolean; punch?: TimelineMoment | null }) => {
+  const landed = punch !== null && ms >= punch.end_ms;
   const last = line.words.length - 1;
   return (
     <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'baseline', columnGap: '0.3em', rowGap: size * 0.1, fontFamily: DISPLAY_FONT, fontWeight: 800, fontSize: size, lineHeight: 1.12, letterSpacing: -0.02 * size, textAlign: 'center' }}>
@@ -27,7 +34,7 @@ const Words = ({ line, ms, size, color, live }: { line: LyricLine; ms: number; s
         const now = live && said && ms < word.toMs;
         const end = i === last;
         const pop = live && said ? 1 - easeOut(ramp(ms, word.fromMs, POP_MS)) : 0;
-        const fill = !said ? AHEAD : now ? ACCENT : end ? color : INK;
+        const fill = !said ? AHEAD : now || (landed && inMoment(punch, word.fromMs, word.toMs)) ? ACCENT : end ? color : INK;
         return (
           <span key={i} style={{ position: 'relative', display: 'inline-block', color: fill, transform: `translateY(${-0.08 * size * pop}px) scale(${1 + 0.1 * pop})`, transformOrigin: '50% 80%' }}>
             {word.text}
@@ -49,7 +56,15 @@ export const VerseStage = ({ timeline, seg, ms, w, h, k, pulse = 0 }: { timeline
   const lines = verseLines(seg);
   const speaker = timeline.speakers.find((s) => s.id === seg.speaker_id);
   const color = speaker?.color ?? ACCENT;
-  const at = lineAt(lines, ms + LEAD_MS);
+  const hit = hitAt(timeline, ms);
+  const verseHit = hit && hit.moment.seq_index === seg.seq_index ? hit.moment : null;
+  const landsAt = verseHit?.end_ms ?? 0;
+  // The line ending on the punchline that just landed.
+  const punchLine = (i: number) => verseHit !== null && lines[i].endMs >= landsAt - 30 && lines[i].startMs <= landsAt;
+  // When line i comes up: just before its first word, or after the punchline's hold before it.
+  const shownAt = (i: number) => (i > 0 && punchLine(i - 1) ? Math.max(lines[i].startMs, landsAt + PUNCH_HOLD_MS) : lines[i].startMs) - LEAD_MS;
+  let at = lineAt(lines, ms + LEAD_MS);
+  if (at > 0 && ms < shownAt(at)) at -= 1;
   const line = at >= 0 ? lines[at] : null;
   const prev = at > 0 ? lines[at - 1] : null;
   const pad = w * 0.06;
@@ -58,11 +73,14 @@ export const VerseStage = ({ timeline, seg, ms, w, h, k, pulse = 0 }: { timeline
   const small = tall ? fitFont(prev?.text ?? '', w - 2 * pad, 2, 46 * k, 32 * k) : fitFont(prev?.text ?? '', w - 2 * pad, 2, 36 * k, 26 * k);
   const prevBox = tall ? { top: h * 0.12, height: h * 0.27 } : { top: h * 0.07, height: h * 0.25 };
   const lineBox = tall ? { top: h * 0.42, bottom: h * 0.2 } : { top: h * 0.36, bottom: h * 0.08 };
-  const enter = line ? easeOut(ramp(ms, line.startMs - LEAD_MS, ENTER_MS)) : 0;
+  const enter = line ? easeOut(ramp(ms, shownAt(at), ENTER_MS)) : 0;
   const first = lines[0];
   const titled = Boolean(speaker && first && first.startMs - seg.start_ms >= TITLE_MIN_MS);
   const title = titled && first ? backOut(ramp(ms, seg.start_ms, 420)) * (1 - ramp(ms, first.startMs - LEAD_MS - 200, 200)) : 0;
   const nameSize = speaker ? fitFont(speaker.name, w * 0.8, 1, 112 * k, 60 * k) : 0;
+  // A punchline slams into place as its last word lands.
+  const punch = at >= 0 && punchLine(at) ? verseHit : null;
+  const slam = punch && hit && ms >= punch.end_ms ? 1 + 0.1 * (1 - easeOut(hit.landed)) : 1;
   return (
     <div style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
       {speaker && (
@@ -82,8 +100,8 @@ export const VerseStage = ({ timeline, seg, ms, w, h, k, pulse = 0 }: { timeline
         </div>
       )}
       {line && (
-        <div style={{ position: 'absolute', left: pad, right: pad, ...lineBox, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: enter, transform: `translateY(${(1 - enter) * 36 * k}px)` }}>
-          <Words line={line} ms={ms} size={big} color={color} live />
+        <div style={{ position: 'absolute', left: pad, right: pad, ...lineBox, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: enter, transform: `translateY(${(1 - enter) * 36 * k}px) scale(${slam})` }}>
+          <Words line={line} ms={ms} size={big} color={color} live punch={punch} />
         </div>
       )}
     </div>

@@ -26,6 +26,7 @@ from app.schemas.timeline import (
     Timeline,
     TimelineBeat,
     TimelineHighlight,
+    TimelineMoment,
     TimelineSegment,
     TimelineSpeaker,
     TimelineStats,
@@ -42,18 +43,25 @@ from app.services.credits import (
     prices_of,
 )
 from app.services.formats import format_of
+from app.services.formats.base import DEBATE_HIGHLIGHTS, HighlightStyle
 from app.services.free_router import resolved_participants
 from app.services.heartbeat import beating
 from app.services.media import beats, ffmpeg, music
 from app.services.media.alignment import WordTiming, clamp_words, merge_chunks
 from app.services.media.highlights import (
+    HIGHLIGHTS_VERSION,
     HighlightPick,
+    MomentPick,
     build_highlights_messages,
     extract_winner,
     fallback_highlights,
+    fallback_moments,
+    keep_moments,
     match_speaker,
     parse_highlights,
+    parse_moments,
     snap_highlight,
+    snap_moment,
 )
 from app.services.media.images import ImageStudio
 from app.services.media.languages import language_code
@@ -294,17 +302,21 @@ def _synthesize_turn(
 def highlights_key(model: str, topic: str, language: str, segments: list[TimelineSegment]) -> str:
     """What the picks depend on: the model and the transcript, not the spoken durations (new
     voices change those, not the moments)."""
-    lines = [model, topic, language]
+    lines = [f"v{HIGHLIGHTS_VERSION}", model, topic, language]
     lines += [f"{s.seq_index}|{s.speaker_name}|{s.turn_type}|{s.text}" for s in segments]
     return hashlib.sha256("\n".join(lines).encode()).hexdigest()
 
 
-def _cached_picks(path: Path, key: str) -> tuple[str | None, list[HighlightPick]] | None:
+HostPicks = tuple[str | None, list[HighlightPick], list[MomentPick]]
+
+
+def _cached_picks(path: Path, key: str) -> HostPicks | None:
     try:
         data = json.loads(path.read_text())
         if data.get("key") != key:
             return None
-        return data.get("winner_name"), [HighlightPick(**p) for p in data["picks"]]
+        picks = [HighlightPick(**p) for p in data["picks"]]
+        return data.get("winner_name"), picks, [MomentPick(**m) for m in data.get("moments", [])]
     except (OSError, ValueError, TypeError, KeyError, AttributeError):
         return None
 
@@ -317,10 +329,12 @@ def _host_picks(
     language: str,
     segments: list[TimelineSegment],
     speakers: list[TimelineSpeaker],
-) -> tuple[str | None, list[HighlightPick]]:
-    """The host model's picks, asked once per transcript: a rebuild reads them from
-    `highlights.json`, so a paid host costs one call per debate run, not one per audio build.
-    Raises when the model is turned off, no free-model slot comes or the answer fails."""
+    style: HighlightStyle = DEBATE_HIGHLIGHTS,
+) -> HostPicks:
+    """The host model's picks (Shorts, the winner, the lines the video hits), asked once per
+    transcript: a rebuild reads them from `highlights.json`, so a paid host costs one call per
+    debate run, not one per audio build. Raises when the model is turned off, no free-model slot
+    comes or the answer fails."""
     key = highlights_key(model, topic, language, segments)
     cached = _cached_picks(paths.highlights, key)
     if cached is not None:
@@ -332,14 +346,17 @@ def _host_picks(
     ):
         raise RuntimeError("no free-model slot")
     messages = build_highlights_messages(
-        topic=topic, language=language, segments=segments, speakers=speakers
+        topic=topic, language=language, segments=segments, speakers=speakers, style=style
     )
     text, _usage = complete(model, messages, purpose="highlights", max_tokens=HIGHLIGHTS_MAX_TOKENS)
-    winner_name, picks = parse_highlights(extract_json(text))
+    answer = extract_json(text)
+    winner_name, picks = parse_highlights(answer)
+    moments = parse_moments(answer)
     if picks:  # a bad answer (a router's odd pick) is asked again by the next build
         body = {"key": key, "model": model, "winner_name": winner_name}
-        paths.highlights.write_text(json.dumps(body | {"picks": [asdict(p) for p in picks]}))
-    return winner_name, picks
+        body |= {"picks": [asdict(p) for p in picks], "moments": [asdict(m) for m in moments]}
+        paths.highlights.write_text(json.dumps(body))
+    return winner_name, picks, moments
 
 
 def _pick_highlights(
@@ -351,14 +368,23 @@ def _pick_highlights(
     segments: list[TimelineSegment],
     speakers: list[TimelineSpeaker],
     total_ms: int,
-) -> tuple[list[TimelineHighlight], str | None]:
-    """Moments picked by the host's model (the one that ran the debate) with a deterministic
-    fallback. Returns (highlights, winner_name)."""
+    style: HighlightStyle = DEBATE_HIGHLIGHTS,
+) -> "Picks":
+    """Shorts and the lines the video hits, picked by the host's model (the one that ran the
+    debate), with deterministic fallbacks."""
+    debaters = {s.id for s in speakers if s.role == "debater"}
+    fallback = fallback_moments(segments, debaters)
     if not settings.OPENROUTER_API_KEY:
-        return fallback_highlights(segments, total_ms), None
+        return Picks(fallback_highlights(segments, total_ms), None, fallback, by_model=False)
     try:
-        winner_name, picks = _host_picks(
-            model, paths, topic=topic, language=language, segments=segments, speakers=speakers
+        winner_name, picks, marked = _host_picks(
+            model,
+            paths,
+            topic=topic,
+            language=language,
+            segments=segments,
+            speakers=speakers,
+            style=style,
         )
         highlights = [
             hl
@@ -367,12 +393,23 @@ def _pick_highlights(
         ]
         for i, hl in enumerate(highlights):
             hl.index = i
-        if highlights:
-            return highlights, winner_name
-        return fallback_highlights(segments, total_ms), winner_name
+        moments = [
+            m for pick in marked if (m := snap_moment(segments, pick, style.moment, debaters))
+        ]
+        moments = keep_moments(moments, style.max_moments) or fallback
+        shorts = highlights or fallback_highlights(segments, total_ms)
+        return Picks(shorts, winner_name, moments, by_model=bool(highlights))
     except Exception as e:
         logger.warning("Highlight selection failed, using fallback: %s", e)
-        return fallback_highlights(segments, total_ms), None
+        return Picks(fallback_highlights(segments, total_ms), None, fallback, by_model=False)
+
+
+@dataclass
+class Picks:
+    highlights: list[TimelineHighlight]
+    winner_name: str | None
+    moments: list[TimelineMoment]
+    by_model: bool  # False: the deterministic fallbacks (no key, a failed or useless answer)
 
 
 @dataclass
@@ -636,8 +673,7 @@ def _build(db: Session, debate: Debate, options: MediaOptions, force: bool) -> B
     if not turns:
         raise RuntimeError("The debate has no spoken turns")
 
-    moderator = next((p for p in participants if p.get("role") == "moderator"), None)
-    judge_model = str((moderator or {}).get("model_id") or settings.DEFAULT_MODEL_ID)
+    judge_model = _host_model(participants)
     speakers = build_speakers(participants, code, judge_model)
     speakers_by_id = {s.id: s for s in speakers}
 
@@ -1051,6 +1087,60 @@ def _build_battle(
     return BuildResult(chars=char_cost, music_ms=billed_ms)
 
 
+def _host_model(participants: list[dict[str, Any]]) -> str:
+    """The model that hosted the debate (a Free Router's pinned one): it picks the Shorts and
+    the lines the video hits."""
+    moderator = next((p for p in participants if p.get("role") == "moderator"), None)
+    return str((moderator or {}).get("model_id") or settings.DEFAULT_MODEL_ID)
+
+
+@attributed
+def refresh_timeline(debate_id: str) -> str:
+    """Bring a ready timeline.json up to date without voicing or composing anything: the beat
+    grid of a generated track, the Shorts and the lines the video hits (the host's model is
+    asked again only when its prompt changed: HIGHLIGHTS_VERSION, at most one call). Bumps
+    `media_json.revision`, so players fetch the new file. Returns what it did."""
+    with get_sync_session() as db:
+        debate = db.get(Debate, uuid.UUID(debate_id))
+        if debate is None or debate.media_status != "ready":
+            return "skipped: no ready audio"
+        paths = MediaPaths(debate_id)
+        try:
+            timeline = Timeline.model_validate_json(paths.timeline.read_text())
+        except (OSError, ValueError) as e:
+            return f"skipped: unreadable timeline ({e.__class__.__name__})"
+        conf: dict[str, Any] = debate.config_json or {}
+        fmt = format_of(conf)
+        participants = resolved_participants(conf.get("participants", []), debate.participants)
+        update: dict[str, Any] = {}
+        if fmt.soundtrack == "music" and paths.music_wav.exists():
+            update["beat"] = _beat_of(paths.music_wav)
+        picks = _pick_highlights(
+            model=_host_model(participants),
+            paths=paths,
+            topic=str(conf.get("topic") or ""),
+            language=str(conf.get("language") or "English"),
+            segments=timeline.segments,
+            speakers=timeline.speakers,
+            total_ms=timeline.total_ms,
+            style=fmt.highlight_style,
+        )
+        # A failed host keeps the Shorts it picked before (the fallback is the last exchange).
+        highlights = (
+            picks.highlights if picks.by_model or not timeline.highlights else timeline.highlights
+        )
+        update |= {"highlights": highlights, "moments": picks.moments}
+        paths.timeline.write_text(timeline.model_copy(update=update).model_dump_json(indent=2))
+        state = dict(debate.media_json or {})
+        state["revision"] = int(state.get("revision") or 0) + 1
+        debate.media_json = state
+        db.commit()
+        beat = update.get("beat")
+        grid = f", beat at {beat.offset_ms} ms" if beat else ""
+        source = "picked" if picks.by_model else "kept / fallback"
+        return f"{len(highlights)} shorts ({source}), {len(picks.moments)} moments{grid}"
+
+
 def _beat_of(track: Path) -> TimelineBeat | None:
     """The generated track's beat grid (the video moves on it); none when unclear or unreadable:
     the video then moves on the loudness."""
@@ -1099,7 +1189,7 @@ def _finish(
     language = str(conf.get("language") or "English")
     speakers_by_id = {s.id: s for s in speakers}
     set_media_state(db, debate, step="highlights", message="Picking highlights for shorts…")
-    highlights, winner_name = _pick_highlights(
+    picks = _pick_highlights(
         model=judge_model,
         paths=paths,
         topic=str(conf.get("topic") or ""),
@@ -1107,6 +1197,7 @@ def _finish(
         segments=segments,
         speakers=speakers,
         total_ms=total_ms,
+        style=format_of(conf).highlight_style,
     )
     verdict_turn = next((t for t in turns if t.turn_type == "verdict"), None)
     verdict: TimelineVerdict | None = None
@@ -1116,7 +1207,8 @@ def _finish(
         winner = (
             speakers_by_id.get(str(structured_id))
             if structured_id
-            else extract_winner(verdict_turn.text, speakers) or match_speaker(winner_name, speakers)
+            else extract_winner(verdict_turn.text, speakers)
+            or match_speaker(picks.winner_name, speakers)
         )
         verdict = TimelineVerdict(
             seq_index=verdict_turn.seq_index,
@@ -1143,10 +1235,11 @@ def _finish(
         gap_ms=gap_ms,
         total_ms=total_ms,
         verdict=verdict,
-        highlights=highlights,
+        highlights=picks.highlights,
         visuals=visuals,
         stats=stats,
         beat=beat,
+        moments=picks.moments,
     )
     paths.timeline.write_text(timeline.model_dump_json(indent=2))
 
