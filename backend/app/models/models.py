@@ -402,6 +402,78 @@ class ViewDay(Base):
     __table_args__ = (Index("ix_view_days_debate_id", "debate_id"),)
 
 
+class Visit(Base):
+    """One visit of the site (a session: ends after 30 minutes without activity), written by the
+    page's presence beacon (app.services.audience). The ids come from the browser: `visitor_id`
+    lives in its localStorage, `id` rotates with the visit. `ip` and `user_agent` are cleared
+    after the `analytics_ip_days` lever; the rest (place, source, pages, time) stays."""
+
+    __tablename__ = "visits"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    visitor_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), index=True)
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    # Signed in with a console role at some point of the visit (left out of the statistics).
+    staff: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    last_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    ip: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    user_agent: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    country: Mapped[str | None] = mapped_column(String(2), nullable=True)  # ISO 3166-1 alpha-2
+    region: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    city: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    # Where it came from (app.services.views.classify), the referring host and page, the
+    # campaign of the landing address (utm_*) and its `?ref=`.
+    source: Mapped[str] = mapped_column(String(16), default="direct")
+    referrer_host: Mapped[str | None] = mapped_column(String(253), nullable=True)
+    referrer: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    utm_source: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    utm_medium: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    utm_campaign: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    ref: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    landing: Mapped[str] = mapped_column(String(300), default="/")
+    exit_path: Mapped[str] = mapped_column(String(300), default="/")
+    pageviews: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    actions: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    # Time the page was in front of the visitor (visible, not idle), over all its pages.
+    engaged_ms: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    device: Mapped[str] = mapped_column(String(8), default="desktop")  # desktop | mobile | tablet
+    browser: Mapped[str | None] = mapped_column(String(24), nullable=True)
+    os: Mapped[str | None] = mapped_column(String(24), nullable=True)
+    screen: Mapped[str | None] = mapped_column(String(16), nullable=True)  # "1440x900"
+    language: Mapped[str | None] = mapped_column(String(16), nullable=True)  # navigator.language
+    timezone: Mapped[str | None] = mapped_column(String(48), nullable=True)
+    # The visitor's first visit (no earlier visit with its id).
+    new_visitor: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+
+    __table_args__ = (Index("ix_visits_visitor_started", "visitor_id", "started_at"),)
+
+
+class VisitEvent(Base):
+    """A page shown in a visit (`kind=page`, `engaged_ms` grows while it stays in front) or
+    something the visitor did there (`kind=action`, `name` from audience.ACTIONS)."""
+
+    __tablename__ = "visit_events"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    visit_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("visits.id", ondelete="CASCADE")
+    )
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    kind: Mapped[str] = mapped_column(String(8))  # page | action
+    name: Mapped[str] = mapped_column(String(32))  # "page", or the action
+    path: Mapped[str] = mapped_column(String(300))
+    debate_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("debates.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    engaged_ms: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    props: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, server_default="{}")
+
+    __table_args__ = (Index("ix_visit_events_visit_at", "visit_id", "at"),)
+
+
 class ProviderUsage(Base):
     """One paid provider call (or try): what it was for, on whose key, what it cost.
 

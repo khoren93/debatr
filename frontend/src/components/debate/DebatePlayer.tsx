@@ -44,12 +44,14 @@ interface ControlsProps {
   canFullscreen: boolean;
   onFullscreen: () => void;
   onActiveSeq?: (seq: number | null) => void;
+  /** How far playback got (0–1), on every frame while playing. */
+  onProgress?: (fraction: number) => void;
   /** Before the full-screen button (the embed's "Watch on Debatr"). */
   extra?: ReactNode;
 }
 
 /** Control strip of the ready player: seek bar by turns, play, mute, time, speaker, fullscreen. */
-const PlayerControls = ({ playerRef, chapters, totalMs, initialMs, fullscreen, canFullscreen, onFullscreen, onActiveSeq, extra }: ControlsProps) => {
+const PlayerControls = ({ playerRef, chapters, totalMs, initialMs, fullscreen, canFullscreen, onFullscreen, onActiveSeq, onProgress, extra }: ControlsProps) => {
   const [ms, setMs] = useState(initialMs);
   const playing = usePlaying(playerRef);
   const [muted, setMuted] = useState(false);
@@ -70,7 +72,10 @@ const PlayerControls = ({ playerRef, chapters, totalMs, initialMs, fullscreen, c
     const onFrame = ({ detail }: { detail: { frame: number } }) => {
       const frameMs = (detail.frame / FPS) * 1000;
       // Playing counts as engaged even when the play event came before this listener (autoplay).
-      if (player.isPlaying()) engaged.current = true;
+      if (player.isPlaying()) {
+        engaged.current = true;
+        onProgress?.(Math.min(1, frameMs / Math.max(1, totalMs - 1000 / FPS)));
+      }
       setMs(frameMs);
       report(frameMs);
     };
@@ -95,7 +100,7 @@ const PlayerControls = ({ playerRef, chapters, totalMs, initialMs, fullscreen, c
       player.removeEventListener('seeked', onSeeked);
       player.removeEventListener('mutechange', onMute);
     };
-  }, [playerRef, chapters, onActiveSeq]);
+  }, [playerRef, chapters, onActiveSeq, onProgress, totalMs]);
 
   const seekMs = (target: number) => playerRef.current?.seekTo(msToFrame(Math.max(0, Math.min(totalMs - 1, target))));
   const index = chapterAt(chapters, ms);
@@ -218,6 +223,7 @@ interface PlayerProps {
   onPlay?: () => void;
   playerRef: RefObject<PlayerRef | null>;
   onActiveSeq?: (seq: number | null) => void;
+  onProgress?: (fraction: number) => void;
   /** The player of another site's iframe (EmbedShell). */
   embed?: boolean;
   /** In the control strip before the full-screen button. */
@@ -226,7 +232,7 @@ interface PlayerProps {
   header?: ReactNode;
 }
 
-export const DebatePlayer = ({ timeline, mediaBase, format, highlightIndex, startSeq, startMs = 0, deferred = false, poster = null, onPlay, playerRef, onActiveSeq, embed = false, extra, header }: PlayerProps) => {
+export const DebatePlayer = ({ timeline, mediaBase, format, highlightIndex, startSeq, startMs = 0, deferred = false, poster = null, onPlay, playerRef, onActiveSeq, onProgress, embed = false, extra, header }: PlayerProps) => {
   const shellRef = useRef<HTMLDivElement>(null);
   const [fullscreen, setFullscreen] = useState(false);
   const isLong = format === 'long';
@@ -263,7 +269,7 @@ export const DebatePlayer = ({ timeline, mediaBase, format, highlightIndex, star
       {poster && <PosterFace poster={poster} onPlay={(e) => playerRef.current?.play(e)} />}
     </PlayerFrame>
   );
-  const controls = <PlayerControls key={key} playerRef={playerRef} chapters={chapters} totalMs={totalMs} initialMs={(initialFrame / FPS) * 1000} fullscreen={fullscreen} canFullscreen={document.fullscreenEnabled} onFullscreen={toggleFullscreen} onActiveSeq={onActiveSeq} extra={extra} />;
+  const controls = <PlayerControls key={key} playerRef={playerRef} chapters={chapters} totalMs={totalMs} initialMs={(initialFrame / FPS) * 1000} fullscreen={fullscreen} canFullscreen={document.fullscreenEnabled} onFullscreen={toggleFullscreen} onActiveSeq={onActiveSeq} onProgress={onProgress} extra={extra} />;
   return embed ? <EmbedShell playerRef={playerRef} shellRef={shellRef} frame={frame} controls={controls} header={header} /> : <PlayerShell shellRef={shellRef} vertical={!isLong} fullscreen={fullscreen} frame={frame} controls={controls} />;
 };
 

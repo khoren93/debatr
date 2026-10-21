@@ -4,6 +4,7 @@ import type { DebateDetail } from '../../api/types';
 import { EMBED_ALLOW, embedCode, embedPath, embedTitle, type EmbedFormat } from '../../lib/embed';
 import { Segmented, SwitchTrack, useToast } from '../ui';
 import { msLabel, type VideoFormat } from './helpers';
+import { track } from '../../lib/presence';
 
 /** Where the page's player is: the embed may start there (the same video, the same clock). */
 export interface PlayerPosition {
@@ -41,6 +42,7 @@ export const EmbedPanel = ({ debate, position }: Props) => {
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(code);
+      track('copy_embed', { format, start }, debate.id);
       setCopied(true);
       toast.success('Embed code copied');
       window.setTimeout(() => setCopied(false), 1400);

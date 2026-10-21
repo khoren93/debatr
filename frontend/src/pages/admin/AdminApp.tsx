@@ -3,6 +3,7 @@ import { AdminAuthProvider, RequireAdmin } from '../../auth/AdminAuthContext';
 import { AdminShell } from '../../components/admin/AdminShell';
 import { Page } from '../../components/layout/AppShell';
 import { LinkButton } from '../../components/ui';
+import AdminAudience from './AdminAudience';
 import AdminAudit from './AdminAudit';
 import AdminDebate from './AdminDebate';
 import AdminDebates from './AdminDebates';
@@ -17,6 +18,8 @@ import AdminSystem from './AdminSystem';
 import AdminTrending from './AdminTrending';
 import AdminUser from './AdminUser';
 import AdminUsers from './AdminUsers';
+import AdminVisit from './AdminVisit';
+import AdminVisits from './AdminVisits';
 
 const AdminNotFound = () => (
   <Page className="text-center">
@@ -45,6 +48,9 @@ const AdminApp = () => (
         <Route index element={<AdminOverview />} />
         <Route path="users" element={<AdminUsers />} />
         <Route path="users/:id" element={<AdminUser />} />
+        <Route path="audience" element={<AdminAudience />} />
+        <Route path="audience/visits" element={<AdminVisits />} />
+        <Route path="audience/visits/:id" element={<AdminVisit />} />
         <Route path="debates" element={<AdminDebates />} />
         <Route path="debates/:id" element={<AdminDebate />} />
         <Route path="moderation" element={<AdminModeration />} />

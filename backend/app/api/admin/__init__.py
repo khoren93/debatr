@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends
 
 from app.admin.access import enforce_admin_api_limit
 from app.api.admin import (
+    routes_audience,
     routes_audit,
     routes_auth,
     routes_debates,
@@ -26,4 +27,5 @@ router.include_router(routes_trending.router, tags=["admin"])
 router.include_router(routes_system.router, tags=["admin"])
 router.include_router(routes_finance.router, tags=["admin"])
 router.include_router(routes_audit.router, tags=["admin"])
+router.include_router(routes_audience.router, tags=["admin"])
 router.include_router(routes_settings.router, tags=["admin"])

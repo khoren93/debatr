@@ -6,6 +6,8 @@ x-backend-env: &backend-env
   DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-ai_debates}
   REDIS_URL: redis://redis:6379/0
   MEDIA_ROOT: /media
+  # IP → place database of the Audience page (services/audience/geo), fetched monthly.
+  GEOIP_DIR: /geoip
   # The server renderer: the AI covers take the debaters' logos from it (/og/logo.png).
   WEB_INTERNAL_URL: http://web:3000
   # From .env (or the shell): the admin console's host, also read by the frontend's Caddy.
@@ -58,6 +60,7 @@ services:
       <<: *backend-env
     volumes:
       - media_data:/media
+      - geoip_data:/geoip
     depends_on:
       db:
         condition: service_healthy
@@ -93,6 +96,7 @@ services:
       RQ_SIMPLE_WORKER: "false"
     volumes:
       - media_data:/media
+      - geoip_data:/geoip
     depends_on:
       db:
         condition: service_healthy
@@ -194,3 +198,4 @@ volumes:
   redis_data:
   media_data:
   og_cache:
+  geoip_data:

@@ -5,6 +5,7 @@ import { viewerContext, type Viewer } from '../auth/viewer';
 import { readViewer } from '../auth/viewer.server';
 import { RouteError } from '../components/RouteError';
 import { AppShell } from '../components/layout/AppShell';
+import { Presence } from '../components/Presence';
 import { SiteStatusProvider } from '../hooks/useSiteStatus';
 import { siteOrigin } from '../server/site.server';
 import { serverSiteStatus } from '../server/siteStatus.server';
@@ -44,6 +45,7 @@ export default function Site({ loaderData }: Route.ComponentProps) {
         <AppShell>
           <Outlet />
         </AppShell>
+        <Presence />
       </SiteStatusProvider>
     </AuthProvider>
   );

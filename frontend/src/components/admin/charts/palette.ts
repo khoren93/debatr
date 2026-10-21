@@ -37,3 +37,12 @@ export const SPEND_COLORS = { models: '#3987e5', voices: '#d95926', pictures: '#
 export const SOURCE_COLORS = { search: '#3987e5', ai: '#d95926', social: '#199e70', embed: '#c98500', other: '#d55181', direct: '#008300', internal: '#9085e9' } as const;
 
 export const SOURCE_LABELS = { search: 'Search', ai: 'AI assistants', social: 'Social', embed: 'Embeds', other: 'Other sites', direct: 'Direct', internal: 'On the site' } as const;
+
+/**
+ * Magnitude in one hue (the Audience page's weekday × hour grid): the reference blue ramp's
+ * steps 600, 450, 350, 200 and 100, few → many on the dark card. Checked with the validator as an
+ * ordinal ramp against the card surface: monotone lightness, every adjacent gap ≥ 0.06, the
+ * darkest step 2.27:1 against the surface, one hue. An empty cell is the neutral surface step.
+ */
+export const HEAT_STEPS = ['#184f95', '#2a78d6', '#5598e7', '#9ec5f4', '#cde2fb'] as const;
+export const HEAT_EMPTY = 'rgba(255,255,255,0.05)';

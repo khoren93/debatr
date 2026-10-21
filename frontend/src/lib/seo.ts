@@ -328,6 +328,17 @@ export const topicSeo = (page: MotionPage): SeoData => {
 export const embedSeo = (title: string): SeoData => ({ title: withBrand(collapse(title)), robots: 'noindex' });
 
 /** Pages of an account and the sign-in forms: a title, kept out of every index. */
+/** The privacy notice: indexed, outside the sitemaps. */
+export const privacySeo = (): SeoData => ({
+  title: withBrand('Privacy'),
+  description: `What ${APP_NAME} keeps about accounts and visits, why, and for how long.`,
+  path: '/privacy',
+  robots: 'index',
+  type: 'website',
+  image: SITE_OG_IMAGE,
+  lang: 'en',
+});
+
 export const privateSeo = (title: string): SeoData => ({ title: title ? withBrand(title) : APP_NAME, robots: 'private' });
 
 /** Error pages: the status says it all to crawlers; people get a title. */

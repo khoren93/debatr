@@ -85,6 +85,10 @@ class Levers(BaseModel):
     # The topic writer (trending lists, AI topic ideas) and the trending lists' safety review.
     topic_model: str = Field(default="anthropic/claude-haiku-5.5", min_length=1, max_length=120)
     topic_review_model: str = Field(default="google/gemini-2.5-flash", min_length=1, max_length=120)
+    # Visits (services/audience): the presence beacon at all, and how long a visit keeps its IP
+    # and User-Agent (0: for good).
+    analytics_enabled: bool = True
+    analytics_ip_days: int = Field(default=90, ge=0, le=3650)
 
     @field_validator("maintenance_message")
     @classmethod
@@ -166,6 +170,8 @@ def defaults() -> dict[str, Any]:
         "topic_review_model": _env_model(
             "TOPIC_REVIEW_MODEL", settings.TOPIC_REVIEW_MODEL, "topic_review_model"
         ),
+        "analytics_enabled": settings.ANALYTICS_ENABLED,
+        "analytics_ip_days": max(0, min(3650, settings.ANALYTICS_IP_DAYS)),
     }
 
 

@@ -270,10 +270,12 @@ async def test_site_status(levers: dict) -> None:
         },
         "ai_covers": "paid",
         "cover_price_usd": 0.042,  # COVER_PRICE_USD 0.035 x markup 1.2
+        "analytics": True,
     }
-    levers.update(registration_open=False, maintenance=True)
+    levers.update(registration_open=False, maintenance=True, analytics_enabled=False)
     out = await site_status()
     assert not out.registration_open and out.maintenance and out.maintenance_message
+    assert not out.analytics
 
 
 async def test_limits_follow_the_levers(levers: dict) -> None:

@@ -22,6 +22,7 @@ from app.api import (
     routes_models,
     routes_motions,
     routes_oembed,
+    routes_presence,
     routes_presets,
     routes_reactions,
     routes_seo,
@@ -101,6 +102,7 @@ app.add_middleware(AdminGate)
 # Routers
 app.include_router(admin_api.router, prefix="/api/admin")
 app.include_router(routes_status.router, prefix="/api", tags=["meta"])
+app.include_router(routes_presence.router, prefix="/api", tags=["meta"])
 app.include_router(routes_auth.router, prefix="/api/auth", tags=["auth"])
 app.include_router(routes_tokens.router, prefix="/api/auth", tags=["api tokens"])
 app.include_router(routes_billing.router, prefix="/api/billing", tags=["billing"])

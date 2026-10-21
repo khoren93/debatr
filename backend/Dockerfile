@@ -10,8 +10,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PATH="/opt/venv/bin:$PATH"
 
-# /media is the shared volume for generated audio (see docker-compose.yml).
-RUN useradd --create-home --uid 1000 app && mkdir -p /code /media && chown app:app /code /media
+# /media is the shared volume for generated audio, /geoip the IP → place database (see
+# docker-compose.yml): a new named volume copies the folder's owner from the image.
+RUN useradd --create-home --uid 1000 app && mkdir -p /code /media /geoip && chown app:app /code /media /geoip
 
 WORKDIR /code
 

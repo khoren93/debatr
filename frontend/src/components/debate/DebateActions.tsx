@@ -9,6 +9,7 @@ import { debateMarkdown, downloadText, timelineSrt, transcriptText, type VideoFo
 import { LikeButton } from './LikeButton';
 import type { PlayerPosition } from './EmbedPanel';
 import { ICON_ON_PHONES, TOOL_BUTTON } from './toolButton';
+import { track } from '../../lib/presence';
 
 // Opens on a click: not part of the page's first JavaScript.
 const SharePopover = lazy(() => import('./SharePopover'));
@@ -76,7 +77,10 @@ export const DebateActions = ({ debate, timeline, isActive, completed, voicing, 
     };
   }, [open]);
 
-  const toggle = (which: 'share' | 'menu') => setOpen((cur) => (cur === which ? null : which));
+  const toggle = (which: 'share' | 'menu') => {
+    if (which === 'share' && open !== 'share') track('share', {}, debate.id);
+    setOpen((cur) => (cur === which ? null : which));
+  };
   const run = (action: () => void) => () => {
     setOpen(null);
     action();
@@ -130,7 +134,7 @@ export const DebateActions = ({ debate, timeline, isActive, completed, voicing, 
         </button>
       )}
       {completed && (owner || debate.is_public) && (
-        <Link to={`/create?remix=${debate.id}`} aria-label="Remix" title="Remix: a new debate with this setup" className={`${TOOL_BUTTON} ${ICON_ON_PHONES}`}>
+        <Link to={`/create?remix=${debate.id}`} onClick={() => track('remix', {}, debate.id)} aria-label="Remix" title="Remix: a new debate with this setup" className={`${TOOL_BUTTON} ${ICON_ON_PHONES}`}>
           <Repeat2 className="size-4" /> <span className="max-sm:hidden">Remix</span>
         </Link>
       )}

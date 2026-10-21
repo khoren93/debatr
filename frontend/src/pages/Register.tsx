@@ -11,6 +11,7 @@ import { Button, ErrorBox, LinkButton, useToast } from '../components/ui';
 import { useBillingConfig } from '../hooks/useBillingConfig';
 import { useSiteStatus } from '../hooks/useSiteStatus';
 import { APP_NAME } from '../lib/brand';
+import { track } from '../lib/presence';
 
 const DEFAULT_NEXT = '/library';
 const MIN_PASSWORD = 8;
@@ -68,6 +69,7 @@ const Register = () => {
     setExists(false);
     try {
       setUser(await register(email.trim(), password, name.trim() || undefined));
+      track('signup');
       toast.success(bonus > 0 ? `Welcome! ${money(bonus)} of credits added` : `Welcome to ${APP_NAME}!`);
       navigate(next ?? DEFAULT_NEXT, { replace: true });
     } catch (err) {
@@ -93,6 +95,12 @@ const Register = () => {
           <Link to={withNext('/login', next)} className="font-semibold text-accent hover:text-accent-hover">
             Sign in
           </Link>
+          <span className="mt-2 block text-[11px] text-dim">
+            How we handle data:{' '}
+            <Link to="/privacy" className="hover:text-muted">
+              Privacy
+            </Link>
+          </span>
         </>
       }
     >

@@ -996,7 +996,9 @@ export type LeverKey =
   | 'trending_daily_topics'
   | 'trending_shown_topics'
   | 'topic_model'
-  | 'topic_review_model';
+  | 'topic_review_model'
+  | 'analytics_enabled'
+  | 'analytics_ip_days';
 
 export type LeverValue = boolean | number | string | string[];
 
@@ -1055,4 +1057,237 @@ export interface AlertsOut {
   configured: boolean;
   check_every_seconds: number;
   recent: AlertEntry[];
+}
+
+// --- audience (visits of the site; backend services/admin/audience.py) -------------------------
+
+export interface AudienceTiles {
+  visitors: Tile;
+  visits: Tile;
+  pageviews: Tile;
+  /** Average time in front per visit. */
+  engaged_ms: Tile;
+  /** One page and under 10 s. */
+  bounce_rate: Tile;
+  new_visitors: Tile;
+  signups: Tile;
+  online: number;
+}
+
+export interface AudiencePoint {
+  t: string;
+  visitors: number;
+  visits: number;
+  sources: Record<string, number>;
+}
+
+/** One line of a breakdown: `key` is what it groups by, `label` a second key where there is one. */
+export interface AudienceRow {
+  key: string;
+  label: string | null;
+  visits: number;
+  visitors: number;
+  engaged_ms: number | null;
+  bounce_rate: number | null;
+  signups: number;
+}
+
+export interface AudiencePage {
+  path: string;
+  views: number;
+  visitors: number;
+  engaged_ms: number | null;
+  title: string | null;
+}
+
+export interface AudienceCampaign {
+  utm_source: string | null;
+  utm_medium: string | null;
+  utm_campaign: string | null;
+  visits: number;
+  visitors: number;
+  signups: number;
+}
+
+export interface AudienceVideo {
+  debate_id: string;
+  title: string;
+  path: string | null;
+  plays: number;
+  visitors: number;
+  finished: number;
+}
+
+export interface FunnelStep {
+  key: string;
+  label: string;
+  visitors: number;
+}
+
+export interface GeoDatabase {
+  available: boolean;
+  updated_at: string | null;
+  release: string | null;
+  attribution: string | null;
+}
+
+export interface Audience {
+  period: OverviewPeriod;
+  start: string;
+  end: string;
+  previous_start: string | null;
+  bucket: 'hour' | 'day' | 'week';
+  generated_at: string;
+  timezone: string;
+  data_since: string | null;
+  tiles: AudienceTiles;
+  series: AudiencePoint[];
+  sources: AudienceRow[];
+  referrers: AudienceRow[];
+  campaigns: AudienceCampaign[];
+  countries: AudienceRow[];
+  regions: AudienceRow[];
+  cities: AudienceRow[];
+  landing: AudienceRow[];
+  exits: AudienceRow[];
+  pages: AudiencePage[];
+  sections: AudienceRow[];
+  videos: AudienceVideo[];
+  devices: AudienceRow[];
+  browsers: AudienceRow[];
+  systems: AudienceRow[];
+  languages: AudienceRow[];
+  screens: AudienceRow[];
+  /** Visits started: [Monday … Sunday][hour 0–23] in `timezone`. */
+  hours: number[][];
+  funnel: FunnelStep[];
+  actions: AudienceRow[];
+  geo: GeoDatabase;
+}
+
+export interface VisitUser {
+  id: string;
+  email: string;
+  display_name: string;
+}
+
+export interface VisitRow {
+  id: string;
+  visitor_id: string;
+  started_at: string;
+  last_at: string;
+  ip: string | null;
+  country: string | null;
+  region: string | null;
+  city: string | null;
+  source: string;
+  referrer_host: string | null;
+  utm_campaign: string | null;
+  landing: string;
+  exit_path: string;
+  pageviews: number;
+  actions: number;
+  engaged_ms: number;
+  device: string;
+  browser: string | null;
+  os: string | null;
+  new_visitor: boolean;
+  staff: boolean;
+  user: VisitUser | null;
+}
+
+export type VisitSort = 'started' | 'engaged' | 'pageviews' | 'actions';
+
+export interface VisitListQuery {
+  period?: OverviewPeriod;
+  q?: string;
+  source?: string;
+  country?: string;
+  device?: 'desktop' | 'mobile' | 'tablet';
+  signed_in?: boolean;
+  new_visitor?: boolean;
+  action?: string;
+  staff?: boolean;
+  sort?: VisitSort;
+  order?: 'asc' | 'desc';
+  limit?: number;
+  offset?: number;
+}
+
+export interface VisitList {
+  items: VisitRow[];
+  total: number;
+}
+
+export interface VisitEvent {
+  at: string;
+  kind: 'page' | 'action';
+  name: string;
+  label: string;
+  path: string;
+  engaged_ms: number;
+  debate_id: string | null;
+  debate_title: string | null;
+  props: Record<string, unknown>;
+}
+
+export interface VisitDetail extends VisitRow {
+  user_agent: string | null;
+  referrer: string | null;
+  utm_source: string | null;
+  utm_medium: string | null;
+  ref: string | null;
+  screen: string | null;
+  language: string | null;
+  timezone: string | null;
+}
+
+export interface VisitorSummary {
+  visitor_id: string;
+  first_seen: string;
+  last_seen: string;
+  visits: number;
+  pageviews: number;
+  engaged_ms: number;
+  accounts: VisitUser[];
+}
+
+export interface SharedAddress {
+  ip: string;
+  user: VisitUser;
+  visits: number;
+  last_at: string;
+}
+
+export interface VisitCard {
+  visit: VisitDetail;
+  events: VisitEvent[];
+  visitor: VisitorSummary;
+  visitor_visits: VisitRow[];
+  same_ip: SharedAddress[];
+}
+
+export interface AddressRow {
+  ip: string;
+  country: string | null;
+  region: string | null;
+  city: string | null;
+  visits: number;
+  first_at: string;
+  last_at: string;
+}
+
+export interface UserVisits {
+  visits: VisitRow[];
+  total: number;
+  engaged_ms: number;
+  pageviews: number;
+  first: VisitRow | null;
+  addresses: AddressRow[];
+  shared: SharedAddress[];
+}
+
+export interface LiveVisits {
+  visits: VisitRow[];
+  generated_at: string;
 }

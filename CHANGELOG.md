@@ -13,6 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   switches to another language (only the languages with debates, with their counts) or to all of
   them (`?lang=ru`, `?lang=all`). The API takes `language=<code>` and answers how many cards each
   language has.
+- Gallery cards show the debate's language.
+- Admin console: an Audience page with visit statistics.
+- A privacy page (`/privacy`).
 
 ### Changed
 

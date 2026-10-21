@@ -509,6 +509,8 @@ export interface SiteStatus {
   /** AI covers (a lever): off | paid | all_public, and what one costs from the balance. */
   ai_covers: 'off' | 'paid' | 'all_public';
   cover_price_usd: number;
+  /** The presence beacon (lib/presence.ts); false: the site sends none. */
+  analytics?: boolean;
 }
 
 /** Limits of debates on free models for accounts without credits or an own OpenRouter key

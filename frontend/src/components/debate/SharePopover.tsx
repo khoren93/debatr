@@ -5,6 +5,7 @@ import { publishDebate, unpublishDebate } from '../../api/debates';
 import { GALLERY_CATEGORIES, type DebateDetail } from '../../api/types';
 import { Button, Chip, Spinner, useToast } from '../ui';
 import { EmbedPanel, type PlayerPosition } from './EmbedPanel';
+import { track } from '../../lib/presence';
 
 interface Props {
   debate: DebateDetail;
@@ -65,6 +66,7 @@ export const SharePopover = ({ debate, onChange, position }: Props) => {
     if (!link) return;
     try {
       await navigator.clipboard.writeText(link);
+      track('copy_link', {}, debate.id);
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1400);
     } catch {

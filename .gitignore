@@ -23,6 +23,7 @@ docker-compose.override.yml
 
 # Generated audio/timeline files (backend MEDIA_ROOT)
 /backend/media/
+/backend/geoip/
 /media/
 
 # Python

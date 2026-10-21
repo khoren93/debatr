@@ -26,6 +26,7 @@ import { getLocalKey } from '../lib/localKeys';
 import { STAGE_COLORS, STAGE_LABELS, roundLabel, shortModelName, stageOf } from '../lib/format';
 import { formatSpec } from '../lib/formats';
 import { frameToMs, msToFrame } from '../video/timing';
+import { track } from '../lib/presence';
 
 // Browser-only (Remotion, the MP4 renderer): loaded after hydration (see ClientOnly; the player:
 // the facade below).
@@ -122,6 +123,13 @@ const DebateView = ({ initial, viewer, id, slug }: Props) => {
   const [regenOpen, setRegenOpen] = useState(false);
   // Blind voting: the judge's ruling stays covered until the viewer votes or peeks.
   const [revealed, setRevealed] = useState(false);
+  // Video plays and quarters already reported from this page (lib/presence.ts).
+  const reported = useRef(new Set<string>());
+  const note = (key: string, report: () => void) => {
+    if (reported.current.has(key)) return;
+    reported.current.add(key);
+    report();
+  };
   // The player's facade: the server's HTML has the poster and the play button; the Remotion chunk
   // comes on intent (hover, focus), in idle time after the page's load, or on the first click.
   const [wantPlayer, setWantPlayer] = useState(false);
@@ -359,6 +367,14 @@ const DebateView = ({ initial, viewer, id, slug }: Props) => {
   const onPlayed = () => {
     setPlayed(true);
     setDeferred(false);
+    note(`${debate.id}:${format}:play`, () => track('video_play', { format }, debate.id));
+  };
+  // Quarters watched of each video, once per page (the console's "watched to the end").
+  const onProgress = (fraction: number) => {
+    for (const pct of [25, 50, 75, 100]) {
+      if (fraction * 100 < (pct === 100 ? 98 : pct)) break;
+      note(`${debate.id}:${format}:${pct}`, () => track('video_progress', { pct, format }, debate.id));
+    }
   };
 
   /** Transcript click: jump the player to the turn (the long video when the Short lacks it).
@@ -430,7 +446,10 @@ const DebateView = ({ initial, viewer, id, slug }: Props) => {
   const audience = debate.engagement.audience;
   const showVote = debate.is_public && audience.reason !== 'not_public' && audience.reason !== 'not_finished';
   const verdictHidden = showVote && !revealed && audience.my_vote === null && audience.reason !== 'owner';
-  const reveal = () => setRevealed(true);
+  const reveal = () => {
+    setRevealed(true);
+    track('verdict_reveal', {}, debate.id);
+  };
   const topic = debate.settings.topic || debate.title || 'Debate';
   const playable = !isActive && !!timeline && !!media?.urls;
   const voiced = hasVideo;
@@ -610,6 +629,7 @@ const DebateView = ({ initial, viewer, id, slug }: Props) => {
                     deferred={deferred}
                     poster={posterOn ? poster : null}
                     onPlay={onPlayed}
+                    onProgress={onProgress}
                     playerRef={playerRef}
                     onActiveSeq={setActiveSeq}
                   />

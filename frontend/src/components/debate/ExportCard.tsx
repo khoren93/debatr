@@ -11,6 +11,7 @@ import { DebateShort } from '../../video/DebateShort';
 import { SCALE_720P, checkRenderSupport, renderMp4 } from '../../video/render';
 import { longDurationInFrames, shortDurationInFrames } from '../../video/timing';
 import { preloadSceneAssets } from '../../video/visuals/geoLoader';
+import { track } from '../../lib/presence';
 
 type AnyComposition = ComponentType<Record<string, unknown>>;
 
@@ -159,6 +160,7 @@ export const ExportCard = ({ kind, debateId, timeline, mediaBase, highlightIndex
       if (result) URL.revokeObjectURL(result.url);
       setResult({ url: URL.createObjectURL(blob), size: blob.size, ms: took, scale, highlight: highlightIndex });
       if (reportRenders) reportRender(debateId, kind).catch(() => undefined);
+      track('export_mp4', { kind, scale }, debateId);
     } catch (e) {
       const message = (e as Error).message;
       if (!/abort|cancel/i.test(message)) console.error('MP4 render failed', e);

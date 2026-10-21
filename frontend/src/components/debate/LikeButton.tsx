@@ -6,6 +6,7 @@ import { setLike } from '../../api/debates';
 import type { DebateDetail } from '../../api/types';
 import { useToast } from '../ui';
 import { ICON_ON_PHONES, TOOL_BUTTON } from './toolButton';
+import { track } from '../../lib/presence';
 
 interface Props {
   debate: DebateDetail;
@@ -33,6 +34,7 @@ export const LikeButton = ({ debate, onChange }: Props) => {
     try {
       const res = await setLike(debate.id, next);
       onChange(res.likes, res.liked);
+      if (res.liked) track('like', {}, debate.id);
     } catch (err) {
       onChange(likes, liked);
       toast.error(getErrorMessage(err));

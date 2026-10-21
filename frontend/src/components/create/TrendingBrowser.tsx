@@ -8,6 +8,7 @@ import { useTrendingTopics } from '../../hooks/useTrendingTopics';
 import { formatAge, sourceDomain } from '../../lib/format';
 import { formatSpec } from '../../lib/formats';
 import { Spinner } from '../ui';
+import { track } from '../../lib/presence';
 
 interface TrendingBrowserProps {
   /** The wizard's format: its list of news topics and the style of the AI's topics. */
@@ -235,6 +236,7 @@ export const TrendingBrowser = ({ format, language, topic, isPicked, onPick, onU
     if (source.length < MIN_IDEA_TEXT || asking) return;
     const id = ++request.current;
     setIdeas({ format, text: source, status: 'loading', ideas: [] });
+    track('topic_ideas', { format });
     getTopicIdeas(source, format, language)
       .then((res) => {
         if (request.current === id) setIdeas({ format, text: source, status: 'done', ideas: res.ideas });

@@ -9,6 +9,7 @@ import { CoverCard } from './CoverCard';
 import { ExportCard } from './ExportCard';
 import type { SpeakerInfo, VideoFormat } from './helpers';
 import { PublishKit } from './PublishKit';
+import { track } from '../../lib/presence';
 
 interface Props {
   open: boolean;
@@ -120,7 +121,7 @@ export const ExportRail = ({ open, onClose, debate, lineup, media, timeline, med
               </div>
             </div>
             {timeline && media?.urls ? (
-              <a href={media.urls.full_mp3} download={`debate-${debate.id}.mp3`} className="inline-flex h-9 items-center gap-1.5 rounded-[10px] border border-white/8 bg-surface-2 px-3 text-xs font-semibold hover:bg-surface-3">
+              <a href={media.urls.full_mp3} download={`debate-${debate.id}.mp3`} onClick={() => track('download_mp3', {}, debate.id)} className="inline-flex h-9 items-center gap-1.5 rounded-[10px] border border-white/8 bg-surface-2 px-3 text-xs font-semibold hover:bg-surface-3">
                 <Download className="size-3.5" /> MP3
               </a>
             ) : (

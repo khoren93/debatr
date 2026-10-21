@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { getMe, logout as apiLogout } from '../api/auth';
 import type { User } from '../api/types';
 import type { Viewer } from './viewer';
+import { track } from '../lib/presence';
 
 interface AuthState {
   user: User | null;
@@ -56,6 +57,7 @@ export const AuthProvider = ({ children, viewer }: { children: ReactNode; viewer
   }, [known]);
 
   const signOut = useCallback(async () => {
+    track('logout');
     try {
       await apiLogout();
     } finally {

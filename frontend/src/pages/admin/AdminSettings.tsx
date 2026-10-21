@@ -69,6 +69,14 @@ const COPY: Record<LeverKey, { label: string; hint: string }> = {
     label: 'Topic safety review',
     hint: 'Checks every trending list before it is saved (fails closed: no answer, no batch). Keep it another model than the writer, so nothing judges its own topics.',
   },
+  analytics_enabled: {
+    label: 'Visit statistics',
+    hint: 'The site reports pages, time on them and actions for the Audience page (IP, place, device, source). Off: pages send nothing; what was collected stays.',
+  },
+  analytics_ip_days: {
+    label: 'Keep IP addresses, days',
+    hint: 'A visit’s IP and browser string are cleared after this many days (checked hourly); its place, source, pages and time stay. 0: kept for good.',
+  },
   free_verdict_model: {
     label: 'Verdict model of free debates',
     hint: 'Structures the verdict and answers the gallery check when every participant argues on a free model, so such a debate costs nothing. Free models only; off: the paid VERDICT_MODEL. A model that stops answering sends those debates to the moderation queue.',
@@ -85,6 +93,7 @@ const show = (lever: Lever, value: LeverValue, events: AlertEvent[] = []): strin
   if (lever.kind === 'model') return String(value) || (lever.key === 'free_verdict_model' ? 'off (paid model)' : '—');
   if (lever.kind === 'lengths') return Array.isArray(value) && value.length ? value.map((v) => LENGTH_LABELS[v] ?? v).join(', ') : 'all';
   if (lever.kind === 'int' && lever.key.startsWith('free_') && Number(value) === 0) return 'no limit';
+  if (lever.key === 'analytics_ip_days') return Number(value) === 0 ? 'kept for good' : `${Number(value)} days`;
   if (lever.kind === 'factor') return `× ${Number(value)}`;
   if (lever.kind === 'float') return formatUsd(Number(value));
   if (lever.kind === 'text') return String(value) || '(standard text)';
@@ -405,6 +414,16 @@ const AdminSettings = () => {
                     onChange={(value) => value !== lever.value && ask(lever, value)}
                   />
                 ))}
+              </div>
+            </Card>
+            <Card>
+              <SectionLabel>Audience</SectionLabel>
+              <p className="mt-1 text-xs text-muted">Visits of the site: the Audience page. Mention them in the privacy notice (/privacy).</p>
+              <div className="mt-2 divide-y divide-line">
+                {row('analytics_enabled', (lever) => (
+                  <Toggle lever={lever} onChange={(value) => ask(lever, value)} />
+                ))}
+                {row('analytics_ip_days', number)}
               </div>
             </Card>
             <Card>

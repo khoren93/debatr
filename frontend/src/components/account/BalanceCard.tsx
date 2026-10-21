@@ -6,6 +6,7 @@ import { formatCost } from '../../lib/format';
 import { useLocalKey } from '../../lib/localKeys';
 import { Button, SectionLabel, useToast } from '../ui';
 import { money, moneyShort } from './helpers';
+import { track } from '../../lib/presence';
 
 /** Rough all-in cost of one debate at the default settings, for the "≈ N debates" lines. */
 const DEBATE_COST_USD = 0.12;
@@ -57,8 +58,10 @@ export const BalanceCard = ({ user, config, configLoaded, usage, onToppedUp, onS
   const topUp = async () => {
     setBusy(true);
     try {
+      track('checkout', { amount });
       const res = await createCheckout(amount);
       if (res.instant) {
+        track('topup', { amount });
         toast.success(`Added ${moneyShort(amount)} in credits`);
         onToppedUp();
         setBusy(false);

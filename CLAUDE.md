@@ -19,13 +19,14 @@ backend/            FastAPI API + RQ worker (Python 3.12+, managed with uv)
                       (balance changes through the ledger), `indexnow --all [--dry-run]` (every
                       sitemap page to IndexNow at once, after a domain move), `media
                       refresh-timeline <ids> | --format rap_battle` (beat grid, Shorts and
-                      moments of ready timelines without rebuilding audio; media-worker: ffmpeg)
+                      moments of ready timelines without rebuilding audio; media-worker: ffmpeg),
+                      `geoip update` (the Audience page's place database now)
   app/admin/          admin console access: gate (host / IP / Fetch Metadata / Origin, outermost
                       middleware), access (sessions → AdminContext, CSRF, roles, sudo)
   app/scheduler.py    periodic jobs (`python -m app.scheduler`, RQ cron on the background queue:
                       hourly trending check, recovery check every minute, alerts check every 5
-                      minutes, IndexNow flush every minute in production; `--refresh-trending`
-                      builds a batch now)
+                      minutes, IndexNow flush every minute in production, visits upkeep hourly;
+                      `--refresh-trending` builds a batch now)
   app/core/           config (pydantic-settings), db (async SQLAlchemy), redis, logging,
                       ratelimit, auth (session cookie or Bearer API token; session-only deps),
                       security (bcrypt, Fernet, API token format/hash), ids
@@ -36,7 +37,8 @@ backend/            FastAPI API + RQ worker (Python 3.12+, managed with uv)
                       queue, debate changes), routes_trending (batches, hide / show, build now),
                       routes_system (queues, workers, scheduler, runs, limits, providers, health),
                       routes_finance (finance series, CSV, models), routes_audit (audit log page,
-                      facets, security summary), routes_settings (levers, alerts + test message)
+                      facets, security summary), routes_settings (levers, alerts + test message),
+                      routes_audience (Audience page, visits, an account's visits)
   app/api/            routers: auth, tokens (API tokens + `debatr login` device flow), billing
                       (Stripe), debates, gallery (+ leaderboard), motions (topic page, wizard
                       suggestions), reactions (likes/votes), models,
@@ -80,7 +82,10 @@ backend/            FastAPI API + RQ worker (Python 3.12+, managed with uv)
                       users (list query with SQL totals, pure card statistics, CSV, deletion),
                       debates (debate list / card / moderation queue / trending batches),
                       system (RQ / cron snapshot, runs in flight, limits, health, media scan),
-                      finance (money per day / week / month, Stripe reconciliation, model rows)
+                      finance (money per day / week / month, Stripe reconciliation, model rows),
+                      audience (the Audience page's queries)
+  app/services/audience/ visit statistics (see "Visit statistics"): collect (the beacon),
+                      agent (device / browser / OS), geo (place database), jobs (upkeep)
   app/services/media/ audio pipeline: script (markdown→speech), tts/ (elevenlabs, edge),
                       ffmpeg, highlights (the host model picks shorts), visuals (LLM director),
                       sketch (SVG line art → sanitized path data), images (Commons photos / AI
@@ -233,7 +238,8 @@ frontend/           React 19 + React Router 8 (framework mode, server rendering)
                       (filters in the URL), AdminUser (/admin/users/:id), AdminDebates,
                       AdminDebate (/admin/debates/:id), AdminModeration (keyboard queue),
                       AdminTrending, AdminFinance, AdminModels, AdminSystem (#runs #queues
-                      #limits #providers #health), AdminSettings (levers + alerts), AdminAudit
+                      #limits #providers #health), AdminSettings (levers + alerts), AdminAudience
+                      (`?tab=`) + AdminVisits (/admin/audience/visits) + AdminVisit, AdminAudit
                       (`?tab=security`, filters in the URL, diff per entry),
                       AdminSecurity (sessions, recovery codes, passkeys); components/admin:
                       AdminShell, SudoDialog (code or passkey), ActionDialog (reason + sudo
@@ -247,6 +253,8 @@ frontend/           React 19 + React Router 8 (framework mode, server rendering)
                       LineChart, StackedColumns, ChartCard (legend + table view), palette.ts =
                       validated chart colours)
   src/lib/cli.ts      install / login / MCP setup snippets shown on the Account page
+  src/lib/presence.ts the presence beacon (pages, time, `track(action)`; components/Presence.tsx
+                      mounts it in `_site`); `PresenceAction` mirrors backend audience ACTIONS
   src/lib/gallery.ts  the gallery's URL filters (sort, period, format, lang — English unless `?lang=`
                       names another code or `all` —, category, model, voices, page; `orderOf` /
                       `orderParams` = sort + period as one dropdown choice) and its API path (24
@@ -1144,6 +1152,19 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   preview). Stored as counts only: `debates.views` + `view_days` (UTC day, debate, place, source;
   migration 0016) — no IP, address or account; embedding hosts in Redis sorted sets
   (`views:embeds:{id}` and `views:embeds`, 90 days since the last view).
+
+### Visit statistics (`services/audience`, the console's Audience page)
+
+- The site's `lib/presence.ts` batches page, time and action events into `POST /api/presence`
+  (text/plain, `sendBeacon`; always 204; bots and automated browsers send / count nothing).
+  Visitor id in localStorage, a visit ends after 30 idle minutes; rows in `visits` +
+  `visit_events` (migration 0018). Console staff are left out of the numbers. A new action:
+  `PresenceAction`, `collect.ACTIONS` and the console's `ACTION_LABELS` (a test checks them).
+- Levers `analytics_enabled` (off: `GET /api/status` tells the site to send nothing) and
+  `analytics_ip_days` (`jobs.maintenance_job` clears old IPs hourly). Places come from a local
+  MaxMind-format file in GEOIP_DIR (volume `geoip_data`; DB-IP Lite, fetched monthly, CC BY:
+  the page credits it). Permission `audience` (admins). Keep `/privacy` (pages/Privacy.tsx) true
+  to what is kept and for how long.
 
 ### Admin console (`/admin`, `/api/admin/*`)
 

@@ -19,6 +19,7 @@ import {
   type NewsPick,
   type WizardState,
 } from './wizardState';
+import { track } from '../../lib/presence';
 
 interface StepTopicProps {
   state: WizardState;
@@ -119,6 +120,7 @@ export const StepTopic = ({ state, free, patch, onFormat, formatLocks, showError
     // The angle was written for the previously linked topic, or is a brief the old wizard copied
     // into it: it does not fit the new topic.
     const stale = Boolean(news) || (angle !== '' && all.some((t) => t.brief.trim() === angle));
+    track('topic_pick', { format: state.format, category: topic.category });
     patch({
       topic: topic.question,
       news: { topic_id: topic.id, brief: topic.brief, outlet: source?.outlet ?? '', title: source?.title ?? '', url: source?.url ?? '', published_at: source?.published_at ?? null },

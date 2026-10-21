@@ -10,6 +10,7 @@ import { FormField } from '../components/account/FormField';
 import { tokenRequest, type TokenOptions } from '../components/account/tokenOptions';
 import { TokenOptionsFields } from '../components/account/TokenOptionsFields';
 import { Button, ErrorBox, Spinner } from '../components/ui';
+import { track } from '../lib/presence';
 
 /** "wdjb mjht" -> "WDJB-MJHT" (the backend accepts any spacing too). */
 const tidyCode = (raw: string) => {
@@ -158,6 +159,7 @@ const Device = () => {
     setError(null);
     try {
       await approveDevice(code, body.body);
+      track('cli_login');
       setOutcome('approved');
     } catch (err) {
       setError(getErrorMessage(err));

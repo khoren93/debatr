@@ -9,6 +9,7 @@ const OPEN: SiteStatus = {
   free_debates: { per_day: 0, max_rounds: 0, max_debaters: 0, lengths: [] },
   ai_covers: 'paid',
   cover_price_usd: 0,
+  analytics: true,
 };
 // Shared by every component; asked again when older than this (an admin may flip a lever).
 const FRESH_MS = 60_000;

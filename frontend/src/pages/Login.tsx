@@ -8,6 +8,7 @@ import { AuthLayout } from '../components/account/AuthLayout';
 import { FormField, PasswordField } from '../components/account/FormField';
 import { safeNext, withNext } from '../components/account/helpers';
 import { Button, ErrorBox } from '../components/ui';
+import { track } from '../lib/presence';
 
 const DEFAULT_NEXT = '/library';
 
@@ -35,6 +36,7 @@ const Login = () => {
     setError(null);
     try {
       setUser(await login(email.trim(), password));
+      track('login');
       navigate(next ?? DEFAULT_NEXT, { replace: true });
     } catch (err) {
       setError(getErrorStatus(err) === 401 ? 'Wrong email or password' : getErrorMessage(err));

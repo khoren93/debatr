@@ -40,6 +40,7 @@ import { ttsKeyUsable, useElevenLabsKeyStatus } from '../hooks/useElevenLabsKeyS
 import { formatCost, formatMinutes } from '../lib/format';
 import { FORMAT_IDS, FORMATS, formatSpec, type FormatSpec } from '../lib/formats';
 import type { FormatId } from '../api/types';
+import { track } from '../lib/presence';
 
 /**
  * Three-step wizard: topic (trending news or your own, format) → speakers (models, voices,
@@ -200,7 +201,9 @@ const CreateDebate = () => {
       setShowErrors(true);
       return;
     }
-    goTo(Math.min(LAST_STEP, state.step + 1) as WizardStep);
+    const step = Math.min(LAST_STEP, state.step + 1) as WizardStep;
+    track('wizard_step', { step, format: state.format });
+    goTo(step);
   };
   const prev = () => goTo(Math.max(1, state.step - 1) as WizardStep);
 
@@ -216,6 +219,20 @@ const CreateDebate = () => {
         debateId = (await createDebate(config)).debate_id;
         clearWizardState();
       }
+      track(
+        'debate_start',
+        {
+          format: config.format ?? 'debate',
+          rounds: config.num_rounds ?? null,
+          debaters: config.participants.filter((p) => p.role !== 'moderator').length,
+          length: config.length_preset ?? null,
+          language: config.language ?? null,
+          paid: (shownCost ?? 0) > 0,
+          news: Boolean(config.news),
+          remix: Boolean(config.remix_of),
+        },
+        debateId,
+      );
       toast.success('The debate is on its way');
       void refresh();
       navigate(`/debate/${debateId}`);
@@ -244,6 +261,7 @@ const CreateDebate = () => {
         await createDebate({ ...draftConfig, draft: true });
         clearWizardState();
       }
+      track('draft_save', { format: state.format });
       toast.success('Draft saved');
       navigate('/library');
     } catch (err) {

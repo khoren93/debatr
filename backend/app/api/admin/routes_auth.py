@@ -90,6 +90,7 @@ PERMISSION_NAMES = (
     "money",
     "system",
     "audit",
+    "audience",
 )
 WRONG_LOGIN = "Wrong email or password"
 SIGN_IN_AGAIN = "Sign in again"

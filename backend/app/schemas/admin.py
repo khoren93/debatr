@@ -1261,3 +1261,239 @@ class AlertsOut(BaseModel):
 class AlertTestOut(BaseModel):
     sent: bool
     error: str | None = None
+
+
+# --- audience (visits of the site) --------------------------------------------------------------
+
+
+class AudienceTiles(BaseModel):
+    visitors: Tile  # distinct visitors (browsers)
+    visits: Tile
+    pageviews: Tile
+    engaged_ms: Tile  # average time in front per visit
+    bounce_rate: Tile  # one page and under 10 s
+    new_visitors: Tile  # visitors whose first visit is in the period
+    signups: Tile  # accounts created during a visit
+    online: int  # visits active in the last five minutes
+
+
+class AudiencePoint(BaseModel):
+    t: datetime
+    visitors: int
+    visits: int
+    sources: dict[str, int]  # visits by source
+
+
+class AudienceRow(BaseModel):
+    """One line of a breakdown: `key` is what it groups by (a source, a host, a country code, a
+    path…), `label` a second key where there is one (the region of a country, a host's class)."""
+
+    key: str
+    label: str | None = None
+    visits: int
+    visitors: int = 0
+    engaged_ms: float | None = None  # average per visit (per view for pages)
+    bounce_rate: float | None = None
+    signups: int = 0
+
+
+class AudiencePage(BaseModel):
+    path: str
+    views: int
+    visitors: int
+    engaged_ms: float | None  # average per view
+    title: str | None = None  # the debate's, for a debate page
+
+
+class AudienceCampaign(BaseModel):
+    utm_source: str | None
+    utm_medium: str | None
+    utm_campaign: str | None
+    visits: int
+    visitors: int
+    signups: int
+
+
+class AudienceVideo(BaseModel):
+    debate_id: str
+    title: str
+    path: str | None  # the public page; None while private
+    plays: int
+    visitors: int
+    finished: int  # watched to the end
+
+
+class FunnelStep(BaseModel):
+    key: str
+    label: str
+    visitors: int
+
+
+class GeoDatabase(BaseModel):
+    available: bool
+    updated_at: datetime | None = None
+    release: str | None = None
+    attribution: str | None = None
+
+
+class AudienceOut(BaseModel):
+    period: OverviewPeriod
+    start: datetime
+    end: datetime
+    previous_start: datetime | None
+    bucket: Literal["hour", "day", "week"]
+    generated_at: datetime
+    timezone: str  # of the hour-by-weekday grid
+    data_since: datetime | None  # the first visit recorded
+    tiles: AudienceTiles
+    series: list[AudiencePoint]
+    sources: list[AudienceRow]
+    referrers: list[AudienceRow]  # label = the host's source class
+    campaigns: list[AudienceCampaign]
+    countries: list[AudienceRow]  # key = ISO code ("" unknown)
+    regions: list[AudienceRow]  # key = country, label = region
+    cities: list[AudienceRow]  # key = country, label = "city · region"
+    landing: list[AudienceRow]  # key = path
+    exits: list[AudienceRow]
+    pages: list[AudiencePage]
+    sections: list[AudienceRow]  # key = part of the site
+    videos: list[AudienceVideo]
+    devices: list[AudienceRow]
+    browsers: list[AudienceRow]
+    systems: list[AudienceRow]
+    languages: list[AudienceRow]
+    screens: list[AudienceRow]
+    hours: list[list[int]]  # visits started: [Monday … Sunday][hour 0-23] in `timezone`
+    funnel: list[FunnelStep]
+    actions: list[AudienceRow]  # key = action, label = its words; visits = how many times
+    geo: GeoDatabase
+
+
+class VisitUser(BaseModel):
+    id: str
+    email: str
+    display_name: str
+
+
+class VisitRow(BaseModel):
+    id: str
+    visitor_id: str
+    started_at: datetime
+    last_at: datetime
+    ip: str | None
+    country: str | None
+    region: str | None
+    city: str | None
+    source: str
+    referrer_host: str | None
+    utm_campaign: str | None
+    landing: str
+    exit_path: str
+    pageviews: int
+    actions: int
+    engaged_ms: int
+    device: str
+    browser: str | None
+    os: str | None
+    new_visitor: bool
+    staff: bool
+    user: VisitUser | None = None
+
+
+VisitSort = Literal["started", "engaged", "pageviews", "actions"]
+
+
+class VisitListQuery(BaseModel):
+    period: OverviewPeriod = "7d"
+    q: str = Field(default="", max_length=200)  # IP, email, visitor or visit id, place, path
+    source: str | None = Field(default=None, max_length=16)
+    country: str | None = Field(default=None, max_length=2)
+    device: Literal["desktop", "mobile", "tablet"] | None = None
+    signed_in: bool | None = None
+    new_visitor: bool | None = None
+    action: str | None = Field(default=None, max_length=32)  # visits where this happened
+    staff: bool = False  # include console staff
+    sort: VisitSort = "started"
+    order: Literal["asc", "desc"] = "desc"
+    limit: int = Field(default=50, ge=1, le=200)
+    offset: int = Field(default=0, ge=0)
+
+
+class VisitList(BaseModel):
+    items: list[VisitRow]
+    total: int
+
+
+class VisitEventOut(BaseModel):
+    at: datetime
+    kind: Literal["page", "action"]
+    name: str
+    label: str  # the action's words, "Opened a page" for pages
+    path: str
+    engaged_ms: int
+    debate_id: str | None = None
+    debate_title: str | None = None
+    props: dict[str, Any] = Field(default_factory=dict)
+
+
+class VisitDetail(VisitRow):
+    user_agent: str | None
+    referrer: str | None
+    utm_source: str | None
+    utm_medium: str | None
+    ref: str | None
+    screen: str | None
+    language: str | None
+    timezone: str | None
+
+
+class VisitorSummary(BaseModel):
+    visitor_id: str
+    first_seen: datetime
+    last_seen: datetime
+    visits: int
+    pageviews: int
+    engaged_ms: int
+    accounts: list[VisitUser]
+
+
+class SharedAddress(BaseModel):
+    ip: str
+    user: VisitUser
+    visits: int
+    last_at: datetime
+
+
+class VisitCard(BaseModel):
+    visit: VisitDetail
+    events: list[VisitEventOut]
+    visitor: VisitorSummary
+    visitor_visits: list[VisitRow]  # the visitor's other visits, newest first
+    same_ip: list[SharedAddress]  # accounts seen on this visit's IP
+
+
+class AddressRow(BaseModel):
+    ip: str
+    country: str | None
+    region: str | None
+    city: str | None
+    visits: int
+    first_at: datetime
+    last_at: datetime
+
+
+class UserVisits(BaseModel):
+    """An account's visits, including the ones from its browsers before it signed in."""
+
+    visits: list[VisitRow]
+    total: int
+    engaged_ms: int
+    pageviews: int
+    first: VisitRow | None  # where the account's first browser first came from
+    addresses: list[AddressRow]
+    shared: list[SharedAddress]  # other accounts on the same addresses
+
+
+class LiveOut(BaseModel):
+    visits: list[VisitRow]
+    generated_at: datetime

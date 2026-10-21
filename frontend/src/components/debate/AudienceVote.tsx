@@ -8,6 +8,7 @@ import { shortModelName } from '../../lib/format';
 import { Spinner, useToast } from '../ui';
 import type { SpeakerInfo } from './helpers';
 import { SpeakerTile } from './SpeakerTile';
+import { track } from '../../lib/presence';
 
 interface Props {
   debate: DebateDetail;
@@ -45,7 +46,9 @@ export const AudienceVote = ({ debate, debaters, revealed, onReveal, onChange }:
     if (!canVote || pending) return;
     setPending(id);
     try {
-      onChange(await (audience.my_vote === id ? retractVote(debate.id) : castVote(debate.id, id)));
+      const retract = audience.my_vote === id;
+      onChange(await (retract ? retractVote(debate.id) : castVote(debate.id, id)));
+      if (!retract) track('vote', {}, debate.id);
     } catch (err) {
       toast.error(getErrorMessage(err));
     } finally {

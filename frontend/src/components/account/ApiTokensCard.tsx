@@ -10,6 +10,7 @@ import { CopyBlock } from './CopyBlock';
 import { money, timeAgo } from './helpers';
 import { tokenRequest, type TokenOptions } from './tokenOptions';
 import { TokenOptionsFields } from './TokenOptionsFields';
+import { track } from '../../lib/presence';
 
 type SetupTab = 'terminal' | 'claude' | 'json';
 
@@ -146,6 +147,7 @@ export const ApiTokensCard = ({ className = '' }: { className?: string }) => {
     setFormError(null);
     try {
       setCreated(await createToken(request.body));
+      track('token_create');
       setReload((n) => n + 1);
     } catch (err) {
       setFormError(getErrorMessage(err));

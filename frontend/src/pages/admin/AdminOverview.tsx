@@ -8,6 +8,7 @@ import { useAdminAuth } from '../../auth/AdminAuthContext';
 import { Page, PageTitle } from '../../components/layout/AppShell';
 import { AttentionList } from '../../components/admin/AttentionList';
 import { StatTile } from '../../components/admin/StatTile';
+import { TableCard } from '../../components/admin/TableCard';
 import { ChartCard } from '../../components/admin/charts/ChartCard';
 import { LineChart } from '../../components/admin/charts/LineChart';
 import { StackedColumns } from '../../components/admin/charts/StackedColumns';
@@ -201,41 +202,6 @@ const CostBreakdown = ({ byPurpose, total, userKeys }: { byPurpose: Record<strin
     </Card>
   );
 };
-
-const TableCard = ({ title, subtitle, head, rows, empty }: { title: string; subtitle?: string; head: string[]; rows: ReactNode[][]; empty: string }) => (
-  <Card padding="sm" className="min-w-0">
-    <h3 className="text-sm font-semibold text-text-2">{title}</h3>
-    {subtitle && <div className="mt-0.5 text-xs text-muted">{subtitle}</div>}
-    {rows.length === 0 ? (
-      <p className="mt-4 text-sm text-muted">{empty}</p>
-    ) : (
-      <div className="mt-3 overflow-x-auto">
-        <table className="w-full text-xs">
-          <thead className="text-left text-muted">
-            <tr>
-              {head.map((h, i) => (
-                <th key={h} className={`pb-2 font-medium ${i === 0 ? '' : 'whitespace-nowrap pl-3 text-right'}`}>
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="tabular-nums">
-            {rows.map((cells, r) => (
-              <tr key={r} className="border-t border-line">
-                {cells.map((cell, i) => (
-                  <td key={i} className={`py-2 ${i === 0 ? 'pr-3 text-text-2' : 'pl-3 text-right text-text-3 whitespace-nowrap'}`}>
-                    {cell}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    )}
-  </Card>
-);
 
 const AdminOverview = () => {
   const { me } = useAdminAuth();

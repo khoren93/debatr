@@ -16,6 +16,7 @@ import { SecurityCard } from '../components/account/SecurityCard';
 import { UsageCards } from '../components/account/UsageCards';
 import { money } from '../components/account/helpers';
 import { ACCOUNT_TABS, parseAccountTab, type AccountTab } from '../components/account/tabs';
+import { track } from '../lib/presence';
 
 const RECENT = 3;
 
@@ -97,8 +98,12 @@ const Account = () => {
     }
     confirmCheckout(sessionId)
       .then((res) => {
-        if (!res.credited) toast.success('Payment already credited');
-        else toast.success(res.amount_usd !== null ? `Added ${money(res.amount_usd)} in credits` : 'Credits added to your balance');
+        if (!res.credited) {
+          toast.success('Payment already credited');
+          return;
+        }
+        track('topup', { amount: res.amount_usd });
+        toast.success(res.amount_usd !== null ? `Added ${money(res.amount_usd)} in credits` : 'Credits added to your balance');
       })
       .catch((err) => toast.error(getErrorMessage(err)))
       .finally(() => void refresh());

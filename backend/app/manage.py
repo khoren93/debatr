@@ -25,6 +25,9 @@ ready debate of a format with `--format rap_battle`. It reads the generated trac
 so run it in the media-worker container:
 
     docker compose exec media-worker python -m app.manage media refresh-timeline --format rap_battle
+
+`geoip update` fetches the IP → place database of the Audience page now (the background queue
+does it monthly; services/audience/geo) and places the visits saved without one.
 """
 
 import argparse
@@ -289,6 +292,20 @@ def indexnow_all(*, dry_run: bool) -> int:
     return 0 if accepted else 1
 
 
+def geoip_update() -> int:
+    from app.services.audience import geo, jobs
+
+    if not geo.update():
+        print(
+            "The GeoIP database was not updated (GEOIP_URL empty or unreachable)", file=sys.stderr
+        )
+        return 1
+    with get_sync_session() as db:
+        placed = jobs.backfill(db)
+    print(f"GeoIP database ready ({geo.info().get('release')}); placed {placed} visits")
+    return 0
+
+
 def media_refresh(ids: list[str], fmt: str | None) -> int:
     from app.models.models import Debate
     from app.services.media.jobs import refresh_timeline
@@ -351,6 +368,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     refresh.add_argument("ids", nargs="*", help="debate ids")
     refresh.add_argument("--format", dest="fmt", help="every ready debate of this format")
+
+    geoip = commands.add_parser("geoip", help="the IP to place database of the Audience page")
+    geoip.add_subparsers(dest="action", required=True).add_parser("update", help="fetch it now")
     return parser
 
 
@@ -391,6 +411,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return indexnow_all(dry_run=args.dry_run)
     if args.command == "media":
         return media_refresh(list(args.ids), args.fmt)
+    if args.command == "geoip":
+        return geoip_update()
     return 2
 
 

@@ -86,6 +86,9 @@ const Sidebar = () => {
           </Link>
         )}
         <CreditsCard />
+        <Link to="/privacy" className="mt-3 block px-2 text-[11px] text-dim hover:text-muted">
+          Privacy
+        </Link>
       </div>
     </aside>
   );
@@ -155,6 +158,14 @@ export const AppShell = ({ children }: { children: ReactNode }) => {
         {!bare && <MobileTopBar />}
         {!bare && <MaintenanceBanner />}
         <div className="mx-auto flex w-full max-w-[1364px] flex-1 flex-col">{children}</div>
+        {/* Phones have no sidebar: its small links sit under the page. */}
+        {!bare && (
+          <footer className="px-[clamp(18px,4vw,48px)] pb-6 text-[11px] text-dim md:hidden">
+            <Link to="/privacy" className="hover:text-muted">
+              Privacy
+            </Link>
+          </footer>
+        )}
       </main>
       {!bare && <MobileTabs />}
     </div>

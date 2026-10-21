@@ -160,6 +160,16 @@ class Settings(BaseSettings):
     # at /{key}.txt. Changed public pages are announced at most once a minute; only in production
     # with an https SITE_URL. Empty = off.
     INDEXNOW_KEY: str = ""
+    # Visits (app.services.audience; the admin console's Audience page). The levers
+    # analytics_enabled / analytics_ip_days override the two env values.
+    ANALYTICS_ENABLED: bool = True
+    ANALYTICS_IP_DAYS: int = 90  # IP and User-Agent of a visit are cleared after this (0: kept)
+    PRESENCE_RATE_LIMIT: int = 600  # beacons per IP per 10 minutes (0 disables)
+    # IP → country, region and city: DB-IP's free "IP to City Lite" database (CC BY 4.0), fetched
+    # monthly into this folder by the background queue (`python -m app.manage geoip update` now).
+    # Empty GEOIP_URL: no download (put a GeoLite2-City / DB-IP .mmdb there by hand).
+    GEOIP_DIR: str = "./geoip"
+    GEOIP_URL: str = "https://download.db-ip.com/free/dbip-city-lite-{month}.mmdb.gz"
 
     # Admin console (/admin + /api/admin, app/admin): admins are accounts with `users.admin_role`
     # (granted with `python -m app.manage admin grant`), signing in with password + TOTP.
@@ -216,6 +226,10 @@ class Settings(BaseSettings):
     @cached_property
     def media_root_path(self) -> Path:
         return Path(self.MEDIA_ROOT).expanduser().resolve()
+
+    @property
+    def geoip_path(self) -> Path:
+        return Path(self.GEOIP_DIR).expanduser().resolve()
 
     @cached_property
     def rq_queue_names(self) -> list[str]:

@@ -65,6 +65,8 @@ KINDS: dict[str, LeverKind] = {
     "trending_shown_topics": "int",
     "topic_model": "model",
     "topic_review_model": "model",
+    "analytics_enabled": "bool",
+    "analytics_ip_days": "int",
 }
 
 

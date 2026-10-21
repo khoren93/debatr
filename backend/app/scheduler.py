@@ -5,7 +5,8 @@ any waiting turn. The trending-topics refresh is enqueued every hour and decides
 a new batch is due (TRENDING_REFRESH_HOURS), so a restart never builds an extra batch. The
 recovery check (services/recovery) runs every minute and queues again the runs whose worker
 died. The alerts check (services/alerts) runs every five minutes, the IndexNow flush
-(services/indexnow, production only) every minute. `--refresh-trending` builds a batch right now,
+(services/indexnow, production only) every minute, the visits' upkeep (services/audience/jobs:
+old IPs cleared, the monthly GeoIP database) every hour. `--refresh-trending` builds a batch right now,
 in-process.
 """
 
@@ -19,6 +20,7 @@ from app.core.config import settings
 from app.core.logging import setup_logging
 from app.core.redis import get_sync_redis
 from app.services import alerts, indexnow, recovery
+from app.services.audience import jobs as audience_jobs
 from app.services.queue_manager import BACKGROUND_QUEUE_NAME
 from app.services.trending import JOB_TIMEOUT, refresh_trending_job
 
@@ -50,6 +52,13 @@ def build_scheduler(conn: Redis) -> CronScheduler:
         interval=alerts.CHECK_SECONDS,
         job_timeout=alerts.JOB_TIMEOUT,
         result_ttl=60,
+    )
+    cron.register(
+        audience_jobs.maintenance_job,
+        queue_name=BACKGROUND_QUEUE_NAME,
+        interval=audience_jobs.TICK_SECONDS,
+        job_timeout=audience_jobs.JOB_TIMEOUT,
+        result_ttl=300,
     )
     if indexnow.enabled():
         cron.register(

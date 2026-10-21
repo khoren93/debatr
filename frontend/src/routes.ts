@@ -16,6 +16,7 @@ export default [
     // Canonical addresses end in the topic's words (backend services/seo): /d/{slug}/{kebab}.
     route('d/:slug/:kebab?', 'routes/debate.tsx'),
     route('t/:slug/:kebab?', 'routes/topic.tsx'),
+    route('privacy', 'routes/privacy.tsx'),
     layout('routes/_client.tsx', [
       route('login', 'routes/login.tsx'),
       route('register', 'routes/register.tsx'),

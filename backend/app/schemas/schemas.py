@@ -830,3 +830,5 @@ class SiteStatusOut(BaseModel):
     # AI covers (lever): off | paid | all_public, and what one costs from the balance.
     ai_covers: str = "paid"
     cover_price_usd: float = 0.0
+    # The presence beacon (services/audience); off: the site sends none.
+    analytics: bool = True

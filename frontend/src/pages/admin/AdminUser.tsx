@@ -8,6 +8,7 @@ import { useAdminAuth } from '../../auth/AdminAuthContext';
 import { Page } from '../../components/layout/AppShell';
 import { UserActions } from '../../components/admin/users/UserActions';
 import { UserBadges } from '../../components/admin/users/UserBadges';
+import { UserVisitsPanel } from '../../components/admin/users/UserVisitsPanel';
 import { AuditPanel, DebatesPanel, FavoriteModels, LedgerPanel, ReactionsPanel, SpendChart, StatsGrid, TokensPanel } from '../../components/admin/users/UserSections';
 import { formatTime } from '../../components/admin/helpers';
 import { Avatar, Card, ErrorBox, SectionLabel, Segmented, Spinner } from '../../components/ui';
@@ -52,6 +53,7 @@ const AdminUser = () => {
   const card = result?.card.profile.id === id ? result.card : null;
   const reload = () => setVersion((n) => n + 1);
   const canMoney = me.permissions.includes('money');
+  const canAudience = me.permissions.includes('audience');
 
   return (
     <Page>
@@ -138,6 +140,7 @@ const AdminUser = () => {
           </div>
 
           <div className="mt-4 grid gap-4">
+            {canAudience && <UserVisitsPanel userId={card.profile.id} />}
             <DebatesPanel userId={card.profile.id} version={version} />
             {canMoney && <LedgerPanel userId={card.profile.id} version={version} />}
             <AuditPanel targetId={card.profile.id} targetType="user" entries={card.audit} aside="last 50: about the account, and by it as an admin" />

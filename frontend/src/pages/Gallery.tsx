@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { ArrowLeft, ArrowRight, AudioLines, Flame, Globe, Languages, MicVocal, Play, Sparkles, Trophy, X } from 'lucide-react';
 import type { GalleryItem, GalleryLanguage } from '../api/types';
 import { Page, PageTitle } from '../components/layout/AppShell';
-import { CardCover, CardStats, CoverBadge, DebateCard, VersionsBadge } from '../components/cards';
+import { CardCover, CardStats, CoverBadge, DebateCard, LanguageTag, VersionsBadge } from '../components/cards';
 import { Avatar, Button, Chip, Dropdown, EmptyState, LinkButton, ModelIcon, Segmented, type DropdownOption } from '../components/ui';
 import { shortModelName } from '../lib/format';
 import {
@@ -19,6 +19,7 @@ import {
   type LanguageFilter,
 } from '../lib/gallery';
 import { languageName } from '../lib/languages';
+import { track } from '../lib/presence';
 
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
@@ -126,7 +127,8 @@ const Gallery = ({ filters, items, total, languages }: Props) => {
   // While other filters load keep this grid on screen, dimmed.
   const loading = navigation.state === 'loading' && navigation.location.pathname === '/gallery';
 
-  const update = (changes: Record<string, string | null>) =>
+  const update = (changes: Record<string, string | null>) => {
+    for (const [name, value] of Object.entries(changes)) track('gallery_filter', { name, value });
     setParams(
       (prev) => {
         const next = new URLSearchParams(prev);
@@ -139,6 +141,7 @@ const Gallery = ({ filters, items, total, languages }: Props) => {
       },
       { replace: true, preventScrollReset: true },
     );
+  };
   const setParam = (name: string, value: string | null) => update({ [name]: value });
   const setLanguage = (value: LanguageFilter) => setParam('lang', value === DEFAULT_LANGUAGE ? null : value);
 
@@ -264,7 +267,12 @@ const Gallery = ({ filters, items, total, languages }: Props) => {
                 </>
               }
               // No verdict on the cards: the audience votes blind on the debate page.
-              footerRight={<CardStats likes={item.likes} views={item.views} durationMs={item.duration_ms} />}
+              footerRight={
+                <>
+                  <LanguageTag code={item.language_code} />
+                  <CardStats likes={item.likes} views={item.views} durationMs={item.duration_ms} />
+                </>
+              }
             />
           );
         })}
