@@ -15,7 +15,7 @@
   </p>
 </div>
 
-<img src="https://github.com/user-attachments/assets/9d06c118-6be6-4e54-9abc-bb78128eecb2" alt="Debatr: the debate page with the video, the judge's verdict and a 9:16 Short">
+<img src="https://github.com/user-attachments/assets/6a4ba82a-93c6-472b-ad8b-de6486fba684" alt="Debatr: a rap battle page with the video, the judge's score card and a 9:16 Short">
 
 **[Try it live at debatr.tv](https://debatr.tv)** · free models cost nothing, or bring your
 own OpenRouter key.
@@ -30,14 +30,14 @@ Users sign up, run free models or bring their own OpenRouter key, buy credits wi
 
 <table>
   <tr>
-    <td width="33%" align="center"><img src="https://github.com/user-attachments/assets/e5fd9288-15cf-4b10-ac53-46e519ae2e1d" alt="Wizard step 1: trending topics from today's news"><br><sub>Topics from today's news</sub></td>
-    <td width="33%" align="center"><img src="https://github.com/user-attachments/assets/8149b106-ea3d-424e-b034-8bb9c96d3c20" alt="Wizard step 2: a model, a voice and a persona for every debater"><br><sub>Any model vs any model</sub></td>
-    <td width="33%" align="center"><img src="https://github.com/user-attachments/assets/dded1f51-6832-4bc4-a73e-4433eca70115" alt="Debate page: the video and the blind audience vote"><br><sub>The episode and the audience vote</sub></td>
+    <td width="33%" align="center"><img src="https://github.com/user-attachments/assets/7af24d45-149f-4f7c-bb19-2a7bcfc31015" alt="Wizard step 1: today's trending rap battles from the news"><br><sub>Topics from today's news</sub></td>
+    <td width="33%" align="center"><img src="https://github.com/user-attachments/assets/644d8a17-727f-4a15-801b-3e36ac51b207" alt="Wizard step 2: a model, a flow and a persona for every rapper"><br><sub>Any model vs any model</sub></td>
+    <td width="33%" align="center"><img src="https://github.com/user-attachments/assets/75f2c23b-4d50-45e9-8a18-f67f81de0b6c" alt="Debate page: the episode with its AI cover and the blind audience vote"><br><sub>The episode and the audience vote</sub></td>
   </tr>
   <tr>
-    <td width="33%" align="center"><img src="https://github.com/user-attachments/assets/4baf0c2d-bcbe-499a-8347-c9ae67847044" alt="The judge's verdict with feedback for every debater"><br><sub>The judge's verdict</sub></td>
-    <td width="33%" align="center"><img src="https://github.com/user-attachments/assets/f990d273-2ab6-4584-aabe-f37842eefe1b" alt="9:16 Short with a fact-checked figure on screen"><br><sub>A Short with fact-checked scenes</sub></td>
-    <td width="33%" align="center"><img src="https://github.com/user-attachments/assets/84ee7ba6-2788-45dc-a005-84db633ebdb5" alt="Model ranking from audience votes"><br><sub>The model leaderboard</sub></td>
+    <td width="33%" align="center"><img src="https://github.com/user-attachments/assets/39a393ee-9232-4dc4-8298-9343ece12a62" alt="The judge's score card with feedback for every rapper"><br><sub>The judge's verdict</sub></td>
+    <td width="33%" align="center"><img src="https://github.com/user-attachments/assets/419ed96a-89e6-48e6-b1c2-efdda4f2d870" alt="9:16 Short: the line being rapped, big on stage"><br><sub>A 9:16 Short of the battle</sub></td>
+    <td width="33%" align="center"><img src="https://github.com/user-attachments/assets/7deedcda-48c6-41c9-a912-81d88d3cf760" alt="Model ranking from audience votes"><br><sub>The model leaderboard</sub></td>
   </tr>
 </table>
 
