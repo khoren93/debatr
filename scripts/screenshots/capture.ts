@@ -39,6 +39,7 @@ const WIZARD_KEY = 'debatr.wizard.v1';
 interface Debate {
   id: string;
   turns: unknown[];
+  settings: { format?: string };
 }
 interface TimelineVisual {
   seq_index: number;
@@ -125,6 +126,20 @@ const scrollTo = async (page: Page, selector: string, offset = 12) => {
 
 /** Hides the big play button the paused player shows over the frame. */
 const hidePausedOverlay = (page: Page) => page.addStyleTag({ content: 'div:has(> .bg-accent\\/92){display:none!important}' });
+
+/** Hides the poster the long video keeps over its frame until the first play. */
+const hidePoster = (page: Page) =>
+  page.addStyleTag({ content: 'div:has(+ button[aria-label="Play the video"]),button[aria-label="Play the video"]{display:none!important}' });
+
+/**
+ * Opens a page by a client navigation: a public page renders on the server, so its first load
+ * makes no API request the showcase numbers could patch.
+ */
+async function openInApp(page: Page, path: string): Promise<void> {
+  await page.goto(`${BASE}/library`);
+  await page.waitForFunction(() => '__reactRouterDataRouter' in window);
+  await page.evaluate((to) => (window as unknown as { __reactRouterDataRouter: { navigate: (to: string) => Promise<void> } }).__reactRouterDataRouter.navigate(to), path);
+}
 
 /** Seeks the player with its own slider (keyboard steps of 5 s from the start). */
 async function seek(page: Page, ms: number): Promise<void> {
@@ -290,7 +305,8 @@ async function captureWizard(context: BrowserContext, shooter: Shooter, debate: 
   if (wanted('topics')) {
     await page.goto(`${BASE}/create`);
     await page.evaluate((key) => localStorage.removeItem(key), WIZARD_KEY);
-    await page.reload();
+    // The wizard of the shown debate's format (a battle lists battles).
+    await page.goto(`${BASE}/create?format=${debate.settings.format ?? 'debate'}`);
     await page.getByLabel('Search topics').waitFor();
     // Today's tech stories, the first one picked.
     await page.getByRole('tab', { name: /^Tech/ }).click();
@@ -344,7 +360,7 @@ async function captureDebate(context: BrowserContext, shooter: Shooter, debate: 
 
 async function captureLeaderboard(context: BrowserContext, shooter: Shooter): Promise<void> {
   const page = await context.newPage();
-  await page.goto(`${BASE}/leaderboard`);
+  await openInApp(page, '/leaderboard');
   await page.getByRole('heading', { name: 'Model ranking' }).waitFor();
   await page.waitForTimeout(800);
   await shooter.shoot(page, 'leaderboard');
@@ -358,6 +374,7 @@ async function captureFrame(browser: Browser, context: BrowserContext, debate: D
   const page = await desktop.newPage();
   await page.goto(`${BASE}/debate/${debate.id}`);
   await hidePausedOverlay(page);
+  await hidePoster(page);
   await seek(page, longSceneTime(timeline));
   await settle(page);
   const png = await page.locator('.__remotion-player').first().screenshot({ type: 'png' });
