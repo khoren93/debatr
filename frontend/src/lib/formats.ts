@@ -31,6 +31,8 @@ export interface FormatSpec {
   premiumOnly: boolean;
   /** One generated track carries the debaters: each takes a flow instead of a voice. */
   music: boolean;
+  /** The video plays crowd / studio reactions by default (backend Format.crowd_sounds). */
+  crowdSounds: boolean;
   /** The texts are written for this style whatever the wizard says (null: the wizard's). */
   outputStyle: OutputStyle | null;
   /** "Reply length" field: its label and what each preset means here. */
@@ -65,6 +67,7 @@ export const FORMATS: Record<FormatId, FormatSpec> = {
     visuals: true,
     premiumOnly: false,
     music: false,
+    crowdSounds: false,
     outputStyle: null,
     lengthLabel: 'Reply length',
     lengthHints: { very_short: '~50 words · best for Shorts', short: '~100 words · snappy', medium: '~250 words · in depth', long: '~250 words · in depth' },
@@ -97,6 +100,7 @@ export const FORMATS: Record<FormatId, FormatSpec> = {
     visuals: false,
     premiumOnly: true,
     music: true,
+    crowdSounds: true,
     outputStyle: 'spoken',
     lengthLabel: 'Verse length',
     // One line per bar of the beat (backend formats/rap_battle.VERSE_LINES).

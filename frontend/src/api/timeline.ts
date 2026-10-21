@@ -105,4 +105,6 @@ export interface Timeline {
   beat?: TimelineBeat | null;
   /** The lines the video hits, in track order; missing in timelines built before them. */
   moments?: TimelineMoment[];
+  /** Crowd / studio reactions play (video/sfx.ts); missing in older timelines: the format says. */
+  sfx?: boolean | null;
 }

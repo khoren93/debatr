@@ -71,3 +71,8 @@ design/
 
 # Private planning notes (public roadmap lives in README.md)
 PROGRESS.md
+
+# Sound effect takes to listen to (scripts/sfx/generate.py takes)
+scripts/sfx/out/
+# The videos' crowd sounds: made and installed by scripts/sfx/generate.py, copied to servers by hand
+frontend/public/sfx/

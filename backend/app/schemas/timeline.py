@@ -128,3 +128,6 @@ class Timeline(BaseModel):
     beat: TimelineBeat | None = None
     # The lines the video hits, in track order (media/highlights).
     moments: list[TimelineMoment] = Field(default_factory=list)
+    # The video plays crowd / studio reactions (MediaOptions.sfx, else the format's default);
+    # None in timelines from before: the frontend asks the format.
+    sfx: bool | None = None

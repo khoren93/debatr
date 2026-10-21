@@ -18,6 +18,8 @@ class MediaOptions(BaseModel):
     images: Literal["off", "stock", "ai"] = "off"
     # Rap battles: speaker id -> flow preset (media/music.FLOWS), in place of a rapper's voice.
     flows: dict[str, str] = Field(default_factory=dict, max_length=8)
+    # Crowd / studio reactions in the video (frontend video/sfx.ts); None: the format's default.
+    sfx: bool | None = None
 
 
 class GenerateMediaRequest(MediaOptions):

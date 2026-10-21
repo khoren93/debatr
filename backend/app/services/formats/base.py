@@ -131,6 +131,8 @@ class Format(ABC):
     topic_style: TopicStyle = DEBATE_TOPICS
     # How its Shorts and the lines the video hits are picked (media/highlights).
     highlight_style: HighlightStyle = DEBATE_HIGHLIGHTS
+    # The video plays crowd / studio reactions unless the media options say otherwise.
+    crowd_sounds: bool = False
 
     # --- seats ----------------------------------------------------------------------------------
 

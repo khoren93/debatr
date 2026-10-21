@@ -136,6 +136,7 @@ class RapBattleFormat(Format):
         "This is a rap battle: roasting the opposing rapper (an AI model) and its arguments, "
         "trash talk and bragging are expected and fine."
     )
+    crowd_sounds = True
     highlight_style = HighlightStyle(
         show="an AI rap battle",
         clip=(

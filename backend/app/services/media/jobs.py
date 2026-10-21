@@ -1240,6 +1240,7 @@ def _finish(
         stats=stats,
         beat=beat,
         moments=picks.moments,
+        sfx=format_of(conf).crowd_sounds if options.sfx is None else options.sfx,
     )
     paths.timeline.write_text(timeline.model_dump_json(indent=2))
 

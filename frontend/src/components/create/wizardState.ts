@@ -96,6 +96,8 @@ export interface WizardState {
   images: ImageSource;
   /** Web fact-check of the figures and quotes in the scenes (paid like the debate). */
   fact_check: boolean;
+  /** Crowd / studio reactions in the video; null: the format's default (a battle's on). */
+  sfx: boolean | null;
   /** Publish to the gallery once finished and approved by the AI check. */
   auto_publish: boolean;
   /** An AI cover once it completes (runs paid from the balance or an own key; backend
@@ -260,6 +262,7 @@ export const initialState = (): WizardState => ({
   visuals: true,
   images: 'off',
   fact_check: false,
+  sfx: null,
   auto_publish: true,
   cover: true,
   remix: null,
@@ -333,7 +336,8 @@ export const fitFormat = (state: WizardState): WizardState => {
 export const applyFormat = (state: WizardState, format: FormatId): WizardState => {
   if (format === state.format) return state;
   const spec = FORMATS[format];
-  return fitFormat({ ...state, format, speakers: state.speakers.map((s) => ({ ...s, prompt: promptFor(s.prompt, s.role, spec) })) });
+  // Crowd reactions go back to the new format's default (on for a battle, off for a debate).
+  return fitFormat({ ...state, format, sfx: null, speakers: state.speakers.map((s) => ({ ...s, prompt: promptFor(s.prompt, s.role, spec) })) });
 };
 
 /** On-stage name of every speaker (see lib/modelNames.speakerNames). */
@@ -441,6 +445,7 @@ export const buildConfig = (state: WizardState, opts: BuildOptions): DebateConfi
       visuals,
       images: visuals && state.outputs.includes('audio') ? state.images : 'off',
       ...(spec.music ? { flows: flowsOf(state) } : {}),
+      ...(state.sfx === null ? {} : { sfx: state.sfx }),
     },
     fact_check: visuals && state.fact_check,
     auto_publish: state.auto_publish,
@@ -512,6 +517,7 @@ export const stateFromConfig = (config: DebateConfig, base: WizardState): Wizard
     visuals: spec.visuals ? (plan?.visuals ?? base.visuals) : base.visuals,
     images: spec.visuals ? (plan?.images ?? base.images) : base.images,
     fact_check: spec.visuals ? (config.fact_check ?? base.fact_check) : base.fact_check,
+    sfx: typeof plan?.sfx === 'boolean' ? plan.sfx : null,
     auto_publish: config.auto_publish ?? base.auto_publish,
     cover: config.cover ?? base.cover,
   });
@@ -661,6 +667,7 @@ export const sanitizeState = (raw: unknown): WizardState => {
     visuals: typeof raw.visuals === 'boolean' ? raw.visuals : base.visuals,
     images: oneOf(raw.images, ['off', 'stock', 'ai'] as const, base.images),
     fact_check: typeof raw.fact_check === 'boolean' ? raw.fact_check : base.fact_check,
+    sfx: typeof raw.sfx === 'boolean' ? raw.sfx : null,
     auto_publish: typeof raw.auto_publish === 'boolean' ? raw.auto_publish : base.auto_publish,
     cover: typeof raw.cover === 'boolean' ? raw.cover : base.cover,
     remix: sanitizeRemix(raw.remix),

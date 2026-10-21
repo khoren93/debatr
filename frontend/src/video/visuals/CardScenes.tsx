@@ -4,6 +4,7 @@ import { LogoTile } from '../components/ModelLogo';
 import { INK, INK_DIM, backOut, compactNumber, easeInOut, easeOut, fitFont, formatNumber, ramp, seedOf, sketch, withUnit, type Pt } from './draw';
 import { DrawnIcon, InkLayer, Reveal, Stroke } from './Ink';
 import { seriesColors, type SceneCtx } from './scene';
+import { sheetRowAt, winnerRevealMs } from '../reveal';
 
 /** Top list (#1 first) or a pyramid; each place appears when it is named, even in a countdown. */
 export const RankingView = ({ scene, ctx }: { scene: RankingScene; ctx: SceneCtx }) => {
@@ -185,10 +186,10 @@ const ScoreSheetView = ({ scene, ctx }: { scene: ScoreboardScene; ctx: SceneCtx 
   const rowH = Math.min(76 * k, (h - headH - tableTop - 8 * k) / (rounds.length + 1));
   const scoreFs = rowH * 0.56;
   const totals = debaters.map((d) => rounds.reduce((sum, r) => sum + (r.scores[d.id] ?? 0), 0));
-  const rowAt = (i: number) => 600 + i * 550;
+  const rowAt = sheetRowAt;
   const totalAt = rowAt(rounds.length);
   // The winner is crowned when the judge calls the result (`decide_ms`), never before the totals.
-  const decideAt = Math.max(totalAt + 500, scene.decide_ms ?? 0);
+  const decideAt = winnerRevealMs(scene);
   const decided = easeOut(ramp(t, decideAt, 450));
   const winnerIndex = debaters.findIndex((d) => d.id === scene.winner_id);
   const row = (i: number) => tableTop + rowH * i;
@@ -278,7 +279,7 @@ export const ScoreboardView = ({ scene, ctx }: { scene: ScoreboardScene; ctx: Sc
   const logoTop = crownH + 14 * k;
   const nameTop = logoTop + size + 18 * k;
   const nameFs = Math.min(48 * k, ...debaters.map((d) => fitFont(d.name, colW - 30 * k, 1, 52 * k, 26 * k)));
-  const revealAt = 700 + n * 250;
+  const revealAt = winnerRevealMs(scene);
   const decided = easeOut(ramp(t, revealAt, 450));
   const draw = !scene.winner_id;
   const stamp = backOut(ramp(t, revealAt + 250, 420));

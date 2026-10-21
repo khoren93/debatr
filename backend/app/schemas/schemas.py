@@ -115,6 +115,8 @@ class MediaPlan(BaseModel):
     images: ImageSource = "off"  # pictures among the scenes
     # Rap battles: speaker id -> flow preset (media/music.FLOWS), in place of a rapper's voice.
     flows: dict[str, str] = Field(default_factory=dict, max_length=8)
+    # Crowd / studio reactions in the video; None: the format's default (Format.crowd_sounds).
+    sfx: bool | None = None
 
 
 class NewsContext(BaseModel):

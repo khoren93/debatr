@@ -55,6 +55,7 @@ export const RegenerateAudioDialog = ({ open, onClose, debate, media, onQueued }
   const [flowChoice, setFlowChoice] = useState<Record<string, string>>({});
   const [force, setForce] = useState(false);
   const [visualsChoice, setVisualsChoice] = useState<boolean | null>(null);
+  const [sfxChoice, setSfxChoice] = useState<boolean | null>(null);
   const [imagesChoice, setImagesChoice] = useState<ImageSource | null>(null);
   const [submitError, setSubmitError] = useState<{ status: number | null; message: string } | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -132,6 +133,7 @@ export const RegenerateAudioDialog = ({ open, onClose, debate, media, onQueued }
   }, [open, provider, debate.id, voicesKey, keyMissing, keyRejected, savedKey]);
 
   const visuals = spec.visuals && (visualsChoice ?? media?.options?.visuals ?? debate.media_plan?.visuals ?? true);
+  const sfx = sfxChoice ?? media?.options?.sfx ?? debate.media_plan?.sfx ?? spec.crowdSounds;
   const storedImages = imagesChoice ?? media?.options?.images ?? debate.media_plan?.images ?? 'off';
   // AI pictures are paid from the balance; without credits they fall back to free photos.
   const images: ImageSource = storedImages === 'ai' && noCredits ? 'stock' : storedImages;
@@ -156,6 +158,7 @@ export const RegenerateAudioDialog = ({ open, onClose, debate, media, onQueued }
         visuals,
         images: visuals ? images : 'off',
         ...(spec.music ? { flows } : {}),
+        sfx,
         force,
         user_tts_key: userKey,
       });
@@ -355,6 +358,9 @@ export const RegenerateAudioDialog = ({ open, onClose, debate, media, onQueued }
                       : `music: $${billing.music_price_per_min.toFixed(2)} per minute of track`}
               </span>
             )}
+            <label className="flex items-center gap-2" title={spec.crowdSounds ? 'The crowd reacts to the punchlines, the rounds and the winner in the video' : 'A studio audience reacts to the sharpest lines and the verdict in the video'}>
+              <input type="checkbox" checked={sfx} onChange={(e) => setSfxChoice(e.target.checked)} /> crowd reactions
+            </label>
             {spec.visuals && (
               <label className="flex items-center gap-2" title="Charts, numbers and hand-drawn schemes synced with the speech">
                 <input type="checkbox" checked={visuals} onChange={(e) => setVisualsChoice(e.target.checked)} /> visual scenes

@@ -31,3 +31,13 @@ def test_a_refreshed_timeline_gets_a_new_address() -> None:
     state["revision"] = 2
     second = media_out(debate).urls
     assert second is not None and second.timeline.endswith("v=2026-10-21T094816.12r2")
+
+
+def test_crowd_sounds_follow_the_format_unless_chosen() -> None:
+    from app.schemas.media import MediaOptions
+    from app.services.formats import format_of
+
+    assert format_of({"format": "rap_battle"}).crowd_sounds is True
+    assert format_of({}).crowd_sounds is False
+    assert MediaOptions().sfx is None
+    assert MediaOptions.model_validate({"sfx": False}).sfx is False

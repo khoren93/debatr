@@ -273,6 +273,11 @@ cli/                `debatr` package (PyPI): CLI + MCP server, Python 3.10+, uv,
   src/debatr/config.py  server URL + token resolution, saved logins (0600 config.json)
   src/debatr/markers.py, styling.py, render.py  live terminal output (markers hidden, inline Markdown)
   tests/              pytest on a fake server (httpx.MockTransport) and the SDK's in-process client
+scripts/sfx/generate.py  the videos' crowd / studio sounds, NOT in git (frontend/public/sfx is
+                    ignored; a server gets the folder by hand before its frontend build): `takes` asks
+                    ElevenLabs Sound Effects for takes into the git-ignored scripts/sfx/out (paid, ~11
+                    credits a second; out/index.html plays them), `install` re-encodes every take left
+                    there (mono 96 kbps, -18 LUFS) into frontend/public/sfx with its manifest.json
 scripts/backup-db.sh  `make backup` / `make backup-check`: Postgres dumps (pg_dump -Fc, 0600,
                     pruned after BACKUP_KEEP_DAYS, optional rclone upload) and a restore check
                     into a scratch database; the last good backup is noted in Redis `backup:last`
@@ -680,7 +685,9 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
    Quotes are found in the words (`snap_moment`, `locate_quote`), `keep_moments` holds the counts;
    without the model a battle falls back to every verse's last line and its last two verses.
    `app.manage media refresh-timeline` redoes beat, Shorts and moments of a ready timeline
-   without voicing or composing (keeps the old Shorts when the host fails) and bumps
+   without voicing or composing (keeps the old Shorts when the host fails), sets `format` (and
+   `sfx` when unset) from the debate — `Timeline.format` defaults to "debate", so re-serializing
+   a timeline from before the field would make a battle a debate — and bumps
    `media_json.revision`, which the media URLs' `?v=` carry.
    Progress lives in `media_json` (polled by `GET /api/debates/{id}/media`); `media_status`
    is `none | queued | running | ready | error`.
@@ -791,6 +798,20 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   the frame, makes the other rapper's card flinch (jolt + red border) and slams in the accent on
   the stage (`VerseStage` holds it 450 ms before the next line); a debate's zinger flashes softly
   and its said words stay in the accent in the captions.
+- Crowd reactions (`video/sfx.ts`, pure, vitest; `components/Sfx.tsx` plays them): sounds from
+  `public/sfx` — not in git; `manifest.json` lists each kind's files (`readManifest`), loaded once
+  by `sfxLoader` (delayRender; also in `preloadSceneAssets`), no folder or manifest = no sounds,
+  never a request for a missing file — as `<Audio>` in the composition (`SFX_VOLUME` per kind),
+  on the moments the picture hits — a battle's crowd on its punchlines (erupting on
+  the round's best + a low hit, laughing at a roast), a hit as a round card slams, a roar as the
+  scoreboard crowns the winner (`reveal.winnerRevealMs`, shared with the scoreboard); a debate's
+  studio audience on zingers, a whoosh into round cards, a murmur at a contradicted figure, a drum
+  roll and applause for the verdict. Each cue takes one of its kind's files at random but the
+  same on every render (hash of the debate and the cue), never the kind's last file again. Played
+  in the browser (player, MP4, embed), so they follow the beat-timed cards without a server twin
+  and a refreshed timeline needs no remix; the MP3 download is the show's track alone. On when
+  `Timeline.sfx` says so (`MediaOptions.sfx` / `MediaPlan.sfx`, else `Format.crowd_sounds`: a
+  battle yes, a debate no; the wizard's "Crowd reactions" and the regenerate dialog's checkbox).
 - Motion in both formats (`video/groove.ts`): the background's glows drift on slow sine paths
   and turn from one speaker's colour to the next over 700 ms (`glowColorAt`); the camera breathes
   (`cameraAt`: ≤ 0.6 % over 18 s); the speaking logo bounces with the voice's loudness; a debate

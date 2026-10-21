@@ -4,6 +4,7 @@ import type { Timeline } from '../api/timeline';
 import { timelineFormat } from '../lib/formats';
 import { Background } from './components/Background';
 import { Captions } from './components/Captions';
+import { SfxTrack } from './components/Sfx';
 import { BrandMark, EndCard, LabelChip, RoundChip } from './components/Chrome';
 import { FaceOff } from './components/FaceOff';
 import { SpeakerRowCard, SpeakingChip } from './components/SpeakerCard';
@@ -87,6 +88,7 @@ export const DebateShort = ({ timeline, mediaBase, highlightIndex }: ShortProps)
       <Sequence from={msToFrame(SHORT_HOOK_MS)} durationInFrames={msToFrame(len) + 2} premountFor={fps}>
         <Audio src={`${mediaBase}/${timeline.full_audio_wav}`} trimBefore={msToFrame(h.start_ms)} trimAfter={msToFrame(h.end_ms)} />
       </Sequence>
+      <SfxTrack timeline={timeline} offsetMs={SHORT_HOOK_MS - h.start_ms} fromMs={h.start_ms} toMs={h.end_ms} />
 
       {/* The hook card: the face-off with the clip's hook line, fully drawn on frame 0. */}
       {inHook && (

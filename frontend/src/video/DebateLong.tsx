@@ -4,6 +4,7 @@ import type { Timeline, TimelineSpeaker } from '../api/timeline';
 import { timelineFormat } from '../lib/formats';
 import { Background } from './components/Background';
 import { Captions } from './components/Captions';
+import { SfxTrack } from './components/Sfx';
 import { BrandMark, EndCard, IntroCard, RoundChip, VerdictCard } from './components/Chrome';
 import { SpeakerCard, SpeakingChip } from './components/SpeakerCard';
 import { debaterTag } from './speakers';
@@ -71,6 +72,7 @@ export const DebateLong = ({ timeline, mediaBase }: DebateProps) => {
       <Sequence from={msToFrame(INTRO_MS)} durationInFrames={msToFrame(timeline.total_ms) + 2} premountFor={fps}>
         <Audio src={`${mediaBase}/${timeline.full_audio_wav}`} />
       </Sequence>
+      <SfxTrack timeline={timeline} offsetMs={INTRO_MS} />
 
       {inIntro && <IntroCard timeline={timeline} />}
 

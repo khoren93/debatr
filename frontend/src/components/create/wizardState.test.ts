@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { FORMATS } from '../../lib/formats';
-import { applyFormat, initialState } from './wizardState';
+import { applyFormat, buildConfig, initialState } from './wizardState';
 
 describe('applyFormat', () => {
   it('keeps the topic and its news story when the format changes', () => {
@@ -19,5 +19,18 @@ describe('topic lists', () => {
   it('give the rap battle its own news topics', () => {
     expect(FORMATS.debate.topicList).toBe('debate');
     expect(FORMATS.rap_battle.topicList).toBe('rap_battle');
+  });
+});
+
+describe('crowd reactions', () => {
+  const opts = { defaultModelId: 'openrouter/free', models: [], voices: {}, provider: 'edge' as const };
+
+  it('follow the format unless chosen, and go back to its default on a switch', () => {
+    const debate = initialState();
+    expect(debate.sfx).toBeNull();
+    expect(buildConfig(debate, opts).media_plan?.sfx).toBeUndefined(); // the server's default
+    const chosen = { ...debate, sfx: true };
+    expect(buildConfig(chosen, opts).media_plan?.sfx).toBe(true);
+    expect(applyFormat(chosen, 'rap_battle').sfx).toBeNull();
   });
 });

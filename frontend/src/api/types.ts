@@ -142,6 +142,8 @@ export interface MediaPlan {
   images?: ImageSource;
   /** Rap battles: speaker id -> flow (how the rapper sounds in the track), in place of a voice. */
   flows?: Record<string, string>;
+  /** Crowd / studio reactions in the video; unset: the format's default. */
+  sfx?: boolean | null;
 }
 
 // --- AI covers (backend services/media/cover.py) ------------------------------------------
@@ -707,6 +709,8 @@ export interface MediaOptions {
   images?: ImageSource;
   /** Rap battles: speaker id -> flow, in place of the rappers' voices. */
   flows?: Record<string, string>;
+  /** Crowd / studio reactions in the video; unset: the format's default. */
+  sfx?: boolean | null;
 }
 
 export interface GenerateMediaRequest extends MediaOptions {

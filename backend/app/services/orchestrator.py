@@ -689,6 +689,7 @@ def _auto_media(db: Session, debate: Debate) -> None:
                 "visuals": fmt.visuals and bool(plan.get("visuals", True)),
                 "images": str(plan.get("images") or "off") if fmt.visuals else "off",
                 "flows": dict(plan.get("flows") or {}),
+                "sfx": plan.get("sfx") if isinstance(plan.get("sfx"), bool) else None,
             },
             "force": False,
             "own_tts_key": own_tts_key,

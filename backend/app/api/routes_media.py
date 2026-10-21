@@ -347,6 +347,7 @@ async def generate_debate_media(
         visuals=body.visuals,
         images=body.images,
         flows=body.flows,
+        sfx=body.sfx,
     )
     state = dict(debate.media_json or {})
     state.update(

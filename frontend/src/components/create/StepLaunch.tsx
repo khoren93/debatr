@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, ArrowUpRight, Check, Globe, ImageIcon, KeyRound, PenTool, SearchCheck } from 'lucide-react';
+import { ArrowLeft, ArrowRight, ArrowUpRight, Check, Globe, ImageIcon, KeyRound, PenTool, SearchCheck, Users } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 import type { DebateConfig, Estimate, ImageSource, PaymentsMode, VoiceInfo } from '../../api/types';
@@ -178,6 +178,7 @@ export const StepLaunch = ({
   const visualsOn = spec.visuals && state.visuals;
   const images: ImageSource = withAudio && !(state.images === 'ai' && aiImagesLocked) ? state.images : 'off';
   const factCheckOn = visualsOn && state.fact_check && !factCheckLocked;
+  const sfxOn = state.sfx ?? spec.crowdSounds;
 
   const { estimate, shown, error: estimateError, estimating } = est;
   const cost = shown ? estimateCost(shown) : null;
@@ -230,6 +231,7 @@ export const StepLaunch = ({
     ...(config.media_plan?.visuals && config.media_plan.images === 'stock' ? ['free photos'] : []),
     ...(config.media_plan?.visuals && config.media_plan.images === 'ai' ? ['AI images'] : []),
     ...(config.fact_check ? ['fact-check'] : []),
+    ...(withAudio && sfxOn ? ['crowd reactions'] : []),
   ];
   const news = config.news;
 
@@ -369,6 +371,24 @@ export const StepLaunch = ({
               disabled={!visualsOn || factCheckLocked}
               divider
               onToggle={() => patch({ fact_check: !state.fact_check })}
+            />
+          </section>
+        )}
+
+        {/* The crowd plays in the video: only with audio. */}
+        {withAudio && (
+          <section className="grid rounded-panel border border-line bg-surface px-[clamp(16px,2vw,22px)] py-1.5">
+            <FeatureRow
+              icon={<Users className="size-[18px]" />}
+              title="Crowd reactions"
+              cost="FREE"
+              text={
+                spec.crowdSounds
+                  ? 'The crowd reacts in the video: an “ooh” on the punchlines, a hit as a round starts, a roar for the winner.'
+                  : 'A studio audience reacts in the video: an “ooh” on the sharpest lines, a murmur at a contested figure, applause for the verdict.'
+              }
+              on={sfxOn}
+              onToggle={() => patch({ sfx: !sfxOn })}
             />
           </section>
         )}

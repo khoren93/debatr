@@ -3,6 +3,7 @@ import { useDelayRender } from 'remotion';
 import type { Timeline } from '../../api/timeline';
 import { DISPLAY_FONT, FONT, MONO_FONT } from '../constants';
 import { preloadLogos } from '../logos';
+import { loadSfxManifest } from '../sfxLoader';
 import type { World } from './geo';
 
 /** The world map is a lazy chunk + a JSON asset, loaded only for debates with a map scene. */
@@ -36,7 +37,7 @@ const preloadFonts = () =>
 
 /** Load what the frames of this timeline need before rendering them (MP4 export). */
 export const preloadSceneAssets = async (timeline: Timeline): Promise<void> => {
-  await Promise.all([hasMapScene(timeline) ? loadGeo() : null, preloadLogos(timeline), preloadFonts()]);
+  await Promise.all([hasMapScene(timeline) ? loadGeo() : null, preloadLogos(timeline), preloadFonts(), loadSfxManifest()]);
 };
 
 /** The loaded map; holds the frame (delayRender) while it is still loading. */
