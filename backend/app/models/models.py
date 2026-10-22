@@ -58,6 +58,15 @@ class User(Base):
     openrouter_key_enc: Mapped[str | None] = mapped_column(Text, nullable=True)
     openrouter_key_last4: Mapped[str | None] = mapped_column(String(8), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    # Email confirmation (services/email_check): set when the owner opened a link we mailed
+    # (confirmation or password reset). Accounts made since confirmations exist must confirm
+    # before publishing or topping up (`email_check_required`); older ones are only asked to.
+    email_verified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    email_check_required: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default="false"
+    )
     # The site's own account (`python -m app.manage official`): the logo as its avatar, a mark
     # next to its name, the only one allowed the brand's name (services/official).
     official: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")

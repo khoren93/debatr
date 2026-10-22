@@ -31,7 +31,7 @@ from app.core.redis import (
 )
 from app.core.sync_db import get_sync_session
 from app.models.models import Debate, Turn, utcnow
-from app.services import indexnow, queue_manager, runtime_settings
+from app.services import email_check, indexnow, queue_manager, runtime_settings
 from app.services import usage as usage_log
 from app.services.credits import charge_debate_sync, charge_images_sync, debate_prices
 from app.services.events import publish_event
@@ -630,7 +630,11 @@ def _ensure_moderated(db: Session, debate: Debate, api_key: str | None) -> None:
 def _auto_publish(db: Session, debate: Debate) -> None:
     """Publish a finished debate when its owner asked for the gallery (the caller commits)."""
     try:
-        if should_auto_publish(debate) and publish_sync(db, debate):
+        owner = debate.user
+        if owner is not None and email_check.pending(owner) and should_auto_publish(debate):
+            # Goes public once the owner confirms the address (email_check.publish_waiting).
+            logger.info("Debate %s waits for its owner's email check", debate.id)
+        elif should_auto_publish(debate) and publish_sync(db, debate):
             logger.info("Debate %s published to the gallery", debate.id)
             indexnow.announce_sync(indexnow.debate_refs(debate))
         elif debate.moderation_status == "flagged":

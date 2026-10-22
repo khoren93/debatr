@@ -102,6 +102,11 @@ def device_claim_key(device_code_hash: str) -> str:
     return f"device:{device_code_hash}:claim"
 
 
+def email_token_key(kind: str, token_hash: str) -> str:
+    """A link we mailed (services/email_check): `verify` or `reset`, by the hash of its token."""
+    return f"email:{kind}:{token_hash}"
+
+
 def trending_lock_key() -> str:
     """Held while a trending-topics batch is being built (app.services.trending)."""
     return "trending:refresh:lock"

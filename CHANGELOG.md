@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Email confirmation and password reset.** A new account gets a link to confirm its email;
+  "Forgot password?" on the sign-in page mails a link to set a new one (an hour, once; other
+  devices are signed out). New accounts publish to the gallery and add credits once their email
+  is confirmed: a debate finished or published before stays private and goes public with the
+  confirmation. Accounts from before are only asked to confirm (Account → Security). Mail goes
+  through an SMTP relay (`MAIL_SMTP_*`); without one the letters are only logged.
+
 - **The site's own account.** `python -m app.manage official EMAIL --name Debatr` makes an
   account the site's: its debates show the Debatr logo as the author's avatar and a check mark
   next to the name (gallery, home page, topic pages, the debate page). Other accounts cannot take

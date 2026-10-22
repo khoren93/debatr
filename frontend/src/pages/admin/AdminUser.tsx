@@ -71,7 +71,7 @@ const AdminUser = () => {
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <h1 className="truncate font-display text-2xl font-extrabold tracking-tight">{card.profile.display_name}</h1>
-                  <UserBadges role={card.profile.role} active={card.profile.is_active} official={card.profile.official} />
+                  <UserBadges role={card.profile.role} active={card.profile.is_active} official={card.profile.official} emailPending={card.profile.email_required} />
                 </div>
                 <div className="truncate text-sm text-muted">{card.profile.email}</div>
               </div>

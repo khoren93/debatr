@@ -361,6 +361,8 @@ class AdminUserProfile(BaseModel):
     display_name: str
     avatar_seed: str
     official: bool = False  # the site's own account (`python -m app.manage official`)
+    email_verified: bool = False  # opened a link we mailed (services/email_check)
+    email_required: bool = False  # publishing and top-ups wait for the confirmation
     created_at: datetime
     last_login_at: datetime | None
     last_seen_at: datetime | None

@@ -13,7 +13,7 @@ from typing import Any
 
 import httpx
 import pytest
-from fastapi import FastAPI, HTTPException
+from fastapi import BackgroundTasks, FastAPI, HTTPException
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.exc import OperationalError
 from starlette.requests import Request
@@ -165,7 +165,7 @@ async def test_closed_sign_ups(levers: dict) -> None:
     body = RegisterRequest(email="new@example.com", password="long enough pass")
     request = Request({"type": "http", "method": "POST", "path": "/", "headers": []})
     with pytest.raises(HTTPException) as caught:
-        await routes_auth.register(body, request, db=None)  # type: ignore[arg-type]
+        await routes_auth.register(body, request, BackgroundTasks(), db=None)  # type: ignore[arg-type]
     assert caught.value.status_code == 403 and "closed" in caught.value.detail
 
 
@@ -193,10 +193,14 @@ async def test_the_signup_bonus_comes_from_the_lever(
             obj.credits_usd = 3
             obj.created_at = NOW
 
+    async def no_letter(kind: str, user: Any) -> None:
+        return None
+
     monkeypatch.setattr(routes_auth, "apply_transaction", apply)
+    monkeypatch.setattr(routes_auth.email_check, "mail_link", no_letter)
     request = Request({"type": "http", "method": "POST", "path": "/", "headers": [], "session": {}})
     body = RegisterRequest(email="new@example.com", password="long enough pass")
-    await routes_auth.register(body, request, db=DB())  # type: ignore[arg-type]
+    await routes_auth.register(body, request, BackgroundTasks(), db=DB())  # type: ignore[arg-type]
     assert granted == [3]
     (alert,) = raised_alerts
     assert alert.kind == "signup" and alert.title == "New account: new@example.com"

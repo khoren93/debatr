@@ -1,17 +1,20 @@
-"""Accounts: register, login, profile, personal OpenRouter key.
+"""Accounts: register, login, profile, personal OpenRouter key, email confirmation and password
+reset (services/email_check: the links we mail).
 
 Changing the account (profile, password, stored key) needs the browser session; API tokens can
 only read it (`GET /me`)."""
 
+import hashlib
 import logging
+import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import get_current_user, login_session, logout_session, require_session_user
 from app.core.db import get_db
-from app.core.ratelimit import enforce_login_limit
+from app.core.ratelimit import WINDOW_SECONDS, enforce_limit, enforce_login_limit
 from app.core.security import (
     encrypt_secret,
     hash_password,
@@ -23,14 +26,18 @@ from app.core.security import (
 from app.models.models import User, utcnow
 from app.schemas.auth import (
     ChangePasswordRequest,
+    ForgotPasswordRequest,
     LoginRequest,
     OkResponse,
     RegisterRequest,
+    ResetPasswordRequest,
     SetOpenRouterKeyRequest,
     UpdateProfileRequest,
     UserOut,
+    VerifyEmailOut,
+    VerifyEmailRequest,
 )
-from app.services import alerts, runtime_settings
+from app.services import alerts, email_check, mail, runtime_settings
 from app.services.admin import audit
 from app.services.credits import apply_transaction
 from app.services.official import reserved_name
@@ -47,6 +54,8 @@ def user_out(user: User) -> UserOut:
         display_name=user.display_name,
         avatar_seed=user.avatar_seed or "",
         official=bool(user.official),
+        email_verified=user.email_verified_at is not None,
+        email_required=email_check.pending(user),
         credits_usd=float(user.credits_usd or 0),
         openrouter_key_masked=mask_key(user.openrouter_key_last4),
         created_at=user.created_at,
@@ -72,7 +81,10 @@ def _check_name(name: str, user: User | None = None) -> None:
     dependencies=[Depends(enforce_login_limit)],
 )
 async def register(
-    body: RegisterRequest, request: Request, db: AsyncSession = Depends(get_db)
+    body: RegisterRequest,
+    request: Request,
+    background: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
 ) -> UserOut:
     levers = await runtime_settings.current()
     if not levers.registration_open:
@@ -107,6 +119,9 @@ async def register(
     await db.refresh(user)
     login_session(request, user)
     logger.info("New account %s", user.email)
+    letter = await email_check.mail_link("verify", user)
+    if letter is not None:
+        background.add_task(mail.send, letter)
     alerts.notify_soon(
         alerts.signup_alert(
             str(user.id),
@@ -138,6 +153,100 @@ async def login(
 @router.post("/logout", response_model=OkResponse)
 async def logout(request: Request) -> OkResponse:
     logout_session(request)
+    return OkResponse()
+
+
+LINK_GONE = "This link has expired or was already used. Ask for a new one."
+
+
+@router.post(
+    "/password/forgot", response_model=OkResponse, dependencies=[Depends(enforce_login_limit)]
+)
+async def forgot_password(
+    body: ForgotPasswordRequest,
+    request: Request,
+    background: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+) -> OkResponse:
+    """Mail a reset link. The same answer whether the account exists or not."""
+    await enforce_limit(
+        request,
+        bucket="reset_mail",
+        key=hashlib.sha256(body.email.encode("utf-8")).hexdigest()[:32],
+        limit=email_check.MAILS_PER_HOUR,
+        window_seconds=WINDOW_SECONDS,
+        what="reset emails for this address",
+    )
+    user = await db.scalar(select(User).where(User.email == body.email))
+    if user is not None and user.is_active:
+        letter = await email_check.mail_link("reset", user)
+        if letter is not None:
+            background.add_task(mail.send, letter)
+    return OkResponse()
+
+
+@router.post("/password/reset", response_model=UserOut, dependencies=[Depends(enforce_login_limit)])
+async def reset_password(
+    body: ResetPasswordRequest, request: Request, db: AsyncSession = Depends(get_db)
+) -> UserOut:
+    """Set a new password from a mailed link (once), confirm the address it went to, end every
+    other session and sign this browser in."""
+    data = await email_check.read("reset", body.token)
+    user = await db.get(User, uuid.UUID(data["uid"])) if data else None
+    if user is None or not email_check.matches(data, user, epoch=True):
+        raise HTTPException(status_code=400, detail=LINK_GONE)
+    user.password_hash = hash_password(body.password)
+    user.session_epoch += 1
+    confirmed = email_check.confirm(user)
+    if user.admin_role:
+        # The console's password too (its second factor still guards the sign-in).
+        await audit.record(db, "auth.password_reset", request=request, actor=user, commit=False)
+    await db.commit()
+    if confirmed:
+        await email_check.publish_waiting(db, user)
+    login_session(request, user)
+    return user_out(user)
+
+
+@router.post("/email/verify", response_model=VerifyEmailOut)
+async def verify_email(
+    body: VerifyEmailRequest, db: AsyncSession = Depends(get_db)
+) -> VerifyEmailOut:
+    """Confirm the address a mailed link went to; debates that waited for it go public. Works
+    without a session (the link may be opened on another device)."""
+    data = await email_check.read("verify", body.token)
+    user = await db.get(User, uuid.UUID(data["uid"])) if data else None
+    if user is None or not email_check.matches(data, user):
+        raise HTTPException(status_code=400, detail=LINK_GONE)
+    if not email_check.confirm(user):
+        return VerifyEmailOut()
+    await db.commit()
+    return VerifyEmailOut(published=await email_check.publish_waiting(db, user))
+
+
+@router.post("/email/resend", response_model=OkResponse)
+async def resend_confirmation(
+    request: Request,
+    background: BackgroundTasks,
+    user: User = Depends(require_session_user),
+) -> OkResponse:
+    """Mail the signed-in account a new confirmation link."""
+    if user.email_verified_at is not None:
+        return OkResponse()
+    await enforce_limit(
+        request,
+        bucket="verify_mail",
+        key=str(user.id),
+        limit=email_check.MAILS_PER_HOUR,
+        window_seconds=WINDOW_SECONDS,
+        what="confirmation emails",
+    )
+    letter = await email_check.mail_link("verify", user)
+    if letter is None:
+        raise HTTPException(
+            status_code=503, detail="Could not send the email now. Try again later."
+        )
+    background.add_task(mail.send, letter)
     return OkResponse()
 
 

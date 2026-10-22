@@ -44,6 +44,8 @@ class UserOut(BaseModel):
     display_name: str
     avatar_seed: str
     official: bool = False  # the site's own account: the logo is its avatar
+    email_verified: bool = False  # the owner opened a link we mailed
+    email_required: bool = False  # publishing and top-ups wait for the email to be confirmed
     credits_usd: float
     openrouter_key_masked: str | None = None
     created_at: datetime
@@ -70,6 +72,30 @@ class SetOpenRouterKeyRequest(BaseModel):
 
 class OkResponse(BaseModel):
     ok: bool = True
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: str = Field(max_length=320)
+
+    @field_validator("email")
+    @classmethod
+    def _email(cls, value: str) -> str:
+        return value.strip().lower()
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str = Field(min_length=10, max_length=200)
+    # bcrypt only uses the first 72 bytes of a password.
+    password: str = Field(min_length=8, max_length=72)
+
+
+class VerifyEmailRequest(BaseModel):
+    token: str = Field(min_length=10, max_length=200)
+
+
+class VerifyEmailOut(BaseModel):
+    ok: bool = True
+    published: int = 0  # debates that went public with the confirmed address
 
 
 # --- API tokens ---------------------------------------------------------------

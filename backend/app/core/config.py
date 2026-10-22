@@ -214,6 +214,16 @@ class Settings(BaseSettings):
     # Development only: top-ups are credited instantly without Stripe.
     DEV_FAKE_PAYMENTS: bool = False
 
+    # Mail (services/mail): the SMTP relay of the sending service (Resend: smtp.resend.com,
+    # port 465 = TLS from the start, 587 = STARTTLS; user "resend", password = an API key with
+    # sending access). Without a host and a password nothing is sent: the message is logged.
+    MAIL_SMTP_HOST: str = ""
+    MAIL_SMTP_PORT: int = 465
+    MAIL_SMTP_USER: str = "resend"
+    MAIL_SMTP_PASSWORD: str | None = None
+    MAIL_FROM: str = "Debatr <noreply@debatr.tv>"
+    MAIL_REPLY_TO: str = "support@debatr.tv"  # where replies to the site's mail go
+
     model_config = SettingsConfigDict(
         env_file=[".env", "../.env"],
         env_ignore_empty=True,

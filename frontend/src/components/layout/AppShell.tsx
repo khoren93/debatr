@@ -1,11 +1,17 @@
 import { Link, NavLink, useLocation } from 'react-router';
-import { Home, LayoutGrid, Play, Plus, Trophy, UserRound, Wrench } from 'lucide-react';
+import { Home, LayoutGrid, MailWarning, Play, Plus, Trophy, UserRound, Wrench } from 'lucide-react';
+import { useState } from 'react';
+import { resendConfirmation } from '../../api/auth';
+import { getErrorMessage } from '../../api/client';
 import type { ReactNode } from 'react';
 import { useAuth } from '../../auth/AuthContext';
 import { useSiteStatus } from '../../hooks/useSiteStatus';
 import { APP_REPO_URL, APP_SUPPORT_EMAIL } from '../../lib/brand';
 import { formatMoney } from '../../lib/format';
-import { GitHubMark, Logo, Progress, UserAvatar } from '../ui';
+import { Button, GitHubMark, Logo, Progress, UserAvatar, useToast } from '../ui';
+
+/** Focused pages with their own centred layout (AuthLayout): no sidebar or tabs. */
+const BARE_PATHS = new Set(['/login', '/register', '/device', '/forgot-password', '/reset-password', '/verify-email']);
 
 const NAV = [
   { to: '/', label: 'Home', icon: Home, end: true },
@@ -160,11 +166,43 @@ const MaintenanceBanner = () => {
   );
 };
 
+/** A new account has not confirmed its email yet (backend services/email_check): publishing
+ *  and top-ups wait for it. */
+const EmailBanner = () => {
+  const { user } = useAuth();
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const [sent, setSent] = useState(false);
+  if (!user?.email_required) return null;
+  const resend = async () => {
+    setBusy(true);
+    try {
+      await resendConfirmation();
+      setSent(true);
+      toast.success(`Sent a new link to ${user.email}`);
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div role="status" className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-host/25 bg-host/10 px-[clamp(18px,4vw,48px)] py-2 text-[13px] text-text-2">
+      <MailWarning className="size-4 shrink-0 text-host" />
+      <span className="min-w-0 flex-1">
+        Confirm your email to publish debates and add credits: open the link we sent to <span className="font-semibold text-text">{user.email}</span>.
+      </span>
+      <Button variant="ghost" size="sm" className="h-7! px-2.5!" onClick={resend} loading={busy} disabled={sent}>
+        {sent ? 'Sent' : 'Send again'}
+      </Button>
+    </div>
+  );
+};
+
 /** Desktop sidebar + mobile top bar / bottom tabs around the routed page. */
 export const AppShell = ({ children }: { children: ReactNode }) => {
   const { pathname } = useLocation();
-  // Focused pages with their own centred layout (AuthLayout): no sidebar or tabs.
-  const bare = pathname === '/login' || pathname === '/register' || pathname === '/device';
+  const bare = BARE_PATHS.has(pathname);
   return (
     <div className="relative flex min-h-screen bg-ink">
       {/* The sidebar stays pinned to the left edge; only the page content is capped and centred. */}
@@ -172,6 +210,7 @@ export const AppShell = ({ children }: { children: ReactNode }) => {
       <main className="flex min-w-0 flex-1 flex-col overflow-x-clip pb-24 md:pb-0">
         {!bare && <MobileTopBar />}
         {!bare && <MaintenanceBanner />}
+        {!bare && <EmailBanner />}
         <div className="mx-auto flex w-full max-w-[1364px] flex-1 flex-col">{children}</div>
         {/* Phones have no sidebar: its small links sit under the page. */}
         {!bare && (

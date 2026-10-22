@@ -70,6 +70,9 @@ const Login = () => {
           placeholder="you@example.com"
         />
         <PasswordField label="Password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
+        <Link to="/forgot-password" className="-mt-2 justify-self-end text-[13px] text-muted transition-colors hover:text-text">
+          Forgot password?
+        </Link>
         {error && <ErrorBox>{error}</ErrorBox>}
         <Button type="submit" size="lg" className="mt-1 w-full" loading={busy} icon={<ArrowRight className="size-4" />}>
           Sign in

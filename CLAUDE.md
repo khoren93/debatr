@@ -79,7 +79,9 @@ backend/            FastAPI API + RQ worker (Python 3.12+, managed with uv)
                       the console, cached per process), alerts (Telegram: rules, antispam, job),
                       alert_events (the alert kinds the console can mute), official (the
                       brand's name is reserved for `users.official`: case, spacing and
-                      Cyrillic / Greek look-alikes folded)
+                      Cyrillic / Greek look-alikes folded), mail (SMTP relay, the one-button
+                      letter), email_check (confirmation / reset links, what waits for a
+                      confirmed address)
   app/services/admin/ totp (codes, recovery / enrollment codes, QR), sessions (Redis: sessions,
                       sign-in tickets, code failures), passkeys (WebAuthn options / checks),
                       audit (append-only admin_audit_log: writing, the audit page's queries),
@@ -118,7 +120,7 @@ frontend/           React 19 + React Router 8 (framework mode, server rendering)
   src/routes.ts       route tree: `_site` (AppShell; session + site status + `siteUrl` from the
                       server) → public pages (home, gallery, leaderboard, d/:slug/:kebab?,
                       t/:slug/:kebab?: rendered on the server) | `_client` (login, register,
-                      debate/:id: browser only, HydrateFallback, `X-Robots-Tag: noindex`) →
+                      forgot-password, reset-password, verify-email, debate/:id: browser only, HydrateFallback, `X-Robots-Tag: noindex`) →
                       `_private` (library, create, account, device: also a session) | `*` (a real
                       404); `embed/:slug` (outside `_site`: the player for other sites' iframes,
                       no session, `handle.framed`); resource routes `og/d/:file`, `og/t/:file`, `og/site.png` (link preview
@@ -387,6 +389,21 @@ docker compose exec api python -m app.manage credits user@example.com 5 --reason
    `get_current_user` / `require_user` in `app/core/auth.py`. New accounts get
    `SIGNUP_BONUS_USD` credits. Admins sign in to the admin console separately (see "Admin
    console"); the public API grants them nothing.
+   Email (`services/email_check`, `services/mail`): registration mails a confirmation link
+   (`/verify-email?token=`, 3 days, may be opened again: the page posts the token itself, so
+   mail scanners confirm nothing); `POST /api/auth/password/forgot` mails a reset link (the same
+   answer for any address; 3 mails an hour per address) and `POST /password/reset` sets the
+   password from it (`/reset-password?token=`, an hour, once; dies with a password change:
+   the session epoch is in it), confirms the address, bumps the epoch and signs this browser in;
+   `POST /email/verify`, `POST /email/resend` (session, 3 an hour). Redis keeps only the tokens'
+   SHA-256 (`email_token_key`). `users.email_verified_at`; accounts made since migration 0021
+   have `email_check_required` and publish (owner's Publish → 403 with the wish kept as
+   `publish_requested`; `_auto_publish` waits) or top up (403) only once confirmed; the
+   confirmation then publishes what waited (`publish_waiting`). Older accounts are only asked
+   (banner-free: Account → Security). `UserOut.email_verified` / `email_required`; the site's
+   `EmailBanner` (AppShell) for pending accounts. Mail goes through an SMTP relay (`MAIL_SMTP_*`,
+   Resend in production, `From: MAIL_FROM`, `Reply-To: MAIL_REPLY_TO`) in a background task
+   after the response; without a relay it is logged (the body only outside production).
 1. `POST /api/debates` (signed-in users only) validates `DebateConfig` (`topic` ≤
    `TOPIC_MAX_LENGTH` = 150: it is drawn on the video; configs saved before the limit hold up to
    500 and are re-read with `DebateConfig.stored`; the wizard, CLI and trending topics keep to

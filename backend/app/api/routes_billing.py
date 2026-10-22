@@ -34,7 +34,7 @@ from app.schemas.billing import (
     TransactionOut,
     UsageOut,
 )
-from app.services import ledger, runtime_settings
+from app.services import email_check, ledger, runtime_settings
 from app.services.credits import apply_transaction, cover_charge_usd
 from app.services.estimate import reference_debate_usd
 from app.services.media.tts.elevenlabs import system_key_status
@@ -131,6 +131,12 @@ async def checkout(
 ) -> CheckoutOut:
     if body.amount_usd not in settings.topup_amounts:
         raise HTTPException(status_code=400, detail="Unsupported top-up amount")
+    if email_check.pending(user):
+        raise HTTPException(
+            status_code=403,
+            detail=f"Confirm your email before adding credits: open the link we sent to "
+            f"{user.email}.",
+        )
     mode = settings.payments_mode
     if mode == "dev":
         await apply_transaction(

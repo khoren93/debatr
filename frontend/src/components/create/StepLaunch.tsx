@@ -2,6 +2,7 @@ import { ArrowLeft, ArrowRight, ArrowUpRight, Check, Globe, ImageIcon, KeyRound,
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 import type { DebateConfig, Estimate, ImageSource, PaymentsMode, VoiceInfo } from '../../api/types';
+import { useAuth } from '../../auth/AuthContext';
 import { detectStyle } from '../../data/styles';
 import type { TtsKeyCheck, TtsKeyStatus } from '../../hooks/useElevenLabsKeyStatus';
 import { estimateCost } from '../../hooks/useEstimate';
@@ -162,6 +163,7 @@ export const StepLaunch = ({
   goTo,
 }: StepLaunchProps) => {
   const site = useSiteStatus();
+  const { user } = useAuth();
   const spec = formatSpec(state.format);
   // A premium-only format always builds its audio (the wizard locks that output on).
   const outputLocked = (value: WizardState['outputs'][number]) => spec.premiumOnly && value === 'audio';
@@ -590,7 +592,11 @@ export const StepLaunch = ({
           <span className="min-w-0 flex-1">
             <span className="block text-sm font-semibold">Publish to the gallery</span>
             <span className="mt-0.5 block text-xs text-muted">
-              {state.auto_publish ? 'Public with a share link after an automatic content check.' : 'Stays private. You can still publish it later from the debate page.'}
+              {!state.auto_publish
+                ? 'Stays private. You can still publish it later from the debate page.'
+                : user?.email_required
+                  ? 'Public after an automatic content check, once you confirm your email.'
+                  : 'Public with a share link after an automatic content check.'}
             </span>
           </span>
           <SwitchTrack on={state.auto_publish} />

@@ -20,6 +20,10 @@ export default [
     layout('routes/_client.tsx', [
       route('login', 'routes/login.tsx'),
       route('register', 'routes/register.tsx'),
+      // Links we mail (backend services/email_check).
+      route('forgot-password', 'routes/forgot-password.tsx'),
+      route('reset-password', 'routes/reset-password.tsx'),
+      route('verify-email', 'routes/verify-email.tsx'),
       route('debate/:id', 'routes/debate-owner.tsx'),
       layout('routes/_private.tsx', [
         route('library', 'routes/library.tsx'),

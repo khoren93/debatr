@@ -52,7 +52,15 @@ from app.schemas.schemas import (
     StartDebateRequest,
     StopDebateResponse,
 )
-from app.services import alerts, api_tokens, free_limits, indexnow, motions, runtime_settings
+from app.services import (
+    alerts,
+    api_tokens,
+    email_check,
+    free_limits,
+    indexnow,
+    motions,
+    runtime_settings,
+)
 from app.services.credits import Prices, cover_charge_usd, lever_prices, prices_of
 from app.services.debate_control import ACTIVE_STATUSES
 from app.services.debate_control import stop_debate as stop_debate_run
@@ -738,6 +746,16 @@ async def publish_debate(
     if debate.moderation_status == "rejected":
         raise HTTPException(
             status_code=409, detail="This debate was not approved for the public gallery"
+        )
+    if user is not None and email_check.pending(user):
+        # The wish is kept: it goes public with the confirmed address (publish_waiting).
+        debate.moderation_json = {**(debate.moderation_json or {}), "publish_requested": True}
+        debate.category = body.category or debate.category
+        await db.commit()
+        raise HTTPException(
+            status_code=403,
+            detail=f"Confirm your email first: open the link we sent to {user.email}. The "
+            "debate goes to the gallery as soon as you do.",
         )
     if debate.moderation_status == "flagged":
         debate.moderation_json = {**(debate.moderation_json or {}), "publish_requested": True}

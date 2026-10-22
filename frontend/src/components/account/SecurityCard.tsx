@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router';
-import { LogOut } from 'lucide-react';
-import { changePassword } from '../../api/auth';
+import { CircleCheck, LogOut } from 'lucide-react';
+import { changePassword, resendConfirmation } from '../../api/auth';
 import { getErrorMessage } from '../../api/client';
 import { useAuth } from '../../auth/AuthContext';
 import { Button, Input, useToast } from '../ui';
@@ -10,7 +10,50 @@ import { describeDevice } from './helpers';
 const MIN_PASSWORD = 8;
 const ROW = 'flex flex-wrap items-center gap-4 p-[clamp(18px,2.6vw,24px)]';
 
-/** Password (inline change form) and the current session with sign out. */
+/** The account's email and whether it is confirmed (a new link on request). */
+const EmailRow = () => {
+  const { user } = useAuth();
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const [sent, setSent] = useState(false);
+  if (!user) return null;
+  const resend = async () => {
+    setBusy(true);
+    try {
+      await resendConfirmation();
+      setSent(true);
+      toast.success(`Sent a link to ${user.email}`);
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className={`${ROW} border-b border-line`}>
+      <div className="min-w-[200px] flex-1">
+        <div className="text-[15px] font-bold">Email</div>
+        <div className="mt-1 flex flex-wrap items-center gap-x-2 text-[13px] text-muted">
+          <span className="text-text-2">{user.email}</span>
+          {user.email_verified ? (
+            <span className="inline-flex items-center gap-1 text-ok">
+              <CircleCheck className="size-3.5" /> Confirmed
+            </span>
+          ) : (
+            <span className="text-host">{user.email_required ? 'Not confirmed: publishing and top-ups wait for it' : 'Not confirmed'}</span>
+          )}
+        </div>
+      </div>
+      {!user.email_verified && (
+        <Button variant="secondary" size="sm" onClick={resend} loading={busy} disabled={sent}>
+          {sent ? 'Link sent' : 'Send a link'}
+        </Button>
+      )}
+    </div>
+  );
+};
+
+/** Email (confirmation), password (inline change form) and the current session with sign out. */
 export const SecurityCard = () => {
   const { signOut } = useAuth();
   const navigate = useNavigate();
@@ -67,6 +110,7 @@ export const SecurityCard = () => {
 
   return (
     <div className="rounded-panel border border-line bg-surface">
+      <EmailRow />
       <div className={`${ROW} border-b border-line`}>
         <div className="min-w-[200px] flex-1">
           <div className="text-[15px] font-bold">Password</div>

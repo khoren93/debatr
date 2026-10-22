@@ -289,6 +289,9 @@ export interface AdminUserProfile {
   display_name: string;
   avatar_seed: string;
   official?: boolean; // the site's own account
+  email_verified?: boolean;
+  /** Publishing and top-ups wait for the email to be confirmed. */
+  email_required?: boolean;
   created_at: string;
   last_login_at: string | null;
   last_seen_at: string | null;

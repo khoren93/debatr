@@ -34,7 +34,7 @@ from app.models.models import (
     User,
 )
 from app.schemas.admin import UserFilters, UserSort
-from app.services import ledger
+from app.services import email_check, ledger
 from app.services.admin.audit import entry_out
 from app.services.admin.stats import ledger_category
 from app.services.debate_control import ACTIVE_STATUSES
@@ -417,6 +417,8 @@ def profile_out(user: User) -> dict[str, Any]:
         "display_name": user.display_name,
         "avatar_seed": user.avatar_seed or "",
         "official": bool(user.official),
+        "email_verified": user.email_verified_at is not None,
+        "email_required": email_check.pending(user),
         "created_at": user.created_at,
         "last_login_at": user.last_login_at,
         "last_seen_at": user.last_seen_at,

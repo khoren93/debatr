@@ -461,6 +461,10 @@ export interface User {
   display_name: string;
   avatar_seed: string;
   official?: boolean; // the site's own account: the logo is its avatar
+  /** The owner opened a link we mailed (backend services/email_check). */
+  email_verified?: boolean;
+  /** Publishing to the gallery and top-ups wait for the email to be confirmed. */
+  email_required?: boolean;
   credits_usd: number;
   openrouter_key_masked: string | null;
   created_at: string;
