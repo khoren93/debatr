@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 import { Page, PageTitle } from '../components/layout/AppShell';
-import { APP_NAME, APP_REPO_URL } from '../lib/brand';
+import { APP_NAME, APP_SUPPORT_EMAIL } from '../lib/brand';
 
 const Block = ({ title, children }: { title: string; children: ReactNode }) => (
   <section className="mt-8">
@@ -47,11 +47,11 @@ const Privacy = () => (
 
       <Block title="Questions and deletion">
         <p>
-          To get a copy of your data or have your account deleted, open an issue at{' '}
-          <a href={APP_REPO_URL} className="text-accent hover:text-accent-hover" rel="noreferrer" target="_blank">
-            github.com/khoren93/debatr
+          To get a copy of your data or have your account deleted, write to{' '}
+          <a href={`mailto:${APP_SUPPORT_EMAIL}`} className="text-accent hover:text-accent-hover">
+            {APP_SUPPORT_EMAIL}
           </a>{' '}
-          or write from your account’s email. <Link to="/" className="text-accent hover:text-accent-hover">Back to {APP_NAME}</Link>.
+          from your account’s email, so we know the request is yours. <Link to="/" className="text-accent hover:text-accent-hover">Back to {APP_NAME}</Link>.
         </p>
       </Block>
     </div>
