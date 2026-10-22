@@ -126,6 +126,15 @@ def error_text(e: Exception) -> str:
     return f"{type(e).__name__}: {detail}"[:500]
 
 
+def unreachable_hint(host: str, port: int, e: OSError) -> str:
+    """Where the connection failed, and the usual reason a relay times out: the server's host
+    drops outgoing mail ports (Hetzner Cloud blocks 25 and 465; 587 stays open)."""
+    where = f"{host}:{port}"
+    if isinstance(e, TimeoutError) and port in (25, 465):
+        return f"{where}: hosts often block outgoing port {port}, set MAIL_SMTP_PORT=587"
+    return where
+
+
 def send(message: EmailMessage) -> Outcome:
     """Send now (blocking: the API runs it in a thread after its response). Never raises: a
     failure is logged and returned."""
@@ -154,6 +163,8 @@ def send(message: EmailMessage) -> Outcome:
                 reply = smtp.reply
     except (OSError, smtplib.SMTPException) as e:
         error = error_text(e)
+        if not isinstance(e, smtplib.SMTPException):  # no answer from the relay at all
+            error = f"{error} ({unreachable_hint(host, port, e)})"[:500]
         logger.warning("Mail to %s failed: %s", to, error)
         return Outcome("failed", error=error)
     logger.info("Mail sent to %s: %s (%s)", to, subject, reply)

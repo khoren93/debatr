@@ -219,11 +219,11 @@ class Settings(BaseSettings):
     SUPPORT_EMAIL: str = ""
 
     # Mail (services/mail): the SMTP relay of the sending service (Resend: smtp.resend.com,
-    # port 465 = TLS from the start, 587 = STARTTLS; user "resend", password = an API key with
-    # sending access). Without a host, a password and MAIL_FROM nothing is sent: the message is
-    # logged.
+    # port 587 = STARTTLS, 465 = TLS from the start; user "resend", password = an API key with
+    # sending access). Many hosts block outgoing 25 and 465 (Hetzner Cloud does), hence 587.
+    # Without a host, a password and MAIL_FROM nothing is sent: the message is logged.
     MAIL_SMTP_HOST: str = ""
-    MAIL_SMTP_PORT: int = 465
+    MAIL_SMTP_PORT: int = 587
     MAIL_SMTP_USER: str = "resend"
     MAIL_SMTP_PASSWORD: str | None = None
     MAIL_FROM: str = ""  # e.g. "Debatr <noreply@example.com>", on a domain the service verified

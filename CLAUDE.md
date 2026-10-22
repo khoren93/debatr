@@ -408,7 +408,7 @@ docker compose exec api python -m app.manage credits user@example.com 5 --reason
    confirmation then publishes what waited (`publish_waiting`). Older accounts are only asked
    (banner-free: Account → Security). `UserOut.email_verified` / `email_required`; the site's
    `EmailBanner` (AppShell) for pending accounts. Mail goes through an SMTP relay (`MAIL_SMTP_*`,
-   Resend in production, `From: MAIL_FROM`, `Reply-To: MAIL_REPLY_TO`, else `SUPPORT_EMAIL`) in a
+   port 587 + STARTTLS by default: Hetzner Cloud drops outgoing 25 and 465, Resend in production, `From: MAIL_FROM`, `Reply-To: MAIL_REPLY_TO`, else `SUPPORT_EMAIL`) in a
    background task after the response (`mail_log.deliver`); without a relay (host, password and
    `MAIL_FROM`) it is logged (the body only outside production). No address has a default in the
    code (public repo): they come from .env; `SUPPORT_EMAIL` reaches the site through

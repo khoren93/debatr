@@ -226,6 +226,7 @@ def test_send_uses_the_relay_and_never_raises(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setattr(mail, "_TLSRelay", FakeSMTP)
     monkeypatch.setattr(mail, "_Relay", FakeSMTP)
     FakeSMTP.sent, FakeSMTP.fail = [], False
+    monkeypatch.setattr(settings, "MAIL_SMTP_PORT", 465)  # TLS from the start
     sent = mail.send(letter)
     assert sent == mail.Outcome("sent", reply="250 OK queued as 7f3e")
     assert FakeSMTP.sent == [("smtp.relay.example", 465, "Reset your Debatr password")]
@@ -235,6 +236,25 @@ def test_send_uses_the_relay_and_never_raises(monkeypatch: pytest.MonkeyPatch) -
     failed = mail.send(letter)
     assert failed.status == "failed"
     assert failed.error == "SMTPAuthenticationError: 535 bad key"
+
+
+def test_an_unreachable_relay_says_where_and_why(monkeypatch: pytest.MonkeyPatch) -> None:
+    def blocked(host: str, port: int, **kwargs: Any) -> Any:
+        raise TimeoutError("timed out")
+
+    monkeypatch.setattr(settings, "MAIL_SMTP_HOST", "smtp.relay.example")
+    monkeypatch.setattr(settings, "MAIL_SMTP_PASSWORD", "re_test")
+    monkeypatch.setattr(settings, "MAIL_FROM", "Site <noreply@site.example>")
+    monkeypatch.setattr(mail, "_TLSRelay", blocked)
+    monkeypatch.setattr(mail, "_Relay", blocked)
+    letter = email_check.reset_mail("Jane", "jane@example.com", "tok")
+    monkeypatch.setattr(settings, "MAIL_SMTP_PORT", 465)
+    assert mail.send(letter).error == (
+        "TimeoutError: timed out (smtp.relay.example:465: hosts often block outgoing port 465, "
+        "set MAIL_SMTP_PORT=587)"
+    )
+    monkeypatch.setattr(settings, "MAIL_SMTP_PORT", 587)
+    assert mail.send(letter).error == "TimeoutError: timed out (smtp.relay.example:587)"
 
 
 def test_the_relay_keeps_its_answer_to_the_letter(monkeypatch: pytest.MonkeyPatch) -> None:

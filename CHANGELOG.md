@@ -22,6 +22,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   signed events) each letter also shows whether it was delivered, bounced or marked as spam. A
   refused or bounced letter, or production without a relay, raises the "Mail not delivered"
   alert and an item on the overview. Letters are kept `MAIL_LOG_DAYS` (90) days.
+- Mail goes out on port 587 (STARTTLS) by default instead of 465: hosts such as Hetzner Cloud
+  drop outgoing 25 and 465, so every letter timed out. A relay that cannot be reached says where
+  and, for a timeout on 25 / 465, to set `MAIL_SMTP_PORT=587`.
 
 - **The site's own account.** `python -m app.manage official EMAIL --name Debatr` makes an
   account the site's: its debates show the Debatr logo as the author's avatar and a check mark
