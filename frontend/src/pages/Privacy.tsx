@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 import { Page, PageTitle } from '../components/layout/AppShell';
-import { APP_NAME } from '../lib/brand';
+import { APP_NAME, APP_REPO_URL } from '../lib/brand';
 
 const Block = ({ title, children }: { title: string; children: ReactNode }) => (
   <section className="mt-8">
@@ -48,7 +48,7 @@ const Privacy = () => (
       <Block title="Questions and deletion">
         <p>
           To get a copy of your data or have your account deleted, open an issue at{' '}
-          <a href="https://github.com/khoren93/debatr" className="text-accent hover:text-accent-hover" rel="noreferrer" target="_blank">
+          <a href={APP_REPO_URL} className="text-accent hover:text-accent-hover" rel="noreferrer" target="_blank">
             github.com/khoren93/debatr
           </a>{' '}
           or write from your account’s email. <Link to="/" className="text-accent hover:text-accent-hover">Back to {APP_NAME}</Link>.

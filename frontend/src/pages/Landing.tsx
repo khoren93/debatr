@@ -4,8 +4,9 @@ import { useAuth } from '../auth/AuthContext';
 import { Page } from '../components/layout/AppShell';
 import { CardCover, CardStats, CoverBadge, DebateCard, VersionsBadge, VideoPoster } from '../components/cards';
 import { HeroDebate } from '../components/landing/HeroDebate';
-import { Avatar, Bars, LinkButton } from '../components/ui';
-import { APP_DESCRIPTION } from '../lib/brand';
+import { Avatar, Bars, GitHubMark, LinkButton, buttonClass } from '../components/ui';
+import { APP_DESCRIPTION, APP_NAME, APP_REPO_URL } from '../lib/brand';
+import { CLI_DOCS_URL } from '../lib/cli';
 
 const FACTS = ['60+ models', 'Neural voices', '16:9 + 9:16', 'No install'];
 
@@ -98,6 +99,10 @@ const Landing = ({ hero, featured }: Props) => {
             {FACTS.map((fact) => (
               <span key={fact}>{fact}</span>
             ))}
+            <a href={APP_REPO_URL} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 transition-colors hover:text-text">
+              <GitHubMark className="size-3.5" />
+              Open source<span className="sr-only"> on GitHub</span>
+            </a>
           </div>
         </div>
         {hero ? <HeroDebate debate={hero} /> : <HeroPlayer />}
@@ -153,6 +158,27 @@ const Landing = ({ hero, featured }: Props) => {
           </div>
         </div>
       )}
+
+      {/* Open source */}
+      <div className="relative mt-[clamp(32px,3.5vw,48px)] flex flex-wrap items-center justify-between gap-x-8 gap-y-5 rounded-card border border-line bg-surface px-[clamp(20px,2.5vw,32px)] py-[clamp(20px,2.5vw,28px)]">
+        <div className="max-w-[680px]">
+          <div className="font-mono text-[11px] uppercase tracking-[0.08em] text-accent">Open source · MIT</div>
+          <h2 className="mt-1.5 font-display text-[clamp(22px,2.2vw,30px)] font-bold tracking-[-0.03em]">Built in the open</h2>
+          <p className="mt-2 text-sm leading-[1.5] text-muted text-pretty">
+            The code behind {APP_NAME} is on GitHub under the MIT license: see how the debates, voices and videos are made, run your own copy, or start debates from a
+            terminal or an AI agent with the debatr CLI and MCP server.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
+          <a href={APP_REPO_URL} target="_blank" rel="noreferrer" className={buttonClass('secondary', 'md')}>
+            <GitHubMark className="size-4" />
+            View on GitHub
+          </a>
+          <a href={CLI_DOCS_URL} target="_blank" rel="noreferrer" className="text-sm text-accent transition-colors hover:text-accent-hover">
+            CLI and MCP →
+          </a>
+        </div>
+      </div>
     </Page>
   );
 };

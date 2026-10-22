@@ -4,8 +4,11 @@ export const APP_TAGLINE = 'AI debate studio';
 export const APP_DESCRIPTION =
   'Pick a question, cast your models, choose the voices — Debatr runs the debate, scores a verdict and renders a YouTube video plus a 9:16 Short. All in your browser.';
 
+/** The public repository: the sidebar's and the home page's "open source" links. */
+export const APP_REPO_URL = 'https://github.com/khoren93/debatr';
+
 /** Where the project lives besides the site (the home page's Organization `sameAs`). */
-export const APP_PROFILES = ['https://github.com/khoren93/debatr', 'https://pypi.org/project/debatr/'];
+export const APP_PROFILES = [APP_REPO_URL, 'https://pypi.org/project/debatr/'];
 
 /** Search results and link previews of the listing pages (lib/seo.ts). */
 export const SEO_COPY = {

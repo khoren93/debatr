@@ -1,8 +1,10 @@
 /** The `debatr` command-line client and MCP server (cli/ in the repository): install and setup
  *  snippets shown on the Account page. */
 
+import { APP_REPO_URL } from './brand';
+
 export const CLI_INSTALL = 'uv tool install debatr';
-export const CLI_DOCS_URL = 'https://github.com/khoren93/debatr/tree/main/cli#readme';
+export const CLI_DOCS_URL = `${APP_REPO_URL}/tree/main/cli#readme`;
 
 /** Server the CLI talks to unless DEBATR_URL / --url say otherwise (cli/src/debatr/config.py). */
 const CLI_DEFAULT_SITE = 'https://debatr.tv';

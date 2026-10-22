@@ -3,8 +3,9 @@ import { Home, LayoutGrid, Play, Plus, Trophy, UserRound, Wrench } from 'lucide-
 import type { ReactNode } from 'react';
 import { useAuth } from '../../auth/AuthContext';
 import { useSiteStatus } from '../../hooks/useSiteStatus';
+import { APP_REPO_URL } from '../../lib/brand';
 import { formatMoney } from '../../lib/format';
-import { Avatar, Logo, Progress } from '../ui';
+import { Avatar, GitHubMark, Logo, Progress } from '../ui';
 
 const NAV = [
   { to: '/', label: 'Home', icon: Home, end: true },
@@ -50,6 +51,20 @@ const CreditsCard = () => {
   );
 };
 
+/** The small links under the sidebar (phones: under the page). */
+const ShellLinks = ({ className = '' }: { className?: string }) => (
+  <div className={`flex items-center gap-3 text-[11px] text-dim ${className}`}>
+    <a href={APP_REPO_URL} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 hover:text-muted">
+      <GitHubMark className="size-3.5" />
+      Open source<span className="sr-only"> on GitHub</span>
+    </a>
+    <span aria-hidden="true">·</span>
+    <Link to="/privacy" className="hover:text-muted">
+      Privacy
+    </Link>
+  </div>
+);
+
 const Sidebar = () => {
   const { user } = useAuth();
   return (
@@ -86,9 +101,7 @@ const Sidebar = () => {
           </Link>
         )}
         <CreditsCard />
-        <Link to="/privacy" className="mt-3 block px-2 text-[11px] text-dim hover:text-muted">
-          Privacy
-        </Link>
+        <ShellLinks className="mt-3 px-2" />
       </div>
     </aside>
   );
@@ -160,10 +173,8 @@ export const AppShell = ({ children }: { children: ReactNode }) => {
         <div className="mx-auto flex w-full max-w-[1364px] flex-1 flex-col">{children}</div>
         {/* Phones have no sidebar: its small links sit under the page. */}
         {!bare && (
-          <footer className="px-[clamp(18px,4vw,48px)] pb-6 text-[11px] text-dim md:hidden">
-            <Link to="/privacy" className="hover:text-muted">
-              Privacy
-            </Link>
+          <footer className="px-[clamp(18px,4vw,48px)] pb-6 md:hidden">
+            <ShellLinks />
           </footer>
         )}
       </main>
