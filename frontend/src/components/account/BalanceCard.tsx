@@ -8,14 +8,15 @@ import { Button, SectionLabel, useToast } from '../ui';
 import { money, moneyShort } from './helpers';
 import { track } from '../../lib/presence';
 
-/** Rough all-in cost of one debate at the default settings, for the "≈ N debates" lines. */
-const DEBATE_COST_USD = 0.12;
+/** A typical paid debate with free / premium voices until the API says (BillingConfig). */
+const DEBATE_USD = 0.17;
+const VOICED_DEBATE_USD = 1;
 const FALLBACK_AMOUNTS = [5, 10, 25];
 
-/** "~85 debates": rounded to fives so the chips do not pretend to be exact. */
-const debatesFor = (usd: number) => {
-  const n = usd / DEBATE_COST_USD;
-  return n >= 10 ? Math.round(n / 5) * 5 : Math.floor(n);
+/** "~30": from ten on rounded to fives, so the numbers do not pretend to be exact. */
+const debatesFor = (usd: number, cost: number) => {
+  const n = usd / cost;
+  return n >= 10 ? Math.round(n / 5) * 5 : Math.round(n);
 };
 
 interface BalanceCardProps {
@@ -53,6 +54,8 @@ export const BalanceCard = ({ user, config, configLoaded, usage, onToppedUp, onS
   const balance = user.credits_usd;
   const ownKey = Boolean(browserKey || user.openrouter_key_masked);
   const paymentsOff = configLoaded && config.payments_mode === 'disabled';
+  const debateUsd = config.debate_usd || DEBATE_USD;
+  const voicedUsd = config.voiced_debate_usd || VOICED_DEBATE_USD;
   const disabled = !configLoaded || paymentsOff;
 
   const topUp = async () => {
@@ -77,18 +80,20 @@ export const BalanceCard = ({ user, config, configLoaded, usage, onToppedUp, onS
 
   const status = balance < 0 ? (
     <Status tone="negative">Below zero</Status>
-  ) : balance < DEBATE_COST_USD ? (
+  ) : balance < debateUsd ? (
     <Status tone="low">Running low</Status>
   ) : null;
 
   const note =
     balance < 0
       ? 'A run cost a little more than its estimate. Top up before the next paid debate; free models still work.'
-      : balance < DEBATE_COST_USD
+      : balance < debateUsd
         ? ownKey
           ? 'Your own OpenRouter key runs the models. Credits pay for premium voices and AI pictures.'
           : 'Not enough for another debate with paid models. Top up, or add your own keys to keep generating. Free models still work.'
-        : `Enough for about ${debatesFor(balance)} more debates at the default settings.`;
+        : balance < voicedUsd
+          ? `Enough for about ${debatesFor(balance, debateUsd)} more debates on top models with free voices.`
+          : `Enough for about ${debatesFor(balance, debateUsd)} more debates on top models, or ${debatesFor(balance, voicedUsd)} with premium voices.`;
 
   const hint = !configLoaded
     ? ' '
@@ -142,7 +147,8 @@ export const BalanceCard = ({ user, config, configLoaded, usage, onToppedUp, onS
                   }`}
                 >
                   <div className="font-display text-xl font-bold tracking-[-0.02em]">{moneyShort(a)}</div>
-                  <div className="mt-0.5 text-[11px] opacity-75">~{debatesFor(a)} debates</div>
+                  <div className="mt-0.5 text-[11px] opacity-75">~{debatesFor(a, debateUsd)} debates</div>
+                  <div className="text-[11px] opacity-60">~{debatesFor(a, voicedUsd)} voiced</div>
                 </button>
               );
             })}
@@ -160,7 +166,10 @@ export const BalanceCard = ({ user, config, configLoaded, usage, onToppedUp, onS
               Add {moneyShort(amount)} in credits
             </Button>
           )}
-          <div className="mt-2.5 text-center text-xs text-dim">{hint}</div>
+          <p className="mt-2.5 text-center text-xs leading-normal text-muted text-pretty">
+            A two-round debate on top models costs about {formatCost(debateUsd)}, or {formatCost(voicedUsd)} with premium voices. Free models cost nothing.
+          </p>
+          <div className="mt-1.5 text-center text-xs text-dim">{hint}</div>
         </div>
       </div>
       <dl className="grid grid-cols-2 gap-px border-t border-line bg-line @2xl:grid-cols-4">

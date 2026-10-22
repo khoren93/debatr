@@ -3,7 +3,6 @@ import { Link } from 'react-router';
 import { AudioLines, Clock, Eye, Heart, Layers, MicVocal } from 'lucide-react';
 import type { MotionRef, Participant, Verdict } from '../../api/types';
 import { formatCount, formatDuration, gradientFor } from '../../lib/format';
-import { languageName } from '../../lib/languages';
 import { ModelIcon, Thumb } from '../ui';
 import { debaterNames, verdictLabel } from './helpers';
 
@@ -101,13 +100,6 @@ export const VersionsBadge = ({ motion, participants }: { motion: MotionRef | nu
     </span>
   );
 };
-
-/** "RU": the debate's language as a small tag (its own name on hover). */
-export const LanguageTag = ({ code }: { code: string }) => (
-  <span className="rounded bg-surface-3 px-1.5 py-px font-mono text-[10px] uppercase tracking-[0.04em] text-text-2" title={languageName(code)}>
-    {code}
-  </span>
-);
 
 /** Likes · views · length row of a public card (icons instead of words). */
 export const CardStats = ({ likes, views, durationMs }: { likes: number; views: number; durationMs?: number | null }) => (

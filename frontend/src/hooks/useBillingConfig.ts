@@ -10,6 +10,8 @@ const FALLBACK: BillingConfig = {
   tts_price_per_1k_chars: 0.15,
   tts_price_per_min: 0.15,
   music_price_per_min: 0.3,
+  debate_usd: 0,
+  voiced_debate_usd: 0,
   elevenlabs_available: false,
   elevenlabs_error: null,
 };

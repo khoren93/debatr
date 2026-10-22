@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { ArrowLeft, ArrowRight, AudioLines, Flame, Globe, Languages, MicVocal, Play, Sparkles, Trophy, X } from 'lucide-react';
 import type { GalleryItem, GalleryLanguage } from '../api/types';
 import { Page, PageTitle } from '../components/layout/AppShell';
-import { CardAuthor, CardCover, CardStats, CoverBadge, DebateCard, LanguageTag, VersionsBadge } from '../components/cards';
+import { CardAuthor, CardCover, CardStats, CoverBadge, DebateCard, VersionsBadge } from '../components/cards';
 import { Button, Chip, Dropdown, EmptyState, LinkButton, ModelIcon, Segmented, type DropdownOption } from '../components/ui';
 import { shortModelName } from '../lib/format';
 import {
@@ -261,12 +261,7 @@ const Gallery = ({ filters, items, total, languages }: Props) => {
               }
               footerLeft={<CardAuthor name={item.author_name} official={item.author_official} />}
               // No verdict on the cards: the audience votes blind on the debate page.
-              footerRight={
-                <>
-                  <LanguageTag code={item.language_code} />
-                  <CardStats likes={item.likes} views={item.views} durationMs={item.duration_ms} />
-                </>
-              }
+              footerRight={<CardStats likes={item.likes} views={item.views} durationMs={item.duration_ms} />}
             />
           );
         })}

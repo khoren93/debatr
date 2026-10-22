@@ -5,7 +5,13 @@ from fastapi import HTTPException
 
 from app.api import routes_debates
 from app.schemas.schemas import DebateConfig
-from app.services.estimate import Estimate, estimate_debate, pricing_from_models, unpriced_models
+from app.services.estimate import (
+    Estimate,
+    estimate_debate,
+    pricing_from_models,
+    reference_debate_usd,
+    unpriced_models,
+)
 from app.services.openrouter_client import openrouter_client
 
 MOD = {"role": "moderator", "model_id": "m/mod", "display_name": "Host"}
@@ -228,3 +234,17 @@ def test_a_paid_run_is_quoted_at_least_the_minimum():
     # A resume pays the rest of its turns; the minimum was quoted with the first run.
     rest = _estimate(_conf(), pricing, markup=3.0, min_charge=0.05, from_turn=4)
     assert 0 < rest.credits_cost_usd < 0.05
+
+
+def test_reference_debate_follows_the_levers():
+    # Production levers on 2026-10-22: markup 3, premium voices $0.20 per 1K characters, a cover
+    # at $0.035 x 3.
+    plain, voiced = reference_debate_usd(
+        markup=3, min_charge=0, tts_price_per_1k=0.2, cover_usd=0.105
+    )
+    assert 0.12 < plain < 0.2
+    assert 0.9 < voiced < 1.1
+    cheaper, _ = reference_debate_usd(markup=1.2, min_charge=0, tts_price_per_1k=0.2, cover_usd=0)
+    assert cheaper < plain / 2
+    floor, _ = reference_debate_usd(markup=1.2, min_charge=0.5, tts_price_per_1k=0.2, cover_usd=0)
+    assert floor == 0.5

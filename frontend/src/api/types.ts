@@ -544,6 +544,10 @@ export interface BillingConfig {
   tts_price_per_min: number;
   /** A rap battle's generated music on the system key, per minute of track. */
   music_price_per_min: number;
+  /** A typical paid debate at today's prices (two rounds, short replies, models priced like
+   *  Claude Sonnet / GPT, its AI cover), with free voices and with premium ones. */
+  debate_usd: number;
+  voiced_debate_usd: number;
   elevenlabs_available: boolean;
   /** Why premium voices are unavailable (key missing or rejected). */
   elevenlabs_error: string | null;

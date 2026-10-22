@@ -27,6 +27,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The top-up card counts debates at today's prices: about how many typical debates on top models
+  each amount buys, and how many with premium voices (`GET /api/billing/config` answers
+  `debate_usd` and `voiced_debate_usd`). It used to promise more, leaving the voices out.
+- Gallery cards no longer show the debate's language (the language filter stays).
 - The home page lists English debates only.
 - The server calls itself Debatr instead of AI Debates: the API docs' title, the Stripe product
   ("Debatr credits"), CSV exports (`debatr-ledger-….csv` and the console's), the app name sent to

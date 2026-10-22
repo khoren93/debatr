@@ -19,6 +19,10 @@ class BillingConfigOut(BaseModel):
     tts_price_per_min: float
     # A rap battle's generated music on the system key, per minute of track.
     music_price_per_min: float = 0.0
+    # A typical paid debate at today's prices (services/estimate.reference_debate_usd), with
+    # free voices and with premium ones: the Account page's "about N debates".
+    debate_usd: float = 0.0
+    voiced_debate_usd: float = 0.0
     elevenlabs_available: bool
     elevenlabs_error: str | None = None
 

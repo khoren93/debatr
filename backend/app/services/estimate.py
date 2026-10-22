@@ -205,3 +205,44 @@ def estimate_debate(
         music_ms=music_ms,
         music_cost_usd=round(music_cost, 6),
     )
+
+
+# A typical paid run, for the Account page's "about N debates": a host and two debaters on
+# models priced like Claude Sonnet or GPT ($2 in / $10 out per million tokens), short replies,
+# two rounds, in English. A price, not model ids, so it never names a model that left the
+# catalogue.
+REFERENCE_MODEL = "reference"
+REFERENCE_PRICING: Pricing = {REFERENCE_MODEL: (2e-6, 10e-6)}
+REFERENCE_CONFIG: dict[str, Any] = {
+    "topic": "Should cities ban cars from their centres?",
+    "language": "English",
+    "num_rounds": 2,
+    "length_preset": "short",
+    "participants": [
+        {"role": "moderator", "model_id": REFERENCE_MODEL},
+        {"role": "debater", "model_id": REFERENCE_MODEL},
+        {"role": "debater", "model_id": REFERENCE_MODEL},
+    ],
+}
+
+
+def reference_debate_usd(
+    *, markup: float, min_charge: float, tts_price_per_1k: float, cover_usd: float
+) -> tuple[float, float]:
+    """Credits of the typical paid run (REFERENCE_CONFIG) with free voices and with premium ones,
+    the AI cover a paid run gets (`cover_usd`, 0 when covers are off) included."""
+
+    def credits(provider: str) -> float:
+        conf = {**REFERENCE_CONFIG, "media_plan": {"provider": provider, "outputs": ["audio"]}}
+        run = estimate_debate(
+            conf,
+            REFERENCE_PRICING,
+            own_key=False,
+            tts_provider=provider,
+            tts_price_per_1k=tts_price_per_1k,
+            markup=markup,
+            min_charge=min_charge,
+        )
+        return round(run.credits_cost_usd + cover_usd, 4)
+
+    return credits("edge"), credits("elevenlabs")

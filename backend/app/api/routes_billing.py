@@ -35,7 +35,8 @@ from app.schemas.billing import (
     UsageOut,
 )
 from app.services import ledger, runtime_settings
-from app.services.credits import apply_transaction
+from app.services.credits import apply_transaction, cover_charge_usd
+from app.services.estimate import reference_debate_usd
 from app.services.media.tts.elevenlabs import system_key_status
 
 logger = logging.getLogger(__name__)
@@ -71,6 +72,13 @@ def transaction_out(tx: CreditTransaction) -> TransactionOut:
 async def billing_config() -> BillingConfigOut:
     elevenlabs_ok, elevenlabs_reason = await run_in_threadpool(system_key_status)
     levers = await runtime_settings.current()
+    cover = cover_charge_usd(settings.COVER_PRICE_USD, levers.credit_markup)
+    debate_usd, voiced_debate_usd = reference_debate_usd(
+        markup=levers.credit_markup,
+        min_charge=levers.min_debate_charge_usd,
+        tts_price_per_1k=levers.tts_price_per_1k_chars,
+        cover_usd=0.0 if levers.ai_covers == "off" else float(cover),
+    )
     return BillingConfigOut(
         topup_amounts=settings.topup_amounts,
         currency=settings.STRIPE_CURRENCY,
@@ -79,6 +87,8 @@ async def billing_config() -> BillingConfigOut:
         tts_price_per_1k_chars=levers.tts_price_per_1k_chars,
         tts_price_per_min=round(levers.tts_price_per_1k_chars, 4),
         music_price_per_min=levers.music_price_per_min,
+        debate_usd=debate_usd,
+        voiced_debate_usd=voiced_debate_usd,
         elevenlabs_available=elevenlabs_ok,
         elevenlabs_error=elevenlabs_reason,
     )

@@ -1109,7 +1109,10 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   `TTS_CREDIT_PRICE_PER_1K_CHARS`). A run keeps the prices it was quoted: create / draft start
   store them in `config_json.billing.prices` (a resume keeps them), `POST /media` and
   `_auto_media` in `media_json.prices`; charges read the snapshot (`prices_of`, env values for rows
-  from before it). The public `GET /api/billing/config` shows prices, never the markup.
+  from before it). The public `GET /api/billing/config` shows prices, never the markup, and
+  `debate_usd` / `voiced_debate_usd`: a typical paid debate at today's levers
+  (`estimate.reference_debate_usd`: host + two debaters priced like Sonnet / GPT, short, two
+  rounds, its AI cover) with free / premium voices, the Account page's "about N debates".
 - `users.credits_usd` is the balance; `credit_transactions` is the append-only ledger. Every
   change goes through `services/credits.apply_transaction(_sync)`; `provider_ref` makes charges
   and Stripe sessions idempotent. The balance may go slightly negative (actual cost > estimate).
