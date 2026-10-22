@@ -518,6 +518,8 @@ export interface SiteStatus {
   cover_price_usd: number;
   /** The presence beacon (lib/presence.ts); false: the site sends none. */
   analytics?: boolean;
+  /** Where people write to us (the server's SUPPORT_EMAIL): the Contact link and /privacy. */
+  support_email?: string | null;
 }
 
 /** Limits of debates on free models for accounts without credits or an own OpenRouter key

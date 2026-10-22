@@ -28,8 +28,9 @@ backend/            FastAPI API + RQ worker (Python 3.12+, managed with uv)
                       middleware), access (sessions → AdminContext, CSRF, roles, sudo)
   app/scheduler.py    periodic jobs (`python -m app.scheduler`, RQ cron on the background queue:
                       hourly trending check, recovery check every minute, alerts check every 5
-                      minutes, IndexNow flush every minute in production, visits upkeep hourly;
-                      `--refresh-trending` builds a batch now)
+                      minutes, IndexNow flush every minute in production, visits upkeep hourly,
+                      old letters of the mail log every 6 hours; `--refresh-trending` builds a
+                      batch now)
   app/core/           config (pydantic-settings), db (async SQLAlchemy), redis, logging,
                       ratelimit, auth (session cookie or Bearer API token; session-only deps),
                       security (bcrypt, Fernet, API token format/hash), ids
@@ -41,7 +42,8 @@ backend/            FastAPI API + RQ worker (Python 3.12+, managed with uv)
                       routes_system (queues, workers, scheduler, runs, limits, providers, health),
                       routes_finance (finance series, CSV, models), routes_audit (audit log page,
                       facets, security summary), routes_settings (levers, alerts + test message),
-                      routes_audience (Audience page, visits, an account's visits)
+                      routes_audience (Audience page, visits, an account's visits), routes_mail
+                      (Mail page: letters, relay status, test letter)
   app/api/            routers: auth, tokens (API tokens + `debatr login` device flow), billing
                       (Stripe), debates, gallery (+ leaderboard), motions (topic page, wizard
                       suggestions), reactions (likes/votes), models,
@@ -49,7 +51,8 @@ backend/            FastAPI API + RQ worker (Python 3.12+, managed with uv)
                       media, covers (AI covers of a
                       debate), oembed (`GET /api/oembed`: a pasted link → the player, CORS `*`),
                       status (`GET /api/status`:
-                      sign-ups / maintenance for the site), seo (outside /api: robots.txt, the
+                      sign-ups / maintenance / the contact address for the site), mail
+                      (`POST /api/mail/events`: the sending service's signed webhook), seo (outside /api: robots.txt, the
                       sitemaps, the IndexNow key file); serializers.py builds the shared response
                       models
   app/services/       orchestrator (RQ jobs), formats/ (show formats: seats, limits, turn order,
@@ -80,8 +83,9 @@ backend/            FastAPI API + RQ worker (Python 3.12+, managed with uv)
                       alert_events (the alert kinds the console can mute), official (the
                       brand's name is reserved for `users.official`: case, spacing and
                       Cyrillic / Greek look-alikes folded), mail (SMTP relay, the one-button
-                      letter), email_check (confirmation / reset links, what waits for a
-                      confirmed address)
+                      letter, `Outcome` = the relay's answer), mail_log (every letter recorded
+                      in `mail_messages`, webhook events, alerts, pruning), email_check
+                      (confirmation / reset links, what waits for a confirmed address)
   app/services/admin/ totp (codes, recovery / enrollment codes, QR), sessions (Redis: sessions,
                       sign-in tickets, code failures), passkeys (WebAuthn options / checks),
                       audit (append-only admin_audit_log: writing, the audit page's queries),
@@ -90,7 +94,7 @@ backend/            FastAPI API + RQ worker (Python 3.12+, managed with uv)
                       debates (debate list / card / moderation queue / trending batches),
                       system (RQ / cron snapshot, runs in flight, limits, health, media scan),
                       finance (money per day / week / month, Stripe reconciliation, model rows),
-                      audience (the Audience page's queries)
+                      audience (the Audience page's queries), mail (the Mail page's queries)
   app/services/audience/ visit statistics (see "Visit statistics"): collect (the beacon),
                       agent (device / browser / OS), geo (place + network databases), bots
                       (person / bot / AI agent per visit), jobs (upkeep)
@@ -252,7 +256,9 @@ frontend/           React 19 + React Router 8 (framework mode, server rendering)
                       AdminDebate (/admin/debates/:id), AdminModeration (keyboard queue),
                       AdminTrending, AdminFinance, AdminModels, AdminSystem (#runs #queues
                       #limits #providers #health), AdminSettings (levers + alerts), AdminAudience
-                      (`?tab=`) + AdminVisits (/admin/audience/visits) + AdminVisit, AdminAudit
+                      (`?tab=`) + AdminVisits (/admin/audience/visits) + AdminVisit, AdminMail
+                      (/admin/mail: relay card, test letter, letters with filters in the URL;
+                      `?user=` from the account card's Mail panel), AdminAudit
                       (`?tab=security`, filters in the URL, diff per entry),
                       AdminSecurity (sessions, recovery codes, passkeys); components/admin:
                       AdminShell, SudoDialog (code or passkey), ActionDialog (reason + sudo
@@ -402,8 +408,21 @@ docker compose exec api python -m app.manage credits user@example.com 5 --reason
    confirmation then publishes what waited (`publish_waiting`). Older accounts are only asked
    (banner-free: Account → Security). `UserOut.email_verified` / `email_required`; the site's
    `EmailBanner` (AppShell) for pending accounts. Mail goes through an SMTP relay (`MAIL_SMTP_*`,
-   Resend in production, `From: MAIL_FROM`, `Reply-To: MAIL_REPLY_TO`) in a background task
-   after the response; without a relay it is logged (the body only outside production).
+   Resend in production, `From: MAIL_FROM`, `Reply-To: MAIL_REPLY_TO`, else `SUPPORT_EMAIL`) in a
+   background task after the response (`mail_log.deliver`); without a relay (host, password and
+   `MAIL_FROM`) it is logged (the body only outside production). No address has a default in the
+   code (public repo): they come from .env; `SUPPORT_EMAIL` reaches the site through
+   `GET /api/status` (Contact link, /privacy; none = a GitHub issue).
+   Mail log (`services/mail_log`, table `mail_messages`, migration 0022): every letter (kind
+   verify | reset | test, address, subject, account; never the text) with `status` = what the
+   relay said (sending | sent | failed | off, its reply or the error, duration) and `delivery` =
+   what the sending service reported through `POST /api/mail/events` (Svix-signed like Resend's,
+   `MAIL_WEBHOOK_SECRET`; delivered | delayed | bounced | complained | suppressed | failed, a
+   later state wins unless it ranks lower, events deduplicated by `svix-id`). Resend's relay
+   gives a letter its own id and Message-ID, so a letter's first event finds it by address +
+   subject within 30 min (`find_letter`) and links `provider_id`. A refused letter, production
+   without a relay and bounces / spam raise the `mail` alert; pruned after `MAIL_LOG_DAYS` (90)
+   and with the account.
 1. `POST /api/debates` (signed-in users only) validates `DebateConfig` (`topic` ≤
    `TOPIC_MAX_LENGTH` = 150: it is drawn on the video; configs saved before the limit hold up to
    500 and are re-read with `DebateConfig.stored`; the wizard, CLI and trending topics keep to
@@ -1292,7 +1311,8 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   5+ failed console sign-ins in 15 min, newly flagged debates, 3+ failed debates in an hour at
   30 %+ of finished ones, runs without heartbeat or waiting job for 10+ min on two checks in a
   row, OpenRouter < $5 / < $1, ElevenLabs key rejected or < 10 % / < 2 % characters, new top-ups,
-  disk ≥ 85 % / 95 %. Antispam: a quiet key per kind and severity (an escalation sends again);
+  disk ≥ 85 % / 95 %; a letter not sent or not delivered goes out at once from `mail_log`
+  (`mail`). Antispam: a quiet key per kind and severity (an escalation sends again);
   flagged debates and top-ups are told new by the ids the last check saw (the first check after
   a Redis reset reports none). The Settings page's "Telegram notifications" card mutes kinds
   (lever `muted_alerts`; catalogue with group / label / hint in `services/alert_events`, sent as
@@ -1317,7 +1337,8 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   (`stats.attention_items`, pure) covers runs without a heartbeat, OpenRouter balance (cached
   5 min), ElevenLabs key and character quota (`tts/elevenlabs.system_quota`), the last backup
   (Redis `backup:last`, production only), flagged / failed debates, failed audio, negative
-  balances, failed console sign-ins, stale trending and the admin's last recovery codes.
+  balances, failed console sign-ins, stale trending, mail (off in production, or letters not
+  sent / not delivered in 24 h) and the admin's last recovery codes.
   Charts follow the dataviz rules: one axis, legend for 2+ series, crosshair / per-column
   tooltips, keyboard arrows, a table view per chart, colours validated against the card surface.
 - Users (`/api/admin/users*`, permission `users`; ledger and credits also `money`): the list

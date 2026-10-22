@@ -602,6 +602,40 @@ class RuntimeSetting(Base):
     updated_by: Mapped[str | None] = mapped_column(String(320), nullable=True)  # admin's email
 
 
+class MailMessage(Base):
+    """A letter the site sent or tried to (app.services.mail_log; the console's Mail page). Never
+    its text: confirmation and reset letters carry one-time links. `status` is what our SMTP
+    relay said (sending | sent | failed | off = no relay set up), `delivery` what the sending
+    service reported afterwards through its webhook (delivered | delayed | bounced | complained
+    | suppressed | failed). Deleted after MAIL_LOG_DAYS, and with the account."""
+
+    __tablename__ = "mail_messages"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, index=True
+    )
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    kind: Mapped[str] = mapped_column(String(16))  # verify | reset | test
+    to_address: Mapped[str] = mapped_column(String(320), index=True)
+    subject: Mapped[str] = mapped_column(String(200))
+    message_id: Mapped[str | None] = mapped_column(String(255), nullable=True)  # our header
+    status: Mapped[str] = mapped_column(String(12), default="sending")
+    reply: Mapped[str | None] = mapped_column(Text, nullable=True)  # the relay's answer
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # The sending service's id of the letter (Resend's email_id), from its first event.
+    provider_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    delivery: Mapped[str | None] = mapped_column(String(12), nullable=True)
+    delivery_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # The webhook's events: [{"id", "type", "at", "note"}], oldest first.
+    events_json: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSON, default=list, server_default="[]"
+    )
+
+
 class Preset(Base):
     __tablename__ = "presets"
 

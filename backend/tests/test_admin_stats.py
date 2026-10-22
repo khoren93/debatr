@@ -101,6 +101,8 @@ def test_attention_is_ordered_by_severity() -> None:
         (Signals(login_failures_24h=5), [("logins", "warning")]),
         (Signals(stuck_media=2), [("stuck", "critical")]),
         (Signals(recovery_codes_left=4), []),
+        (Signals(mail_off=True, mail_problems_24h=3), [("mail", "critical")]),
+        (Signals(mail_problems_24h=2), [("mail", "warning")]),
     ],
 )
 def test_attention_thresholds(signals: Signals, expected: list[tuple[str, str]]) -> None:

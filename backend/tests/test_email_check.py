@@ -159,33 +159,50 @@ async def test_a_link_belongs_to_the_address_and_the_password_it_was_sent_for(
 
 
 def test_letters_link_the_site_and_escape_the_name(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(settings, "SITE_URL", "https://debatr.tv")
+    monkeypatch.setattr(settings, "SITE_URL", "https://site.example")
+    monkeypatch.setattr(settings, "MAIL_FROM", "Site <noreply@site.example>")
+    monkeypatch.setattr(settings, "MAIL_REPLY_TO", "")
+    monkeypatch.setattr(settings, "SUPPORT_EMAIL", "help@site.example")
     letter = email_check.confirmation_mail("<b>Jane</b>", "jane@example.com", "tok123")
     assert letter["To"] == "jane@example.com"
-    assert letter["From"] == settings.MAIL_FROM
-    assert letter["Reply-To"] == settings.MAIL_REPLY_TO
+    assert letter["From"] == "Site <noreply@site.example>"
+    assert letter["Reply-To"] == "help@site.example"  # no MAIL_REPLY_TO: the contact address
+    assert letter["Message-ID"].endswith("@site.example>")
     assert letter["Auto-Submitted"] == "auto-generated"
     text = letter.get_body(("plain",))
     html = letter.get_body(("html",))
     assert text is not None and html is not None
-    assert "https://debatr.tv/verify-email?token=tok123" in text.get_content()
+    assert "https://site.example/verify-email?token=tok123" in text.get_content()
     assert "&lt;b&gt;Jane&lt;/b&gt;" in html.get_content()
     reset = email_check.reset_mail("Jane", "jane@example.com", "tok456")
     reset_text = reset.get_body(("plain",))
     assert reset_text is not None and "/reset-password?token=tok456" in reset_text.get_content()
+    monkeypatch.setattr(settings, "MAIL_REPLY_TO", "replies@site.example")
+    assert (
+        email_check.reset_mail("Jane", "jane@example.com", "t")["Reply-To"]
+        == "replies@site.example"
+    )
+    monkeypatch.setattr(settings, "MAIL_REPLY_TO", "")
+    monkeypatch.setattr(settings, "SUPPORT_EMAIL", "")
+    assert email_check.reset_mail("Jane", "jane@example.com", "t")["Reply-To"] is None
 
 
 class FakeSMTP:
+    """The relay (`mail._TLSRelay` / `_Relay`): records letters, refuses the login on `fail`."""
+
     sent: ClassVar[list[Any]] = []
     fail = False
 
     def __init__(self, host: str, port: int, **kwargs: Any) -> None:
         self.host, self.port = host, port
+        self.reply = ""
 
     def __enter__(self) -> "FakeSMTP":
         return self
 
     def __exit__(self, *exc: Any) -> None: ...
+
+    def starttls(self, **kwargs: Any) -> None: ...
 
     def login(self, user: str, password: str) -> None:
         if FakeSMTP.fail:
@@ -193,20 +210,41 @@ class FakeSMTP:
 
     def send_message(self, message: Any) -> None:
         FakeSMTP.sent.append((self.host, self.port, message["Subject"]))
+        self.reply = "250 OK queued as 7f3e"
 
 
 def test_send_uses_the_relay_and_never_raises(monkeypatch: pytest.MonkeyPatch) -> None:
     letter = email_check.reset_mail("Jane", "jane@example.com", "tok")
     monkeypatch.setattr(settings, "MAIL_SMTP_HOST", "")
-    assert not mail.send(letter)  # no relay: logged only
-    monkeypatch.setattr(settings, "MAIL_SMTP_HOST", "smtp.resend.com")
+    off = mail.send(letter)  # no relay: logged only
+    assert off.status == "off" and off.error and "MAIL_SMTP_HOST" in off.error
+    monkeypatch.setattr(settings, "MAIL_SMTP_HOST", "smtp.relay.example")
     monkeypatch.setattr(settings, "MAIL_SMTP_PASSWORD", "re_test")
-    monkeypatch.setattr(smtplib, "SMTP_SSL", FakeSMTP)
+    monkeypatch.setattr(settings, "MAIL_FROM", "")
+    assert mail.send(letter).status == "off"  # no sender address either
+    monkeypatch.setattr(settings, "MAIL_FROM", "Site <noreply@site.example>")
+    monkeypatch.setattr(mail, "_TLSRelay", FakeSMTP)
+    monkeypatch.setattr(mail, "_Relay", FakeSMTP)
     FakeSMTP.sent, FakeSMTP.fail = [], False
-    assert mail.send(letter)
-    assert FakeSMTP.sent == [("smtp.resend.com", 465, "Reset your Debatr password")]
+    sent = mail.send(letter)
+    assert sent == mail.Outcome("sent", reply="250 OK queued as 7f3e")
+    assert FakeSMTP.sent == [("smtp.relay.example", 465, "Reset your Debatr password")]
+    monkeypatch.setattr(settings, "MAIL_SMTP_PORT", 587)  # STARTTLS
+    assert mail.send(letter).status == "sent" and FakeSMTP.sent[-1][1] == 587
     FakeSMTP.fail = True
-    assert not mail.send(letter)
+    failed = mail.send(letter)
+    assert failed.status == "failed"
+    assert failed.error == "SMTPAuthenticationError: 535 bad key"
+
+
+def test_the_relay_keeps_its_answer_to_the_letter(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(smtplib.SMTP, "data", lambda self, msg: (250, b"OK id=ab12"))
+    relay = mail._Relay()  # no host: nothing connects
+    assert relay.data(b"letter") == (250, b"OK id=ab12")
+    assert relay.reply == "250 OK id=ab12"
+    refused = smtplib.SMTPRecipientsRefused({"x@example.com": (550, b"no such user")})
+    assert mail.error_text(refused) == "SMTPRecipientsRefused: x@example.com: 550 no such user"
+    assert mail.error_text(TimeoutError("timed out")) == "TimeoutError: timed out"
 
 
 # --- routes -----------------------------------------------------------------------------------

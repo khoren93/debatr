@@ -9,6 +9,7 @@ import AdminDebate from './AdminDebate';
 import AdminDebates from './AdminDebates';
 import AdminFinance from './AdminFinance';
 import AdminLogin from './AdminLogin';
+import AdminMail from './AdminMail';
 import AdminModels from './AdminModels';
 import AdminModeration from './AdminModeration';
 import AdminOverview from './AdminOverview';
@@ -58,6 +59,7 @@ const AdminApp = () => (
         <Route path="finance" element={<AdminFinance />} />
         <Route path="models" element={<AdminModels />} />
         <Route path="system" element={<AdminSystem />} />
+        <Route path="mail" element={<AdminMail />} />
         <Route path="settings" element={<AdminSettings />} />
         <Route path="audit" element={<AdminAudit />} />
         <Route path="security" element={<AdminSecurity />} />

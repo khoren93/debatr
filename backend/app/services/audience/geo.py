@@ -268,7 +268,7 @@ def _download(db: Database, folder: Path, transport: httpx.BaseTransport | None)
     _write_meta(db, tried_at=now.isoformat())
     tag = f"{os.getpid()}-{uuid.uuid4().hex[:8]}"
     gz_file, tmp_file = folder / f"{db.file}.{tag}.gz.part", folder / f"{db.file}.{tag}.part"
-    headers = {"User-Agent": "Debatr/1.0 (+https://debatr.tv)"}
+    headers = {"User-Agent": f"Debatr/1.0 (+{settings.SITE_URL})"}
     with httpx.Client(timeout=DOWNLOAD_TIMEOUT, transport=transport, headers=headers) as client:
         for release in _months(now.date()):
             url = db.url.format(month=release)

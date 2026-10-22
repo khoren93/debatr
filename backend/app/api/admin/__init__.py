@@ -9,6 +9,7 @@ from app.api.admin import (
     routes_auth,
     routes_debates,
     routes_finance,
+    routes_mail,
     routes_overview,
     routes_passkeys,
     routes_settings,
@@ -28,4 +29,5 @@ router.include_router(routes_system.router, tags=["admin"])
 router.include_router(routes_finance.router, tags=["admin"])
 router.include_router(routes_audit.router, tags=["admin"])
 router.include_router(routes_audience.router, tags=["admin"])
+router.include_router(routes_mail.router, tags=["admin"])
 router.include_router(routes_settings.router, tags=["admin"])

@@ -90,6 +90,14 @@ EVENTS: tuple[AlertEvent, ...] = (
     ),
     AlertEvent("disk", "system", "Disk filling up", "85 % full, critical at 95 %."),
     AlertEvent(
+        "mail",
+        "system",
+        "Mail not delivered",
+        "A confirmation or reset letter the relay refused, that bounced or was marked as spam, "
+        "or production without a relay.",
+        at_once=True,
+    ),
+    AlertEvent(
         "trending",
         "system",
         "Trending batch failed",

@@ -973,6 +973,81 @@ export interface SecuritySummary {
   last_failure: AuditEntry | null;
 }
 
+// --- mail (Mail page) -----------------------------------------------------------------------------
+
+/** What our SMTP relay said: sending (not answered yet), sent, failed (refused, unreachable),
+ * off (no relay set up). */
+export type MailStatus = 'sending' | 'sent' | 'failed' | 'off';
+/** What the sending service reported later through its webhook. */
+export type MailDelivery = 'delivered' | 'delayed' | 'bounced' | 'complained' | 'suppressed' | 'failed';
+export type MailKind = 'verify' | 'reset' | 'test';
+/** problems = not sent or not delivered; waiting = sent, no report yet. */
+export type MailStatusFilter = 'problems' | 'waiting' | MailStatus | Exclude<MailDelivery, 'failed'>;
+
+export interface MailQuery {
+  q?: string;
+  status?: MailStatusFilter;
+  kind?: MailKind;
+  user_id?: string;
+  days?: number;
+  limit?: number;
+  offset?: number;
+}
+
+export interface MailEvent {
+  /** sent | delivered | delivery_delayed | bounced | complained | suppressed | failed */
+  type: string;
+  at: string;
+  note: string | null;
+}
+
+export interface MailLetter {
+  id: string;
+  created_at: string;
+  user_id: string | null;
+  kind: MailKind;
+  to_address: string;
+  subject: string;
+  status: MailStatus;
+  /** The relay's answer to the letter (often with its id there). */
+  reply: string | null;
+  error: string | null;
+  duration_ms: number | null;
+  message_id: string | null;
+  /** The sending service's id of the letter (from its webhook). */
+  provider_id: string | null;
+  delivery: MailDelivery | null;
+  delivery_at: string | null;
+  events: MailEvent[];
+}
+
+export interface MailPage {
+  total: number;
+  limit: number;
+  offset: number;
+  rows: MailLetter[];
+}
+
+export interface MailRelay {
+  configured: boolean;
+  host: string;
+  port: number;
+  user: string;
+  from_address: string;
+  reply_to: string;
+  /** MAIL_WEBHOOK_SECRET is set: delivery reports come in. */
+  webhook: boolean;
+  webhook_url: string;
+  log_days: number;
+}
+
+export interface MailStatusSummary {
+  relay: MailRelay;
+  last_7_days: { letters: number; sent: number; not_sent: number; delivered: number; problems: number };
+  last_letter: MailLetter | null;
+  last_failure: MailLetter | null;
+}
+
 // --- levers and alerts ---------------------------------------------------------------------------
 
 export type LeverKind = 'bool' | 'int' | 'float' | 'factor' | 'text' | 'models' | 'model' | 'lengths' | 'alerts' | 'choice';

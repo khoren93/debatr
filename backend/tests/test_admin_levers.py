@@ -259,9 +259,10 @@ async def test_the_model_list_hides_turned_off_models(
     assert [m.id for m in out.data] == ["openai/gpt-4o-mini"]
 
 
-async def test_site_status(levers: dict) -> None:
+async def test_site_status(monkeypatch: pytest.MonkeyPatch, levers: dict) -> None:
     from app.api.routes_status import site_status
 
+    monkeypatch.setattr(settings, "SUPPORT_EMAIL", "")
     assert (await site_status()).model_dump() == {
         "registration_open": True,
         "maintenance": False,
@@ -275,11 +276,13 @@ async def test_site_status(levers: dict) -> None:
         "ai_covers": "paid",
         "cover_price_usd": 0.042,  # COVER_PRICE_USD 0.035 x markup 1.2
         "analytics": True,
+        "support_email": None,
     }
     levers.update(registration_open=False, maintenance=True, analytics_enabled=False)
+    monkeypatch.setattr(settings, "SUPPORT_EMAIL", "help@site.example")
     out = await site_status()
     assert not out.registration_open and out.maintenance and out.maintenance_message
-    assert not out.analytics
+    assert not out.analytics and out.support_email == "help@site.example"
 
 
 async def test_limits_follow_the_levers(levers: dict) -> None:

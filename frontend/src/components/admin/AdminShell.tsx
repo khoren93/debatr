@@ -1,5 +1,5 @@
 import { NavLink, Outlet, useNavigate } from 'react-router';
-import { Activity, Bot, Flag, Gauge, Globe2, LogOut, MessagesSquare, Newspaper, ScrollText, ShieldCheck, SlidersHorizontal, Users, Wallet } from 'lucide-react';
+import { Activity, Bot, Flag, Gauge, Globe2, LogOut, Mail, MessagesSquare, Newspaper, ScrollText, ShieldCheck, SlidersHorizontal, Users, Wallet } from 'lucide-react';
 import { useAdminAuth } from '../../auth/AdminAuthContext';
 import { Logo } from '../ui';
 import { formatTime } from './helpers';
@@ -15,6 +15,7 @@ const NAV = [
   { to: '/admin/finance', label: 'Finance', icon: Wallet, end: false, permission: 'money' },
   { to: '/admin/models', label: 'Models', icon: Bot, end: false, permission: 'debates.read' },
   { to: '/admin/system', label: 'System', icon: Activity, end: false, permission: 'system' },
+  { to: '/admin/mail', label: 'Mail', icon: Mail, end: false, permission: 'users' },
   { to: '/admin/settings', label: 'Settings', icon: SlidersHorizontal, end: false, permission: 'system' },
   { to: '/admin/audit', label: 'Audit log', icon: ScrollText, end: false, permission: 'audit' },
   { to: '/admin/security', label: 'Security', icon: ShieldCheck, end: false, permission: 'console' },

@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 import { Page, PageTitle } from '../components/layout/AppShell';
-import { APP_NAME, APP_SUPPORT_EMAIL } from '../lib/brand';
+import { useSiteStatus } from '../hooks/useSiteStatus';
+import { APP_NAME, APP_REPO_URL } from '../lib/brand';
 
 const Block = ({ title, children }: { title: string; children: ReactNode }) => (
   <section className="mt-8">
@@ -10,9 +11,36 @@ const Block = ({ title, children }: { title: string; children: ReactNode }) => (
   </section>
 );
 
+/** Where to ask for a copy or a deletion: the server's SUPPORT_EMAIL, else the repository. */
+const Contact = () => {
+  const email = useSiteStatus().support_email;
+  const home = (
+    <Link to="/" className="text-accent hover:text-accent-hover">
+      Back to {APP_NAME}
+    </Link>
+  );
+  return email ? (
+    <p>
+      To get a copy of your data or have your account deleted, write to{' '}
+      <a href={`mailto:${email}`} className="text-accent hover:text-accent-hover">
+        {email}
+      </a>{' '}
+      from your account’s email, so we know the request is yours. {home}.
+    </p>
+  ) : (
+    <p>
+      To get a copy of your data or have your account deleted, open an issue at{' '}
+      <a href={APP_REPO_URL} className="text-accent hover:text-accent-hover" rel="noreferrer" target="_blank">
+        {APP_REPO_URL.replace('https://', '')}
+      </a>
+      . {home}.
+    </p>
+  );
+};
+
 /** The privacy notice (`/privacy`). Keep it true to the code: backend services/audience
  *  (visits and their bot verdicts; the IP is cleared after the console's analytics_ip_days
- *  lever), accounts, keys. */
+ *  lever), accounts, keys, the mail log (backend services/mail_log, MAIL_LOG_DAYS). */
 const Privacy = () => (
   <Page>
     <PageTitle kicker="Legal" title="Privacy" />
@@ -22,6 +50,10 @@ const Privacy = () => (
       <Block title="Your account">
         <p>Your email, display name and a hash of your password; the debates you run, your credits and their history. Payments go through Stripe: we never see card numbers.</p>
         <p>Public debates show your display name. You can make a debate private again at any time.</p>
+        <p>
+          Letters we send you (to confirm your address or reset your password) go through our mail provider. For 90 days we keep the address, the subject and whether the letter
+          arrived, never the letter itself.
+        </p>
       </Block>
 
       <Block title="Visits">
@@ -46,13 +78,7 @@ const Privacy = () => (
       </Block>
 
       <Block title="Questions and deletion">
-        <p>
-          To get a copy of your data or have your account deleted, write to{' '}
-          <a href={`mailto:${APP_SUPPORT_EMAIL}`} className="text-accent hover:text-accent-hover">
-            {APP_SUPPORT_EMAIL}
-          </a>{' '}
-          from your account’s email, so we know the request is yours. <Link to="/" className="text-accent hover:text-accent-hover">Back to {APP_NAME}</Link>.
-        </p>
+        <Contact />
       </Block>
     </div>
   </Page>

@@ -6,7 +6,7 @@ import { getErrorMessage } from '../../api/client';
 import type { ReactNode } from 'react';
 import { useAuth } from '../../auth/AuthContext';
 import { useSiteStatus } from '../../hooks/useSiteStatus';
-import { APP_REPO_URL, APP_SUPPORT_EMAIL } from '../../lib/brand';
+import { APP_REPO_URL } from '../../lib/brand';
 import { formatMoney } from '../../lib/format';
 import { Button, GitHubMark, Logo, Progress, UserAvatar, useToast } from '../ui';
 
@@ -57,21 +57,26 @@ const CreditsCard = () => {
   );
 };
 
-/** The small links under the sidebar (phones: under the page). */
-const ShellLinks = ({ className = '' }: { className?: string }) => (
-  <div className={`flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11px] text-dim ${className}`}>
-    <a href={APP_REPO_URL} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 hover:text-muted">
-      <GitHubMark className="size-3.5" />
-      Open source<span className="sr-only"> on GitHub</span>
-    </a>
-    <Link to="/privacy" className="hover:text-muted">
-      Privacy
-    </Link>
-    <a href={`mailto:${APP_SUPPORT_EMAIL}`} title={APP_SUPPORT_EMAIL} className="hover:text-muted">
-      Contact
-    </a>
-  </div>
-);
+/** The small links under the sidebar (phones: under the page); Contact = the server's SUPPORT_EMAIL. */
+const ShellLinks = ({ className = '' }: { className?: string }) => {
+  const contact = useSiteStatus().support_email;
+  return (
+    <div className={`flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11px] text-dim ${className}`}>
+      <a href={APP_REPO_URL} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 hover:text-muted">
+        <GitHubMark className="size-3.5" />
+        Open source<span className="sr-only"> on GitHub</span>
+      </a>
+      <Link to="/privacy" className="hover:text-muted">
+        Privacy
+      </Link>
+      {contact && (
+        <a href={`mailto:${contact}`} title={contact} className="hover:text-muted">
+          Contact
+        </a>
+      )}
+    </div>
+  );
+};
 
 const Sidebar = () => {
   const { user } = useAuth();

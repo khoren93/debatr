@@ -8,6 +8,7 @@ import { useAdminAuth } from '../../auth/AdminAuthContext';
 import { Page } from '../../components/layout/AppShell';
 import { UserActions } from '../../components/admin/users/UserActions';
 import { UserBadges } from '../../components/admin/users/UserBadges';
+import { UserMailPanel } from '../../components/admin/users/UserMailPanel';
 import { UserVisitsPanel } from '../../components/admin/users/UserVisitsPanel';
 import { AuditPanel, DebatesPanel, FavoriteModels, LedgerPanel, ReactionsPanel, SpendChart, StatsGrid, TokensPanel } from '../../components/admin/users/UserSections';
 import { formatTime } from '../../components/admin/helpers';
@@ -142,6 +143,7 @@ const AdminUser = () => {
           <div className="mt-4 grid gap-4">
             {canAudience && <UserVisitsPanel userId={card.profile.id} />}
             <DebatesPanel userId={card.profile.id} version={version} />
+            <UserMailPanel userId={card.profile.id} />
             {canMoney && <LedgerPanel userId={card.profile.id} version={version} />}
             <AuditPanel targetId={card.profile.id} targetType="user" entries={card.audit} aside="last 50: about the account, and by it as an admin" />
           </div>

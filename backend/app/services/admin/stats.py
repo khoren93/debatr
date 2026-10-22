@@ -24,12 +24,14 @@ from app.models.models import (
     DebateLike,
     DebateParticipant,
     DebateVote,
+    MailMessage,
     ProviderUsage,
     TrendingBatch,
     User,
     UserActivityDay,
     ViewDay,
 )
+from app.services.admin.mail import problem_clause
 from app.services.views import SOURCES
 
 Bucket = Literal["hour", "day", "week"]
@@ -124,6 +126,8 @@ class Signals:
     negative_balances: int = 0
     negative_total: float = 0.0
     login_failures_24h: int = 0
+    mail_off: bool = False  # production without a mail relay
+    mail_problems_24h: int = 0  # letters not sent or not delivered
     openrouter_balance: float | None = None
     openrouter_error: str | None = None
     elevenlabs_ok: bool | None = None  # None: no system key
@@ -211,6 +215,27 @@ def attention_items(s: Signals) -> list[dict[str, Any]]:
                     f"{left:,} of {s.elevenlabs_limit:,} left this period",
                 )
             )
+    if s.mail_off:
+        items.append(
+            _item(
+                "mail",
+                "critical",
+                "Mail is off",
+                "no relay set up (MAIL_SMTP_HOST, _PASSWORD, MAIL_FROM): confirmation and reset "
+                "letters are not sent",
+                "/admin/mail",
+            )
+        )
+    elif s.mail_problems_24h:
+        items.append(
+            _item(
+                "mail",
+                "warning",
+                f"{_plural(s.mail_problems_24h, 'letter')} not delivered in 24 h",
+                "refused by the relay, bounced or marked as spam",
+                "/admin/mail?status=problems",
+            )
+        )
     if s.check_backups and (s.backup_age_hours is None or s.backup_age_hours > BACKUP_MAX_HOURS):
         when = (
             "never recorded"
@@ -824,6 +849,12 @@ async def attention_counts(db: AsyncSession, now: datetime) -> Signals:
             select(func.count())
             .select_from(AdminAuditLog)
             .where(AdminAuditLog.action.in_(LOGIN_FAILURES), AdminAuditLog.created_at >= day_ago),
+        ),
+        mail_problems_24h=await _count(
+            db,
+            select(func.count())
+            .select_from(MailMessage)
+            .where(problem_clause(), MailMessage.created_at >= day_ago),
         ),
         trending_age_hours=(now - _aware(newest_batch)).total_seconds() / 3600
         if newest_batch

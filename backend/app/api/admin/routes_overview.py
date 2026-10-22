@@ -23,6 +23,7 @@ from app.core.config import settings
 from app.core.redis import debate_beat_key, get_async_redis, media_beat_key
 from app.models.models import utcnow
 from app.schemas.admin import OverviewOut, OverviewPeriod
+from app.services import mail
 from app.services.admin import stats
 from app.services.admin.stats import Signals
 from app.services.media.tts.elevenlabs import system_key_status, system_quota
@@ -97,6 +98,7 @@ async def _signals(db: AsyncSession, now: datetime) -> Signals:
         if quota:
             signals.elevenlabs_used, signals.elevenlabs_limit = quota["used"], quota["limit"]
     signals.trending_every_hours = settings.TRENDING_REFRESH_HOURS
+    signals.mail_off = settings.is_production and not mail.enabled()
     signals.check_backups = settings.is_production
     signals.backup_age_hours = await _backup_age_hours(now)
     return signals

@@ -1202,6 +1202,107 @@ class SecuritySummary(BaseModel):
     last_failure: AuditEntryOut | None
 
 
+# --- mail ---------------------------------------------------------------------------------------
+
+# problems: not sent, or not delivered (bounced, spam, suppressed, failed); failed: refused by
+# the relay or reported failed by the sending service; the others are a status or a delivery.
+MailStatusFilter = Literal[
+    "problems",
+    "sending",
+    "sent",
+    "failed",
+    "off",
+    "waiting",
+    "delivered",
+    "delayed",
+    "bounced",
+    "complained",
+    "suppressed",
+]
+MailKind = Literal["verify", "reset", "test"]
+
+
+class MailQuery(BaseModel):
+    """Filters of the Mail page (query parameters)."""
+
+    q: str = Field(default="", max_length=320)  # address or subject contains, or an exact id
+    status: MailStatusFilter | None = None
+    kind: MailKind | None = None
+    user_id: uuid.UUID | None = None
+    days: int | None = Field(default=None, ge=1, le=366)
+    limit: int = Field(default=50, ge=1, le=200)
+    offset: int = Field(default=0, ge=0)
+
+
+class MailEventOut(BaseModel):
+    type: str  # sent | delivered | delivery_delayed | bounced | complained | suppressed | failed
+    at: datetime
+    note: str | None = None
+
+
+class MailOut(BaseModel):
+    id: str
+    created_at: datetime
+    user_id: str | None
+    kind: str
+    to_address: str
+    subject: str
+    status: str  # sending | sent | failed | off
+    reply: str | None
+    error: str | None
+    duration_ms: int | None
+    message_id: str | None
+    provider_id: str | None
+    delivery: str | None  # delivered | delayed | bounced | complained | suppressed | failed
+    delivery_at: datetime | None
+    events: list[MailEventOut]
+
+
+class MailPage(BaseModel):
+    total: int
+    limit: int
+    offset: int
+    rows: list[MailOut]
+
+
+class MailRelayOut(BaseModel):
+    """How the server sends mail (never the password)."""
+
+    configured: bool  # host and password set
+    host: str
+    port: int
+    user: str
+    from_address: str
+    reply_to: str
+    webhook: bool  # MAIL_WEBHOOK_SECRET is set: delivery states come in
+    webhook_url: str  # where the sending service's webhook should point
+    log_days: int
+
+
+class MailCounts(BaseModel):
+    letters: int
+    sent: int  # the relay took them
+    not_sent: int  # refused, or no relay
+    delivered: int
+    problems: int  # bounced, marked as spam, suppressed or failed after sending
+
+
+class MailStatusOut(BaseModel):
+    relay: MailRelayOut
+    last_7_days: MailCounts
+    last_letter: MailOut | None
+    last_failure: MailOut | None  # the newest letter with a problem
+
+
+class MailTestRequest(BaseModel):
+    to: str = Field(max_length=320)
+
+    @field_validator("to")
+    @classmethod
+    def _to(cls, value: str) -> str:
+        return normalize_email(value)
+
+
 # --- levers and alerts --------------------------------------------------------------------------
 
 LeverKind = Literal[

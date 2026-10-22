@@ -15,6 +15,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   is confirmed: a debate finished or published before stays private and goes public with the
   confirmation. Accounts from before are only asked to confirm (Account → Security). Mail goes
   through an SMTP relay (`MAIL_SMTP_*`); without one the letters are only logged.
+- **Mail in the admin console.** A Mail page lists every letter the site sent or tried to send
+  (address, subject, kind; never the text) with what the relay answered or why it refused, plus
+  the relay's settings and a "Send a test letter" button; an account's card shows its letters.
+  With the sending service's webhook (`POST /api/mail/events`, `MAIL_WEBHOOK_SECRET`; Resend's
+  signed events) each letter also shows whether it was delivered, bounced or marked as spam. A
+  refused or bounced letter, or production without a relay, raises the "Mail not delivered"
+  alert and an item on the overview. Letters are kept `MAIL_LOG_DAYS` (90) days.
 
 - **The site's own account.** `python -m app.manage official EMAIL --name Debatr` makes an
   account the site's: its debates show the Debatr logo as the author's avatar and a check mark
@@ -38,8 +45,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   each amount buys, and how many with premium voices (`GET /api/billing/config` answers
   `debate_usd` and `voiced_debate_usd`). It used to promise more, leaving the voices out.
 - Gallery cards no longer show the debate's language (the language filter stays).
-- Contact: support@debatr.tv on the privacy page (instead of a GitHub issue) and a "Contact" link
-  under the sidebar.
+- Contact: the server's `SUPPORT_EMAIL` on the privacy page (a GitHub issue without one) and a
+  "Contact" link under the sidebar; it is also the Reply-To of the site's mail unless
+  `MAIL_REPLY_TO` is set. No address is built into the code any more: `MAIL_FROM` and
+  `SUPPORT_EMAIL` come from the server's .env.
 - The home page lists English debates only.
 - The server calls itself Debatr instead of AI Debates: the API docs' title, the Stripe product
   ("Debatr credits"), CSV exports (`debatr-ledger-….csv` and the console's), the app name sent to

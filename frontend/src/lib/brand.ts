@@ -4,9 +4,6 @@ export const APP_TAGLINE = 'AI debate studio';
 export const APP_DESCRIPTION =
   'Pick a question, cast the models — Debatr runs a debate or a rap battle, the judge rules, and you get a YouTube video plus a 9:16 Short. All in your browser.';
 
-/** Where people write to us (Cloudflare Email Routing forwards it): the sidebar and /privacy. */
-export const APP_SUPPORT_EMAIL = 'support@debatr.tv';
-
 /** The public repository: the sidebar's and the home page's "open source" links. */
 export const APP_REPO_URL = 'https://github.com/khoren93/debatr';
 

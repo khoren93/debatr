@@ -37,7 +37,7 @@ from app.schemas.auth import (
     VerifyEmailOut,
     VerifyEmailRequest,
 )
-from app.services import alerts, email_check, mail, runtime_settings
+from app.services import alerts, email_check, mail_log, runtime_settings
 from app.services.admin import audit
 from app.services.credits import apply_transaction
 from app.services.official import reserved_name
@@ -121,7 +121,7 @@ async def register(
     logger.info("New account %s", user.email)
     letter = await email_check.mail_link("verify", user)
     if letter is not None:
-        background.add_task(mail.send, letter)
+        background.add_task(mail_log.deliver, letter, kind="verify", user_id=user.id)
     alerts.notify_soon(
         alerts.signup_alert(
             str(user.id),
@@ -181,7 +181,7 @@ async def forgot_password(
     if user is not None and user.is_active:
         letter = await email_check.mail_link("reset", user)
         if letter is not None:
-            background.add_task(mail.send, letter)
+            background.add_task(mail_log.deliver, letter, kind="reset", user_id=user.id)
     return OkResponse()
 
 
@@ -246,7 +246,7 @@ async def resend_confirmation(
         raise HTTPException(
             status_code=503, detail="Could not send the email now. Try again later."
         )
-    background.add_task(mail.send, letter)
+    background.add_task(mail_log.deliver, letter, kind="verify", user_id=user.id)
     return OkResponse()
 
 

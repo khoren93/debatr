@@ -835,3 +835,5 @@ class SiteStatusOut(BaseModel):
     cover_price_usd: float = 0.0
     # The presence beacon (services/audience); off: the site sends none.
     analytics: bool = True
+    # Where people write to us (SUPPORT_EMAIL): the Contact link and /privacy; None: not set.
+    support_email: str | None = None

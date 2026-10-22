@@ -214,15 +214,25 @@ class Settings(BaseSettings):
     # Development only: top-ups are credited instantly without Stripe.
     DEV_FAKE_PAYMENTS: bool = False
 
+    # Where people write to us: the site's Contact link and /privacy (`GET /api/status`), and
+    # the Reply-To of its mail unless MAIL_REPLY_TO says otherwise. Empty: no contact address.
+    SUPPORT_EMAIL: str = ""
+
     # Mail (services/mail): the SMTP relay of the sending service (Resend: smtp.resend.com,
     # port 465 = TLS from the start, 587 = STARTTLS; user "resend", password = an API key with
-    # sending access). Without a host and a password nothing is sent: the message is logged.
+    # sending access). Without a host, a password and MAIL_FROM nothing is sent: the message is
+    # logged.
     MAIL_SMTP_HOST: str = ""
     MAIL_SMTP_PORT: int = 465
     MAIL_SMTP_USER: str = "resend"
     MAIL_SMTP_PASSWORD: str | None = None
-    MAIL_FROM: str = "Debatr <noreply@debatr.tv>"
-    MAIL_REPLY_TO: str = "support@debatr.tv"  # where replies to the site's mail go
+    MAIL_FROM: str = ""  # e.g. "Debatr <noreply@example.com>", on a domain the service verified
+    MAIL_REPLY_TO: str = ""  # where replies go; empty: SUPPORT_EMAIL
+    # Signing secret (whsec_…) of the sending service's webhook to POST /api/mail/events
+    # (Resend: delivered, bounced, complained…); without it the console shows only what the relay
+    # said. The console's Mail page keeps letters (never their text) for MAIL_LOG_DAYS.
+    MAIL_WEBHOOK_SECRET: str | None = None
+    MAIL_LOG_DAYS: int = 90
 
     model_config = SettingsConfigDict(
         env_file=[".env", "../.env"],
