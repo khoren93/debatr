@@ -262,6 +262,7 @@ export interface DebateDetail {
   turns: Turn[];
   user_id: string | null;
   author_name: string | null;
+  author_official?: boolean; // by the site's own account: the logo as the avatar, the official mark
   is_owner: boolean;
   is_public: boolean;
   slug: string | null;
@@ -311,6 +312,7 @@ export interface MotionVersion {
   language: string;
   language_code: string;
   author_name: string | null;
+  author_official?: boolean; // by the site's own account: the logo as the avatar, the official mark
   participants: Participant[];
   likes: number;
   views: number;
@@ -458,6 +460,7 @@ export interface User {
   email: string;
   display_name: string;
   avatar_seed: string;
+  official?: boolean; // the site's own account: the logo is its avatar
   credits_usd: number;
   openrouter_key_masked: string | null;
   created_at: string;
@@ -611,6 +614,7 @@ export interface GalleryItem {
   language_code: string;
   category: string | null;
   author_name: string | null;
+  author_official?: boolean; // by the site's own account: the logo as the avatar, the official mark
   views: number;
   likes: number;
   votes: number;

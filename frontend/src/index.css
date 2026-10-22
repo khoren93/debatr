@@ -93,6 +93,9 @@
   --animate-pulse-dot: pulse-dot 1.6s infinite;
   --animate-bars: bars 1s infinite;
   --animate-vs-pulse: vs-pulse 3.2s ease-in-out infinite;
+  --animate-beam-swing: beam-swing 7s ease-in-out infinite alternate;
+  /* A rap battle's tempo (92 BPM): a flare every second beat. */
+  --animate-beam-flare: beam-flare 1.304s ease-out infinite;
 
   @keyframes rise {
     from {
@@ -122,6 +125,25 @@
     }
     82% {
       scale: 1.16;
+    }
+  }
+  /* The home page's stage lights (components/landing/StageLights): a beam swings around its
+     lamp, `--lean` ± `--swing`. */
+  @keyframes beam-swing {
+    from {
+      rotate: calc(var(--lean) - var(--swing));
+    }
+    to {
+      rotate: calc(var(--lean) + var(--swing));
+    }
+  }
+  @keyframes beam-flare {
+    0%,
+    100% {
+      opacity: 0.65;
+    }
+    10% {
+      opacity: 1;
     }
   }
   @keyframes bars {

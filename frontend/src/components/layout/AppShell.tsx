@@ -5,7 +5,7 @@ import { useAuth } from '../../auth/AuthContext';
 import { useSiteStatus } from '../../hooks/useSiteStatus';
 import { APP_REPO_URL } from '../../lib/brand';
 import { formatMoney } from '../../lib/format';
-import { Avatar, GitHubMark, Logo, Progress } from '../ui';
+import { GitHubMark, Logo, Progress, UserAvatar } from '../ui';
 
 const NAV = [
   { to: '/', label: 'Home', icon: Home, end: true },
@@ -93,7 +93,7 @@ const Sidebar = () => {
       <div className="mt-auto">
         {user && (
           <Link to="/account" className="mb-3 flex items-center gap-2.5 rounded-[10px] px-2 py-1.5 hover:bg-surface-2">
-            <Avatar seed={user.avatar_seed} size={26} />
+            <UserAvatar seed={user.avatar_seed} official={user.official} size={26} />
             <span className="min-w-0">
               <span className="block truncate text-sm font-semibold">{user.display_name}</span>
               <span className="block truncate text-[11px] text-muted">{user.email}</span>
@@ -117,7 +117,7 @@ const MobileTopBar = () => {
       {user ? (
         <Link to="/account" className="flex items-center gap-2 rounded-full border border-line-2 bg-surface py-1.5 pl-3 pr-1.5 font-mono text-xs">
           {formatMoney(user.credits_usd)}
-          <Avatar seed={user.avatar_seed} size={22} />
+          <UserAvatar seed={user.avatar_seed} official={user.official} size={22} />
         </Link>
       ) : (
         <Link to="/login" className="rounded-full bg-accent px-3.5 py-1.5 text-xs font-bold text-ink">

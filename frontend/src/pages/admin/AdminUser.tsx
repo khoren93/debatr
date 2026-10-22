@@ -11,7 +11,7 @@ import { UserBadges } from '../../components/admin/users/UserBadges';
 import { UserVisitsPanel } from '../../components/admin/users/UserVisitsPanel';
 import { AuditPanel, DebatesPanel, FavoriteModels, LedgerPanel, ReactionsPanel, SpendChart, StatsGrid, TokensPanel } from '../../components/admin/users/UserSections';
 import { formatTime } from '../../components/admin/helpers';
-import { Avatar, Card, ErrorBox, SectionLabel, Segmented, Spinner } from '../../components/ui';
+import { Card, ErrorBox, SectionLabel, Segmented, Spinner, UserAvatar } from '../../components/ui';
 import { formatAgo, formatMoney } from '../../lib/format';
 
 type Period = '30d' | 'all';
@@ -67,11 +67,11 @@ const AdminUser = () => {
         <div className={`transition-opacity ${result?.key !== key ? 'opacity-60' : ''}`}>
           <Card className="mt-4">
             <div className="flex flex-wrap items-start gap-4">
-              <Avatar seed={card.profile.avatar_seed || card.profile.id} size={52} rounded="lg" />
+              <UserAvatar seed={card.profile.avatar_seed || card.profile.id} official={card.profile.official} size={52} rounded="lg" />
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <h1 className="truncate font-display text-2xl font-extrabold tracking-tight">{card.profile.display_name}</h1>
-                  <UserBadges role={card.profile.role} active={card.profile.is_active} />
+                  <UserBadges role={card.profile.role} active={card.profile.is_active} official={card.profile.official} />
                 </div>
                 <div className="truncate text-sm text-muted">{card.profile.email}</div>
               </div>

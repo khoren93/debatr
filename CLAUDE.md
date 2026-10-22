@@ -16,7 +16,9 @@ backend/            FastAPI API + RQ worker (Python 3.12+, managed with uv)
   app/worker.py       RQ worker entrypoint (`python -m app.worker`)
   app/manage.py       operator commands on the server, not part of the public CLI: `admin grant |
                       revoke | list | reset-2fa | revoke-sessions | enroll-code`, `credits …`
-                      (balance changes through the ledger), `indexnow --all [--dry-run]` (every
+                      (balance changes through the ledger), `official <email> [--name N] [--off]`
+                      (the site's own account: the logo as its avatar, a check mark, the only
+                      one allowed the brand's name), `indexnow --all [--dry-run]` (every
                       sitemap page to IndexNow at once, after a domain move), `media
                       refresh-timeline <ids> | --format rap_battle` (beat grid, Shorts and
                       moments of ready timelines without rebuilding audio; media-worker: ffmpeg),
@@ -75,7 +77,9 @@ backend/            FastAPI API + RQ worker (Python 3.12+, managed with uv)
                       usage (provider_usage booking, debate context, ContextThreadPool),
                       activity (user_activity_days, last_seen_at), runtime_settings (levers of
                       the console, cached per process), alerts (Telegram: rules, antispam, job),
-                      alert_events (the alert kinds the console can mute)
+                      alert_events (the alert kinds the console can mute), official (the
+                      brand's name is reserved for `users.official`: case, spacing and
+                      Cyrillic / Greek look-alikes folded)
   app/services/admin/ totp (codes, recovery / enrollment codes, QR), sessions (Redis: sessions,
                       sign-in tickets, code failures), passkeys (WebAuthn options / checks),
                       audit (append-only admin_audit_log: writing, the audit page's queries),
@@ -161,7 +165,8 @@ frontend/           React 19 + React Router 8 (framework mode, server rendering)
                       useHydrated (false on the server and during hydration), useSiteUrl (the
                       `_site` loader's origin for canonical links)
   src/components/ui/  design-system primitives (Button, Card, Chip, Segmented, Field, Pill,
-                      Progress, Modal/ConfirmDialog, Toast, Avatar/SpeakerBadge, Thumb, Logo,
+                      Progress, Modal/ConfirmDialog, Toast, Avatar/SpeakerBadge (UserAvatar = the
+                      logo for the site's own account, OfficialMark), Thumb, Logo, GitHubMark,
                       Dropdown — custom select, portalled list; SwitchTrack,
                       ModelIcon — provider logo of a model id via src/lib/modelIcons.ts,
                       ClientOnly — browser-only UI after hydration, RelativeDate — "5 days ago",
@@ -230,7 +235,9 @@ frontend/           React 19 + React Router 8 (framework mode, server rendering)
   src/pages/          page components (routes in src/routes wrap them; Landing, Gallery,
                       Leaderboard, Topic render from route data, DebateView starts from it):
                       Landing (/: English only; the hero plays the most popular voiced debate in
-                      place, components/landing/HeroDebate, like the embed's facade), Library
+                      place, components/landing/HeroDebate, like the embed's facade, under CSS
+                      stage lights, components/landing/StageLights; ends on the open-source
+                      block), Library
                       (/library), Gallery (/gallery), Leaderboard (/leaderboard),
                       CreateDebate (/create, `?draft=<id>`, `?remix=<id>`),
                       DebateView (/debate/:id and public /d/:slug), Topic (/t/:slug: a topic's

@@ -3,8 +3,8 @@ import type { ReactNode } from 'react';
 import { ArrowLeft, ArrowRight, AudioLines, Flame, Globe, Languages, MicVocal, Play, Sparkles, Trophy, X } from 'lucide-react';
 import type { GalleryItem, GalleryLanguage } from '../api/types';
 import { Page, PageTitle } from '../components/layout/AppShell';
-import { CardCover, CardStats, CoverBadge, DebateCard, LanguageTag, VersionsBadge } from '../components/cards';
-import { Avatar, Button, Chip, Dropdown, EmptyState, LinkButton, ModelIcon, Segmented, type DropdownOption } from '../components/ui';
+import { CardAuthor, CardCover, CardStats, CoverBadge, DebateCard, LanguageTag, VersionsBadge } from '../components/cards';
+import { Button, Chip, Dropdown, EmptyState, LinkButton, ModelIcon, Segmented, type DropdownOption } from '../components/ui';
 import { shortModelName } from '../lib/format';
 import {
   CATEGORY_OPTIONS,
@@ -242,7 +242,6 @@ const Gallery = ({ filters, items, total, languages }: Props) => {
     return (
       <div className={`mt-[22px] grid grid-cols-[repeat(auto-fill,minmax(min(100%,320px),1fr))] gap-5 transition-opacity ${loading ? 'pointer-events-none opacity-50' : ''}`} aria-busy={loading}>
         {items.map((item, i) => {
-          const author = item.author_name?.trim() || 'Anonymous';
           return (
             <DebateCard
               key={item.id}
@@ -260,12 +259,7 @@ const Gallery = ({ filters, items, total, languages }: Props) => {
                   topRight={<CoverBadge format={item.cover ? undefined : item.format} premiumVoices={item.premium_voices} />}
                 />
               }
-              footerLeft={
-                <>
-                  <Avatar seed={author} size={20} />
-                  <span className="truncate">{author}</span>
-                </>
-              }
+              footerLeft={<CardAuthor name={item.author_name} official={item.author_official} />}
               // No verdict on the cards: the audience votes blind on the debate page.
               footerRight={
                 <>

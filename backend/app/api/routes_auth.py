@@ -33,6 +33,7 @@ from app.schemas.auth import (
 from app.services import alerts, runtime_settings
 from app.services.admin import audit
 from app.services.credits import apply_transaction
+from app.services.official import reserved_name
 from app.services.openrouter_client import openrouter_client
 
 logger = logging.getLogger(__name__)
@@ -45,6 +46,7 @@ def user_out(user: User) -> UserOut:
         email=user.email,
         display_name=user.display_name,
         avatar_seed=user.avatar_seed or "",
+        official=bool(user.official),
         credits_usd=float(user.credits_usd or 0),
         openrouter_key_masked=mask_key(user.openrouter_key_last4),
         created_at=user.created_at,
@@ -53,7 +55,14 @@ def user_out(user: User) -> UserOut:
 
 def _default_name(email: str) -> str:
     local = email.split("@", 1)[0]
-    return local.replace(".", " ").replace("_", " ").strip().title()[:100] or "Debater"
+    name = local.replace(".", " ").replace("_", " ").strip().title()[:100]
+    return name if name and not reserved_name(name) else "Debater"
+
+
+def _check_name(name: str, user: User | None = None) -> None:
+    """The brand's name is the official account's alone (services/official)."""
+    if reserved_name(name) and not (user is not None and user.official):
+        raise HTTPException(status_code=400, detail="This name is reserved. Pick another one.")
 
 
 @router.post(
@@ -71,6 +80,7 @@ async def register(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Sign-ups are closed for now. Accounts that exist can still sign in.",
         )
+    _check_name(body.display_name or "")
     exists = await db.scalar(select(User.id).where(User.email == body.email))
     if exists is not None:
         raise HTTPException(status_code=409, detail="An account with this email already exists")
@@ -144,6 +154,7 @@ async def update_profile(
     db: AsyncSession = Depends(get_db),
 ) -> UserOut:
     if body.display_name is not None:
+        _check_name(body.display_name, user)
         user.display_name = body.display_name.strip() or user.display_name
     if body.avatar_seed is not None:
         user.avatar_seed = body.avatar_seed.strip() or random_token(6)

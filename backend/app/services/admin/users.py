@@ -416,6 +416,7 @@ def profile_out(user: User) -> dict[str, Any]:
         "email": user.email,
         "display_name": user.display_name,
         "avatar_seed": user.avatar_seed or "",
+        "official": bool(user.official),
         "created_at": user.created_at,
         "last_login_at": user.last_login_at,
         "last_seen_at": user.last_seen_at,

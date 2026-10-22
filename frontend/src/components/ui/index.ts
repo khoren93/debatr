@@ -8,7 +8,7 @@ export { Pill, StagePill } from './Pill';
 export { Progress } from './Progress';
 export { Modal, ConfirmDialog } from './Modal';
 export { ToastProvider, useToast } from './Toast';
-export { Avatar, SpeakerBadge, avatarGradient } from './Avatar';
+export { Avatar, OfficialMark, SpeakerBadge, UserAvatar, avatarGradient } from './Avatar';
 export { Thumb } from './Thumb';
 export { EmptyState, ErrorBox } from './Empty';
 export { Logo, LogoMark, Bars } from './Logo';

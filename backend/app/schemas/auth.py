@@ -43,6 +43,7 @@ class UserOut(BaseModel):
     email: str
     display_name: str
     avatar_seed: str
+    official: bool = False  # the site's own account: the logo is its avatar
     credits_usd: float
     openrouter_key_masked: str | None = None
     created_at: datetime

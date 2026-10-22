@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The site's own account.** `python -m app.manage official EMAIL --name Debatr` makes an
+  account the site's: its debates show the Debatr logo as the author's avatar and a check mark
+  next to the name (gallery, home page, topic pages, the debate page). Other accounts cannot take
+  the brand's name, in any spelling.
+- The home page says the project is open source: a GitHub link in the hero's facts, a "Built in
+  the open" block, and a link under the sidebar on every page.
+- The home page mentions rap battles (the label above the headline, the description, a link to
+  the battles in the gallery) and hangs a battle's stage lights over the hero (still for visitors
+  who ask for less motion).
 - **The home page plays the most popular debate.** The hero shows the gallery's top trending
   English debate with its video and plays it in place (the player loads on hover or the first
   click); without one it keeps the static poster.

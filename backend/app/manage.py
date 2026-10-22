@@ -29,6 +29,11 @@ so run it in the media-worker container:
 `geoip update` fetches the IP → place and IP → network databases of the Audience page now (the
 background queue does it monthly; services/audience/geo) and places the visits saved without one.
 
+`official EMAIL [--name NAME] [--off]` makes an account the site's own (the gallery shows the
+logo as its avatar and marks it; only it may carry the brand's name, services/official), with a
+new display name if given; `--off` makes it an ordinary account again (a brand name falls back to
+one from the email).
+
 `audience classify [--days N]` weighs stored visits again — person, bot or AI agent
 (services/audience/bots) —: once for the visits from before the verdicts, or after the rules
 changed. Visits from before the page counted its input keep fewer signals.
@@ -277,6 +282,32 @@ def admin_list() -> int:
         return 0
 
 
+def set_official(email: str, *, on: bool, name: str | None) -> int:
+    from app.api.routes_auth import _default_name
+    from app.services.official import reserved_name
+
+    name = (name or "").strip()[:100]
+    if name and not on:
+        print("--name goes with making an account official, not with --off", file=sys.stderr)
+        return 2
+    with get_sync_session() as db:
+        user = _user_by_email(db, email)
+        if user is None:
+            return 1
+        before = {"official": user.official, "display_name": user.display_name}
+        user.official = on
+        if name:
+            user.display_name = name
+        elif not on and reserved_name(user.display_name):
+            user.display_name = _default_name(user.email)
+        after = {"official": user.official, "display_name": user.display_name}
+        record_sync(db, "user.official_changed", target=user, before=before, after=after)
+        db.commit()
+        state = "official" if on else "an ordinary account"
+        print(f"{user.email}: {state}, shown as {user.display_name!r}")
+        return 0
+
+
 def indexnow_all(*, dry_run: bool) -> int:
     from app.services import indexnow
 
@@ -387,6 +418,11 @@ def build_parser() -> argparse.ArgumentParser:
     credits.add_argument("--description", help="what the user sees in the ledger")
     credits.add_argument("--yes", action="store_true", help="do not ask for confirmation")
 
+    official = commands.add_parser("official", help="the site's own account (logo avatar, mark)")
+    official.add_argument("email")
+    official.add_argument("--name", help="display name to show, e.g. Debatr")
+    official.add_argument("--off", action="store_true", help="make it an ordinary account again")
+
     index = commands.add_parser("indexnow", help="announce pages to IndexNow")
     index.add_argument("--all", action="store_true", required=True, help="every sitemap page")
     index.add_argument("--dry-run", action="store_true", help="print the pages, send nothing")
@@ -442,6 +478,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             description=args.description,
             assume_yes=args.yes,
         )
+    if args.command == "official":
+        return set_official(args.email, on=not args.off, name=args.name)
     if args.command == "indexnow":
         return indexnow_all(dry_run=args.dry_run)
     if args.command == "media":

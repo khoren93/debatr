@@ -58,6 +58,9 @@ class User(Base):
     openrouter_key_enc: Mapped[str | None] = mapped_column(Text, nullable=True)
     openrouter_key_last4: Mapped[str | None] = mapped_column(String(8), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    # The site's own account (`python -m app.manage official`): the logo as its avatar, a mark
+    # next to its name, the only one allowed the brand's name (services/official).
+    official: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, index=True
     )

@@ -9,7 +9,7 @@ import { debateFilesBase } from '../api/media';
 import { ACTIVE_STATUSES, type Audience, type DebateDetail, type Turn } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { Page } from '../components/layout/AppShell';
-import { Button, ClientOnly, ConfirmDialog, EmptyState, ErrorBox, LinkButton, Pill, RelativeDate, useToast } from '../components/ui';
+import { Button, ClientOnly, ConfirmDialog, EmptyState, ErrorBox, LinkButton, OfficialMark, Pill, RelativeDate, useToast } from '../components/ui';
 import { CardStats } from '../components/cards';
 import { AudienceVote } from '../components/debate/AudienceVote';
 import { DebateActions } from '../components/debate/DebateActions';
@@ -513,7 +513,12 @@ const DebateView = ({ initial, viewer, id, slug }: Props) => {
       )}
       <RelativeDate iso={debate.created_at} />
       {debate.is_public && <CardStats likes={debate.engagement.likes} views={debate.views} />}
-      {debate.author_name && !isOwner && <span>by {debate.author_name}</span>}
+      {debate.author_name && !isOwner && (
+        <span className="inline-flex items-center gap-1">
+          by {debate.author_name}
+          {debate.author_official && <OfficialMark className="size-3" />}
+        </span>
+      )}
       {debate.remix_of && (
         <Link to={debate.remix_of.path || `/d/${debate.remix_of.slug}`} title={debate.remix_of.topic} className="inline-flex min-w-0 max-w-[260px] items-center gap-1 hover:text-text">
           <Repeat2 className="size-3 shrink-0" /> <span className="truncate">remix of {debate.remix_of.topic}</span>

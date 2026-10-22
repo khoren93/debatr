@@ -559,6 +559,7 @@ class MotionVersion(BaseModel):
     language: str
     language_code: str = "en"
     author_name: str | None = None
+    author_official: bool = False  # by the site's own account (services/official)
     participants: list[ParticipantOut] = Field(default_factory=list)
     likes: int = 0
     views: int = 0
@@ -600,6 +601,7 @@ class DebateDetail(BaseModel):
     turns: list[TurnOut]
     user_id: str | None = None
     author_name: str | None = None
+    author_official: bool = False  # by the site's own account (services/official)
     is_owner: bool = False
     is_public: bool = False
     slug: str | None = None
@@ -642,6 +644,7 @@ class GalleryItem(BaseModel):
     language_code: str = "en"
     category: str | None = None
     author_name: str | None = None
+    author_official: bool = False  # by the site's own account (services/official)
     views: int = 0
     likes: int = 0
     votes: int = 0

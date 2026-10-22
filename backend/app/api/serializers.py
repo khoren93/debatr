@@ -52,6 +52,11 @@ def is_owner(debate: Debate, viewer: User | None) -> bool:
     return viewer is not None and debate.user_id == viewer.id
 
 
+def official_author(debate: Debate) -> bool:
+    """Made by the site's own account (services/official)."""
+    return debate.user is not None and bool(debate.user.official)
+
+
 def can_view(debate: Debate, viewer: User | None) -> bool:
     """Owners, and anyone for public or legacy (ownerless) debates. Admins read the others in
     the admin console, never through this API."""
@@ -370,6 +375,7 @@ def detail_out(
         turns=[turn_out(t, format_of(conf)) for t in debate.turns],
         user_id=str(debate.user_id) if debate.user_id else None,
         author_name=author,
+        author_official=official_author(debate),
         is_owner=owner,
         config=owner_config(debate) if owner else None,
         moderation=moderation_out(debate) if owner or manager else None,
@@ -413,6 +419,7 @@ def motion_version_out(debate: Debate, current: Debate | None = None) -> MotionV
         language=str(conf.get("language") or "English"),
         language_code=language_code(conf.get("language")),
         author_name=debate.user.display_name if debate.user is not None else None,
+        author_official=official_author(debate),
         participants=participants_out(debate),
         likes=debate.likes_count or 0,
         views=debate.views or 0,
@@ -478,6 +485,7 @@ def gallery_item_out(debate: Debate, motion: MotionInfo | None = None) -> Galler
         language_code=language_code(conf.get("language")),
         category=debate.category,
         author_name=debate.user.display_name if debate.user is not None else None,
+        author_official=official_author(debate),
         views=debate.views or 0,
         likes=debate.likes_count or 0,
         votes=debate.votes_count or 0,

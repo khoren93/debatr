@@ -3,7 +3,7 @@ import { Check, Pencil, RefreshCw, X } from 'lucide-react';
 import { updateProfile } from '../../api/auth';
 import { getErrorMessage } from '../../api/client';
 import type { User } from '../../api/types';
-import { Avatar, Button, Input, useToast } from '../ui';
+import { Button, Input, OfficialMark, UserAvatar, useToast } from '../ui';
 import { monthYear } from './helpers';
 
 const randomSeed = () => Math.random().toString(36).slice(2, 10);
@@ -60,17 +60,20 @@ export const ProfileHeader = ({ user, onUser, children }: ProfileHeaderProps) =>
   return (
     <div className="flex flex-wrap items-center gap-[18px]">
       <div className="relative shrink-0">
-        <Avatar seed={user.avatar_seed} size={64} rounded="lg" />
-        <button
-          type="button"
-          onClick={shuffleAvatar}
-          disabled={shuffling}
-          title="New avatar"
-          aria-label="Generate a new avatar"
-          className="absolute -right-1.5 -bottom-1.5 grid size-[26px] cursor-pointer place-items-center rounded-[9px] border-2 border-ink bg-surface-2 text-text-3 transition-colors hover:text-accent disabled:cursor-wait"
-        >
-          <RefreshCw className={`size-3 ${shuffling ? 'animate-spin' : ''}`} strokeWidth={2.4} />
-        </button>
+        <UserAvatar seed={user.avatar_seed} official={user.official} size={64} rounded="lg" />
+        {/* The site's own account keeps the logo. */}
+        {!user.official && (
+          <button
+            type="button"
+            onClick={shuffleAvatar}
+            disabled={shuffling}
+            title="New avatar"
+            aria-label="Generate a new avatar"
+            className="absolute -right-1.5 -bottom-1.5 grid size-[26px] cursor-pointer place-items-center rounded-[9px] border-2 border-ink bg-surface-2 text-text-3 transition-colors hover:text-accent disabled:cursor-wait"
+          >
+            <RefreshCw className={`size-3 ${shuffling ? 'animate-spin' : ''}`} strokeWidth={2.4} />
+          </button>
+        )}
       </div>
       <div className="min-w-[200px] flex-1">
         {editing ? (
@@ -102,6 +105,7 @@ export const ProfileHeader = ({ user, onUser, children }: ProfileHeaderProps) =>
         ) : (
           <div className="flex items-center gap-2.5">
             <h1 className="truncate font-display text-[clamp(26px,3vw,36px)] leading-none font-extrabold tracking-[-0.03em]">{user.display_name}</h1>
+            {user.official && <OfficialMark className="size-5" />}
             <button
               type="button"
               onClick={startEdit}

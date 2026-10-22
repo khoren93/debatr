@@ -1,10 +1,12 @@
+import { MicVocal } from 'lucide-react';
 import { Link } from 'react-router';
 import type { GalleryItem, Participant } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { Page } from '../components/layout/AppShell';
-import { CardCover, CardStats, CoverBadge, DebateCard, VersionsBadge, VideoPoster } from '../components/cards';
+import { CardAuthor, CardCover, CardStats, CoverBadge, DebateCard, VersionsBadge, VideoPoster } from '../components/cards';
 import { HeroDebate } from '../components/landing/HeroDebate';
-import { Avatar, Bars, GitHubMark, LinkButton, buttonClass } from '../components/ui';
+import { StageLights } from '../components/landing/StageLights';
+import { Bars, GitHubMark, LinkButton, buttonClass } from '../components/ui';
 import { APP_DESCRIPTION, APP_NAME, APP_REPO_URL } from '../lib/brand';
 import { CLI_DOCS_URL } from '../lib/cli';
 
@@ -17,7 +19,7 @@ const STEPS = [
   },
   {
     title: 'Cast the speakers',
-    text: 'A moderator, a pro and a con. Any of 60+ models, each with its own neural voice and persona.',
+    text: 'A host and two sides, or an MC and two rappers. Any of 60+ models, each with its own neural voice and persona.',
   },
   {
     title: 'Render & publish',
@@ -68,13 +70,15 @@ const Landing = ({ hero, featured }: Props) => {
       {/* As wide as the viewport, so it does not stop at the capped content width (the shell's
           <main> clips it at the sidebar). */}
       <div className="pointer-events-none absolute -top-60 left-1/2 h-[1040px] w-screen -translate-x-1/2" style={{ background: HERO_GLOW }} aria-hidden="true" />
+      {/* A nod to the rap battles: their club lights, hung over the hero. */}
+      <StageLights className="absolute inset-x-0 top-0 h-[min(900px,110vh)]" />
 
       {/* Hero */}
       <div className="relative grid grid-cols-[repeat(auto-fit,minmax(min(100%,340px),1fr))] items-center gap-[clamp(28px,4vw,56px)]">
         <div className="animate-rise" style={{ animationDuration: '0.6s' }}>
           <div className="inline-flex items-center gap-2 rounded-full border border-accent/35 px-3 py-1.5 font-mono text-[11px] tracking-[0.08em] text-accent">
             <span className="size-1.5 rounded-full bg-accent animate-pulse-dot" />
-            AI DEBATE STUDIO
+            AI DEBATES · RAP BATTLES
           </div>
           <h1 className="mt-4 font-display text-[clamp(38px,3.85vw,62px)] font-extrabold leading-[1.02] tracking-[-0.035em] text-balance">
             Two AIs. One topic.
@@ -89,6 +93,9 @@ const Landing = ({ hero, featured }: Props) => {
             <LinkButton to="/gallery" variant="secondary" size="lg">
               Watch examples
             </LinkButton>
+            <Link to="/gallery?format=rap_battle" className="inline-flex items-center gap-1.5 px-2 text-sm text-muted transition-colors hover:text-text">
+              <MicVocal className="size-4" /> Rap battles →
+            </Link>
             {user && (
               <Link to="/library" className="px-2 text-sm text-muted transition-colors hover:text-text">
                 Go to library →
@@ -146,12 +153,7 @@ const Landing = ({ hero, featured }: Props) => {
                     topRight={<CoverBadge format={item.cover ? undefined : item.format} premiumVoices={item.premium_voices} />}
                   />
                 }
-                footerLeft={
-                  <>
-                    <Avatar seed={item.author_name?.trim() || 'Anonymous'} size={20} />
-                    <span className="truncate">{item.author_name?.trim() || 'Anonymous'}</span>
-                  </>
-                }
+                footerLeft={<CardAuthor name={item.author_name} official={item.author_official} />}
                 footerRight={<CardStats likes={item.likes} views={item.views} durationMs={item.duration_ms} />}
               />
             ))}

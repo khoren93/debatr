@@ -360,6 +360,7 @@ class AdminUserProfile(BaseModel):
     email: str
     display_name: str
     avatar_seed: str
+    official: bool = False  # the site's own account (`python -m app.manage official`)
     created_at: datetime
     last_login_at: datetime | None
     last_seen_at: datetime | None

@@ -1,8 +1,8 @@
 import { Plus } from 'lucide-react';
 import type { MotionPage } from '../api/types';
 import { Page, PageTitle } from '../components/layout/AppShell';
-import { CardCover, CardStats, CoverBadge, DebateCard } from '../components/cards';
-import { Avatar, LinkButton } from '../components/ui';
+import { CardAuthor, CardCover, CardStats, CoverBadge, DebateCard } from '../components/cards';
+import { LinkButton } from '../components/ui';
 
 /** Language of a version when the topic is debated in more than one. */
 const LanguageBadge = ({ code }: { code: string }) => (
@@ -31,7 +31,6 @@ const Topic = ({ page }: { page: MotionPage }) => {
       <p className="mt-3 max-w-[640px] text-sm leading-normal text-muted">The same question argued by different models{languages.size > 1 ? ' and in different languages' : ''}. Pick a version to watch, or run it with your own lineup.</p>
       <div className="mt-[22px] grid grid-cols-[repeat(auto-fill,minmax(min(100%,320px),1fr))] gap-5">
         {page.items.map((item, i) => {
-          const author = item.author_name?.trim() || 'Anonymous';
           return (
             <DebateCard
               key={item.id}
@@ -47,12 +46,7 @@ const Topic = ({ page }: { page: MotionPage }) => {
                   topRight={<CoverBadge format={item.cover ? undefined : item.format} premiumVoices={item.premium_voices} />}
                 />
               }
-              footerLeft={
-                <>
-                  <Avatar seed={author} size={20} />
-                  <span className="truncate">{author}</span>
-                </>
-              }
+              footerLeft={<CardAuthor name={item.author_name} official={item.author_official} />}
               footerRight={<CardStats likes={item.likes} views={item.views} durationMs={item.duration_ms} />}
             />
           );

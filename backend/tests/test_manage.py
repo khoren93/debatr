@@ -66,3 +66,19 @@ def test_media_refresh_takes_ids_or_a_format() -> None:
     )
     args = build_parser().parse_args(["media", "refresh-timeline", "--format", "rap_battle"])
     assert (args.ids, args.fmt) == ([], "rap_battle")
+
+
+def test_official_takes_a_name_or_off() -> None:
+    args = build_parser().parse_args(["official", "a@b.co", "--name", "Debatr"])
+    assert (args.command, args.email, args.name, args.off) == (
+        "official",
+        "a@b.co",
+        "Debatr",
+        False,
+    )
+    assert build_parser().parse_args(["official", "a@b.co", "--off"]).off is True
+
+
+def test_official_off_with_a_name_exits_before_the_database(capsys: pytest.CaptureFixture[str]):
+    assert main(["official", "a@b.co", "--off", "--name", "Debatr"]) == 2
+    assert "--name" in capsys.readouterr().err
