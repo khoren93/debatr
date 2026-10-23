@@ -325,6 +325,9 @@ scripts/screenshots/  `make screenshots`: README images (numbered phone screens,
                     images are dragged into a GitHub comment box and README links the
                     user-attachments URLs, never committed; PNG screens since that takes no WebP)
 design/             local Claude Design export (`Debatr Studio.html`), git-ignored
+assets/             brand images for profiles elsewhere (Google account, YouTube…), not used by the
+                    site: debatr-avatar.svg (the mark on a full lime square, safe for round crops)
+                    and its 512 / 1024 PNGs, the favicon tile (frontend/public/favicon.svg) as PNGs
 docker-compose.yml  full stack; docker-compose.dev.yml = only Postgres + Redis for native dev
 ```
 
