@@ -107,6 +107,11 @@ def email_token_key(kind: str, token_hash: str) -> str:
     return f"email:{kind}:{token_hash}"
 
 
+def google_flow_key(state_hash: str) -> str:
+    """A sign-in with Google on its way (services/google_auth), by the hash of its `state`."""
+    return f"oauth:google:{state_hash}"
+
+
 def trending_lock_key() -> str:
     """Held while a trending-topics batch is being built (app.services.trending)."""
     return "trending:refresh:lock"

@@ -837,3 +837,5 @@ class SiteStatusOut(BaseModel):
     analytics: bool = True
     # Where people write to us (SUPPORT_EMAIL): the Contact link and /privacy; None: not set.
     support_email: str | None = None
+    # Sign-in with Google is set up (GOOGLE_CLIENT_ID / _SECRET): the sign-in pages offer it.
+    google_login: bool = False

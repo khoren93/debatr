@@ -11,6 +11,7 @@ const OPEN: SiteStatus = {
   cover_price_usd: 0,
   analytics: true,
   support_email: null,
+  google_login: false,
 };
 // Shared by every component; asked again when older than this (an admin may flip a lever).
 const FRESH_MS = 60_000;

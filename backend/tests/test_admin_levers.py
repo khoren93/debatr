@@ -263,6 +263,7 @@ async def test_site_status(monkeypatch: pytest.MonkeyPatch, levers: dict) -> Non
     from app.api.routes_status import site_status
 
     monkeypatch.setattr(settings, "SUPPORT_EMAIL", "")
+    monkeypatch.setattr(settings, "GOOGLE_CLIENT_ID", "")
     assert (await site_status()).model_dump() == {
         "registration_open": True,
         "maintenance": False,
@@ -277,6 +278,7 @@ async def test_site_status(monkeypatch: pytest.MonkeyPatch, levers: dict) -> Non
         "cover_price_usd": 0.042,  # COVER_PRICE_USD 0.035 x markup 1.2
         "analytics": True,
         "support_email": None,
+        "google_login": False,
     }
     levers.update(registration_open=False, maintenance=True, analytics_enabled=False)
     monkeypatch.setattr(settings, "SUPPORT_EMAIL", "help@site.example")

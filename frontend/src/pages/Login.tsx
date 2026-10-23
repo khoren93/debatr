@@ -6,8 +6,11 @@ import { getErrorMessage, getErrorStatus } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { AuthLayout } from '../components/account/AuthLayout';
 import { FormField, PasswordField } from '../components/account/FormField';
+import { googleSignInError } from '../components/account/google';
+import { GoogleSignIn } from '../components/account/GoogleButton';
 import { safeNext, withNext } from '../components/account/helpers';
 import { Button, ErrorBox } from '../components/ui';
+import { useSiteStatus } from '../hooks/useSiteStatus';
 import { track } from '../lib/presence';
 
 const DEFAULT_NEXT = '/library';
@@ -17,6 +20,8 @@ const Login = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const next = safeNext(searchParams.get('next'));
+  const google = useSiteStatus().google_login;
+  const googleError = googleSignInError(searchParams.get('error'));
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
@@ -59,12 +64,18 @@ const Login = () => {
         </>
       }
     >
+      {googleError && !error && <ErrorBox className="mb-4">{googleError}</ErrorBox>}
+      {google && (
+        <div className="mb-4">
+          <GoogleSignIn next={next} />
+        </div>
+      )}
       <form onSubmit={onSubmit} noValidate className="grid gap-4">
         <FormField
           label="Email"
           type="email"
           autoComplete="email"
-          autoFocus
+          autoFocus={!google}
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           placeholder="you@example.com"

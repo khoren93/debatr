@@ -1,5 +1,5 @@
 """Accounts: register, login, profile, personal OpenRouter key, email confirmation and password
-reset (services/email_check: the links we mail).
+reset (services/email_check: the links we mail). Sign-in with Google: routes_google.
 
 Changing the account (profile, password, stored key) needs the browser session; API tokens can
 only read it (`GET /me`)."""
@@ -23,7 +23,7 @@ from app.core.security import (
     random_token,
     verify_password,
 )
-from app.models.models import User, utcnow
+from app.models.models import User, UserIdentity, utcnow
 from app.schemas.auth import (
     ChangePasswordRequest,
     ForgotPasswordRequest,
@@ -47,7 +47,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-def user_out(user: User) -> UserOut:
+def user_out(user: User, google_email: str | None = None) -> UserOut:
     return UserOut(
         id=str(user.id),
         email=user.email,
@@ -58,11 +58,23 @@ def user_out(user: User) -> UserOut:
         email_required=email_check.pending(user),
         credits_usd=float(user.credits_usd or 0),
         openrouter_key_masked=mask_key(user.openrouter_key_last4),
+        has_password=bool(user.password_hash),
+        google_email=google_email,
         created_at=user.created_at,
     )
 
 
-def _default_name(email: str) -> str:
+async def account_out(db: AsyncSession, user: User) -> UserOut:
+    """The account with the Google account tied to it (Account → Security)."""
+    google = await db.scalar(
+        select(UserIdentity.email).where(
+            UserIdentity.user_id == user.id, UserIdentity.provider == "google"
+        )
+    )
+    return user_out(user, google_email=google or None)
+
+
+def default_name(email: str) -> str:
     local = email.split("@", 1)[0]
     name = local.replace(".", " ").replace("_", " ").strip().title()[:100]
     return name if name and not reserved_name(name) else "Debater"
@@ -72,6 +84,41 @@ def _check_name(name: str, user: User | None = None) -> None:
     """The brand's name is the official account's alone (services/official)."""
     if reserved_name(name) and not (user is not None and user.official):
         raise HTTPException(status_code=400, detail="This name is reserved. Pick another one.")
+
+
+async def create_account(
+    db: AsyncSession,
+    *,
+    email: str,
+    display_name: str,
+    password_hash: str | None,
+    bonus_usd: float,
+    verified: bool = False,
+) -> User:
+    """A new account with its welcome credits (flushed; the caller commits). `verified`: the
+    email is already confirmed (Google said so)."""
+    now = utcnow()
+    user = User(
+        email=email,
+        password_hash=password_hash,
+        display_name=display_name,
+        avatar_seed=random_token(6),
+        last_login_at=now,
+        email_verified_at=now if verified else None,
+    )
+    db.add(user)
+    await db.flush()
+    if bonus_usd > 0:
+        await apply_transaction(
+            db,
+            user.id,
+            bonus_usd,
+            "bonus",
+            description="Welcome credits",
+            provider="system",
+            provider_ref=f"bonus:signup:{user.id}",
+        )
+    return user
 
 
 @router.post(
@@ -96,25 +143,13 @@ async def register(
     exists = await db.scalar(select(User.id).where(User.email == body.email))
     if exists is not None:
         raise HTTPException(status_code=409, detail="An account with this email already exists")
-    user = User(
+    user = await create_account(
+        db,
         email=body.email,
+        display_name=(body.display_name or "").strip() or default_name(body.email),
         password_hash=hash_password(body.password),
-        display_name=(body.display_name or "").strip() or _default_name(body.email),
-        avatar_seed=random_token(6),
-        last_login_at=utcnow(),
+        bonus_usd=levers.signup_bonus_usd,
     )
-    db.add(user)
-    await db.flush()
-    if levers.signup_bonus_usd > 0:
-        await apply_transaction(
-            db,
-            user.id,
-            levers.signup_bonus_usd,
-            "bonus",
-            description="Welcome credits",
-            provider="system",
-            provider_ref=f"bonus:signup:{user.id}",
-        )
     await db.commit()
     await db.refresh(user)
     login_session(request, user)
@@ -147,7 +182,7 @@ async def login(
     user.last_login_at = utcnow()
     await db.commit()
     login_session(request, user)
-    return user_out(user)
+    return await account_out(db, user)
 
 
 @router.post("/logout", response_model=OkResponse)
@@ -205,7 +240,7 @@ async def reset_password(
     if confirmed:
         await email_check.publish_waiting(db, user)
     login_session(request, user)
-    return user_out(user)
+    return await account_out(db, user)
 
 
 @router.post("/email/verify", response_model=VerifyEmailOut)
@@ -251,9 +286,11 @@ async def resend_confirmation(
 
 
 @router.get("/me", response_model=UserOut | None)
-async def me(user: User | None = Depends(get_current_user)) -> UserOut | None:
+async def me(
+    user: User | None = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+) -> UserOut | None:
     """The signed-in user, or null."""
-    return user_out(user) if user else None
+    return await account_out(db, user) if user else None
 
 
 @router.patch("/me", response_model=UserOut)
@@ -268,7 +305,7 @@ async def update_profile(
     if body.avatar_seed is not None:
         user.avatar_seed = body.avatar_seed.strip() or random_token(6)
     await db.commit()
-    return user_out(user)
+    return await account_out(db, user)
 
 
 @router.post("/me/password", response_model=OkResponse)
@@ -278,7 +315,9 @@ async def change_password(
     user: User = Depends(require_session_user),
     db: AsyncSession = Depends(get_db),
 ) -> OkResponse:
-    if not verify_password(body.current_password, user.password_hash):
+    """Change the password, or set the first one of an account made with Google (no current
+    password to give)."""
+    if user.password_hash and not verify_password(body.current_password or "", user.password_hash):
         raise HTTPException(status_code=400, detail="Current password is wrong")
     user.password_hash = hash_password(body.new_password)
     # Ends every other session of this account: site cookies (core.auth compares the epoch) and
@@ -302,7 +341,7 @@ async def set_openrouter_key(
     user.openrouter_key_enc = encrypt_secret(body.key)
     user.openrouter_key_last4 = key_last4(body.key)
     await db.commit()
-    return user_out(user)
+    return await account_out(db, user)
 
 
 @router.delete("/me/openrouter-key", response_model=UserOut)
@@ -312,4 +351,4 @@ async def remove_openrouter_key(
     user.openrouter_key_enc = None
     user.openrouter_key_last4 = None
     await db.commit()
-    return user_out(user)
+    return await account_out(db, user)

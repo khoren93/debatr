@@ -44,7 +44,8 @@ backend/            FastAPI API + RQ worker (Python 3.12+, managed with uv)
                       facets, security summary), routes_settings (levers, alerts + test message),
                       routes_audience (Audience page, visits, an account's visits), routes_mail
                       (Mail page: letters, relay status, test letter)
-  app/api/            routers: auth, tokens (API tokens + `debatr login` device flow), billing
+  app/api/            routers: auth, google (sign-in with Google: start, callback, disconnect),
+                      tokens (API tokens + `debatr login` device flow), billing
                       (Stripe), debates, gallery (+ leaderboard), motions (topic page, wizard
                       suggestions), reactions (likes/votes), models,
                       presets, topics (trending per format, AI topic ideas), stream (SSE),
@@ -85,7 +86,8 @@ backend/            FastAPI API + RQ worker (Python 3.12+, managed with uv)
                       Cyrillic / Greek look-alikes folded), mail (SMTP relay, the one-button
                       letter, `Outcome` = the relay's answer), mail_log (every letter recorded
                       in `mail_messages`, webhook events, alerts, pruning), email_check
-                      (confirmation / reset links, what waits for a confirmed address)
+                      (confirmation / reset links, what waits for a confirmed address),
+                      google_auth (OAuth flow + PKCE in Redis, ID token check, pure decisions)
   app/services/admin/ totp (codes, recovery / enrollment codes, QR), sessions (Redis: sessions,
                       sign-in tickets, code failures), passkeys (WebAuthn options / checks),
                       audit (append-only admin_audit_log: writing, the audit page's queries),
@@ -230,8 +232,10 @@ frontend/           React 19 + React Router 8 (framework mode, server rendering)
   src/components/account/  Account page tabs (tabs.ts: `?tab=overview|keys|billing|security`,
                            accountPath): ProfileHeader, BalanceCard, UsageCards (bar per day),
                            Ledger (recent activity + full ledger), ProviderKeys (browser keys),
-                           API tokens (ApiTokensCard, TokenOptionsFields, CopyBlock), SecurityCard;
-                           auth layout/fields
+                           API tokens (ApiTokensCard, TokenOptionsFields, CopyBlock), SecurityCard
+                           (email, Google, password / "Set a password", session); auth layout/fields,
+                           GoogleButton (GoogleSignIn = "Continue with Google" + "or with email",
+                           GoogleMark), google.ts (the `?error=google_*` / `?google=` texts)
   src/video/          Remotion compositions (DebateLong 16:9, DebateShort 9:16, ScenePoster =
                       one scene for the transcript board) + render.ts; browser-only except
                       constants.ts and timing.ts (frame / segment arithmetic, no Remotion);
@@ -395,6 +399,25 @@ docker compose exec api python -m app.manage credits user@example.com 5 --reason
    `get_current_user` / `require_user` in `app/core/auth.py`. New accounts get
    `SIGNUP_BONUS_USD` credits. Admins sign in to the admin console separately (see "Admin
    console"); the public API grants them nothing.
+   Sign-in with Google (`services/google_auth`, `routes_google`, `GOOGLE_CLIENT_ID` / `_SECRET`;
+   `GET /api/status` → `google_login`): `GET /api/auth/google/start?next=` (or `?link=true` from
+   Account → Security) keeps the flow (mode, PKCE verifier, nonce, landing page; to link: the
+   account and its epoch) in Redis under the hash of `state`, which also goes into a SameSite=Lax
+   cookie on `/api/auth/google` (it must come back with Google's cross-site redirect; a
+   callback from another browser is refused). `GET /callback` trades the code (client secret +
+   PKCE) and checks the ID token itself (RS256 against Google's cached JWKS via `cryptography`,
+   issuer, audience, expiry, nonce), then answers with a small page that moves on by script / meta
+   refresh: a 302 at the end of a cross-site arrival is cross-site too, so the Strict session
+   cookie would stay home and the landing page render signed out (checked in Chrome). Accounts
+   are tied by Google's `sub` in `user_identities` (one Google per account, unique per subject),
+   never by email, except a first Google sign-in whose email is an account's *confirmed* email
+   (it joins it); an unconfirmed one is refused (`google_exists`: whoever registered the address
+   first would keep a password into the owner's account). New accounts: confirmed email, no
+   password (`users.password_hash` nullable, migration 0023; `UserOut.has_password` /
+   `google_email`; `POST /me/password` sets the first one without a current password), name from
+   Google unless reserved, welcome credits, the signup alert "via Google". `DELETE
+   /api/auth/google` disconnects unless it is the only way in. Problems land on
+   `/login?error=google_<code>` or `/account?tab=security&google=<code>`.
    Email (`services/email_check`, `services/mail`): registration mails a confirmation link
    (`/verify-email?token=`, 3 days, may be opened again: the page posts the token itself, so
    mail scanners confirm nothing); `POST /api/auth/password/forgot` mails a reset link (the same

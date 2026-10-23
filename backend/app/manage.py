@@ -283,7 +283,7 @@ def admin_list() -> int:
 
 
 def set_official(email: str, *, on: bool, name: str | None) -> int:
-    from app.api.routes_auth import _default_name
+    from app.api.routes_auth import default_name
     from app.services.official import reserved_name
 
     name = (name or "").strip()[:100]
@@ -299,7 +299,7 @@ def set_official(email: str, *, on: bool, name: str | None) -> int:
         if name:
             user.display_name = name
         elif not on and reserved_name(user.display_name):
-            user.display_name = _default_name(user.email)
+            user.display_name = default_name(user.email)
         after = {"official": user.official, "display_name": user.display_name}
         record_sync(db, "user.official_changed", target=user, before=before, after=after)
         db.commit()

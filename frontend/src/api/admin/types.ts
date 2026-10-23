@@ -298,6 +298,10 @@ export interface AdminUserProfile {
   is_active: boolean;
   role: AdminRole | null;
   two_factor: boolean;
+  /** False: made with Google, no password yet. */
+  has_password?: boolean;
+  /** The Google account it signs in with. */
+  google_email?: string | null;
   credits_usd: number;
   openrouter_key_masked: string | null;
 }

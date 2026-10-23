@@ -81,10 +81,15 @@ const AdminUser = () => {
                 <div className={`font-display text-3xl font-bold tracking-tight ${card.profile.credits_usd < 0 ? 'text-con' : ''}`}>{formatMoney(card.profile.credits_usd)}</div>
               </div>
             </div>
-            <div className="mt-5 grid grid-cols-2 gap-x-6 gap-y-3 border-t border-line pt-4 sm:grid-cols-3 lg:grid-cols-6">
+            <div className="mt-5 grid grid-cols-2 gap-x-6 gap-y-3 border-t border-line pt-4 sm:grid-cols-3 lg:grid-cols-7">
               <Fact label="Signed up">{formatTime(card.profile.created_at)}</Fact>
               <Fact label="Last seen">{card.profile.last_seen_at ? `${formatAgo(card.profile.last_seen_at)}, ${formatTime(card.profile.last_seen_at)}` : 'never'}</Fact>
               <Fact label="Last sign-in">{card.profile.last_login_at ? formatTime(card.profile.last_login_at) : 'never'}</Fact>
+              <Fact label="Signs in with">
+                <span title={card.profile.google_email ?? undefined}>
+                  {[card.profile.has_password !== false && 'password', card.profile.google_email && `Google (${card.profile.google_email})`].filter(Boolean).join(' · ') || 'nothing'}
+                </span>
+              </Fact>
               <Fact label="OpenRouter key">
                 {card.profile.openrouter_key_masked ? (
                   <span className="inline-flex items-center gap-1 font-mono">

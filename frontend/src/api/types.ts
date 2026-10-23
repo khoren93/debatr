@@ -467,6 +467,10 @@ export interface User {
   email_required?: boolean;
   credits_usd: number;
   openrouter_key_masked: string | null;
+  /** False: made with Google and no password set yet (Account → Security offers to set one). */
+  has_password?: boolean;
+  /** The Google account it signs in with, if one is connected. */
+  google_email?: string | null;
   created_at: string;
 }
 
@@ -520,6 +524,8 @@ export interface SiteStatus {
   analytics?: boolean;
   /** Where people write to us (the server's SUPPORT_EMAIL): the Contact link and /privacy. */
   support_email?: string | null;
+  /** Sign-in with Google is set up on the server: the sign-in pages offer it. */
+  google_login?: boolean;
 }
 
 /** Limits of debates on free models for accounts without credits or an own OpenRouter key

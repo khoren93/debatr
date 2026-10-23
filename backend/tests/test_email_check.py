@@ -52,6 +52,8 @@ class FakeDB:
         return self.user if self.user is not None and self.user.id == key else None
 
     async def scalar(self, statement: Any) -> Any:
+        if "user_identities" in str(statement):
+            return None  # no Google account tied
         return self.user
 
     async def commit(self) -> None:

@@ -18,6 +18,7 @@ from app.api import (
     routes_debates,
     routes_formats,
     routes_gallery,
+    routes_google,
     routes_mail,
     routes_media,
     routes_models,
@@ -105,6 +106,7 @@ app.include_router(admin_api.router, prefix="/api/admin")
 app.include_router(routes_status.router, prefix="/api", tags=["meta"])
 app.include_router(routes_presence.router, prefix="/api", tags=["meta"])
 app.include_router(routes_auth.router, prefix="/api/auth", tags=["auth"])
+app.include_router(routes_google.router, prefix="/api/auth", tags=["auth"])
 app.include_router(routes_tokens.router, prefix="/api/auth", tags=["api tokens"])
 app.include_router(routes_billing.router, prefix="/api/billing", tags=["billing"])
 app.include_router(routes_mail.router, prefix="/api/mail", tags=["mail"])

@@ -6,6 +6,7 @@ import { getErrorMessage, getErrorStatus } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { AuthLayout } from '../components/account/AuthLayout';
 import { FormField, PasswordField } from '../components/account/FormField';
+import { GoogleSignIn } from '../components/account/GoogleButton';
 import { money, safeNext, withNext } from '../components/account/helpers';
 import { Button, ErrorBox, LinkButton, useToast } from '../components/ui';
 import { useBillingConfig } from '../hooks/useBillingConfig';
@@ -104,8 +105,13 @@ const Register = () => {
         </>
       }
     >
+      {site.google_login && (
+        <div className="mb-4">
+          <GoogleSignIn next={next} />
+        </div>
+      )}
       <form onSubmit={onSubmit} noValidate className="grid gap-4">
-        <FormField label="Name" optional autoComplete="name" autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="How should we call you?" maxLength={60} />
+        <FormField label="Name" optional autoComplete="name" autoFocus={!site.google_login} value={name} onChange={(e) => setName(e.target.value)} placeholder="How should we call you?" maxLength={60} />
         <FormField
           label="Email"
           type="email"

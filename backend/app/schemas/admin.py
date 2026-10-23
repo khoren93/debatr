@@ -369,6 +369,8 @@ class AdminUserProfile(BaseModel):
     is_active: bool
     role: str | None
     two_factor: bool  # console second factor set up
+    has_password: bool = True  # False: made with Google, no password yet
+    google_email: str | None = None  # the Google account it signs in with
     credits_usd: float
     openrouter_key_masked: str | None
 

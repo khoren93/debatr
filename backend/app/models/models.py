@@ -15,6 +15,7 @@ from sqlalchemy import (
     Numeric,
     String,
     Text,
+    UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -46,7 +47,8 @@ class User(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     email: Mapped[str] = mapped_column(String(320), unique=True, index=True)
-    password_hash: Mapped[str] = mapped_column(String(200))
+    # None: the account signs in with Google only (user_identities) until it sets a password.
+    password_hash: Mapped[str | None] = mapped_column(String(200), nullable=True)
     display_name: Mapped[str] = mapped_column(String(100))
     # Seed for the generated avatar gradient; users can re-roll it.
     avatar_seed: Mapped[str] = mapped_column(String(64), default="")
@@ -102,6 +104,29 @@ class User(Base):
         cascade="all, delete-orphan",
         passive_deletes=True,
         order_by="ApiToken.created_at.desc()",
+    )
+
+
+class UserIdentity(Base):
+    """A sign-in from another provider (Google) tied to an account by the provider's own id of
+    the person (`subject`, Google's `sub`), never by the email, which can change on both sides.
+    One per provider and account (services/google_auth)."""
+
+    __tablename__ = "user_identities"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    provider: Mapped[str] = mapped_column(String(16))  # google
+    subject: Mapped[str] = mapped_column(String(255))
+    email: Mapped[str | None] = mapped_column(String(320), nullable=True)  # as of the last sign-in
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("provider", "subject", name="uq_user_identities_provider_subject"),
+        UniqueConstraint("user_id", "provider", name="uq_user_identities_user_provider"),
     )
 
 

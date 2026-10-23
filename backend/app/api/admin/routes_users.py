@@ -30,7 +30,7 @@ from app.core.config import settings
 from app.core.db import get_db
 from app.core.redis import get_async_redis, stop_flag_key
 from app.core.security import hash_password
-from app.models.models import ApiToken, CreditTransaction, Debate, User, utcnow
+from app.models.models import ApiToken, CreditTransaction, Debate, User, UserIdentity, utcnow
 from app.schemas.admin import (
     AdminLedgerPage,
     AdminUserCard,
@@ -209,7 +209,14 @@ async def user_card(
     spent = await spent_by_tokens(db, [t.id for t in tokens])
     return AdminUserCard.model_validate(
         {
-            "profile": accounts.profile_out(user),
+            "profile": accounts.profile_out(
+                user,
+                await db.scalar(
+                    select(UserIdentity.email).where(
+                        UserIdentity.user_id == user.id, UserIdentity.provider == "google"
+                    )
+                ),
+            ),
             "all_time": accounts.period_stats(
                 debates, txs, since=None, cost_system=await accounts.system_cost(db, user.id, None)
             ),

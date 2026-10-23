@@ -410,7 +410,7 @@ def spend_days(
 # --- the account card (queries) -----------------------------------------------------------------
 
 
-def profile_out(user: User) -> dict[str, Any]:
+def profile_out(user: User, google_email: str | None = None) -> dict[str, Any]:
     return {
         "id": str(user.id),
         "email": user.email,
@@ -425,6 +425,8 @@ def profile_out(user: User) -> dict[str, Any]:
         "is_active": user.is_active,
         "role": user.admin_role,
         "two_factor": user.totp_enabled_at is not None,
+        "has_password": bool(user.password_hash),
+        "google_email": google_email,
         "credits_usd": _usd(user.credits_usd),
         "openrouter_key_masked": mask_key(user.openrouter_key_last4)
         if user.openrouter_key_enc

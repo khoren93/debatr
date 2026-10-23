@@ -48,6 +48,8 @@ class UserOut(BaseModel):
     email_required: bool = False  # publishing and top-ups wait for the email to be confirmed
     credits_usd: float
     openrouter_key_masked: str | None = None
+    has_password: bool = True  # False: made with Google, no password set yet
+    google_email: str | None = None  # the Google account tied to it (signs in with Google)
     created_at: datetime
 
 
@@ -57,7 +59,8 @@ class UpdateProfileRequest(BaseModel):
 
 
 class ChangePasswordRequest(BaseModel):
-    current_password: str = Field(min_length=1, max_length=72)
+    # Not needed (and ignored) when the account has no password yet (made with Google).
+    current_password: str | None = Field(default=None, max_length=72)
     new_password: str = Field(min_length=8, max_length=72)
 
 

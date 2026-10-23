@@ -234,6 +234,12 @@ class Settings(BaseSettings):
     MAIL_WEBHOOK_SECRET: str | None = None
     MAIL_LOG_DAYS: int = 90
 
+    # Sign-in with Google (services/google_auth): the OAuth client (type "Web application") of a
+    # Google Cloud project; its redirect URI is {SITE_URL}/api/auth/google/callback. Without
+    # both the site shows no Google button.
+    GOOGLE_CLIENT_ID: str = ""
+    GOOGLE_CLIENT_SECRET: str | None = None
+
     model_config = SettingsConfigDict(
         env_file=[".env", "../.env"],
         env_ignore_empty=True,

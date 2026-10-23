@@ -15,6 +15,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   is confirmed: a debate finished or published before stays private and goes public with the
   confirmation. Accounts from before are only asked to confirm (Account → Security). Mail goes
   through an SMTP relay (`MAIL_SMTP_*`); without one the letters are only logged.
+- **Sign in with Google.** "Continue with Google" on the sign-in and sign-up pages (when
+  `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` are set): a new account starts with its email
+  confirmed and no password; Account → Security connects or disconnects Google and sets a first
+  password. A Google account whose email belongs to an account with a confirmed email joins it;
+  an unconfirmed one is refused with a way out (sign in with the password, then connect Google).
+  The console's user card shows how an account signs in.
 - **Mail in the admin console.** A Mail page lists every letter the site sent or tried to send
   (address, subject, kind; never the text) with what the relay answered or why it refused, plus
   the relay's settings and a "Send a test letter" button; an account's card shows its letters.

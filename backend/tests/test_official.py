@@ -2,7 +2,7 @@
 
 import pytest
 
-from app.api.routes_auth import _default_name
+from app.api.routes_auth import default_name
 from app.services.official import reserved_name
 
 
@@ -33,6 +33,6 @@ def test_other_names_are_free(name: str) -> None:
     assert not reserved_name(name)
 
 
-def test_default_name_never_takes_the_brand() -> None:
-    assert _default_name("debatr@example.com") == "Debater"
-    assert _default_name("jane.doe@example.com") == "Jane Doe"
+def testdefault_name_never_takes_the_brand() -> None:
+    assert default_name("debatr@example.com") == "Debater"
+    assert default_name("jane.doe@example.com") == "Jane Doe"

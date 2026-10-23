@@ -361,9 +361,15 @@ def locked_alert(email: str, ip: str | None) -> Alert:
 
 
 def signup_alert(
-    user_id: str, email: str, name: str, ip: str | None, agent: str | None, bonus_usd: float
+    user_id: str,
+    email: str,
+    name: str,
+    ip: str | None,
+    agent: str | None,
+    bonus_usd: float,
+    via: str | None = None,
 ) -> Alert:
-    parts = [name, ip or "", agent_label(agent)]
+    parts = [name, f"via {via}" if via else "", ip or "", agent_label(agent)]
     if bonus_usd > 0:
         parts.append(f"{_usd(bonus_usd)} welcome credits")
     return Alert(
