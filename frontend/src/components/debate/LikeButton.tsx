@@ -13,21 +13,28 @@ interface Props {
   onChange: (likes: number, liked: boolean) => void;
 }
 
-/** Heart toggle (the count is in the page's meta line). Anonymous visitors are sent to sign in. */
+/** Heart toggle (the count is in the page's meta line). Anonymous visitors are sent to sign in;
+ *  a new account with its email unconfirmed is told to confirm it (it may still take a like back). */
 export const LikeButton = ({ debate, onChange }: Props) => {
   const toast = useToast();
   const navigate = useNavigate();
   const location = useLocation();
   const [busy, setBusy] = useState(false);
-  const { likes, liked, can_like: canLike } = debate.engagement;
-  const signIn = !canLike;
+  const { likes, liked, can_like: canLike, like_reason: reason } = debate.engagement;
+  // Older APIs sent no reason: "cannot like" meant signed out.
+  const signIn = reason === 'sign_in' || (!canLike && reason === undefined);
+  const confirm = reason === 'confirm_email';
 
   const toggle = async () => {
     if (signIn) {
       navigate(`/login?next=${encodeURIComponent(location.pathname + location.search)}`);
       return;
     }
-    if (!canLike || busy) return;
+    if (confirm && !liked) {
+      toast.error('Confirm your email to like debates: open the link we sent you.');
+      return;
+    }
+    if ((!canLike && !(confirm && liked)) || busy) return;
     const next = !liked;
     onChange(Math.max(0, likes + (next ? 1 : -1)), next); // optimistic
     setBusy(true);
@@ -43,7 +50,15 @@ export const LikeButton = ({ debate, onChange }: Props) => {
     }
   };
 
-  const title = signIn ? 'Sign in to like this debate' : liked ? 'Unlike' : 'Like this debate';
+  const title = signIn
+    ? 'Sign in to like this debate'
+    : confirm && !liked
+      ? 'Confirm your email to like debates'
+      : reason === 'owner'
+        ? 'Your own debate'
+        : liked
+          ? 'Unlike'
+          : 'Like this debate';
   return (
     <button
       type="button"

@@ -1,7 +1,10 @@
 """Likes and audience votes on public debates.
 
 Only signed-in users other than the owner can like or vote, and only on public debates
-(votes also need a finished debate with at least two debaters). `debates.likes_count` and
+(votes also need a finished debate with at least two debaters). Accounts that must confirm
+their email (services/email_check.pending) like and vote once they have: votes rank the models
+and likes rank the gallery, and fresh accounts are cheap. Taking a like or a vote back stays
+open to them (`RETRACT_ALLOWED`). `debates.likes_count` and
 `debates.votes_count` are kept in step with the rows using atomic increments.
 """
 
@@ -14,6 +17,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.serializers import debater_models, is_owner
 from app.models.models import Debate, DebateLike, DebateVote, User, utcnow
 from app.schemas.schemas import AudienceOut, EngagementOut
+from app.services.email_check import pending
+
+# Reasons that do not stop a viewer from taking back a like or vote given before.
+RETRACT_ALLOWED = frozenset({"confirm_email"})
 
 
 def like_blocker(debate: Debate, viewer: User | None) -> str | None:
@@ -24,6 +31,8 @@ def like_blocker(debate: Debate, viewer: User | None) -> str | None:
         return "sign_in"
     if is_owner(debate, viewer):
         return "owner"
+    if pending(viewer):
+        return "confirm_email"
     return None
 
 
@@ -37,6 +46,8 @@ def vote_blocker(debate: Debate, viewer: User | None) -> str | None:
         return "sign_in"
     if is_owner(debate, viewer):
         return "owner"
+    if pending(viewer):
+        return "confirm_email"
     return None
 
 
@@ -80,10 +91,12 @@ async def engagement_out(db: AsyncSession, debate: Debate, viewer: User | None) 
             )
             is not None
         )
+    like_reason = like_blocker(debate, viewer)
     return EngagementOut(
         likes=debate.likes_count or 0,
         liked=liked,
-        can_like=like_blocker(debate, viewer) is None,
+        can_like=like_reason is None,
+        like_reason=like_reason,
         audience=await audience_out(db, debate, viewer),
     )
 

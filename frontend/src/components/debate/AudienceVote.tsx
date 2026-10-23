@@ -36,6 +36,7 @@ export const AudienceVote = ({ debate, debaters, revealed, onReveal, onChange }:
   const showResults = revealed || audience.my_vote !== null;
   const canVote = audience.can_vote;
   const signIn = audience.reason === 'sign_in';
+  const confirm = audience.reason === 'confirm_email';
   const signInHref = `/login?next=${encodeURIComponent(location.pathname + location.search)}`;
 
   const vote = async (id: string) => {
@@ -43,7 +44,11 @@ export const AudienceVote = ({ debate, debaters, revealed, onReveal, onChange }:
       navigate(signInHref);
       return;
     }
-    if (!canVote || pending) return;
+    if (confirm && audience.my_vote !== id) {
+      toast.error('Confirm your email to vote: open the link we sent you.');
+      return;
+    }
+    if ((!canVote && !confirm) || pending) return;
     setPending(id);
     try {
       const retract = audience.my_vote === id;
@@ -80,10 +85,10 @@ export const AudienceVote = ({ debate, debaters, revealed, onReveal, onChange }:
         </button>
       </>
     );
-  } else if (signIn) {
+  } else if (signIn || confirm) {
     note = (
       <>
-        <span>Sign in to vote.</span>
+        <span>{signIn ? 'Sign in to vote.' : 'Confirm your email to vote: open the link we sent you.'}</span>
         {!showResults && (
           <button type="button" onClick={onReveal} className={linkButton}>
             Show results and the verdict
@@ -121,7 +126,7 @@ export const AudienceVote = ({ debate, debaters, revealed, onReveal, onChange }:
         {debaters.map((d) => {
           const share = percent(audience.counts[d.id] ?? 0, audience.total);
           const chosen = audience.my_vote === d.id;
-          const clickable = canVote || signIn;
+          const clickable = canVote || signIn || confirm;
           return (
             <button
               key={d.id}

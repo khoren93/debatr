@@ -217,8 +217,9 @@ export interface DebateSettings {
   news: NewsContext | null;
 }
 
-/** Why the viewer cannot vote / like (null when they can). */
-export type EngagementBlocker = 'sign_in' | 'owner' | 'not_public' | 'not_finished';
+/** Why the viewer cannot vote / like (null when they can). confirm_email: a new account likes and
+ *  votes once its email is confirmed. */
+export type EngagementBlocker = 'sign_in' | 'owner' | 'confirm_email' | 'not_public' | 'not_finished';
 
 export interface Audience {
   total: number;
@@ -233,6 +234,7 @@ export interface Engagement {
   likes: number;
   liked: boolean;
   can_like: boolean;
+  like_reason?: EngagementBlocker | null;
   audience: Audience;
 }
 

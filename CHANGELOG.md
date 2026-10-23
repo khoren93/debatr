@@ -21,6 +21,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   password. A Google account whose email belongs to an account with a confirmed email joins it;
   an unconfirmed one is refused with a way out (sign in with the password, then connect Google).
   The console's user card shows how an account signs in.
+- New accounts like debates and vote in the audience once their email is confirmed (votes rank
+  the models, likes rank the gallery). Sign-ups with Google are confirmed at once; a like or vote
+  given before can still be taken back. Accounts from before email confirmation are not affected.
 - **Mail in the admin console.** A Mail page lists every letter the site sent or tried to send
   (address, subject, kind; never the text) with what the relay answered or why it refused, plus
   the relay's settings and a "Send a test letter" button; an account's card shows its letters.

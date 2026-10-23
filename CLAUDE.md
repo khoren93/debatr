@@ -725,6 +725,10 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   `debates.likes_count` / `votes_count` (atomic increments in `services/engagement.py`; the admin
   Like/Vote views call `recount` after deletes). Only signed-in non-owners can like or vote, only on
   public debates; votes also need `status=completed` and ≥2 debaters (`like_blocker`/`vote_blocker`).
+  Accounts that must confirm their email (`email_check.pending`) like and vote once they have
+  (`confirm_email`: votes rank the models, likes the gallery); taking an earlier like or vote
+  back stays open (`RETRACT_ALLOWED`). `EngagementOut.like_reason` / `AudienceOut.reason` say
+  why, and the page says so instead of doing nothing.
 - `PUT|DELETE /api/debates/{id}/like`, `PUT|DELETE /api/debates/{id}/vote` (`participant_id` of a
   debater; a second PUT moves the vote). `DebateDetail.engagement` carries likes, `liked` and the
   `audience` split (`counts`, `my_vote`, `can_vote`, `reason`).

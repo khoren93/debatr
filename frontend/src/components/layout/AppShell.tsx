@@ -171,8 +171,8 @@ const MaintenanceBanner = () => {
   );
 };
 
-/** A new account has not confirmed its email yet (backend services/email_check): publishing
- *  and top-ups wait for it. */
+/** A new account has not confirmed its email yet (backend services/email_check): publishing,
+ *  top-ups, likes and votes wait for it. */
 const EmailBanner = () => {
   const { user } = useAuth();
   const toast = useToast();
@@ -195,7 +195,7 @@ const EmailBanner = () => {
     <div role="status" className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-host/25 bg-host/10 px-[clamp(18px,4vw,48px)] py-2 text-[13px] text-text-2">
       <MailWarning className="size-4 shrink-0 text-host" />
       <span className="min-w-0 flex-1">
-        Confirm your email to publish debates and add credits: open the link we sent to <span className="font-semibold text-text">{user.email}</span>.
+        Confirm your email to publish debates, add credits, like and vote: open the link we sent to <span className="font-semibold text-text">{user.email}</span>.
       </span>
       <Button variant="ghost" size="sm" className="h-7! px-2.5!" onClick={resend} loading={busy} disabled={sent}>
         {sent ? 'Sent' : 'Send again'}

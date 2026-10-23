@@ -43,7 +43,7 @@ const EmailRow = () => {
               <CircleCheck className="size-3.5" /> Confirmed
             </span>
           ) : (
-            <span className="text-host">{user.email_required ? 'Not confirmed: publishing and top-ups wait for it' : 'Not confirmed'}</span>
+            <span className="text-host">{user.email_required ? 'Not confirmed: publishing, top-ups, likes and votes wait for it' : 'Not confirmed'}</span>
           )}
         </div>
       </div>

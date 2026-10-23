@@ -15,6 +15,7 @@ from app.core.db import get_db
 from app.models.models import User
 from app.schemas.schemas import AudienceOut, LikeOut, VoteRequest
 from app.services.engagement import (
+    RETRACT_ALLOWED,
     audience_out,
     cast_vote,
     like_blocker,
@@ -53,12 +54,17 @@ def _beacon(body: bytes) -> ViewBeacon:
 _BLOCKED = {
     "not_public": (404, "This debate is not public"),
     "owner": (403, "You cannot rate your own debate"),
+    "confirm_email": (
+        403,
+        "Confirm your email to like and vote: open the link we mailed you "
+        "(Account → Security sends a new one)",
+    ),
     "not_finished": (409, "Voting opens once the debate has finished"),
 }
 
 
-def _raise_if_blocked(reason: str | None) -> None:
-    if reason is not None:
+def _raise_if_blocked(reason: str | None, *, retract: bool = False) -> None:
+    if reason is not None and not (retract and reason in RETRACT_ALLOWED):
         status, detail = _BLOCKED.get(reason, (403, "Not allowed"))
         raise HTTPException(status_code=status, detail=detail)
 
@@ -108,7 +114,7 @@ async def unlike_debate(
     debate_id: str, user: User = Depends(require_user), db: AsyncSession = Depends(get_db)
 ) -> LikeOut:
     debate = await load_debate(db, debate_id)
-    _raise_if_blocked(like_blocker(debate, user))
+    _raise_if_blocked(like_blocker(debate, user), retract=True)
     return LikeOut(liked=False, likes=await set_like(db, debate, user, False))
 
 
@@ -133,6 +139,6 @@ async def unvote(
     debate_id: str, user: User = Depends(require_user), db: AsyncSession = Depends(get_db)
 ) -> AudienceOut:
     debate = await load_debate(db, debate_id)
-    _raise_if_blocked(vote_blocker(debate, user))
+    _raise_if_blocked(vote_blocker(debate, user), retract=True)
     await retract_vote(db, debate, user)
     return await audience_out(db, debate, user)

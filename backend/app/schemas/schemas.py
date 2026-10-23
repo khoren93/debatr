@@ -519,7 +519,7 @@ class AudienceOut(BaseModel):
     counts: dict[str, int] = Field(default_factory=dict)  # participant_id -> votes
     my_vote: str | None = None
     can_vote: bool = False
-    # Why the viewer cannot vote: sign_in | owner | not_public | not_finished
+    # Why the viewer cannot vote: sign_in | owner | confirm_email | not_public | not_finished
     reason: str | None = None
 
 
@@ -527,6 +527,7 @@ class EngagementOut(BaseModel):
     likes: int = 0
     liked: bool = False
     can_like: bool = False
+    like_reason: str | None = None  # why not: sign_in | owner | confirm_email | not_public
     audience: AudienceOut = Field(default_factory=AudienceOut)
 
 
