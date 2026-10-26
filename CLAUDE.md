@@ -1334,9 +1334,11 @@ OpenRouter key cannot resume on the system key (409); media goes back to `none`.
   seconds everywhere. Tests stub the table with the `levers` fixture (conftest).
 - Alerts (`services/alerts`, optional `ALERT_TELEGRAM_BOT_TOKEN` + `ALERT_TELEGRAM_CHAT_ID`):
   a console sign-in (with how the second factor was passed), a locked second factor, a new
-  account (`routes_auth.register`) and a debate that starts (create or draft start, not resume:
-  `routes_debates._announce`) go out at once from the API (`notify_soon`, a background task;
-  sign-ups and debates capped at 30 an hour each, `Alert.hourly`); a failed trending batch from
+  account (`routes_auth.register`), a debate that starts (create or draft start, not resume:
+  `routes_debates._announce`) and a visit (`audience.collect.record`: the visit's first beacon,
+  not an AI agent, console staff or a resumed tab; the verdict is the first beacon's) go out at
+  once from the API (`notify_soon`, a background task; sign-ups and debates capped at 30 an hour
+  each, visits at 60, `Alert.hourly`); a failed trending batch from
   its job; `check_alerts_job` (scheduler, every 5 min) gathers facts and `decide` (pure) raises:
   5+ failed console sign-ins in 15 min, newly flagged debates, 3+ failed debates in an hour at
   30 %+ of finished ones, runs without heartbeat or waiting job for 10+ min on two checks in a

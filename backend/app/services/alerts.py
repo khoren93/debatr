@@ -1,7 +1,8 @@
 """Operator alerts in Telegram (optional: ALERT_TELEGRAM_BOT_TOKEN + ALERT_TELEGRAM_CHAT_ID).
 
 Raised at once: a console sign-in and a locked second factor (the API, `notify_soon`), a new
-account and a debate that starts (the public API), a failed trending batch (its job). Found by
+account, a debate that starts and a visit of the site (the public API; AI agents and console
+staff are left out), a failed trending batch (its job). Found by
 `check_alerts_job` (the scheduler, every CHECK_SECONDS on the background queue): a series of
 failed console sign-ins, newly flagged debates, a spike of failed debates, runs without a worker,
 a low OpenRouter balance, a rejected ElevenLabs key or its characters running out, top-ups and a
@@ -13,7 +14,7 @@ goes out, so muting the security alerts cannot pass unnoticed.
 
 Antispam: an alert with `quiet` seconds holds a Redis key that long, so a lasting condition is
 reported once and again only when it escalates (each severity has its own key). Frequent events
-(sign-ups, debates) have an `hourly` cap, so a wave of bots cannot bury the other alerts. New
+(sign-ups, debates, visits) have an `hourly` cap, so a wave of bots cannot bury the other alerts. New
 flagged debates, top-ups and stuck runs are told apart from the ones already reported by the ids
 the last check saw. Every alert, sent or not (no Telegram configured, Telegram refused), lands
 in RECENT_KEY for the console's Settings page.
@@ -85,6 +86,7 @@ BALANCE_KEY = "admin:openrouter_balance"  # shared with the overview (routes_ove
 BALANCE_SECONDS = 300
 SIGNUPS_PER_HOUR = 30
 DEBATES_PER_HOUR = 30
+VISITS_PER_HOUR = 60
 
 
 @dataclass(frozen=True)
@@ -424,6 +426,44 @@ def debate_alert(start: DebateStart) -> Alert:
         severity="info",
         path=f"/admin/debates/{start.debate_id}",
         hourly=DEBATES_PER_HOUR,
+    )
+
+
+@dataclass(frozen=True)
+class VisitStart:
+    """What the alert of a new visit tells (audience.collect fills it from its first beacon)."""
+
+    visit_id: str
+    landing: str
+    place: str | None  # "Yerevan, AM"
+    source: str  # services.views.Source
+    referrer_host: str | None
+    user_agent: str | None
+    returning: bool
+    account: str | None = None  # the email of a signed-in visitor
+    verdict: str = "unclear"  # audience.bots.Verdict on the first beacon
+
+
+def visit_alert(visit: VisitStart) -> Alert:
+    if visit.referrer_host:
+        came = f"from {visit.referrer_host}"
+    else:
+        came = "direct" if visit.source == "direct" else f"source: {visit.source}"
+    parts = [
+        visit.place or "",
+        agent_label(visit.user_agent),
+        came,
+        "returning" if visit.returning else "",
+        visit.account or "",
+        f"looks like a {visit.verdict}" if visit.verdict in ("bot", "suspect") else "",
+    ]
+    return Alert(
+        kind="visit",
+        title=f"Visit: {visit.landing}",
+        detail=" · ".join(part for part in parts if part),
+        severity="info",
+        path=f"/admin/audience/visits/{visit.visit_id}",
+        hourly=VISITS_PER_HOUR,
     )
 
 

@@ -12,6 +12,10 @@ Each beacon also carries counts of the page's input since the previous one and, 
 load, what the browser says about itself (`bots.ClientSignals` / `bots.ClientEnv`); with the
 request's headers and the network they decide whether the visit is a person, a bot or an AI
 agent, weighed again with every beacon (`bots.classify`).
+
+A new visit is told in Telegram from its first beacon (`alerts.visit_alert`, muted in the
+console like the other alerts), unless it is an AI agent, console staff or a tab left for half an
+hour coming back.
 """
 
 import logging
@@ -29,6 +33,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.models import Debate, User, Visit, VisitEvent
+from app.services import alerts
 from app.services.audience import bots
 from app.services.audience.agent import parse_agent
 from app.services.audience.geo import lookup, network
@@ -292,11 +297,12 @@ async def _debates(db: AsyncSession, beacon: Beacon) -> tuple[dict[str, uuid.UUI
     return by_slug, known
 
 
-async def _open_visit(db: AsyncSession, beacon: Beacon, ctx: Context) -> Visit | None:
-    """The beacon's visit, made by its first beacon; None when it is another visitor's."""
+async def _open_visit(db: AsyncSession, beacon: Beacon, ctx: Context) -> tuple[Visit | None, bool]:
+    """The beacon's visit, made by its first beacon (then True); None when it is another
+    visitor's."""
     visit = await db.get(Visit, beacon.visit)
     if visit is not None:
-        return visit if visit.visitor_id == beacon.visitor else None
+        return (visit if visit.visitor_id == beacon.visitor else None), False
     first = next((e for e in beacon.events if e.type == "page"), None)
     utm = campaign(first.query if first else None)
     source, host = visit_source(
@@ -346,14 +352,33 @@ async def _open_visit(db: AsyncSession, beacon: Beacon, ctx: Context) -> Visit |
         "network": net.org if net else None,
         "network_kind": bots.network_kind(net.asn, net.org) if net else None,
     }
-    await db.execute(insert(Visit).values(**row).on_conflict_do_nothing(index_elements=["id"]))
+    result = await db.execute(
+        insert(Visit).values(**row).on_conflict_do_nothing(index_elements=["id"])
+    )
+    created = bool(getattr(result, "rowcount", 0))
     visit = await db.get(Visit, beacon.visit, populate_existing=True)
-    return visit if visit is not None and visit.visitor_id == beacon.visitor else None
+    if visit is None or visit.visitor_id != beacon.visitor:
+        return None, False
+    return visit, created
+
+
+def visit_start(visit: Visit, verdict: str, user: User | None) -> alerts.VisitStart:
+    return alerts.VisitStart(
+        visit_id=str(visit.id),
+        landing=visit.landing,
+        place=", ".join(p for p in (visit.city, visit.country) if p) or None,
+        source=visit.source,
+        referrer_host=visit.referrer_host,
+        user_agent=visit.user_agent,
+        returning=not visit.new_visitor,
+        account=user.email if user is not None else None,
+        verdict=verdict,
+    )
 
 
 async def record(db: AsyncSession, beacon: Beacon, ctx: Context) -> bool:
     """Write the beacon; False when it was dropped."""
-    visit = await _open_visit(db, beacon, ctx)
+    visit, created = await _open_visit(db, beacon, ctx)
     if visit is None:
         return False
     by_slug, known = await _debates(db, beacon)
@@ -433,6 +458,14 @@ async def record(db: AsyncSession, beacon: Beacon, ctx: Context) -> bool:
         values["user_id"] = user.id
         if user.admin_role:
             values["staff"] = True
+    told = created and not beacon.resumed and not values.get("staff")
+    start = (
+        visit_start(visit, assessment.verdict, user)
+        if told and assessment.verdict != "agent"
+        else None
+    )
     await db.execute(update(Visit).where(Visit.id == visit.id).values(**values))
     await db.commit()
+    if start is not None:
+        alerts.notify_soon(alerts.visit_alert(start))
     return True

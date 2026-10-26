@@ -49,6 +49,14 @@ EVENTS: tuple[AlertEvent, ...] = (
         "Every sign-up: address, name, browser, welcome credits.",
         at_once=True,
     ),
+    AlertEvent(
+        "visit",
+        "people",
+        "New visit",
+        "Every visit of the site, on its first page: landing page, place, browser, where it came "
+        "from. AI agents and console staff are left out; at most 60 an hour.",
+        at_once=True,
+    ),
     AlertEvent("topup", "people", "Top-ups", "Stripe payments credited to a balance."),
     AlertEvent(
         "debate",

@@ -12,7 +12,7 @@ import pytest
 
 from app.core.config import settings
 from app.services import alert_events, alerts
-from app.services.alerts import Alert, DebateStart, Facts
+from app.services.alerts import Alert, DebateStart, Facts, VisitStart
 
 TOKEN = "123456:secret-bot-token"
 
@@ -174,6 +174,7 @@ def test_alerts_raised_at_once_are_in_the_catalogue() -> None:
         alerts.trending_failed_alert("no answer"),
         alerts.signup_alert("u1", "a@b.co", "Ann", None, None, 0),
         alerts.debate_alert(DebateStart("d1", "Tabs?", "a@b.co", ["x/y"], 1, 0.0)),
+        alerts.visit_alert(VisitStart("v1", "/", None, "direct", None, None, False)),
     ]
     assert {alert.kind for alert in raised} <= set(alert_events.KINDS)
     assert len(set(alert_events.KINDS)) == len(alert_events.KINDS)
@@ -206,6 +207,25 @@ def test_sign_up_and_new_debate_alerts() -> None:
     free = alerts.debate_alert(DebateStart("d3", "T", "a@b.co", ["x/y:free"], 2, 0.0))
     assert own.detail.endswith("3 rounds · own OpenRouter key")
     assert free.detail.endswith("2 rounds · free models")
+
+
+def test_visit_alerts() -> None:
+    safari = (
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 "
+        "(KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1"
+    )
+    visit = alerts.visit_alert(
+        VisitStart(
+            "v1", "/d/abc/tabs", "Yerevan, AM", "social", "t.co", safari, True, "a@b.co", "human"
+        )
+    )
+    assert visit.title == "Visit: /d/abc/tabs" and visit.path == "/admin/audience/visits/v1"
+    assert visit.detail == "Yerevan, AM · Safari on iOS · from t.co · returning · a@b.co"
+    assert visit.hourly == alerts.VISITS_PER_HOUR and visit.severity == "info"
+    direct = alerts.visit_alert(VisitStart("v2", "/", None, "direct", None, None, False))
+    assert direct.detail == "direct"
+    tagged = alerts.visit_alert(VisitStart("v3", "/", None, "ai", None, None, False, None, "bot"))
+    assert tagged.detail == "source: ai · looks like a bot"
 
 
 def test_changing_the_mutes_is_told() -> None:
