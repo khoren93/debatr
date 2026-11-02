@@ -45,7 +45,7 @@ from app.services import motions
 from app.services.admin.stats import ledger_category
 from app.services.admin.users import audit_out, day_start, ledger_row_out, like_pattern, public_url
 from app.services.debate_control import ACTIVE_STATUSES
-from app.services.formats import DEFAULT_FORMAT
+from app.services.formats import DEFAULT_FORMAT, topic_styles
 from app.services.media import cover as covers
 from app.services.moderation import wants_public
 from app.services.resume import resume_point
@@ -614,7 +614,9 @@ async def moderation_queue(db: AsyncSession, recent: int = 30) -> dict[str, Any]
 # --- trending ---------------------------------------------------------------------------------
 
 
-def batch_row(batch: TrendingBatch, hidden: int, current: bool) -> dict[str, Any]:
+def batch_row(
+    batch: TrendingBatch, hidden: int, current: bool, live_lists: list[str] | None = None
+) -> dict[str, Any]:
     stats: dict[str, Any] = batch.stats_json or {}
 
     def stat(name: str) -> int | None:
@@ -629,6 +631,7 @@ def batch_row(batch: TrendingBatch, hidden: int, current: bool) -> dict[str, Any
         "hidden": hidden,
         "cost_usd": _usd(batch.cost_usd),
         "current": current,
+        "live_lists": live_lists or [],
         "feeds_ok": stat("feeds_ok"),
         "feeds_total": stat("feeds_total"),
         "headlines_fresh": stat("headlines_fresh"),
@@ -673,12 +676,36 @@ async def newest_batch_id(db: AsyncSession) -> uuid.UUID | None:
     )
 
 
+async def live_batches(db: AsyncSession) -> dict[str, uuid.UUID]:
+    """The batch the site shows for each list of topics: the newest one that has that list (a
+    list that failed to build leaves its format on an older batch, like routes_topics)."""
+    live: dict[str, uuid.UUID] = {}
+    for list_id in topic_styles():
+        has_list = exists().where(
+            TrendingTopic.batch_id == TrendingBatch.id, TrendingTopic.format == list_id
+        )
+        batch_id = await db.scalar(
+            select(TrendingBatch.id)
+            .where(has_list)
+            .order_by(TrendingBatch.created_at.desc())
+            .limit(1)
+        )
+        if batch_id is not None:
+            live[list_id] = batch_id
+    return live
+
+
+def _lists_of(live: dict[str, uuid.UUID], batch_id: uuid.UUID) -> list[str]:
+    return [list_id for list_id, live_id in live.items() if live_id == batch_id]
+
+
 async def trending_batches(
     db: AsyncSession, *, limit: int, offset: int
 ) -> tuple[int, list[dict[str, Any]]]:
     hidden = _hidden_counts()
     total = await db.scalar(select(func.count()).select_from(TrendingBatch))
     newest = await newest_batch_id(db)
+    live = await live_batches(db)
     rows = await db.execute(
         select(TrendingBatch, func.coalesce(hidden.c.hidden, 0))
         .outerjoin(hidden, hidden.c.batch_id == TrendingBatch.id)
@@ -687,7 +714,8 @@ async def trending_batches(
         .offset(offset)
     )
     return int(total or 0), [
-        batch_row(batch, int(n), batch.id == newest) for batch, n in rows.all()
+        batch_row(batch, int(n), batch.id == newest, _lists_of(live, batch.id))
+        for batch, n in rows.all()
     ]
 
 
@@ -725,7 +753,12 @@ async def trending_batch(db: AsyncSession, batch_id: uuid.UUID) -> dict[str, Any
     stats: dict[str, Any] = batch.stats_json or {}
     hidden = sum(1 for t in topics if t.is_hidden)
     return {
-        "batch": batch_row(batch, hidden, batch.id == await newest_batch_id(db)),
+        "batch": batch_row(
+            batch,
+            hidden,
+            batch.id == await newest_batch_id(db),
+            _lists_of(await live_batches(db), batch.id),
+        ),
         "topics": [topic_out(t) for t in topics],
         "dropped": [d for d in stats.get("dropped") or [] if isinstance(d, dict)],
         "blocked": [b for b in stats.get("blocked") or [] if isinstance(b, dict)],

@@ -53,6 +53,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Console → Trending topics: any day's batch opens below with "View topics" (it never changes
+  what the site shows), its topics split into Debate and Rap battle lists, and "Live" marks the
+  batch each list on the site comes from (a battle list that failed stays on an older batch).
 - The top-up card counts debates at today's prices: about how many typical debates on top models
   each amount buys, and how many with premium voices (`GET /api/billing/config` answers
   `debate_usd` and `voiced_debate_usd`). It used to promise more, leaving the voices out.

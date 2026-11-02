@@ -652,6 +652,8 @@ export interface TrendingBatchRow {
   hidden: number;
   cost_usd: number;
   current: boolean;
+  /** The lists of this batch the site shows now (a list that failed stays on an older batch). */
+  live_lists: string[];
   feeds_ok: number | null;
   feeds_total: number | null;
   headlines_fresh: number | null;

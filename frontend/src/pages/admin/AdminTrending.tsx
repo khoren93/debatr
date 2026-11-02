@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { ArrowUpRight, Eye, EyeOff, RefreshCw } from 'lucide-react';
 import { buildTrendingNow, getTrendingBatch, listTrendingBatches, setTopicHidden } from '../../api/admin/debates';
@@ -9,18 +9,14 @@ import { Page, PageTitle } from '../../components/layout/AppShell';
 import { DataTable, Pager, type Column } from '../../components/admin/DataTable';
 import { Panel } from '../../components/admin/users/UserSections';
 import { formatTime, formatUsd } from '../../components/admin/helpers';
-import { Button, ConfirmDialog, ErrorBox, Spinner, useToast } from '../../components/ui';
+import { Button, ConfirmDialog, ErrorBox, Segmented, Spinner, useToast } from '../../components/ui';
 import { sourceDomain } from '../../lib/format';
-import { formatSpec } from '../../lib/formats';
+import { FORMAT_IDS, FORMATS, formatSpec } from '../../lib/formats';
 
 const PAGE = 20;
+/** The lists of news topics, the debate's first (formats that write topics their own way have one). */
+const LISTS = [...new Set(FORMAT_IDS.map((id) => FORMATS[id].topicList))];
 const ratio = (a: number | null, b: number | null) => (a === null ? '—' : b === null ? String(a) : `${a}/${b}`);
-
-/** A format's list: its topics' chip ("debate" lists go without one, as before formats). */
-const FormatChip = ({ format }: { format: string | undefined }) =>
-  format && format !== 'debate' ? (
-    <span className="rounded-[5px] bg-surface-2 px-1.5 py-0.5 font-mono text-[10px] tracking-[0.04em] text-text-3">{formatSpec(format).label}</span>
-  ) : null;
 
 const AdminTrending = () => {
   const { me } = useAdminAuth();
@@ -34,7 +30,9 @@ const AdminTrending = () => {
   const [busyTopic, setBusyTopic] = useState<string | null>(null);
   const [confirmBuild, setConfirmBuild] = useState(false);
   const [building, setBuilding] = useState(false);
+  const topicsRef = useRef<HTMLDivElement>(null);
   const listKey = `${offset}:${version}`;
+  const list = LISTS.find((l) => l === params.get('list')) ?? LISTS[0];
 
   useEffect(() => {
     let cancelled = false;
@@ -96,6 +94,20 @@ const AdminTrending = () => {
     }
   };
 
+  /** Opens a batch's topics below; the site keeps showing the newest batch whatever is viewed here. */
+  const view = (id: string) => {
+    setParams((prev) => ({ ...Object.fromEntries(prev), batch: id }), { replace: true, preventScrollReset: true });
+    topicsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  const chooseList = (next: string) =>
+    setParams((prev) => ({ ...Object.fromEntries(prev), list: next }), { replace: true, preventScrollReset: true });
+
+  const shownTopics = card?.topics.filter((t) => (t.format || 'debate') === list) ?? [];
+  const shownDropped = card?.dropped.filter((d) => (d.format || 'debate') === list) ?? [];
+  const listStats = card?.batch.formats.find((f) => f.format === list);
+  const listLive = card?.batch.live_lists.includes(list) ?? false;
+
   const batchColumns: Column<TrendingBatchRow>[] = [
     {
       key: 'when',
@@ -104,7 +116,11 @@ const AdminTrending = () => {
       cell: (b) => (
         <span className="flex items-center gap-2">
           <span className={b.id === chosen ? 'font-semibold text-text' : 'text-text-2'}>{formatTime(b.created_at)}</span>
-          {b.current && <span className="rounded-full bg-accent/15 px-2 py-0.5 text-[10px] font-bold uppercase text-accent">Live</span>}
+          {(b.live_lists.length === LISTS.length ? ['Live'] : b.live_lists.map((l) => `Live: ${formatSpec(l).name}`)).map((label) => (
+            <span key={label} className="whitespace-nowrap rounded-full bg-accent/15 px-2 py-0.5 text-[10px] font-bold uppercase text-accent">
+              {label}
+            </span>
+          ))}
         </span>
       ),
     },
@@ -115,11 +131,18 @@ const AdminTrending = () => {
     { key: 'cost', header: 'Cost', align: 'right', cell: (b) => formatUsd(b.cost_usd) },
     {
       key: 'open',
-      header: <span className="sr-only">Open</span>,
+      header: <span className="sr-only">View topics</span>,
       align: 'right',
       cell: (b) => (
-        <Button variant="ghost" size="sm" onClick={() => setParams({ batch: b.id }, { replace: true })} disabled={b.id === chosen}>
-          {b.id === chosen ? 'Shown' : 'Show'}
+        <Button
+          variant="ghost"
+          size="sm"
+          icon={<Eye className="size-4" />}
+          title="Shows its topics below. Nothing changes on the site: it always shows the newest batch."
+          onClick={() => view(b.id)}
+          disabled={b.id === chosen}
+        >
+          {b.id === chosen ? 'Viewing' : 'View topics'}
         </Button>
       ),
     },
@@ -132,10 +155,7 @@ const AdminTrending = () => {
       header: 'Topic',
       cell: (t) => (
         <span className={`flex min-w-0 max-w-[560px] flex-col ${t.is_hidden ? 'opacity-50' : ''}`}>
-          <span className="flex flex-wrap items-center gap-2 font-semibold text-text-2">
-            <FormatChip format={t.format} />
-            {t.question}
-          </span>
+          <span className="font-semibold text-text-2">{t.question}</span>
           <span className="text-xs text-muted">
             {t.label} · {t.category} · heat {t.heat} · {t.outlets} outlet{t.outlets === 1 ? '' : 's'}
           </span>
@@ -188,38 +208,46 @@ const AdminTrending = () => {
 
       {batches && (
         <div className="mt-6 grid gap-4">
-          <Panel title="Batches" aside="the newest one is on the site">
+          <Panel title="Batches" aside="the site shows the newest; viewing an older one here changes nothing">
             <DataTable caption="Batches" columns={batchColumns} rows={rows} rowKey={(b) => b.id} loading={batches.key !== listKey} empty="No batches yet." />
             <Pager offset={offset} limit={PAGE} total={batches.page.total} onChange={setOffset} />
           </Panel>
 
           {card && (
-            <>
+            <div ref={topicsRef} className="grid scroll-mt-4 gap-4">
               <Panel title={`Topics of ${formatTime(card.batch.created_at)}`} aside={`${card.batch.model}${card.batch.review_model !== card.batch.model ? `, reviewed by ${card.batch.review_model}` : ''} · ${formatUsd(card.batch.cost_usd)}`}>
-                {card.batch.formats.length > 0 && (
-                  <ul className="flex flex-wrap gap-x-5 gap-y-1 border-b border-line/70 px-4 py-2.5 text-xs text-text-3">
-                    {card.batch.formats.map((f) => (
-                      <li key={f.format}>
-                        <span className="font-semibold text-text-2">{formatSpec(f.format).name}</span>{' '}
-                        {f.error ? <span className="text-host">failed: {f.error} (the site keeps an older list)</span> : `${f.kept ?? '—'} kept of ${f.asked ?? '—'} asked`}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                <DataTable caption="Topics" columns={topicColumns} rows={card.topics} rowKey={(t) => t.id} empty="No topics." />
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-line/70 px-4 py-2.5 text-xs text-text-3">
+                  <Segmented
+                    size="sm"
+                    options={LISTS.map((l) => ({
+                      value: l,
+                      label: `${formatSpec(l).name} · ${card.topics.filter((t) => (t.format || 'debate') === l).length}`,
+                    }))}
+                    value={list}
+                    onChange={chooseList}
+                  />
+                  {listLive ? (
+                    <span className="font-semibold text-accent">On the site now</span>
+                  ) : (
+                    <span>Not on the site now</span>
+                  )}
+                  {listStats && (
+                    <span>
+                      {listStats.error ? <span className="text-host">failed: {listStats.error} (the site keeps an older list)</span> : `${listStats.kept ?? '—'} kept of ${listStats.asked ?? '—'} asked`}
+                    </span>
+                  )}
+                </div>
+                <DataTable caption="Topics" columns={topicColumns} rows={shownTopics} rowKey={(t) => t.id} empty={`No ${formatSpec(list).name.toLowerCase()} topics in this batch.`} />
               </Panel>
               <div className="grid items-start gap-4 lg:grid-cols-2">
-                <Panel title="Dropped topics" aside={`${card.dropped.length}`}>
-                  {card.dropped.length === 0 ? (
+                <Panel title="Dropped topics" aside={`${shownDropped.length}`}>
+                  {shownDropped.length === 0 ? (
                     <p className="px-4 py-4 text-sm text-muted">None.</p>
                   ) : (
                     <ul className="max-h-96 divide-y divide-line/70 overflow-y-auto">
-                      {card.dropped.map((d, i) => (
+                      {shownDropped.map((d, i) => (
                         <li key={i} className="px-4 py-2.5 text-xs">
-                          <div className="flex flex-wrap items-center gap-2 text-text-2">
-                            <FormatChip format={d.format} />
-                            {d.question ?? '—'}
-                          </div>
+                          <div className="text-text-2">{d.question ?? '—'}</div>
                           <div className="text-muted">{d.reason ?? ''}</div>
                         </li>
                       ))}
@@ -241,7 +269,7 @@ const AdminTrending = () => {
                   )}
                 </Panel>
               </div>
-            </>
+            </div>
           )}
         </div>
       )}

@@ -199,8 +199,10 @@ def test_batch_row() -> None:
             "dropped": [{"question": "q", "reason": "r"}],
         },
     )
-    row = admin_debates.batch_row(batch, hidden=2, current=True)
+    row = admin_debates.batch_row(batch, hidden=2, current=True, live_lists=["debate"])
     assert (row["feeds_ok"], row["headlines_fresh"], row["headlines_sent"]) == (11, 300, None)
+    assert row["live_lists"] == ["debate"]
+    assert admin_debates.batch_row(batch, hidden=0, current=False)["live_lists"] == []
     assert (row["dropped"], row["hidden"], row["current"], row["cost_usd"]) == (1, 2, True, 0.021)
 
 

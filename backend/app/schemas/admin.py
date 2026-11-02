@@ -818,6 +818,7 @@ class TrendingBatchRow(BaseModel):
     hidden: int
     cost_usd: float
     current: bool  # the newest batch: what the wizard shows
+    live_lists: list[str] = []  # the lists of it the site shows now (a failed list stays older)
     feeds_ok: int | None
     feeds_total: int | None
     headlines_fresh: int | None
