@@ -154,12 +154,12 @@ const AdminTrending = () => {
       key: 'question',
       header: 'Topic',
       cell: (t) => (
-        <span className={`flex min-w-0 max-w-[560px] flex-col ${t.is_hidden ? 'opacity-50' : ''}`}>
+        <span className={`flex min-w-0 flex-col ${t.is_hidden ? 'opacity-50' : ''}`}>
           <span className="font-semibold text-text-2">{t.question}</span>
           <span className="text-xs text-muted">
             {t.label} · {t.category} · heat {t.heat} · {t.outlets} outlet{t.outlets === 1 ? '' : 's'}
           </span>
-          {t.brief && <span className="mt-0.5 line-clamp-2 text-xs text-text-3">{t.brief}</span>}
+          {t.brief && <span className="mt-0.5 text-xs text-text-3">{t.brief}</span>}
           <span className="mt-0.5 flex flex-wrap gap-x-2 text-[11px]">
             {t.sources.map((s, i) =>
               s.url ? (
